@@ -37,13 +37,27 @@ export type CollectionTaskType =
   | 'site_probe'
   | 'realtime_stat'
   | 'resource_snapshot'
+  | 'performance_sync'
+  | 'topup_sync'
+  | 'redemption_sync'
+  | 'upstream_task_sync'
+  | 'model_meta_sync'
+  | 'plan_sync'
+  | 'pricing_group_sync'
+  | 'system_task_sync'
   | 'user_sync'
   | 'channel_sync'
+  | 'log_sync'
   | 'usage_hour'
   | 'usage_backfill'
   | 'usage_validation'
   | 'account_rebuild'
   | 'customer_rebuild'
+
+export type FastCollectionTaskType =
+  | 'site_probe'
+  | 'realtime_stat'
+  | 'resource_snapshot'
 
 export interface UsageSummary {
   request_count: MetricString | null
@@ -289,7 +303,7 @@ export interface CollectionRunWindowItem {
 
 export interface FastTaskHistoryItem {
   site_id: IdString
-  task_type: CollectionTaskType
+  task_type: FastCollectionTaskType
   started_at: Timestamp
   finished_at: Timestamp
   status: 'running' | 'success' | 'failed'
@@ -300,7 +314,7 @@ export interface FastTaskHistoryItem {
 
 export interface FastTaskHistoryListParams extends ListQuery {
   site_id: IdString
-  task_type: CollectionTaskType
+  task_type: FastCollectionTaskType
   status?: FastTaskHistoryItem['status'] | ''
   offset?: number
   limit?: number

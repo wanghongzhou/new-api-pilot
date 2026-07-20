@@ -1,4 +1,8 @@
-import { collectionTaskTypes, retryableSiteUsageTaskTypes } from './constants'
+import {
+  collectionTaskCatalog,
+  collectionTaskTypes,
+  retryableSiteUsageTaskTypes,
+} from './constants'
 import type {
   CollectionRunItem,
   CollectionRunWindowItem,
@@ -23,10 +27,11 @@ export function siteRunContractError(
   if (!isCollectionTaskType(run.task_type)) {
     return 'collection.contract.unknownTaskType'
   }
+  const targetType = collectionTaskCatalog[run.task_type].targetType
   if (
     run.site_id !== siteId ||
-    run.target_type !== 'site' ||
-    run.target_id !== siteId
+    run.target_type !== targetType ||
+    (targetType === 'site' && run.target_id !== siteId)
   ) {
     return 'collection.contract.foreignRun'
   }

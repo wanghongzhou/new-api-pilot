@@ -61,7 +61,7 @@ func TestAcceptanceTestPathsRejectsInvalidArrays(t *testing.T) {
 	}
 }
 
-func TestA89ToA100RequireEveryTestLayer(t *testing.T) {
+func TestA89ToA101RequireEveryTestLayer(t *testing.T) {
 	complete := []string{
 		"tests/integration/example_acceptance_test.go",
 		"web/src/features/example/api.test.ts",
@@ -92,13 +92,13 @@ func TestA89ToA100RequireEveryTestLayer(t *testing.T) {
 	}
 }
 
-func TestMultiLayerAcceptanceRangeStartsAtA89AndIncludesA100(t *testing.T) {
-	for _, id := range []string{"A89", "A99", "A100"} {
+func TestMultiLayerAcceptanceRangeStartsAtA89AndIncludesA101(t *testing.T) {
+	for _, id := range []string{"A89", "A99", "A100", "A101"} {
 		if !requiresMultiLayerAcceptance(id) {
 			t.Fatalf("%s should require multi-layer coverage", id)
 		}
 	}
-	for _, id := range []string{"A01", "A88", "A101", "invalid"} {
+	for _, id := range []string{"A01", "A88", "A102", "invalid"} {
 		if requiresMultiLayerAcceptance(id) {
 			t.Fatalf("%s should not require multi-layer coverage", id)
 		}
@@ -123,6 +123,24 @@ func TestMultiLayerAcceptanceRequiresDesktopAndMobileProjects(t *testing.T) {
 	})
 	if !issuesContain(current.issues, "chromium-desktop and chromium-mobile") {
 		t.Fatalf("issues=%#v, want missing mobile project", current.issues)
+	}
+}
+
+func TestA102RequiresIntegrationAndContractCoverage(t *testing.T) {
+	complete := []string{
+		"planned:tests/integration/data_maintenance_acceptance_test.go",
+		"internal/docscheck/maintenance_catalog_test.go",
+	}
+	current := &checker{root: t.TempDir()}
+	current.checkIntegrationContractAcceptance("manifest.yaml", "A102", complete)
+	if len(current.issues) != 0 {
+		t.Fatalf("complete A102 coverage produced issues=%#v", current.issues)
+	}
+
+	current = &checker{root: t.TempDir()}
+	current.checkIntegrationContractAcceptance("manifest.yaml", "A102", complete[1:])
+	if !issuesContain(current.issues, "backend integration") {
+		t.Fatalf("missing integration issues=%#v", current.issues)
 	}
 }
 

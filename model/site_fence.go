@@ -649,6 +649,7 @@ const (
 	SiteDeleteDependencyActiveCollection   SiteDeleteDependencyType = "active_collection"
 	SiteDeleteDependencyActiveAlert        SiteDeleteDependencyType = "active_alert"
 	SiteDeleteDependencyAlertHistory       SiteDeleteDependencyType = "alert_history"
+	SiteDeleteDependencyDataMaintenance    SiteDeleteDependencyType = "data_maintenance"
 )
 
 func (repository *SiteRepository) SiteDeleteBlockers(ctx context.Context, siteID int64) ([]SiteDeleteDependencyType, error) {
@@ -698,6 +699,8 @@ WHERE e.site_id = ? AND e.status = 'resolved'
   AND (e.first_fired_at IS NOT NULL OR e.last_fired_at IS NOT NULL OR
        EXISTS (SELECT 1 FROM alert_delivery d WHERE d.alert_event_id = e.id))
 LIMIT 1)`, args: []any{siteID}},
+		{name: SiteDeleteDependencyDataMaintenance, query: `SELECT EXISTS(
+SELECT 1 FROM data_maintenance_state WHERE site_id = ? AND status IN ('pending','running') LIMIT 1)`, args: []any{siteID}},
 	}
 	blockers := make([]SiteDeleteDependencyType, 0, len(checks))
 	for _, check := range checks {
@@ -736,6 +739,8 @@ WHERE rw.site_id = ? AND r.status IN ('success','failed')`, args: []any{siteID}}
 		{name: "terminal collection runs", query: `DELETE FROM collection_run
 WHERE status IN ('success','failed') AND (site_id = ? OR (target_type = 'site' AND target_id = ?))`, args: []any{siteID, siteID}},
 		{name: "site aggregation locks", query: "DELETE FROM aggregation_bucket_lock WHERE lock_key LIKE ?", args: []any{"stats:site:" + strconv.FormatInt(siteID, 10) + ":%"}},
+		{name: "terminal data maintenance", query: "DELETE FROM data_maintenance_state WHERE site_id = ? AND status IN ('complete','failed')", args: []any{siteID}},
+		{name: "instance lifecycle metadata", query: "DELETE FROM site_instance_lifecycle WHERE site_id = ?", args: []any{siteID}},
 		{name: "current instances", query: "DELETE FROM site_instance WHERE site_id = ?", args: []any{siteID}},
 		{name: "monitoring pauses", query: "DELETE FROM site_monitoring_pause WHERE site_id = ?", args: []any{siteID}},
 		{name: "channels", query: "DELETE FROM site_channel WHERE site_id = ?", args: []any{siteID}},

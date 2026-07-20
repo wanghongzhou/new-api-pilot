@@ -60,8 +60,8 @@ func (service *SiteService) PreflightBaseURL(ctx context.Context, siteID int64, 
 		NormalizedBaseURL: normalized, ChangeType: compareSiteBaseURLs(site.BaseURL, normalized),
 		OldPublic:       dto.SitePublicIdentity{BaseURL: site.BaseURL, SystemName: site.SystemName, Version: site.Version},
 		CandidatePublic: dto.SitePublicIdentity{BaseURL: normalized, SystemName: status.SystemName, Version: status.Version},
-		ContractStatus: contractStatus,
-		PreflightToken: token, ExpiresAt: expiresAt,
+		ContractStatus:  contractStatus,
+		PreflightToken:  token, ExpiresAt: expiresAt,
 	}, nil
 }
 

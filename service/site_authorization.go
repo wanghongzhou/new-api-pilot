@@ -358,6 +358,13 @@ func (service *SiteService) commitAuthorization(ctx context.Context, original mo
 		if err := repository.ReplaceCapabilities(ctx, site.ID, capabilities); err != nil {
 			return err
 		}
+		if newReady && site.ManagementStatus == constant.SiteManagementActive && site.StatisticsEndAt == nil {
+			if err := repository.EnsureAuthorizationPricingIntent(
+				ctx, site.ID, int64(site.ConfigVersion), requestID, committedAt,
+			); err != nil {
+				return err
+			}
+		}
 		if evidence.ChannelsValid {
 			if err := repository.SyncChannels(ctx, site.ID, committedAt, channelModels(evidence.Channels)); err != nil {
 				return err
@@ -418,6 +425,9 @@ func (service *SiteService) commitAuthorization(ctx context.Context, original mo
 				Source: AlertSampleSourceUser, SiteID: original.ID, ObservedAt: committedAt,
 			})
 		}
+	}
+	if service.maintenance != nil {
+		service.maintenance.NotifyAuthorizationPricingSync()
 	}
 	// Probe only after the authorization transaction has committed. A failed
 	// probe is persisted by probeWithSnapshot and must not undo credentials or

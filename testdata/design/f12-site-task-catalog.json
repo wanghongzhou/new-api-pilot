@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "fixture_id": "F12",
+  "clock": {
+    "now_unix": 2101600000,
+    "timezone": "Asia/Shanghai"
+  },
+  "tasks": [
+    {"task_type": "site_probe", "category": "fast", "trigger_class": "fast_interval", "purpose_key": "siteTasks.purpose.siteProbe"},
+    {"task_type": "realtime_stat", "category": "fast", "trigger_class": "fast_interval", "purpose_key": "siteTasks.purpose.realtimeStat"},
+    {"task_type": "resource_snapshot", "category": "fast", "trigger_class": "fast_interval", "purpose_key": "siteTasks.purpose.resourceSnapshot"},
+    {"task_type": "performance_sync", "category": "durable", "trigger_class": "resource_interval", "purpose_key": "siteTasks.purpose.performanceSync"},
+    {"task_type": "topup_sync", "category": "durable", "trigger_class": "resource_interval", "purpose_key": "siteTasks.purpose.topupSync"},
+    {"task_type": "redemption_sync", "category": "durable", "trigger_class": "resource_interval", "purpose_key": "siteTasks.purpose.redemptionSync"},
+    {"task_type": "upstream_task_sync", "category": "durable", "trigger_class": "resource_interval", "purpose_key": "siteTasks.purpose.upstreamTaskSync"},
+    {"task_type": "model_meta_sync", "category": "durable", "trigger_class": "resource_interval", "purpose_key": "siteTasks.purpose.modelMetaSync"},
+    {"task_type": "plan_sync", "category": "durable", "trigger_class": "resource_interval", "purpose_key": "siteTasks.purpose.planSync"},
+    {"task_type": "pricing_group_sync", "category": "durable", "trigger_class": "resource_interval", "purpose_key": "siteTasks.purpose.pricingGroupSync"},
+    {"task_type": "system_task_sync", "category": "durable", "trigger_class": "resource_interval", "purpose_key": "siteTasks.purpose.systemTaskSync"},
+    {"task_type": "user_sync", "category": "hourly", "trigger_class": "hour_boundary", "purpose_key": "siteTasks.purpose.userSync"},
+    {"task_type": "channel_sync", "category": "hourly", "trigger_class": "hour_boundary", "purpose_key": "siteTasks.purpose.channelSync"},
+    {"task_type": "log_sync", "category": "hourly", "trigger_class": "hour_boundary", "purpose_key": "siteTasks.purpose.logSync"},
+    {"task_type": "usage_hour", "category": "usage", "trigger_class": "usage_delay", "purpose_key": "siteTasks.purpose.usageHour"},
+    {"task_type": "usage_backfill", "category": "usage", "trigger_class": "event_backfill", "purpose_key": "siteTasks.purpose.usageBackfill"},
+    {"task_type": "usage_validation", "category": "usage", "trigger_class": "validation_calendar", "purpose_key": "siteTasks.purpose.usageValidation"},
+    {"task_type": "account_rebuild", "category": "rebuild", "trigger_class": "event_rebuild", "purpose_key": "siteTasks.purpose.accountRebuild"},
+    {"task_type": "customer_rebuild", "category": "rebuild", "trigger_class": "event_rebuild", "purpose_key": "siteTasks.purpose.customerRebuild"}
+  ],
+  "catalog_rules": {
+    "create_site_enqueues": [],
+    "preflight_enqueues": [],
+    "authorize_ready_enqueues": ["usage_backfill"],
+    "authorize_post_commit_immediate": ["site_probe"],
+    "enable_recovery_enqueues": ["usage_backfill", "site_probe", "realtime_stat", "resource_snapshot"],
+    "offline_allows_only": ["site_probe"],
+    "data_export_required_for": ["usage_hour", "usage_backfill", "usage_validation"]
+  },
+  "history_rules": {
+    "fast_schedule_success": "bounded_redis_history_without_normal_collection_run",
+    "fast_manual_recovery_or_diagnostic": "durable_collection_run",
+    "durable_and_hourly": "durable_collection_run_and_database_facts",
+    "usage_and_rebuild": "durable_collection_run_windows",
+    "business_facts": "retained_by_each_resource_contract",
+    "diagnostic_runs": "bounded_or_redacted_by_maintenance_contract"
+  },
+  "scenarios": [
+    "exactly_nineteen_task_types",
+    "no_missing_or_unknown_task_type",
+    "category_and_trigger_class_match_constant_contract",
+    "startup_fast_tasks_do_not_imply_hourly_startup_sync",
+    "offline_suppresses_every_non_probe_site_task",
+    "create_and_preflight_create_no_background_task",
+    "authorize_initial_backfill_and_post_commit_probe_only",
+    "enable_creates_usage_and_current_state_recovery_runs",
+    "fast_and_durable_history_are_distinct",
+    "purpose_keys_cover_all_task_types"
+  ]
+}

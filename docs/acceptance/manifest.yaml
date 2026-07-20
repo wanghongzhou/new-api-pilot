@@ -1,7 +1,7 @@
 schema_version: 1
 baseline:
   source: "docs/多站点运营管理平台-详细设计-07-运维与验收.md#51-核心验收矩阵"
-  acceptance_range: "A01-A100"
+  acceptance_range: "A01-A102"
   release_policy: "required-no-skip"
   product_locale: "zh-CN"
   fixture_checksum_manifest: "testdata/design/manifest.sha256"
@@ -44,6 +44,14 @@ fixtures:
   F11:
     path: "testdata/design/f11-system-tasks.json"
     purpose: "safe system-task list/current monitoring, typed projection, completeness, retention and read-only boundary"
+
+  F12:
+    path: "testdata/design/f12-site-task-catalog.json"
+    purpose: "the exact 19 site task types, functional categories, trigger classes, lifecycle boundaries and history contracts"
+
+  F13:
+    path: "testdata/design/f13-data-maintenance.json"
+    purpose: "authorization pricing sync and persistent-clock resource, audit redaction and metadata diagnostic maintenance contracts"
 
 acceptance_cases:
   - acceptance_id: A01
@@ -880,3 +888,23 @@ acceptance_cases:
       - "web/src/lib/acceptance-fixture-consumption.test.ts"
     owner_role: backend
     evidence_path: "planned:artifacts/acceptance/A100/"
+  - acceptance_id: A101
+    requirement_id: R04
+    fixture: [F12]
+    layer: integration
+    test_or_runbook_paths:
+      - "tests/integration/site_task_catalog_acceptance_test.go"
+      - "web/src/features/sites/site-task-catalog.test.ts"
+      - "web/e2e/site-task-catalog.spec.ts"
+      - "web/src/features/sites/site-task-catalog-fixture-consumption.test.ts"
+    owner_role: qa
+    evidence_path: "planned:artifacts/acceptance/A101/"
+  - acceptance_id: A102
+    requirement_id: R04
+    fixture: [F04, F12, F13]
+    layer: integration
+    test_or_runbook_paths:
+      - "tests/integration/data_maintenance_acceptance_test.go"
+      - "internal/docscheck/maintenance_catalog_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A102/"

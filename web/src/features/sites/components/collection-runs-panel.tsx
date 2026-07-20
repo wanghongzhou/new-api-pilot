@@ -37,6 +37,8 @@ import {
   listSiteCollectionRuns,
 } from '../api'
 import {
+  collectionTaskCatalog,
+  collectionTaskCategories,
   collectionRunStatuses,
   collectionRunWindowStatuses,
   collectionTaskTypes,
@@ -128,6 +130,14 @@ function RunCard({
           <h3 className='font-medium'>
             {t(dynamicI18nKey('site', `collection.task.${run.task_type}`))}
           </h3>
+          <p className='text-muted-foreground mt-1 text-sm'>
+            {t(
+              dynamicI18nKey(
+                'site',
+                collectionTaskCatalog[run.task_type].purposeKey
+              )
+            )}
+          </p>
           <p className='text-muted-foreground text-xs'>{formatRange(run)}</p>
         </div>
         <RunStatusBadge status={run.status} />
@@ -353,9 +363,21 @@ function RunWindowsSheet({
         {run && !runContractError && (
           <section className='border-border bg-muted/30 rounded-lg border p-4'>
             <div className='flex flex-wrap items-center justify-between gap-2'>
-              <strong>
-                {t(dynamicI18nKey('site', `collection.task.${run.task_type}`))}
-              </strong>
+              <div>
+                <strong>
+                  {t(
+                    dynamicI18nKey('site', `collection.task.${run.task_type}`)
+                  )}
+                </strong>
+                <p className='text-muted-foreground mt-1 text-sm'>
+                  {t(
+                    dynamicI18nKey(
+                      'site',
+                      collectionTaskCatalog[run.task_type].purposeKey
+                    )
+                  )}
+                </p>
+              </div>
               <RunStatusBadge status={run.status} />
             </div>
             <p className='text-muted-foreground mt-1 text-sm'>
@@ -504,6 +526,17 @@ export function CollectionRunsPanel({
           t(
             dynamicI18nKey(
               'site',
+              collectionTaskCatalog[row.original.task_type].purposeKey
+            )
+          ),
+        header: t('siteTasks.purposeLabel'),
+        id: 'purpose',
+      },
+      {
+        cell: ({ row }) =>
+          t(
+            dynamicI18nKey(
+              'site',
               `collection.trigger.${row.original.trigger_type}`
             )
           ),
@@ -608,10 +641,24 @@ export function CollectionRunsPanel({
             value={search.runTaskType ?? ''}
           >
             <option value=''>{t('collection.allTaskTypes')}</option>
-            {collectionTaskTypes.map((taskType) => (
-              <option key={taskType} value={taskType}>
-                {t(dynamicI18nKey('site', `collection.task.${taskType}`))}
-              </option>
+            {collectionTaskCategories.map((category) => (
+              <optgroup
+                key={category}
+                label={t(
+                  dynamicI18nKey('site', `siteTasks.category.${category}`)
+                )}
+              >
+                {collectionTaskTypes
+                  .filter(
+                    (taskType) =>
+                      collectionTaskCatalog[taskType].category === category
+                  )
+                  .map((taskType) => (
+                    <option key={taskType} value={taskType}>
+                      {t(dynamicI18nKey('site', `collection.task.${taskType}`))}
+                    </option>
+                  ))}
+              </optgroup>
             ))}
           </Select>
         </div>

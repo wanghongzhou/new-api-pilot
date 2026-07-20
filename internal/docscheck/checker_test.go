@@ -31,13 +31,13 @@ func TestExpandReferencesIncludesThreeDigitAcceptanceID(t *testing.T) {
 	}
 }
 
-func TestAcceptanceIDPatternEndsAtA100(t *testing.T) {
-	for _, value := range []string{"A01", "A99", "A100"} {
+func TestAcceptanceIDPatternEndsAtA102(t *testing.T) {
+	for _, value := range []string{"A01", "A99", "A100", "A101", "A102"} {
 		if !acceptanceIDPattern.MatchString(value) {
 			t.Fatalf("acceptanceIDPattern rejected %s", value)
 		}
 	}
-	for _, value := range []string{"A1", "A000", "A101"} {
+	for _, value := range []string{"A1", "A000", "A103"} {
 		if acceptanceIDPattern.MatchString(value) {
 			t.Fatalf("acceptanceIDPattern accepted %s", value)
 		}

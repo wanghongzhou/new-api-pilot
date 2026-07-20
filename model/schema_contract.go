@@ -260,6 +260,40 @@ func AuthoritativeSchemaContracts() (map[string]TableContract, error) {
 		}
 		contracts[name] = contract
 	}
+	maintenanceStatements, err := readMigrationStatements("0019_data_maintenance.sql")
+	if err != nil {
+		return nil, err
+	}
+	if len(maintenanceStatements) != 1 {
+		return nil, fmt.Errorf("0019 data maintenance migration is incomplete")
+	}
+	maintenanceContracts, err := parseCreateTableContracts(maintenanceStatements)
+	if err != nil {
+		return nil, err
+	}
+	for name, contract := range maintenanceContracts {
+		if _, exists := contracts[name]; exists {
+			return nil, fmt.Errorf("migration schema contract duplicates table %s", name)
+		}
+		contracts[name] = contract
+	}
+	lifecycleStatements, err := readMigrationStatements("0020_site_instance_lifecycle.sql")
+	if err != nil {
+		return nil, err
+	}
+	if len(lifecycleStatements) != 2 {
+		return nil, fmt.Errorf("0020 site instance lifecycle migration is incomplete")
+	}
+	lifecycleContracts, err := parseCreateTableContracts(lifecycleStatements[:1])
+	if err != nil {
+		return nil, err
+	}
+	for name, contract := range lifecycleContracts {
+		if _, exists := contracts[name]; exists {
+			return nil, fmt.Errorf("migration schema contract duplicates table %s", name)
+		}
+		contracts[name] = contract
+	}
 
 	reencryptStatements, err := readMigrationStatements("0005_encryption_reencrypt.sql")
 	if err != nil {

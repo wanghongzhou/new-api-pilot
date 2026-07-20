@@ -2,9 +2,13 @@ package model
 
 import (
 	"context"
+	"errors"
 
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
+
+var ErrSiteInstanceLifecycleContract = errors.New("site instance lifecycle contract is invalid")
 
 type SiteCapability struct {
 	ID            int64  `gorm:"column:id;primaryKey;autoIncrement"`
@@ -66,6 +70,19 @@ type SiteInstance struct {
 }
 
 func (SiteInstance) TableName() string { return "site_instance" }
+
+type SiteInstanceLifecycle struct {
+	ID             int64  `gorm:"column:id;primaryKey;autoIncrement"`
+	SiteID         int64  `gorm:"column:site_id"`
+	NodeName       string `gorm:"column:node_name"`
+	StartMinuteTS  int64  `gorm:"column:start_minute_ts"`
+	EndMinuteTS    *int64 `gorm:"column:end_minute_ts"`
+	EvidenceStatus string `gorm:"column:evidence_status"`
+	CreatedAt      int64  `gorm:"column:created_at"`
+	UpdatedAt      int64  `gorm:"column:updated_at"`
+}
+
+func (SiteInstanceLifecycle) TableName() string { return "site_instance_lifecycle" }
 
 type SiteInstanceStatusMinutely struct {
 	ID              int64    `gorm:"column:id;primaryKey;autoIncrement"`
@@ -209,6 +226,49 @@ func (repository *SiteRepository) SyncChannels(ctx context.Context, siteID, sync
 func (repository *SiteRepository) SyncInstances(ctx context.Context, writes []SiteInstanceWrite) error {
 	for index := range writes {
 		instance := &writes[index].Instance
+		var existing SiteInstance
+		existingErr := repository.db.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).Where("site_id=? AND node_name=?", instance.SiteID, instance.NodeName).Take(&existing).Error
+		if existingErr != nil && !errors.Is(existingErr, gorm.ErrRecordNotFound) {
+			return existingErr
+		}
+		startKnown := errors.Is(existingErr, gorm.ErrRecordNotFound) || existing.RetiredAt != nil
+		if !startKnown {
+			var open SiteInstanceLifecycle
+			if err := repository.db.WithContext(ctx).Where("site_id=? AND node_name=? AND end_minute_ts IS NULL", instance.SiteID, instance.NodeName).Take(&open).Error; err == nil && open.EvidenceStatus == "legacy_unknown" {
+				if writes[index].Sample.MinuteTS <= 0 {
+					return ErrSiteInstanceLifecycleContract
+				}
+				boundary := writes[index].Sample.MinuteTS - writes[index].Sample.MinuteTS%60
+				if updateErr := repository.db.WithContext(ctx).Model(&open).Updates(map[string]any{"end_minute_ts": boundary, "updated_at": instance.UpdatedAt}).Error; updateErr != nil {
+					return updateErr
+				}
+				startKnown = true
+			} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+		}
+		if startKnown {
+			startMinute := instance.FirstSeenAt - instance.FirstSeenAt%60
+			if existing.RetiredAt != nil && writes[index].Sample.MinuteTS > 0 {
+				startMinute = writes[index].Sample.MinuteTS - writes[index].Sample.MinuteTS%60
+			}
+			lifecycle := SiteInstanceLifecycle{SiteID: instance.SiteID, NodeName: instance.NodeName, StartMinuteTS: startMinute, EvidenceStatus: "known", CreatedAt: instance.UpdatedAt, UpdatedAt: instance.UpdatedAt}
+			if lifecycle.CreatedAt <= 0 {
+				lifecycle.CreatedAt, lifecycle.UpdatedAt = startMinute, startMinute
+			}
+			if err := repository.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "site_id"}, {Name: "node_name"}, {Name: "start_minute_ts"}}, DoUpdates: clause.Assignments(map[string]any{"end_minute_ts": nil, "evidence_status": "known", "updated_at": instance.UpdatedAt})}).Create(&lifecycle).Error; err != nil {
+				if !IsDuplicateKey(err) {
+					return err
+				}
+				var openCount int64
+				if countErr := repository.db.WithContext(ctx).Model(&SiteInstanceLifecycle{}).Where("site_id=? AND node_name=? AND end_minute_ts IS NULL AND evidence_status='known'", instance.SiteID, instance.NodeName).Count(&openCount).Error; countErr != nil {
+					return countErr
+				}
+				if openCount != 1 {
+					return err
+				}
+			}
+		}
 		if err := repository.db.WithContext(ctx).Clauses(clause.OnConflict{
 			Columns: []clause.Column{{Name: "site_id"}, {Name: "node_name"}},
 			DoUpdates: clause.AssignmentColumns([]string{
@@ -237,12 +297,30 @@ func (repository *SiteRepository) SyncInstances(ctx context.Context, writes []Si
 // upstream snapshot. It is deliberately separate from SyncInstances so failed
 // upstream requests never retire monitoring targets.
 func (repository *SiteRepository) RetireMissingInstances(ctx context.Context, siteID, retiredAt int64, nodeNames []string) error {
-	query := repository.db.WithContext(ctx).Model(&SiteInstance{}).
-		Where("site_id = ? AND retired_at IS NULL", siteID)
-	if len(nodeNames) > 0 {
-		query = query.Where("node_name NOT IN ?", nodeNames)
-	}
-	return query.Updates(map[string]any{"retired_at": retiredAt, "updated_at": retiredAt}).Error
+	return repository.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		query := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("site_id=? AND retired_at IS NULL", siteID)
+		if len(nodeNames) > 0 {
+			query = query.Where("node_name NOT IN ?", nodeNames)
+		}
+		var retiring []SiteInstance
+		if err := query.Find(&retiring).Error; err != nil {
+			return err
+		}
+		if len(retiring) == 0 {
+			return nil
+		}
+		names := make([]string, 0, len(retiring))
+		for _, instance := range retiring {
+			names = append(names, instance.NodeName)
+		}
+		endMinute := retiredAt - retiredAt%60
+		if err := tx.Model(&SiteInstanceLifecycle{}).Where("site_id=? AND node_name IN ? AND end_minute_ts IS NULL", siteID, names).
+			Updates(map[string]any{"end_minute_ts": gorm.Expr("GREATEST(start_minute_ts, ?)", endMinute), "updated_at": retiredAt}).Error; err != nil {
+			return err
+		}
+		return tx.Model(&SiteInstance{}).Where("site_id=? AND node_name IN ? AND retired_at IS NULL", siteID, names).
+			Updates(map[string]any{"retired_at": retiredAt, "updated_at": retiredAt}).Error
+	})
 }
 
 func (repository *SiteRepository) ListInstanceResourceStatesForUpdate(

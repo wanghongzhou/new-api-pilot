@@ -42,6 +42,8 @@ func CheckWithOptions(root string, options Options) []Issue {
 	current := &checker{root: filepath.Clean(absoluteRoot), options: options}
 	trace := current.checkTraceability()
 	manifest := current.checkAcceptanceManifest(trace)
+	current.checkSiteTaskCatalog()
+	current.checkDataMaintenanceCatalog()
 	current.checkFixtureChecksums(manifest)
 	catalog := current.checkMessageCatalog()
 	current.checkMessageRefOpenAPI(catalog)

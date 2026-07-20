@@ -14,8 +14,8 @@ func TestAuthoritativeSchemaContractsLoadAllMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AuthoritativeSchemaContracts() error = %v", err)
 	}
-	if len(contracts) != 67 {
-		t.Fatalf("authoritative table count = %d, want 67", len(contracts))
+	if len(contracts) != 69 {
+		t.Fatalf("authoritative table count = %d, want 69", len(contracts))
 	}
 	for _, table := range []string{
 		"schema_migration", "schema_migration_progress", "collection_run", "alert_delivery",
@@ -28,6 +28,7 @@ func TestAuthoritativeSchemaContractsLoadAllMigrations(t *testing.T) {
 		"site_upstream_task", "site_upstream_task_collection_state",
 		"site_group_catalog", "site_pricing_catalog", "pricing_group_collection_state",
 		"site_system_task", "site_system_task_collection_state",
+		"data_maintenance_state", "site_instance_lifecycle",
 	} {
 		contract, exists := contracts[table]
 		if !exists || len(contract.Columns) == 0 || len(contract.Indexes) == 0 {

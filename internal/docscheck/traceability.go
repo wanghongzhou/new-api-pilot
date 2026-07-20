@@ -87,9 +87,9 @@ func (current *checker) checkTraceability() traceability {
 		}
 	}
 
-	checkIdentifierRange(current, path, "D", 1, 139, keys(result.decisions))
+	checkIdentifierRange(current, path, "D", 1, 141, keys(result.decisions))
 	checkIdentifierRange(current, path, "R", 1, 10, keys(result.requirements))
-	checkIdentifierRange(current, path, "A", 1, 100, keys(result.acceptanceCases))
+	checkIdentifierRange(current, path, "A", 1, 102, keys(result.acceptanceCases))
 
 	for decisionID, decision := range result.decisions {
 		if len(decision.requirements) == 0 {

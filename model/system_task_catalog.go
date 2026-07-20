@@ -142,8 +142,10 @@ func (r *SiteRepository) SyncSystemTasks(ctx context.Context, site Site, at int6
 		states = append(states, state)
 	}
 	for _, state := range states {
-		updates:=[]string{"data_status","truncated","id_gap","as_of","last_success_at","last_error_code","observed_count","config_version","updated_at"}
-		if state.DataStatus=="unavailable"{updates=[]string{"data_status","last_failure_at","last_error_code","config_version","updated_at"}}
+		updates := []string{"data_status", "truncated", "id_gap", "as_of", "last_success_at", "last_error_code", "observed_count", "config_version", "updated_at"}
+		if state.DataStatus == "unavailable" {
+			updates = []string{"data_status", "last_failure_at", "last_error_code", "config_version", "updated_at"}
+		}
 		if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "site_id"}, {Name: "resource_kind"}}, DoUpdates: clause.AssignmentColumns(updates)}).Create(&state).Error; err != nil {
 			return written, err
 		}

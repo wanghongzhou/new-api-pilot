@@ -126,7 +126,12 @@ export function DataTable<TData>({
           renderMobileCard && 'hidden sm:block'
         )}
       >
-        <div className='overflow-x-auto'>
+        <div
+          aria-label={ariaLabel}
+          className='focus-visible:ring-ring overflow-x-auto focus-visible:ring-2 focus-visible:outline-none'
+          role='region'
+          tabIndex={0}
+        >
           <table
             aria-label={ariaLabel}
             className='w-full border-collapse text-sm'

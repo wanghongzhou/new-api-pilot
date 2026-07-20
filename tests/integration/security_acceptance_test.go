@@ -308,7 +308,7 @@ func testA45UpstreamBoundary(t *testing.T) {
 	}
 
 	loopbackClient := newClient(service.NewAPIClientOptions{
-		BaseURL: fmt.Sprintf("https://127.0.0.1:%d", port),
+		BaseURL:      fmt.Sprintf("https://127.0.0.1:%d", port),
 		AllowedCIDRs: []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8")}, CAFile: caPath,
 	})
 	if err := callStatus(loopbackClient, "a45_loopback_explicit"); !errors.Is(err, service.ErrUpstreamAddressForbidden) {

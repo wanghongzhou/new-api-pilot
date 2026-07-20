@@ -1,0 +1,122 @@
+{
+  "schema_version": 2,
+  "fixture_id": "F13",
+  "clock": {
+    "now_unix": 2101608000,
+    "timezone": "Asia/Shanghai",
+    "previous_complete_date": 20360805,
+    "due_phase_cases": ["02:59", "03:00", "03:19", "03:20", "04:00"]
+  },
+  "operations": [
+    {"operation_id": "authorize_pricing_group_sync", "category": "authorization_trigger", "trigger_class": "authorize_post_commit"},
+    {"operation_id": "resource_daily_finalize", "category": "resource_maintenance", "trigger_class": "beijing_daily"},
+    {"operation_id": "resource_rollup_gap_repair", "category": "resource_maintenance", "trigger_class": "beijing_daily"},
+    {"operation_id": "collection_run_error_redaction", "category": "retention", "trigger_class": "retention_scan"},
+    {"operation_id": "metadata_diagnostic_run_cleanup", "category": "retention", "trigger_class": "retention_scan"}
+  ],
+  "authorization_scenarios": {
+    "ready_site_id": "11",
+    "ready_config_version": "7",
+    "expected_task_type": "pricing_group_sync",
+    "idempotent_replays": 3,
+    "expected_active_runs": 1,
+    "enqueue_failure_keeps_authorized": true,
+    "diagnostic_allowed_fields": ["site_id", "config_version", "request_id", "error_code"],
+    "diagnostic_forbidden_fields": ["access_token", "password", "upstream_body", "raw_error"],
+    "state_shape": "site_config_versioned_date_zero"
+  },
+  "resource_daily": {
+    "date_key": 20360805,
+    "sites": ["11", "12", "13"],
+    "batch_size": 2,
+    "watermark_before": 20360804,
+    "watermark_after_success": 20360805,
+    "partial_failure_site_id": "12",
+    "partial_failure_keeps_watermark": 20360804,
+    "partial_failure_keeps_all_daily_unfinalized": true,
+    "publish_mode": "two_phase_atomic_all_day",
+    "required_fixed_fields": ["sample_count", "expected_sample_count", "data_status", "is_final"],
+    "coverage_cases": ["site_enabled_at_half_hour", "site_pause_full_hour", "node_first_seen_floor_minute", "node_retire_gap_reappear", "zero_sample_expected_hour", "missing_site_daily", "missing_instance_daily", "missing_expected_hour", "config_or_lifecycle_revision_changed"],
+    "data_statuses": ["complete", "partial", "missing", "paused"],
+    "finalize_rebuilds": ["site_status_daily", "site_instance_status_daily"],
+    "scope_revision": "sha256_canonical_site_config_pause_known_lifecycle",
+    "revision_change_action": "reset_composite_cursor_and_rescan",
+    "revision_vectors": [
+      {
+        "name": "global_single_site_open_node",
+        "canonical_json": "[[\"sites\",[[11,7,2101521600,null]]],[\"pauses\",[]],[\"lifecycles\",[[1,11,\"node-a\",2101521600,null,2101608000]]]]",
+        "sha256": "4eb87a819af1864dc2a3818156fd36c6b746c1c65b83b7a343fe8cfb884fa7e6"
+      },
+      {
+        "name": "site_slice_pause_and_retired_node",
+        "canonical_json": "[[\"sites\",[[11,7,2101521600,null]]],[\"pauses\",[[3,11,2101525200,2101528800,2101608000]]],[\"lifecycles\",[[1,11,\"node-a\",2101521600,2101532400,2101608000]]]]",
+        "sha256": "4eb0608c983c43a32ca70fe826f6015741c459c5f22517df15480de026cae7cb"
+      }
+    ]
+  },
+  "instance_lifecycle": {
+    "table": "site_instance_lifecycle",
+    "identity": ["site_id", "node_name", "start_minute_ts"],
+    "interval": "[start_minute_ts,end_minute_ts)",
+    "evidence_statuses": ["known", "legacy_unknown"],
+    "expected_uses": ["known"],
+    "single_open_interval": true,
+    "same_minute_retire_reappear": "merge_open",
+    "legacy_migration_policy": "diagnostic_only_until_first_new_successful_sample",
+    "site_delete_policy": "owned_metadata"
+  },
+  "gap_repair": {
+    "batch_size": 2,
+    "cursor_order": "resource_kind,site_id,node_name,bucket_start",
+    "cursor_fields": ["cursor_kind", "cursor_site_id", "cursor_node_name", "cursor_bucket_start"],
+    "resource_kind_order": ["instance_hourly", "site_hourly"],
+    "site_node_name_sentinel": "",
+    "node_name_order": "utf8mb4_bin",
+    "repairs": ["hourly_missing", "hourly_unfixed_sample_expected_status"],
+    "never_rewrites": ["correct_complete_hourly", "daily", "final", "last_calculated_at_of_unchanged_bucket"],
+    "cases": [
+      "minute_exists_hourly_missing",
+      "hourly_unfixed_sample_counts",
+      "complete_bucket_idempotent_no_change",
+      "partial_batch_failure_resumes_from_cursor"
+    ]
+  },
+  "runtime": {
+    "startup_authorization_limit": 20,
+    "regular_authorization_limit": 100,
+    "operation_errors_are_joined": true,
+    "failure_does_not_starve_other_due_operations": true,
+    "lifecycle_cases": ["parent_cancel_during_recovery", "quiesce_during_recovery", "stop_during_recovery", "processor_releases_after_cancel", "no_double_close", "no_ready_rebound", "wake_continues_backlog", "tick_continues_backlog"]
+  },
+  "retention": {
+    "collection_run_error_days": 90,
+    "metadata_success_run_days": 30,
+    "batch_size": 2,
+    "error_redaction_keeps": ["id", "task_type", "trigger_type", "status", "error_code", "error_params", "range", "counts"],
+    "metadata_cleanup_task_types": ["user_sync", "channel_sync"],
+    "metadata_cleanup_requires": ["status_success", "trigger_schedule", "older_than_cutoff"],
+    "metadata_cleanup_never_deletes": ["failed", "manual", "windowed", "parent_range_empty_but_child_window_exists", "local_rebuild", "other_task_type"]
+  },
+  "automatic_cleanup_boundaries": {
+    "wall_clock_not_frozen_for": ["export_file_ttl", "log_fact_retention", "system_task_terminal_retention"],
+    "still_required": ["retryable_failure", "eventual_cleanup", "terminal_or_ttl_predicate"]
+  },
+  "scenarios": [
+    "controlled_clock_beijing_previous_day",
+    "persistent_daily_watermark_survives_restart",
+    "bounded_cursor_resume_without_duplicate_effect",
+    "partial_failure_never_marks_complete_or_final",
+    "config_fence_discards_stale_authorization_task",
+    "pricing_enqueue_failure_does_not_rollback_authorization",
+    "safe_diagnostic_fields_only",
+    "error_message_redaction_preserves_audit_skeleton",
+    "metadata_cleanup_exact_predicate",
+    "automatic_cleanup_has_no_frozen_wall_clock"
+    ,"instance_lifecycle_history_survives_retire_reappear"
+    ,"legacy_unknown_never_creates_expected_or_rewrites_final"
+    ,"gap_composite_cursor_batch_two_resume"
+    ,"complete_and_final_buckets_are_byte_stable"
+    ,"five_operations_fail_independently"
+    ,"bounded_startup_recovery_reaches_ready"
+  ]
+}

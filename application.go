@@ -150,11 +150,13 @@ func bootstrapApplication(
 		ExportTimeout:       options.Config.UpstreamExportTimeout,
 		Metrics:             metrics,
 	})
+	maintenanceWake := worker.NewDataMaintenanceWake()
 	siteRepository := model.NewSiteRepository(options.Database.GORM)
 	siteService, err := service.NewSiteService(service.SiteServiceOptions{
 		Repository: siteRepository, ClientFactory: clientFactory, Cipher: options.Cipher,
 		Clock:           options.Clock,
 		PreflightSecret: options.Config.SessionSecret, PostCommit: postCommit,
+		Maintenance: maintenanceWake,
 	})
 	if err != nil {
 		return nil, service.BootstrapResult{}, fmt.Errorf("initialize site service: %w", err)
@@ -245,7 +247,7 @@ func bootstrapApplication(
 		return nil, service.BootstrapResult{}, fmt.Errorf("initialize dashboard service: %w", err)
 	}
 	applicationRuntime, err := buildApplicationRuntime(options, metrics, alertService, dingTalkService,
-		clientFactory, siteRepository, siteService, logService, postCommit, redisStore)
+		clientFactory, siteRepository, siteService, logService, postCommit, maintenanceWake, redisStore)
 	if err != nil {
 		return nil, service.BootstrapResult{}, err
 	}
@@ -314,11 +316,20 @@ func buildApplicationRuntime(
 	siteService *service.SiteService,
 	logService *service.UpstreamLogService,
 	postCommit service.PostCommitNotifier,
-	redisStores ...*common.RedisStore,
+	runtimeExtras ...any,
 ) (runtimeLifecycle, error) {
 	var redisStore *common.RedisStore
-	if len(redisStores) > 0 {
-		redisStore = redisStores[0]
+	var maintenanceWake *worker.DataMaintenanceWake
+	for _, extra := range runtimeExtras {
+		switch typed := extra.(type) {
+		case *common.RedisStore:
+			redisStore = typed
+		case *worker.DataMaintenanceWake:
+			maintenanceWake = typed
+		}
+	}
+	if maintenanceWake == nil {
+		maintenanceWake = worker.NewDataMaintenanceWake()
 	}
 	if options.RuntimeMode == applicationRuntimeA49ReadOnly {
 		return &acceptanceReadOnlyRuntime{}, nil
@@ -404,7 +415,17 @@ func buildApplicationRuntime(
 	if err != nil {
 		return nil, fmt.Errorf("initialize export runtime: %w", err)
 	}
-	applicationRuntime, err := newRuntimeGroup(workerRuntime, alertRuntime, exportRuntime, resourceRetentionRuntime, logRetentionRuntime)
+	maintenanceService, err := service.NewDataMaintenanceService(
+		model.NewDataMaintenanceRepository(options.Database.GORM), options.Clock,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("initialize data maintenance service: %w", err)
+	}
+	maintenanceRuntime, err := worker.NewDataMaintenanceRuntime(maintenanceService, options.Clock, maintenanceWake, 0)
+	if err != nil {
+		return nil, fmt.Errorf("initialize data maintenance runtime: %w", err)
+	}
+	applicationRuntime, err := newRuntimeGroup(workerRuntime, alertRuntime, exportRuntime, resourceRetentionRuntime, logRetentionRuntime, maintenanceRuntime)
 	if err != nil {
 		return nil, fmt.Errorf("initialize application runtime: %w", err)
 	}

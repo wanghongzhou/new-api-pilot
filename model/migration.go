@@ -556,9 +556,85 @@ WHERE table_schema = DATABASE() AND table_name = ? AND table_type = 'BASE TABLE'
 			return false, fmt.Errorf("no postcondition for DDL statement %d", index+1)
 		}
 		return verifyMigrationTable(ctx, connection, tables[index])
+	case "0019_data_maintenance":
+		if index != 0 {
+			return false, fmt.Errorf("no postcondition for DDL statement %d", index+1)
+		}
+		return verifyDataMaintenanceTable(ctx, connection)
+	case "0020_site_instance_lifecycle":
+		if index < 0 || index > 1 {
+			return false, fmt.Errorf("no postcondition for DDL statement %d", index+1)
+		}
+		return verifySiteInstanceLifecycleTable(ctx, connection)
 	default:
 		return false, fmt.Errorf("migration %s has no registered DDL postconditions", version)
 	}
+}
+
+func verifySiteInstanceLifecycleTable(ctx context.Context, connection *sql.Conn) (bool, error) {
+	ready, err := verifyMigrationTable(ctx, connection, "site_instance_lifecycle")
+	if err != nil || !ready {
+		return ready, err
+	}
+	var columns, generated, indexes, foreignKeys, checks int
+	if err := connection.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.columns
+WHERE table_schema=DATABASE() AND table_name='site_instance_lifecycle' AND column_name IN
+('id','site_id','node_name','start_minute_ts','end_minute_ts','evidence_status','open_node_name','created_at','updated_at')`).Scan(&columns); err != nil {
+		return false, err
+	}
+	if err := connection.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.columns
+WHERE table_schema=DATABASE() AND table_name='site_instance_lifecycle' AND column_name='open_node_name' AND extra LIKE '%STORED GENERATED%'`).Scan(&generated); err != nil {
+		return false, err
+	}
+	if err := connection.QueryRowContext(ctx, `SELECT COUNT(DISTINCT index_name) FROM information_schema.statistics
+WHERE table_schema=DATABASE() AND table_name='site_instance_lifecycle' AND index_name IN
+('uk_site_instance_lifecycle_start','uk_site_instance_lifecycle_open','idx_site_instance_lifecycle_range')`).Scan(&indexes); err != nil {
+		return false, err
+	}
+	if err := connection.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.referential_constraints
+WHERE constraint_schema=DATABASE() AND table_name='site_instance_lifecycle' AND constraint_name='fk_site_instance_lifecycle_site' AND update_rule='RESTRICT' AND delete_rule='RESTRICT'`).Scan(&foreignKeys); err != nil {
+		return false, err
+	}
+	if err := connection.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.table_constraints
+WHERE constraint_schema=DATABASE() AND table_name='site_instance_lifecycle' AND constraint_type='CHECK' AND constraint_name='chk_site_instance_lifecycle_range'`).Scan(&checks); err != nil {
+		return false, err
+	}
+	return columns == 9 && generated == 1 && indexes == 3 && foreignKeys == 1 && checks == 1, nil
+}
+
+func verifyDataMaintenanceTable(ctx context.Context, connection *sql.Conn) (bool, error) {
+	ready, err := verifyMigrationTable(ctx, connection, "data_maintenance_state")
+	if err != nil || !ready {
+		return ready, err
+	}
+	var columns, indexes, foreignKeys, checks int
+	if err := connection.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.columns
+WHERE table_schema = DATABASE() AND table_name = 'data_maintenance_state'
+  AND column_name IN ('operation_id','scope_key','scope_revision','date_key','status','cursor_kind','cursor_site_id',
+    'cursor_node_name','cursor_bucket_start','cursor_id','site_id','site_config_version','request_id',
+    'run_id','error_code','attempt_count','next_attempt_at','last_attempt_at','last_success_at',
+    'last_failure_at','created_at','updated_at')`).Scan(&columns); err != nil {
+		return false, err
+	}
+	if err := connection.QueryRowContext(ctx, `SELECT COUNT(DISTINCT index_name) FROM information_schema.statistics
+WHERE table_schema = DATABASE() AND table_name = 'data_maintenance_state'
+  AND index_name IN ('uk_data_maintenance_scope','idx_data_maintenance_due','idx_data_maintenance_site')`).Scan(&indexes); err != nil {
+		return false, err
+	}
+	if err := connection.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.referential_constraints
+WHERE constraint_schema = DATABASE() AND table_name = 'data_maintenance_state'
+  AND constraint_name IN ('fk_data_maintenance_site','fk_data_maintenance_run')
+  AND update_rule = 'RESTRICT' AND delete_rule IN ('RESTRICT','SET NULL')`).Scan(&foreignKeys); err != nil {
+		return false, err
+	}
+	if err := connection.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.table_constraints
+WHERE constraint_schema = DATABASE() AND table_name = 'data_maintenance_state'
+  AND constraint_type = 'CHECK' AND constraint_name IN (
+    'chk_data_maintenance_operation','chk_data_maintenance_status','chk_data_maintenance_cursor',
+	'chk_data_maintenance_attempt','chk_data_maintenance_site_pair','chk_data_maintenance_shape')`).Scan(&checks); err != nil {
+		return false, err
+	}
+	return columns == 22 && indexes == 3 && foreignKeys == 2 && checks == 6, nil
 }
 
 func verifyMigrationTable(ctx context.Context, connection *sql.Conn, table string) (bool, error) {

@@ -22,7 +22,7 @@ import (
 
 const acceptanceManifestPath = "docs/acceptance/manifest.yaml"
 
-var acceptanceIDPattern = regexp.MustCompile(`^A(?:\d{2}|100)$`)
+var acceptanceIDPattern = regexp.MustCompile(`^A(?:\d{2}|10[0-2])$`)
 
 type acceptanceManifest struct {
 	SchemaVersion   int                          `yaml:"schema_version"`
@@ -81,8 +81,8 @@ func (current *checker) checkAcceptanceManifest(trace traceability) *acceptanceM
 	if manifest.SchemaVersion != 1 {
 		current.add("manifest", path, "schema_version = %d, want 1", manifest.SchemaVersion)
 	}
-	if manifest.Baseline.AcceptanceRange != "A01-A100" {
-		current.add("manifest", path, "baseline.acceptance_range = %q, want A01-A100", manifest.Baseline.AcceptanceRange)
+	if manifest.Baseline.AcceptanceRange != "A01-A102" {
+		current.add("manifest", path, "baseline.acceptance_range = %q, want A01-A102", manifest.Baseline.AcceptanceRange)
 	}
 	if manifest.Baseline.ReleasePolicy != "required-no-skip" {
 		current.add("manifest", path, "baseline.release_policy = %q, want required-no-skip", manifest.Baseline.ReleasePolicy)
@@ -109,6 +109,8 @@ func (current *checker) checkAcceptanceManifest(trace traceability) *acceptanceM
 		"F09": "testdata/design/f09-subscription-plans.json",
 		"F10": "testdata/design/f10-pricing-groups.json",
 		"F11": "testdata/design/f11-system-tasks.json",
+		"F12": "testdata/design/f12-site-task-catalog.json",
+		"F13": "testdata/design/f13-data-maintenance.json",
 	}
 	for fixtureID, expectedPath := range expectedFixturePaths {
 		definition, exists := manifest.Fixtures[fixtureID]
@@ -171,6 +173,9 @@ func (current *checker) checkAcceptanceManifest(trace traceability) *acceptanceM
 		if requiresMultiLayerAcceptance(acceptance.AcceptanceID) {
 			current.checkMultiLayerAcceptance(path, acceptance.AcceptanceID, testPaths)
 		}
+		if acceptance.AcceptanceID == "A102" {
+			current.checkIntegrationContractAcceptance(path, acceptance.AcceptanceID, testPaths)
+		}
 		current.checkPlannedPath(path, acceptance.AcceptanceID, "evidence_path", acceptance.EvidencePath, true)
 		if acceptance.Layer == "runbook" {
 			for _, testPath := range testPaths {
@@ -180,7 +185,7 @@ func (current *checker) checkAcceptanceManifest(trace traceability) *acceptanceM
 			}
 		}
 	}
-	checkIdentifierRange(current, path, "A", 1, 100, keys(caseIDs))
+	checkIdentifierRange(current, path, "A", 1, 102, keys(caseIDs))
 	for acceptanceID := range trace.acceptanceCases {
 		if _, exists := caseIDs[acceptanceID]; !exists {
 			current.add("manifest", path, "%s exists in design matrix but not manifest", acceptanceID)
@@ -238,7 +243,7 @@ func requiresMultiLayerAcceptance(acceptanceID string) bool {
 		return false
 	}
 	number, err := strconv.Atoi(strings.TrimPrefix(acceptanceID, "A"))
-	return err == nil && number >= 89 && number <= 100
+	return err == nil && number >= 89 && number <= 101
 }
 
 func classifyMultiLayerPaths(paths []string) multiLayerCoverage {
@@ -280,6 +285,16 @@ func (current *checker) checkMultiLayerAcceptance(manifestPath string, acceptanc
 	}
 	if !coverage.SafetyOrFixture {
 		current.add("manifest", manifestPath, "%s test paths lack safety absence/fixture consumption coverage", acceptanceID)
+	}
+}
+
+func (current *checker) checkIntegrationContractAcceptance(manifestPath string, acceptanceID string, paths []string) {
+	coverage := classifyMultiLayerPaths(paths)
+	if !coverage.BackendIntegration {
+		current.add("manifest", manifestPath, "%s test paths lack backend integration coverage", acceptanceID)
+	}
+	if !coverage.ContractOrUnit {
+		current.add("manifest", manifestPath, "%s test paths lack contract/unit coverage", acceptanceID)
 	}
 }
 

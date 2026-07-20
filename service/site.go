@@ -25,6 +25,7 @@ type SiteService struct {
 	clock                common.Clock
 	preflightSecret      []byte
 	postCommit           PostCommitNotifier
+	maintenance          DataMaintenanceNotifier
 	performanceCache     *sitePerformanceCache
 	performanceRefreshes chan struct{}
 }
@@ -36,6 +37,11 @@ type SiteServiceOptions struct {
 	Clock           common.Clock
 	PreflightSecret []byte
 	PostCommit      PostCommitNotifier
+	Maintenance     DataMaintenanceNotifier
+}
+
+type DataMaintenanceNotifier interface {
+	NotifyAuthorizationPricingSync()
 }
 
 func NewSiteService(options SiteServiceOptions) (*SiteService, error) {
@@ -49,6 +55,7 @@ func NewSiteService(options SiteServiceOptions) (*SiteService, error) {
 		sites: options.Repository, clients: options.ClientFactory, cipher: options.Cipher,
 		clock:           options.Clock,
 		preflightSecret: append([]byte(nil), options.PreflightSecret...), postCommit: options.PostCommit,
+		maintenance:          options.Maintenance,
 		performanceCache:     newSitePerformanceCache(),
 		performanceRefreshes: make(chan struct{}, 4),
 	}, nil

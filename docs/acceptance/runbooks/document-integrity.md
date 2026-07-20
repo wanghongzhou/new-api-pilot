@@ -22,9 +22,9 @@
 
 执行 `make docs-check` 并保存命令、退出码和完整报告。至少验证：
 
-- D01～D139、R01～R10、A01～A100 连续且唯一；每个 D 的 R/A 引用合法，需求域、详细决策、验收项之间不存在孤儿。
-- `docs/acceptance/manifest.yaml` 恰有 A01～A100，每项必填字段完整，R/fixture/layer 合法，运行手册路径存在；`planned:` 测试路径只允许用于尚未实现的功能。
-- F01～F11 固定路径均在 fixture manifest 中，文件 checksum、版本和引用一致。
+- D01～D141、R01～R10、A01～A102 连续且唯一；每个 D 的 R/A 引用合法，需求域、详细决策、验收项之间不存在孤儿。
+- `docs/acceptance/manifest.yaml` 恰有 A01～A102，每项必填字段完整，R/fixture/layer 合法，运行手册路径存在；`planned:` 测试路径只允许用于尚未实现的功能。
+- F01～F13 固定路径均在 fixture manifest 中，文件 checksum、版本和引用一致；F12、02 §7.1.1 与 constant 恰有同一组 19 个 task_type/category/trigger_class/purpose_key，F13 与 05C §34.7 恰有同一组五个 operation_id/category/trigger_class。
 - MessageRef registry、精确 params 和单一 `zh-CN` 资源一致，无缺键、重复或空值；不存在其他 locale、语言检测或切换入口。
 - 全部 Markdown 内部锚点、相对文件链接和受控外部链接有效。
 

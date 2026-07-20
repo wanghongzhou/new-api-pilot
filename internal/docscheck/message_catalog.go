@@ -20,10 +20,10 @@ const (
 var stableCodePattern = regexp.MustCompile(`[A-Z][A-Z0-9_]+`)
 
 type messageCatalog struct {
-	SchemaVersion  int                   `json:"schema_version"`
-	Source         string                `json:"source"`
-	APIErrorCodes  []string              `json:"api_error_codes"`
-	Entries        []messageCatalogEntry `json:"entries"`
+	SchemaVersion int                   `json:"schema_version"`
+	Source        string                `json:"source"`
+	APIErrorCodes []string              `json:"api_error_codes"`
+	Entries       []messageCatalogEntry `json:"entries"`
 }
 
 type messageCatalogEntry struct {

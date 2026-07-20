@@ -247,7 +247,7 @@ func settingTestRows(t *testing.T) map[string]model.PlatformSetting {
 		"collector.resource_interval_seconds": "60", "collector.usage_delay_minutes": "5",
 		"collector.minute_retention_days": "90", "collector.probe_concurrency": "20",
 		"system_task_terminal_retention_days": "90",
-		"collector.realtime_concurrency": "10", "collector.resource_concurrency": "10",
+		"collector.realtime_concurrency":      "10", "collector.resource_concurrency": "10",
 		"collector.metadata_concurrency": "5", "collector.usage_concurrency": "5",
 		"collector.backfill_concurrency": "2", "collector.manual_backfill_max_days": "366",
 		"export.file_ttl_hours": "24", "export.max_active_per_user": "3",

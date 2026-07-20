@@ -78,7 +78,7 @@ func openCoreAcceptanceTransaction(t *testing.T) *gorm.DB {
 
 func coreAcceptanceIDRequiresDatabase(id string) bool {
 	switch id {
-	case "A01", "A02", "A03", "A04", "A06", "A07", "A10", "A11", "A19", "A21", "A24", "A32", "A33", "A34", "A35", "A36", "A37", "A41", "A54", "A56", "A57", "A63", "A80", "A81", "A86":
+	case "A01", "A02", "A03", "A04", "A06", "A07", "A10", "A11", "A19", "A21", "A24", "A32", "A33", "A34", "A35", "A36", "A37", "A41", "A54", "A56", "A57", "A63", "A80", "A81", "A86", "A102":
 		return true
 	default:
 		return false

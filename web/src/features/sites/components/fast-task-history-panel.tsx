@@ -11,7 +11,11 @@ import { isIdString, parseIdString } from '@/lib/api-types'
 import { fromUnixSeconds } from '@/lib/dayjs'
 
 import { listSiteFastTaskHistory } from '../api'
-import { collectionTaskTypes } from '../constants'
+import {
+  collectionTaskCatalog,
+  fastCollectionTaskTypes,
+  isFastCollectionTaskType,
+} from '../constants'
 import { siteKeys } from '../query-keys'
 import type { FastTaskHistoryItem } from '../types'
 
@@ -52,7 +56,11 @@ export function FastTaskHistoryPanel({ siteId }: { siteId: string }) {
     refetchInterval: 5_000,
     staleTime: 5_000,
   })
-  const items = query.data?.items ?? []
+  const rawItems = query.data?.items ?? []
+  const contractError = rawItems.some(
+    (item) => !isFastCollectionTaskType(item.task_type)
+  )
+  const items = contractError ? [] : rawItems
   const columns = useMemo<ColumnDef<FastTaskHistoryItem, unknown>[]>(
     () => [
       {
@@ -62,6 +70,17 @@ export function FastTaskHistoryPanel({ siteId }: { siteId: string }) {
           ),
         header: t('collection.taskType'),
         id: 'taskType',
+      },
+      {
+        cell: ({ row }) =>
+          t(
+            dynamicI18nKey(
+              'site',
+              collectionTaskCatalog[row.original.task_type].purposeKey
+            )
+          ),
+        header: t('siteTasks.purposeLabel'),
+        id: 'purpose',
       },
       {
         cell: ({ row }) =>
@@ -134,27 +153,26 @@ export function FastTaskHistoryPanel({ siteId }: { siteId: string }) {
             }}
             value={taskType}
           >
-            {collectionTaskTypes
-              .filter((type) =>
-                ['site_probe', 'realtime_stat', 'resource_snapshot'].includes(
-                  type
-                )
-              )
-              .map((type) => (
-                <option key={type} value={type}>
-                  {t(dynamicI18nKey('site', `collection.task.${type}`))}
-                </option>
-              ))}
+            {fastCollectionTaskTypes.map((type) => (
+              <option key={type} value={type}>
+                {t(dynamicI18nKey('site', `collection.task.${type}`))}
+              </option>
+            ))}
           </Select>
         </div>
       </div>
+      {contractError && (
+        <p className='text-destructive text-sm' role='alert'>
+          {t('collection.contract.unknownFastTask')}
+        </p>
+      )}
       <DataTable
         ariaLabel={t('collection.fastHistoryTable')}
         columns={columns}
         data={items}
         emptyDescription={t('collection.fastHistoryEmptyDescription')}
         emptyTitle={t('collection.fastHistoryEmpty')}
-        error={!validSiteId || query.isError}
+        error={!validSiteId || query.isError || contractError}
         fetching={query.isFetching}
         loading={query.isPending}
         onPageChange={setPage}
