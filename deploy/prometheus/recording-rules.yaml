@@ -1,0 +1,34 @@
+groups:
+  - name: new-api-pilot.recording
+    interval: 30s
+    rules:
+      - record: new_api_pilot:http_5xx_ratio:5m
+        expr: |
+          sum(rate(new_api_pilot_http_requests_total{status_class="5xx"}[5m]))
+          /
+          clamp_min(sum(rate(new_api_pilot_http_requests_total[5m])), 0.000001)
+      - record: new_api_pilot:upstream_failure_ratio:5m
+        expr: |
+          sum(rate(new_api_pilot_upstream_requests_total{result!="success"}[5m]))
+          /
+          clamp_min(sum(rate(new_api_pilot_upstream_requests_total[5m])), 0.000001)
+      - record: new_api_pilot:db_pool_utilization
+        expr: |
+          sum(new_api_pilot_db_connections{state="in_use"})
+          /
+          clamp_min(sum(new_api_pilot_db_connections{state="max"}), 1)
+      - record: new_api_pilot:alert_delivery_failures:10m
+        expr: |
+          sum(increase(new_api_pilot_alert_deliveries_total{
+            channel="dingtalk",result=~"failed|exhausted"
+          }[10m]))
+      - record: new_api_pilot:export_failures:15m
+        expr: |
+          sum(increase(new_api_pilot_export_events_total{
+            event="failure",result=~"failed|exhausted|lost"
+          }[15m]))
+      - record: new_api_pilot:collection_failures:15m
+        expr: |
+          sum(increase(new_api_pilot_collection_events_total{
+            event="completion",result=~"failed|exhausted|lost"
+          }[15m]))

@@ -1,0 +1,13 @@
+{
+  "success": true,
+  "message": "",
+  "data": {
+    "page": 1,
+    "page_size": 100,
+    "total": 2,
+    "items": [
+      {"id": 1, "name": "Primary Channel", "type": 1, "status": 1, "test_time": 1768618700, "response_time": 120, "balance": 12.3456789012, "balance_updated_time": 1768618750, "models": "gpt-4o,gpt-4.1", "group": "default", "used_quota": 9007199254740993, "priority": 10, "weight": 20, "auto_ban": 1, "tag": "primary"},
+      {"id": 9, "name": "Historical Channel", "type": 2, "status": 2, "test_time": 1768618600, "response_time": 800, "balance": 0, "balance_updated_time": 1768618650, "models": "claude-3-5", "group": "vip", "used_quota": 7, "priority": 0, "weight": 0, "auto_ban": 0, "tag": null}
+    ]
+  }
+}

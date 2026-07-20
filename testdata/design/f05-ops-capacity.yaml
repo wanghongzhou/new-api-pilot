@@ -1,0 +1,181 @@
+schema_version: 2
+fixture_id: F05
+description: Deterministic export, backup, recovery, monitoring, and A49 capacity acceptance profile.
+clock:
+  timezone: Asia/Shanghai
+  now: "2026-01-17T23:59:59+08:00"
+  now_unix: 1768665599
+
+mysql:
+  version: "8.4"
+  transaction_isolation: READ-COMMITTED
+  charset: utf8mb4
+  collation: utf8mb4_unicode_ci
+  binlog_enabled: true
+  full_backup_retention_days: 30
+  binlog_retention_days: 7
+  rpo_seconds: 3600
+  rto_seconds: 14400
+  migration_checksum_tamper_must_fail: true
+
+encryption:
+  algorithm: AES-256-GCM
+  key_bytes: 32
+  nonce_bytes: 12
+  fixture_old_key_id: 0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0
+  fixture_new_key_id: f0e1d2c3b4a5968778695a4b3c2d1e0ff0e1d2c3b4a5968778695a4b3c2d1e0f
+  contains_secret_material: false
+
+export:
+  per_user_active_limit: 3
+  global_active_limit: 10
+  max_file_bytes: 2147483648
+  min_free_bytes: 5368709120
+  min_free_ratio: 0.10
+  file_ttl_hours: 24
+  page_size: 5000
+  xlsx_rows_per_sheet: 1000000
+  csv_utf8_bom: true
+  formula_prefixes: ["=", "+", "-", "@"]
+  disk_profiles:
+    healthy:
+      free_bytes: 10737418240
+      total_bytes: 107374182400
+      expected: allowed
+    below_absolute_threshold:
+      free_bytes: 4294967296
+      total_bytes: 107374182400
+      expected: EXPORT_DISK_LOW
+    below_ratio_threshold:
+      free_bytes: 8589934592
+      total_bytes: 107374182400
+      expected: EXPORT_DISK_LOW
+    unreadable:
+      free_bytes: 0
+      total_bytes: 0
+      expected: EXPORT_DISK_LOW
+
+redis:
+  required_in_production: true
+  ready_check_name: redis
+  unavailable_http_status: 503
+  fast_task_history_count: 100
+  fast_task_history_retention_seconds: 86400
+  authoritative_business_store: false
+
+performance_proxy_cache:
+  minimum_hours: 1
+  maximum_hours: 720
+  cached_hours: 24
+  success_ttl_seconds: 3600
+  failure_ttl_seconds: 300
+  maximum_parallel_refreshes: 4
+  key_fields: [site_id, config_version]
+  persistent: false
+
+capacity:
+  seed: 49050117
+  customers: 1000
+  sites: 50
+  remote_users: 100000
+  remote_users_per_site: 2000
+  managed_accounts: 10000
+  managed_accounts_per_site: 200
+  usage_fact_hourly_rows_30d: 15000000
+  fact_days: 30
+  fact_hours_local: [0, 4, 8, 12, 16]
+  active_channels_per_site: 100
+  active_models_per_site: 200
+  concurrent_read_users: 20
+  viewer_username_prefix: a49-viewer-
+  collection_window_start_unix: 1765983600
+  collection_window_end_unix: 1768665600
+  hourly_query_start_unix: 1765983600
+  hourly_query_end_unix: 1768662000
+  upstream_previous_hour_p95_seconds: 60
+  warmup_seconds: 120
+  sample_seconds: 600
+  think_time_milliseconds: 200
+  request_timeout_seconds: 10
+  minimum_successful_requests_per_endpoint: 1000
+  maximum_error_rate: 0.001
+  endpoints:
+    - name: list_sites
+      scenario: list
+      path: /api/sites?p=1&page_size=20&sort_by=updated_at&sort_order=desc
+    - name: list_customers
+      scenario: list
+      path: /api/customers?p=1&page_size=20&sort_by=updated_at&sort_order=desc
+    - name: list_accounts
+      scenario: list
+      path: /api/accounts?p=1&page_size=20&managed_status=active&sort_by=updated_at&sort_order=desc
+    - name: hourly_global_31d
+      scenario: hourly
+      path: /api/statistics/global?start_timestamp=1765983600&end_timestamp=1768662000&granularity=hour&p=1&page_size=100&sort_by=bucket_start&sort_order=desc
+    - name: dashboard_summary
+      scenario: dashboard
+      path: /api/dashboard/summary
+    - name: dashboard_trend
+      scenario: dashboard
+      path: /api/dashboard/trend?days=30
+    - name: dashboard_top_site
+      scenario: dashboard
+      path: /api/dashboard/top?type=site&metric=request_count&limit=5
+    - name: dashboard_top_customer
+      scenario: dashboard
+      path: /api/dashboard/top?type=customer&metric=request_count&limit=5
+    - name: dashboard_top_model
+      scenario: dashboard
+      path: /api/dashboard/top?type=model&metric=request_count&limit=5
+    - name: dashboard_top_channel
+      scenario: dashboard
+      path: /api/dashboard/top?type=channel&metric=request_count&limit=5
+    - name: dashboard_health
+      scenario: dashboard
+      path: /api/dashboard/health
+  populated_summary_tables:
+    - usage_fact_daily
+    - account_stat_daily
+    - customer_stat_daily
+    - site_stat_hourly
+    - site_stat_daily
+    - global_stat_hourly
+    - global_stat_daily
+    - model_stat_daily
+    - channel_stat_daily
+  resources:
+    minimum_cpus: 8
+    minimum_memory_bytes: 17179869184
+    minimum_docker_free_bytes: 37580963840
+    minimum_evidence_free_bytes: 5368709120
+  targets:
+    list_p95_seconds: 1
+    hourly_31d_p95_seconds: 3
+    dashboard_p95_seconds: 3
+    previous_hour_complete_by_minute: 15
+
+retention:
+  business_hourly_days: permanent
+  business_daily_days: permanent
+  collection_window_days: permanent
+  resource_minutely_days: 90
+  resource_hourly_days: permanent
+  resource_daily_days: permanent
+  application_log_days: 30
+  security_log_days: 180
+
+failure_drills:
+  - network_disconnect
+  - upstream_401
+  - upstream_429
+  - upstream_5xx
+  - process_restart
+  - export_disk_low
+
+required_commands:
+  - make docs-check
+  - go test ./...
+  - go vet ./...
+  - cd web && bun run check
+  - cd web && bun run test:e2e
+  - make acceptance

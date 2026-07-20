@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "fixture_id": "F07",
+  "clock": { "now_unix": 2101200000, "timezone": "Asia/Shanghai" },
+  "tasks": [
+    { "site_id": "1", "remote_id": "9", "created_at": 2101190000, "updated_at": 2101199900, "task_id": "task_public_1", "platform": "video", "user_id": "7", "group": "default", "channel_id": "3", "quota": "9007199254740993", "action": "generate", "status": "IN_PROGRESS", "submit_time": 2101190000, "start_time": 2101190010, "finish_time": 0, "progress": "50%", "properties": { "model": "video-model" } }
+  ],
+  "transitions": ["NOT_START->SUBMITTED", "SUBMITTED->QUEUED", "QUEUED->IN_PROGRESS", "IN_PROGRESS->SUCCESS", "IN_PROGRESS->FAILURE"],
+  "polling_scenarios": ["overlap_window", "known_unfinished_rescan", "total_drift", "maximum_id_drift", "duplicate_id", "config_fence", "terminal_retention", "unfinished_retained"]
+}

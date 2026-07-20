@@ -1,0 +1,39 @@
+{
+  "success": true,
+  "message": "",
+  "data": {
+    "page": 1,
+    "page_size": 100,
+    "total": 4,
+    "items": [
+      {
+        "id": 1,
+        "username": "root",
+        "display_name": "Fixture Root",
+        "role": 100,
+        "status": 1,
+        "group": "default",
+        "quota": 9007199254740993,
+        "used_quota": 9007199254740994,
+        "request_count": 9007199254740995,
+        "created_at": 1735660800,
+        "last_login_at": 1768618800,
+        "DeletedAt": null
+      },
+      {
+        "id": 2,
+        "username": "removed-user",
+        "display_name": "Removed User",
+        "role": 1,
+        "status": 1,
+        "group": "default",
+        "quota": 0,
+        "used_quota": 100,
+        "request_count": 1,
+        "created_at": 1735664400,
+        "last_login_at": 1735668000,
+        "DeletedAt": {"Time": "2026-01-16T08:00:00+08:00", "Valid": true}
+      }
+    ]
+  }
+}

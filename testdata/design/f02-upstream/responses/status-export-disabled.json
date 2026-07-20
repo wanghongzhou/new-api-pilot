@@ -1,0 +1,11 @@
+{
+  "success": true,
+  "message": "",
+  "data": {
+    "version": "v0.6.11-fixture",
+    "system_name": "Fixture Site Export Disabled",
+    "quota_per_unit": 500000,
+    "usd_exchange_rate": 7.2,
+    "enable_data_export": false
+  }
+}

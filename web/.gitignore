@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.tanstack/
+node_modules/.tmp/
+playwright-report/
+test-results/

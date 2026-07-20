@@ -1,0 +1,8 @@
+{
+  "success": true,
+  "message": "",
+  "data": [
+    {"model_name": "Model-A", "created_at": 1768406400, "count": 6, "quota": 501, "token_used": 50},
+    {"model_name": "model-a", "created_at": 1768406400, "count": 1, "quota": 100, "token_used": 10}
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "success": true,
+  "message": "",
+  "data": {
+    "id": 1,
+    "username": "root",
+    "display_name": "Fixture Root",
+    "role": 100,
+    "status": 1,
+    "group": "default",
+    "quota": 9007199254740993,
+    "used_quota": 9007199254740994,
+    "request_count": 9007199254740995,
+    "created_at": 1735660800,
+    "last_login_at": 1768618800,
+    "DeletedAt": null
+  }
+}

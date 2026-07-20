@@ -1,0 +1,42 @@
+{
+  "success": true,
+  "message": "",
+  "data": [
+    {
+      "node_name": "alpha-1",
+      "status": "online",
+      "stale_after_seconds": 90,
+      "started_at": 1768406400,
+      "last_seen_at": 1768622390,
+      "info": {
+        "node": {"name": "alpha-1"},
+        "role": "master",
+        "runtime": {"version": "go1.25.1", "goos": "linux", "goarch": "amd64"},
+        "host": {"hostname": "shared-host"},
+        "resources": {
+          "cpu": {"usage_percent": 84.5},
+          "memory": {"usage_percent": 70.25},
+          "storage": {"total_bytes": 1000000000, "used_bytes": 500000000, "free_bytes": 500000000, "used_percent": 50}
+        }
+      }
+    },
+    {
+      "node_name": "alpha-2",
+      "status": "stale",
+      "stale_after_seconds": 90,
+      "started_at": 1768406400,
+      "last_seen_at": 1768622200,
+      "info": {
+        "node": {"name": "alpha-2"},
+        "role": "worker",
+        "runtime": {"version": "go1.25.1", "goos": "linux", "goarch": "amd64"},
+        "host": {"hostname": "shared-host"},
+        "resources": {
+          "cpu": {"usage_percent": 95},
+          "memory": {"usage_percent": 85},
+          "storage": {"total_bytes": 2000000000, "used_bytes": 1900000000, "free_bytes": 100000000, "used_percent": 95}
+        }
+      }
+    }
+  ]
+}

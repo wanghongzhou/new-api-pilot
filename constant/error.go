@@ -1,0 +1,28 @@
+package constant
+
+const (
+	CodeValidationError          = "VALIDATION_ERROR"
+	CodeAuthRequired             = "AUTH_REQUIRED"
+	CodeAuthInvalid              = "AUTH_INVALID"
+	CodeUserDisabled             = "USER_DISABLED"
+	CodeForbidden                = "FORBIDDEN"
+	CodeOriginForbidden          = "ORIGIN_FORBIDDEN"
+	CodePasswordChangeRequired   = "PASSWORD_CHANGE_REQUIRED"
+	CodeNotFound                 = "NOT_FOUND"
+	CodePayloadTooLarge          = "PAYLOAD_TOO_LARGE"
+	CodeInternalError            = "INTERNAL_ERROR"
+	CodeInternalContractError    = "INTERNAL_CONTRACT_ERROR"
+	CodeLoginRateLimited         = "LOGIN_RATE_LIMITED"
+	CodeConflict                 = "CONFLICT"
+	CodeDeleteRestricted         = "DELETE_RESTRICTED"
+	CodeLastAdmin                = "LAST_ADMIN"
+	CodeSiteConfigChanged        = "SITE_CONFIG_CHANGED"
+	CodeUpstreamUnavailable      = "UPSTREAM_UNAVAILABLE"
+	CodeUpstreamError            = "UPSTREAM_ERROR"
+	CodeUpstreamAddressForbidden = "UPSTREAM_ADDRESS_FORBIDDEN"
+	CodeUpstreamUserNotFound     = "UPSTREAM_USER_NOT_FOUND"
+	CodeSLOConfigForbidden       = "SLO_CONFIG_FORBIDDEN"
+	CodeExportLimitReached       = "EXPORT_LIMIT_REACHED"
+	CodeExportExpired            = "EXPORT_EXPIRED"
+	CodeExportFileMissing        = "EXPORT_FILE_MISSING"
+)

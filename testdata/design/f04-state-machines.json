@@ -1,0 +1,258 @@
+{
+  "schema_version": 1,
+  "fixture_id": "F04",
+  "description": "Deterministic lifecycle, task recovery, concurrency, and alert state-machine scenarios.",
+  "clock": {
+    "timezone": "Asia/Shanghai",
+    "now": "2026-01-17T12:00:00+08:00",
+    "now_unix": 1768622400,
+    "current_hour": 1768622400,
+    "latest_complete_hour": 1768618800
+  },
+  "scenarios": [
+    {
+      "id": "site_disable_enable",
+      "initial": {
+        "site_id": "101",
+        "management_status": "active",
+        "statistics_status": "ready",
+        "config_version": 3,
+        "disabled_at": null
+      },
+      "events": [
+        {
+          "at": 1768622400,
+          "type": "disable"
+        },
+        {
+          "at": 1768626000,
+          "type": "enable"
+        }
+      ],
+      "expected": {
+        "config_version": 5,
+        "statistics_status": "backfilling",
+        "old_runs_error_code": "SITE_CONFIG_CHANGED",
+        "facts_unchanged": true,
+        "monitoring_pause": [1768622400, 1768626000]
+      }
+    },
+    {
+      "id": "account_restore_retry",
+      "initial": {
+        "account_id": "301",
+        "managed_status": "archived",
+        "statistics_paused_at": 1768492800,
+        "statistics_backfill_status": "failed"
+      },
+      "events": [
+        {
+          "type": "restore",
+          "run_id": "7001",
+          "result": "failed"
+        },
+        {
+          "type": "restore",
+          "run_id": "7002",
+          "result": "success"
+        }
+      ],
+      "expected": {
+        "managed_status": "active",
+        "statistics_paused_at": null,
+        "statistics_backfill_status": "none",
+        "latest_run_id": "7002"
+      }
+    },
+    {
+      "id": "customer_enable_child_retry",
+      "initial": {
+        "customer_id": "202",
+        "status": "disabled",
+        "statistics_paused_at": 1768492800,
+        "account_ids": ["303", "304"]
+      },
+      "events": [
+        {
+          "type": "enable",
+          "run_id": "7101",
+          "failed_account_id": "304"
+        },
+        {
+          "type": "retry",
+          "run_id": "7102",
+          "account_id": "304",
+          "result": "success"
+        }
+      ],
+      "expected": {
+        "status": "using",
+        "statistics_paused_at": null,
+        "latest_target_runs": {
+          "303": "7101",
+          "304": "7102"
+        }
+      }
+    },
+    {
+      "id": "remote_identity_mismatch",
+      "initial": {
+        "account_id": "302",
+        "remote_user_id": "1002",
+        "remote_created_at": 1735668000,
+        "remote_state": "normal"
+      },
+      "events": [
+        {
+          "type": "complete_user_sync",
+          "observed_created_at": 1768406400
+        }
+      ],
+      "expected": {
+        "remote_state": "identity_mismatch",
+        "statistics_paused_at": 1768622400,
+        "alert_rule_key": "account_identity_mismatch",
+        "automatic_recovery": false
+      }
+    },
+    {
+      "id": "worker_lease_recovery",
+      "initial": {
+        "run_id": "7201",
+        "run_window_id": "720101",
+        "status": "running",
+        "attempt_count": 2,
+        "heartbeat_at": 1768622040,
+        "maximum_attempts": 5
+      },
+      "events": [
+        {
+          "at": 1768622400,
+          "type": "lease_reaper"
+        }
+      ],
+      "expected": {
+        "status": "pending",
+        "attempt_count": 2,
+        "error_code": "WORKER_LEASE_LOST",
+        "orphaned": false
+      }
+    },
+    {
+      "id": "site_fence_during_materialization",
+      "initial": {
+        "site_id": "101",
+        "config_version": 8,
+        "run_id": "7301",
+        "site_config_version": 8,
+        "windows_initialized_at": null
+      },
+      "events": [
+        {
+          "type": "materialize_first_batch",
+          "window_count": 1000
+        },
+        {
+          "type": "bump_site_fence",
+          "new_config_version": 9
+        },
+        {
+          "type": "resume_materialization"
+        }
+      ],
+      "expected": {
+        "run_status": "failed",
+        "error_code": "SITE_CONFIG_CHANGED",
+        "new_pending_windows_after_fence": 0,
+        "active_key": null
+      }
+    },
+    {
+      "id": "overlapping_usage_runs",
+      "initial": {
+        "site_id": "101",
+        "active_run": {
+          "id": "7401",
+          "start_timestamp": 1768406400,
+          "end_timestamp": 1768449600
+        }
+      },
+      "events": [
+        {
+          "type": "manual_backfill",
+          "start_timestamp": 1768446000,
+          "end_timestamp": 1768489200
+        }
+      ],
+      "expected": {
+        "http_status": 409,
+        "code": "TASK_OVERLAP",
+        "duplicate_window_ownership": false
+      }
+    },
+    {
+      "id": "alert_warning_critical_recovery",
+      "initial": {
+        "target_key": "site:101:node:alpha-1",
+        "warning_threshold": "85",
+        "critical_threshold": "95",
+        "for_times": 3
+      },
+      "samples": ["84", "85", "85", "85", "95", "95", "95", "90", "90", "90", "84"],
+      "expected_transitions": [
+        "warning_firing",
+        "warning_resolved",
+        "critical_firing",
+        "critical_resolved",
+        "warning_firing",
+        "warning_resolved"
+      ],
+      "maximum_active_events_per_target": 1
+    },
+    {
+      "id": "fast_task_redis_history",
+      "initial": {
+        "site_id": "101",
+        "task_type": "site_probe",
+        "history_count": 3,
+        "retention_seconds": 60
+      },
+      "events": [
+        {"type": "record", "status": "success", "request_id": "fast-1"},
+        {"type": "record", "status": "failed", "request_id": "fast-2"},
+        {"type": "record", "status": "success", "request_id": "fast-3"},
+        {"type": "record", "status": "success", "request_id": "fast-4"},
+        {"type": "redis_write_failure", "request_id": "fast-5"}
+      ],
+      "expected": {
+        "retained_request_ids": ["fast-4", "fast-3", "fast-2"],
+        "success_filter_total": 2,
+        "failed_filter_total": 1,
+        "ttl_seconds": 60,
+        "business_result_changed_by_write_failure": false,
+        "ready_failed_checks": ["redis"]
+      }
+    },
+    {
+      "id": "performance_proxy_cache_fence",
+      "initial": {"site_id": "101", "config_version": 8, "hours": 24},
+      "events": [
+        {"type": "proxy_success", "request_count": "40"},
+        {"type": "list_cache_read", "config_version": 8},
+        {"type": "bump_site_fence", "new_config_version": 9},
+        {"type": "list_cache_read", "config_version": 9},
+        {"type": "proxy_failure"}
+      ],
+      "expected": {
+        "weighted_success_rate": 97.5,
+        "weighted_avg_latency_ms": 90,
+        "weighted_avg_tps": 40,
+        "same_version_cache_status": "ready",
+        "new_version_cache_status": "unavailable",
+        "success_ttl_seconds": 3600,
+        "failure_ttl_seconds": 300,
+        "persisted_to_mysql_or_redis": false
+      }
+    }
+  ]
+}

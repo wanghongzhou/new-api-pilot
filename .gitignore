@@ -1,0 +1,33 @@
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Go
+/bin/
+*.exe
+*.test
+*.out
+coverage.*
+
+# Frontend
+web/node_modules/
+web/dist/
+web/.tanstack/
+web/node_modules/.tmp/
+
+# Runtime data
+/data/
+/artifacts/
+/cookies.txt
+*.log
+
+# Editors and OS
+.cursor/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local indexes
+.codegraph/

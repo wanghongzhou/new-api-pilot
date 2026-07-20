@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "fixture_id": "F01",
+  "description": "Deterministic platform authentication, authorization, password, and bigint contract data.",
+  "clock": {
+    "timezone": "Asia/Shanghai",
+    "now": "2026-01-17T12:00:00+08:00",
+    "now_unix": 1768622400
+  },
+  "bigint_contract": {
+    "javascript_max_safe_integer": "9007199254740991",
+    "first_unsafe_integer": "9007199254740992",
+    "platform_user_id": "9007199254740993",
+    "quota": "9223372036854775000",
+    "request_count": "9007199254741999",
+    "token_used": "9007199254742999"
+  },
+  "password_policy": {
+    "bcrypt_cost": 10,
+    "minimum_unicode_characters": 8,
+    "maximum_utf8_bytes": 72,
+    "valid": [
+      {
+        "name": "normal",
+        "value": "Correct-Horse-2026!",
+        "utf8_bytes": 19
+      },
+      {
+        "name": "exactly_72_utf8_bytes",
+        "value": "界界界界界界界界界界界界界界界界界界界界界界界界",
+        "utf8_bytes": 72
+      }
+    ],
+    "invalid": [
+      {
+        "name": "seven_unicode_characters",
+        "value": "Ab1!xyz",
+        "reason": "too_short"
+      },
+      {
+        "name": "more_than_72_utf8_bytes",
+        "value": "界界界界界界界界界界界界界界界界界界界界界界界界界",
+        "utf8_bytes": 75,
+        "reason": "too_many_utf8_bytes"
+      }
+    ]
+  },
+  "users": [
+    {
+      "id": "9007199254740993",
+      "username": "admin",
+      "display_name": "Bootstrap Admin",
+      "role": "admin",
+      "status": 1,
+      "must_change_password": true,
+      "session_version": 1,
+      "password_input": "Correct-Horse-2026!",
+      "last_login_at": null,
+      "created_at": 1768406400,
+      "updated_at": 1768406400
+    },
+    {
+      "id": "9007199254740994",
+      "username": "operator-admin",
+      "display_name": "Operator Admin",
+      "role": "admin",
+      "status": 1,
+      "must_change_password": false,
+      "session_version": 7,
+      "password_input": "Operator-2026!",
+      "last_login_at": 1768618800,
+      "created_at": 1768406400,
+      "updated_at": 1768618800
+    },
+    {
+      "id": "9007199254740995",
+      "username": "report-viewer",
+      "display_name": "Report Viewer",
+      "role": "viewer",
+      "status": 1,
+      "must_change_password": false,
+      "session_version": 3,
+      "password_input": "Viewer-2026!",
+      "last_login_at": 1768615200,
+      "created_at": 1768406400,
+      "updated_at": 1768615200
+    },
+    {
+      "id": "9007199254740996",
+      "username": "disabled-viewer",
+      "display_name": "Disabled Viewer",
+      "role": "viewer",
+      "status": 2,
+      "must_change_password": false,
+      "session_version": 5,
+      "password_input": "Disabled-2026!",
+      "last_login_at": 1768500000,
+      "created_at": 1768406400,
+      "updated_at": 1768608000
+    }
+  ],
+  "session_contract": {
+    "cookie_name": "session",
+    "max_age_seconds": 2592000,
+    "http_only": true,
+    "same_site": "Strict",
+    "host_only": true,
+    "header_user_id": "9007199254740993"
+  },
+  "login_rate_limit": {
+    "window_seconds": 600,
+    "maximum_failures": 5,
+    "block_seconds": 900,
+    "normalized_username": "admin",
+    "client_ip": "192.0.2.10"
+  }
+}

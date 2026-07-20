@@ -1,0 +1,22 @@
+{
+  "success": true,
+  "message": "",
+  "data": {
+    "models": [
+      {
+        "model_name": "model-a",
+        "request_count": 10,
+        "success_rate": 90,
+        "avg_latency_ms": 120,
+        "avg_tps": 25
+      },
+      {
+        "model_name": "model-b",
+        "request_count": 30,
+        "success_rate": 100,
+        "avg_latency_ms": 80,
+        "avg_tps": 45
+      }
+    ]
+  }
+}

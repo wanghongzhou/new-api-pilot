@@ -1,0 +1,212 @@
+groups:
+  - name: new-api-pilot.application
+    interval: 30s
+    rules:
+      - alert: NewAPIPilotTargetDown
+        expr: up{job="new-api-pilot"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          receiver_scope: infrastructure
+        annotations:
+          summary: new-api-pilot 抓取目标不可达
+          description: Prometheus 连续两分钟无法抓取应用指标。
+      - alert: NewAPIPilotScrapeMissing
+        expr: absent(up{job="new-api-pilot"})
+        for: 2m
+        labels:
+          severity: critical
+          receiver_scope: infrastructure
+        annotations:
+          summary: new-api-pilot 抓取配置或服务发现缺失
+          description: Prometheus 中没有 new-api-pilot 抓取目标。
+      - alert: NewAPIPilotSchedulerMetricMissing
+        expr: absent(new_api_pilot_scheduler_heartbeat_timestamp_seconds)
+        for: 2m
+        labels:
+          severity: critical
+          receiver_scope: infrastructure
+        annotations:
+          summary: 调度器心跳指标缺失
+          description: 应用目标存在，但调度器心跳序列没有被采集。
+      - alert: NewAPIPilotSchedulerStalled
+        expr: time() - new_api_pilot_scheduler_heartbeat_timestamp_seconds > 180
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: 调度器停止推进
+          description: 最近一次成功调度距离当前时间已超过三分钟。
+      - alert: NewAPIPilotNotReady
+        expr: new_api_pilot_ready == 0 or absent(new_api_pilot_ready)
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: 应用持续未就绪
+          description: 应用就绪指标为零或缺失已超过两分钟。
+      - alert: NewAPIPilotRuntimeComponentNotReady
+        expr: min by (component) (new_api_pilot_runtime_ready) == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: 运行组件未就绪
+          description: 至少一个已注册的运行组件持续未就绪。
+      - alert: NewAPIPilotHTTPErrorRateHigh
+        expr: new_api_pilot:http_5xx_ratio:5m > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: HTTP 5xx 比例过高
+          description: 最近五分钟 HTTP 5xx 比例持续超过 5%。
+      - alert: NewAPIPilotUpstreamFailureRateHigh
+        expr: new_api_pilot:upstream_failure_ratio:5m > 0.20
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 上游请求失败比例过高
+          description: 最近五分钟上游请求失败比例持续超过 20%。
+
+  - name: new-api-pilot.workers
+    interval: 30s
+    rules:
+      - alert: NewAPIPilotTaskQueueStalled
+        expr: max by (queue) (new_api_pilot_task_oldest_age_seconds) > 900
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: 任务队列等待时间过长
+          description: 队列中最老待处理任务已等待超过十五分钟。
+      - alert: NewAPIPilotCollectionLagging
+        expr: new_api_pilot_collection_lag_seconds > 900
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: 小时采集未满足 H+15
+          description: eligible 站点中的最大完整窗口延迟持续超过十五分钟。
+      - alert: NewAPIPilotCollectionSitesStale
+        expr: new_api_pilot_collection_stale_sites > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 存在采集过期站点
+          description: 至少一个 eligible 站点没有满足完整窗口时效要求。
+      - alert: NewAPIPilotCollectionFailures
+        expr: new_api_pilot:collection_failures:15m > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 采集任务出现失败
+          description: 最近十五分钟存在已持久化的采集失败或 claim 丢失。
+      - alert: NewAPIPilotDingTalkDeliveryFailures
+        expr: new_api_pilot:alert_delivery_failures:10m >= 3
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: 钉钉投递连续失败
+          description: 最近十分钟至少出现三次失败或重试耗尽。
+      - alert: NewAPIPilotExportFailures
+        expr: new_api_pilot:export_failures:15m > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 导出任务出现失败
+          description: 最近十五分钟存在已持久化的导出失败、耗尽或 claim 丢失。
+
+  - name: new-api-pilot.dependencies
+    interval: 30s
+    rules:
+      - alert: NewAPIPilotDBPoolPressure
+        expr: new_api_pilot:db_pool_utilization > 0.90
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: MySQL 连接池接近耗尽
+          description: 数据库连接池使用率持续超过 90%。
+      - alert: NewAPIPilotDBPoolMetricInvalid
+        expr: sum(new_api_pilot_db_connections{state="max"}) <= 0 or absent(new_api_pilot_db_connections{state="max"})
+        for: 2m
+        labels:
+          severity: critical
+          receiver_scope: infrastructure
+        annotations:
+          summary: MySQL 连接池容量指标无效
+          description: 连接池最大连接数为零或对应指标缺失。
+      - alert: NewAPIPilotExportFilesystemInvalid
+        expr: new_api_pilot_export_total_bytes <= 0 or absent(new_api_pilot_export_total_bytes)
+        for: 2m
+        labels:
+          severity: critical
+          receiver_scope: infrastructure
+        annotations:
+          summary: 导出文件系统容量不可读
+          description: 文件系统总容量为零或指标缺失，空间比例不能被可信计算。
+      - alert: NewAPIPilotExportFilesystemLow
+        expr: |
+          (new_api_pilot_export_total_bytes > 0)
+          and
+          ((new_api_pilot_export_free_bytes < 5368709120)
+            or (new_api_pilot_export_free_bytes / new_api_pilot_export_total_bytes < 0.10))
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: 导出文件系统剩余空间不足
+          description: 剩余空间低于 5 GiB 或总容量的 10%。
+
+  - name: new-api-pilot.infrastructure
+    interval: 30s
+    rules:
+      - alert: NewAPIPilotBackupStale
+        expr: time() - new_api_pilot_backup_last_success_timestamp_seconds > 3600
+        for: 5m
+        labels:
+          severity: critical
+          receiver_scope: infrastructure
+        annotations:
+          summary: 备份成功时间超过 RPO
+          description: 最近一次成功备份距离当前时间已超过一小时。
+      - alert: NewAPIPilotBackupFailure
+        expr: increase(new_api_pilot_backup_failures_total[1h]) > 0
+        labels:
+          severity: critical
+          receiver_scope: infrastructure
+        annotations:
+          summary: 备份任务失败
+          description: 最近一小时基础设施报告了备份失败。
+      - alert: NewAPIPilotBackupMetricMissing
+        expr: absent(new_api_pilot_backup_last_success_timestamp_seconds)
+        for: 5m
+        labels:
+          severity: critical
+          receiver_scope: infrastructure
+        annotations:
+          summary: 备份成功时间指标缺失
+          description: node-exporter textfile 或等价备份指标未被采集。
+      - alert: NewAPIPilotClockMetricMissing
+        expr: absent(new_api_pilot_clock_offset_seconds)
+        for: 5m
+        labels:
+          severity: critical
+          receiver_scope: infrastructure
+        annotations:
+          summary: 数据库时钟偏移指标缺失
+          description: 应用没有产出 MySQL 与应用时钟的偏移指标。
+      - alert: NewAPIPilotClockOffsetHigh
+        expr: abs(new_api_pilot_clock_offset_seconds) > 5
+        labels:
+          severity: critical
+          receiver_scope: infrastructure
+        annotations:
+          summary: 数据库与应用时钟偏移过大
+          description: MySQL 时钟与应用时钟的偏差超过五秒。

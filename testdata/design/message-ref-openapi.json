@@ -1,0 +1,2475 @@
+{
+  "components": {
+    "schemas": {
+      "AnyMessageRef": {
+        "discriminator": {
+          "mapping": {
+            "ALERT_ACCOUNT_DISABLED": "#/components/schemas/MessageRef_ALERT_ACCOUNT_DISABLED",
+            "ALERT_ACCOUNT_IDENTITY_MISMATCH": "#/components/schemas/MessageRef_ALERT_ACCOUNT_IDENTITY_MISMATCH",
+            "ALERT_ACCOUNT_MISSING": "#/components/schemas/MessageRef_ALERT_ACCOUNT_MISSING",
+            "ALERT_ACCOUNT_QUOTA_EMPTY": "#/components/schemas/MessageRef_ALERT_ACCOUNT_QUOTA_EMPTY",
+            "ALERT_AUTH_EXPIRED": "#/components/schemas/MessageRef_ALERT_AUTH_EXPIRED",
+            "ALERT_BACKFILL_FAILED": "#/components/schemas/MessageRef_ALERT_BACKFILL_FAILED",
+            "ALERT_CHANNEL_AVAILABILITY_LOW": "#/components/schemas/MessageRef_ALERT_CHANNEL_AVAILABILITY_LOW",
+            "ALERT_CHANNEL_BALANCE_LOW": "#/components/schemas/MessageRef_ALERT_CHANNEL_BALANCE_LOW",
+            "ALERT_CHANNEL_RESPONSE_TIME_HIGH": "#/components/schemas/MessageRef_ALERT_CHANNEL_RESPONSE_TIME_HIGH",
+            "ALERT_COLLECTION_MISSING": "#/components/schemas/MessageRef_ALERT_COLLECTION_MISSING",
+            "ALERT_CPU_HIGH": "#/components/schemas/MessageRef_ALERT_CPU_HIGH",
+            "ALERT_DISK_HIGH": "#/components/schemas/MessageRef_ALERT_DISK_HIGH",
+            "ALERT_EXPORT_DISABLED": "#/components/schemas/MessageRef_ALERT_EXPORT_DISABLED",
+            "ALERT_INSTANCE_OFFLINE": "#/components/schemas/MessageRef_ALERT_INSTANCE_OFFLINE",
+            "ALERT_INSTANCE_STALE": "#/components/schemas/MessageRef_ALERT_INSTANCE_STALE",
+            "ALERT_MEMORY_HIGH": "#/components/schemas/MessageRef_ALERT_MEMORY_HIGH",
+            "ALERT_NO_INSTANCE": "#/components/schemas/MessageRef_ALERT_NO_INSTANCE",
+            "ALERT_SCOPE_INACTIVE": "#/components/schemas/MessageRef_ALERT_SCOPE_INACTIVE",
+            "ALERT_SITE_OFFLINE": "#/components/schemas/MessageRef_ALERT_SITE_OFFLINE",
+            "ALERT_VALIDATION_FAILED": "#/components/schemas/MessageRef_ALERT_VALIDATION_FAILED",
+            "CAPABILITY_EXPORT_DISABLED": "#/components/schemas/MessageRef_CAPABILITY_EXPORT_DISABLED",
+            "CAPABILITY_FIRST_USER_PROOF_FAILED": "#/components/schemas/MessageRef_CAPABILITY_FIRST_USER_PROOF_FAILED",
+            "CAPABILITY_IDENTITY_FAILED": "#/components/schemas/MessageRef_CAPABILITY_IDENTITY_FAILED",
+            "CAPABILITY_NO_TRAFFIC_SKIPPED": "#/components/schemas/MessageRef_CAPABILITY_NO_TRAFFIC_SKIPPED",
+            "CAPABILITY_OK": "#/components/schemas/MessageRef_CAPABILITY_OK",
+            "CAPABILITY_RESPONSE_INVALID": "#/components/schemas/MessageRef_CAPABILITY_RESPONSE_INVALID",
+            "CAPABILITY_UPSTREAM_UNAVAILABLE": "#/components/schemas/MessageRef_CAPABILITY_UPSTREAM_UNAVAILABLE",
+            "COLLECTION_RETRY_EXHAUSTED": "#/components/schemas/MessageRef_COLLECTION_RETRY_EXHAUSTED",
+            "DATA_BACKFILLING": "#/components/schemas/MessageRef_DATA_BACKFILLING",
+            "DATA_PARTIAL_SITES": "#/components/schemas/MessageRef_DATA_PARTIAL_SITES",
+            "DATA_PENDING": "#/components/schemas/MessageRef_DATA_PENDING",
+            "DATA_SCOPE_PAUSED": "#/components/schemas/MessageRef_DATA_SCOPE_PAUSED",
+            "DATA_UPSTREAM_UNAVAILABLE": "#/components/schemas/MessageRef_DATA_UPSTREAM_UNAVAILABLE",
+            "DATA_VALIDATION_FAILED": "#/components/schemas/MessageRef_DATA_VALIDATION_FAILED",
+            "DATA_VALIDATION_MISMATCH": "#/components/schemas/MessageRef_DATA_VALIDATION_MISMATCH",
+            "DATA_WINDOW_MISSING": "#/components/schemas/MessageRef_DATA_WINDOW_MISSING",
+            "DELIVERY_RETRY_EXHAUSTED": "#/components/schemas/MessageRef_DELIVERY_RETRY_EXHAUSTED",
+            "DELIVERY_RETRY_SCHEDULED": "#/components/schemas/MessageRef_DELIVERY_RETRY_SCHEDULED",
+            "DEPENDENCY_WINDOWS_MISSING": "#/components/schemas/MessageRef_DEPENDENCY_WINDOWS_MISSING",
+            "DINGTALK_ADDRESS_FORBIDDEN": "#/components/schemas/MessageRef_DINGTALK_ADDRESS_FORBIDDEN",
+            "DINGTALK_REJECTED": "#/components/schemas/MessageRef_DINGTALK_REJECTED",
+            "EXPORT_DISK_LOW": "#/components/schemas/MessageRef_EXPORT_DISK_LOW",
+            "EXPORT_EXPIRED": "#/components/schemas/MessageRef_EXPORT_EXPIRED",
+            "EXPORT_FILE_MISSING": "#/components/schemas/MessageRef_EXPORT_FILE_MISSING",
+            "EXPORT_FILE_TOO_LARGE": "#/components/schemas/MessageRef_EXPORT_FILE_TOO_LARGE",
+            "EXPORT_SNAPSHOT_FAILED": "#/components/schemas/MessageRef_EXPORT_SNAPSHOT_FAILED",
+            "EXPORT_WRITE_FAILED": "#/components/schemas/MessageRef_EXPORT_WRITE_FAILED",
+            "INTERNAL_CONTRACT_ERROR": "#/components/schemas/MessageRef_INTERNAL_CONTRACT_ERROR",
+            "NOTIFICATION_DISABLED": "#/components/schemas/MessageRef_NOTIFICATION_DISABLED",
+            "NOTIFICATION_NOT_CONFIGURED": "#/components/schemas/MessageRef_NOTIFICATION_NOT_CONFIGURED",
+            "NOTIFICATION_TEST_SUCCEEDED": "#/components/schemas/MessageRef_NOTIFICATION_TEST_SUCCEEDED",
+            "SITE_CONFIG_CHANGED": "#/components/schemas/MessageRef_SITE_CONFIG_CHANGED",
+            "SLO_USAGE_CONCURRENCY_TOO_LOW": "#/components/schemas/MessageRef_SLO_USAGE_CONCURRENCY_TOO_LOW",
+            "SLO_USAGE_DELAY_TOO_HIGH": "#/components/schemas/MessageRef_SLO_USAGE_DELAY_TOO_HIGH",
+            "UPSTREAM_RESPONSE_INVALID": "#/components/schemas/MessageRef_UPSTREAM_RESPONSE_INVALID",
+            "UPSTREAM_RESPONSE_TOO_LARGE": "#/components/schemas/MessageRef_UPSTREAM_RESPONSE_TOO_LARGE",
+            "WORKER_LEASE_LOST": "#/components/schemas/MessageRef_WORKER_LEASE_LOST"
+          },
+          "propertyName": "code"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/MessageRef_ALERT_ACCOUNT_DISABLED"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_ALERT_ACCOUNT_IDENTITY_MISMATCH"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_ALERT_ACCOUNT_MISSING"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_ALERT_ACCOUNT_QUOTA_EMPTY"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_ALERT_AUTH_EXPIRED"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_ALERT_BACKFILL_FAILED"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_ALERT_CHANNEL_AVAILABILITY_LOW"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_ALERT_CHANNEL_BALANCE_LOW"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_ALERT_CHANNEL_RESPONSE_TIME_HIGH"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_ALERT_COLLECTION_MISSING"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_ALERT_CPU_HIGH"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_ALERT_DISK_HIGH"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_ALERT_EXPORT_DISABLED"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_ALERT_INSTANCE_OFFLINE"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_ALERT_INSTANCE_STALE"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_ALERT_MEMORY_HIGH"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_ALERT_NO_INSTANCE"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_ALERT_SCOPE_INACTIVE"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_ALERT_SITE_OFFLINE"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_ALERT_VALIDATION_FAILED"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_CAPABILITY_EXPORT_DISABLED"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_CAPABILITY_FIRST_USER_PROOF_FAILED"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_CAPABILITY_IDENTITY_FAILED"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_CAPABILITY_NO_TRAFFIC_SKIPPED"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_CAPABILITY_OK"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_CAPABILITY_RESPONSE_INVALID"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_CAPABILITY_UPSTREAM_UNAVAILABLE"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_COLLECTION_RETRY_EXHAUSTED"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_DATA_BACKFILLING"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_DATA_PARTIAL_SITES"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_DATA_PENDING"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_DATA_SCOPE_PAUSED"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_DATA_UPSTREAM_UNAVAILABLE"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_DATA_VALIDATION_FAILED"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_DATA_VALIDATION_MISMATCH"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_DATA_WINDOW_MISSING"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_DELIVERY_RETRY_EXHAUSTED"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_DELIVERY_RETRY_SCHEDULED"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_DEPENDENCY_WINDOWS_MISSING"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_DINGTALK_ADDRESS_FORBIDDEN"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_DINGTALK_REJECTED"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_EXPORT_DISK_LOW"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_EXPORT_EXPIRED"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_EXPORT_FILE_MISSING"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_EXPORT_FILE_TOO_LARGE"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_EXPORT_SNAPSHOT_FAILED"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_EXPORT_WRITE_FAILED"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_INTERNAL_CONTRACT_ERROR"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_NOTIFICATION_DISABLED"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_NOTIFICATION_NOT_CONFIGURED"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_NOTIFICATION_TEST_SUCCEEDED"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_SITE_CONFIG_CHANGED"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_SLO_USAGE_CONCURRENCY_TOO_LOW"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_SLO_USAGE_DELAY_TOO_HIGH"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_UPSTREAM_RESPONSE_INVALID"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_UPSTREAM_RESPONSE_TOO_LARGE"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_WORKER_LEASE_LOST"
+          }
+        ]
+      },
+      "ApiErrorCode": {
+        "enum": [
+          "AUTH_INVALID",
+          "AUTH_REQUIRED",
+          "BACKFILL_RUNNING",
+          "BASE_URL_PREFLIGHT_REQUIRED",
+          "CONFLICT",
+          "DELETE_RESTRICTED",
+          "EXPORT_EXPIRED",
+          "EXPORT_FILE_MISSING",
+          "EXPORT_LIMIT_REACHED",
+          "FORBIDDEN",
+          "INTERNAL_CONTRACT_ERROR",
+          "INTERNAL_ERROR",
+          "LAST_ADMIN",
+          "LOGIN_RATE_LIMITED",
+          "NOT_FOUND",
+          "ORIGIN_FORBIDDEN",
+          "PASSWORD_CHANGE_REQUIRED",
+          "PAYLOAD_TOO_LARGE",
+          "SITE_CONFIG_CHANGED",
+          "SITE_EXPORT_DISABLED",
+          "SITE_INCOMPATIBLE",
+          "SLO_CONFIG_FORBIDDEN",
+          "TASK_OVERLAP",
+          "TOKEN_ROTATION_RESULT_UNKNOWN",
+          "UPSTREAM_ADDRESS_FORBIDDEN",
+          "UPSTREAM_ERROR",
+          "UPSTREAM_UNAVAILABLE",
+          "UPSTREAM_USER_NOT_FOUND",
+          "USER_DISABLED",
+          "VALIDATION_ERROR"
+        ],
+        "type": "string"
+      },
+      "MessageCode": {
+        "enum": [
+          "ALERT_ACCOUNT_DISABLED",
+          "ALERT_ACCOUNT_IDENTITY_MISMATCH",
+          "ALERT_ACCOUNT_MISSING",
+          "ALERT_ACCOUNT_QUOTA_EMPTY",
+          "ALERT_AUTH_EXPIRED",
+          "ALERT_BACKFILL_FAILED",
+          "ALERT_CHANNEL_AVAILABILITY_LOW",
+          "ALERT_CHANNEL_BALANCE_LOW",
+          "ALERT_CHANNEL_RESPONSE_TIME_HIGH",
+          "ALERT_COLLECTION_MISSING",
+          "ALERT_CPU_HIGH",
+          "ALERT_DISK_HIGH",
+          "ALERT_EXPORT_DISABLED",
+          "ALERT_INSTANCE_OFFLINE",
+          "ALERT_INSTANCE_STALE",
+          "ALERT_MEMORY_HIGH",
+          "ALERT_NO_INSTANCE",
+          "ALERT_SCOPE_INACTIVE",
+          "ALERT_SITE_OFFLINE",
+          "ALERT_VALIDATION_FAILED",
+          "CAPABILITY_EXPORT_DISABLED",
+          "CAPABILITY_FIRST_USER_PROOF_FAILED",
+          "CAPABILITY_IDENTITY_FAILED",
+          "CAPABILITY_NO_TRAFFIC_SKIPPED",
+          "CAPABILITY_OK",
+          "CAPABILITY_RESPONSE_INVALID",
+          "CAPABILITY_UPSTREAM_UNAVAILABLE",
+          "COLLECTION_RETRY_EXHAUSTED",
+          "DATA_BACKFILLING",
+          "DATA_PARTIAL_SITES",
+          "DATA_PENDING",
+          "DATA_SCOPE_PAUSED",
+          "DATA_UPSTREAM_UNAVAILABLE",
+          "DATA_VALIDATION_FAILED",
+          "DATA_VALIDATION_MISMATCH",
+          "DATA_WINDOW_MISSING",
+          "DELIVERY_RETRY_EXHAUSTED",
+          "DELIVERY_RETRY_SCHEDULED",
+          "DEPENDENCY_WINDOWS_MISSING",
+          "DINGTALK_ADDRESS_FORBIDDEN",
+          "DINGTALK_REJECTED",
+          "EXPORT_DISK_LOW",
+          "EXPORT_EXPIRED",
+          "EXPORT_FILE_MISSING",
+          "EXPORT_FILE_TOO_LARGE",
+          "EXPORT_SNAPSHOT_FAILED",
+          "EXPORT_WRITE_FAILED",
+          "INTERNAL_CONTRACT_ERROR",
+          "NOTIFICATION_DISABLED",
+          "NOTIFICATION_NOT_CONFIGURED",
+          "NOTIFICATION_TEST_SUCCEEDED",
+          "SITE_CONFIG_CHANGED",
+          "SLO_USAGE_CONCURRENCY_TOO_LOW",
+          "SLO_USAGE_DELAY_TOO_HIGH",
+          "UPSTREAM_RESPONSE_INVALID",
+          "UPSTREAM_RESPONSE_TOO_LARGE",
+          "WORKER_LEASE_LOST"
+        ],
+        "type": "string"
+      },
+      "MessageRef_ALERT_ACCOUNT_DISABLED": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "ALERT_ACCOUNT_DISABLED"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "account_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "account_name": {
+                "type": "string"
+              },
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "account_id",
+              "account_name"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_ALERT_ACCOUNT_IDENTITY_MISMATCH": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "ALERT_ACCOUNT_IDENTITY_MISMATCH"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "account_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "account_name": {
+                "type": "string"
+              },
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "account_id",
+              "account_name"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_ALERT_ACCOUNT_MISSING": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "ALERT_ACCOUNT_MISSING"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "account_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "account_name": {
+                "type": "string"
+              },
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "account_id",
+              "account_name"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_ALERT_ACCOUNT_QUOTA_EMPTY": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "ALERT_ACCOUNT_QUOTA_EMPTY"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "account_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "account_name": {
+                "type": "string"
+              },
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "account_id",
+              "account_name"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_ALERT_AUTH_EXPIRED": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "ALERT_AUTH_EXPIRED"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "site_name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "site_id",
+              "site_name"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_ALERT_BACKFILL_FAILED": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "ALERT_BACKFILL_FAILED"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "run_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "run_id",
+              "site_id"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_ALERT_CHANNEL_AVAILABILITY_LOW": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "ALERT_CHANNEL_AVAILABILITY_LOW"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "site_name": {
+                "type": "string"
+              },
+              "threshold": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "site_id",
+              "site_name",
+              "threshold",
+              "value"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_ALERT_CHANNEL_BALANCE_LOW": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "ALERT_CHANNEL_BALANCE_LOW"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "site_name": {
+                "type": "string"
+              },
+              "threshold": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "site_id",
+              "site_name",
+              "threshold",
+              "value"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_ALERT_CHANNEL_RESPONSE_TIME_HIGH": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "ALERT_CHANNEL_RESPONSE_TIME_HIGH"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "site_name": {
+                "type": "string"
+              },
+              "threshold": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "site_id",
+              "site_name",
+              "threshold",
+              "value"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_ALERT_COLLECTION_MISSING": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "ALERT_COLLECTION_MISSING"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "end_timestamp": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "start_timestamp": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "end_timestamp",
+              "site_id",
+              "start_timestamp"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_ALERT_CPU_HIGH": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "ALERT_CPU_HIGH"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "target_name": {
+                "type": "string"
+              },
+              "target_type": {
+                "type": "string"
+              },
+              "threshold": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "site_id",
+              "target_name",
+              "target_type",
+              "threshold",
+              "value"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_ALERT_DISK_HIGH": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "ALERT_DISK_HIGH"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "target_name": {
+                "type": "string"
+              },
+              "target_type": {
+                "type": "string"
+              },
+              "threshold": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "site_id",
+              "target_name",
+              "target_type",
+              "threshold",
+              "value"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_ALERT_EXPORT_DISABLED": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "ALERT_EXPORT_DISABLED"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "site_name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "site_id",
+              "site_name"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_ALERT_INSTANCE_OFFLINE": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "ALERT_INSTANCE_OFFLINE"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "instance_name": {
+                "type": "string"
+              },
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "instance_name",
+              "site_id"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_ALERT_INSTANCE_STALE": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "ALERT_INSTANCE_STALE"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "instance_name": {
+                "type": "string"
+              },
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "instance_name",
+              "site_id"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_ALERT_MEMORY_HIGH": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "ALERT_MEMORY_HIGH"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "target_name": {
+                "type": "string"
+              },
+              "target_type": {
+                "type": "string"
+              },
+              "threshold": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "site_id",
+              "target_name",
+              "target_type",
+              "threshold",
+              "value"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_ALERT_NO_INSTANCE": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "ALERT_NO_INSTANCE"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "site_name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "site_id",
+              "site_name"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_ALERT_SCOPE_INACTIVE": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "ALERT_SCOPE_INACTIVE"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "scope_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "scope_name": {
+                "type": "string"
+              },
+              "scope_type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "scope_id",
+              "scope_name",
+              "scope_type"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_ALERT_SITE_OFFLINE": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "ALERT_SITE_OFFLINE"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "site_name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "site_id",
+              "site_name"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_ALERT_VALIDATION_FAILED": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "ALERT_VALIDATION_FAILED"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "end_timestamp": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "failure_kind": {
+                "enum": [
+                  "data_mismatch",
+                  "execution_failed"
+                ],
+                "type": "string"
+              },
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "start_timestamp": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "end_timestamp",
+              "failure_kind",
+              "site_id",
+              "start_timestamp"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_CAPABILITY_EXPORT_DISABLED": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "CAPABILITY_EXPORT_DISABLED"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "capability_key": {
+                "type": "string"
+              },
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "capability_key",
+              "site_id"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_CAPABILITY_FIRST_USER_PROOF_FAILED": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "CAPABILITY_FIRST_USER_PROOF_FAILED"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "capability_key": {
+                "type": "string"
+              },
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "capability_key",
+              "site_id"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_CAPABILITY_IDENTITY_FAILED": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "CAPABILITY_IDENTITY_FAILED"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "capability_key": {
+                "type": "string"
+              },
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "capability_key",
+              "site_id"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_CAPABILITY_NO_TRAFFIC_SKIPPED": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "CAPABILITY_NO_TRAFFIC_SKIPPED"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "capability_key": {
+                "type": "string"
+              },
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "capability_key",
+              "site_id"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_CAPABILITY_OK": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "CAPABILITY_OK"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "capability_key": {
+                "type": "string"
+              },
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "capability_key",
+              "site_id"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_CAPABILITY_RESPONSE_INVALID": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "CAPABILITY_RESPONSE_INVALID"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "capability_key": {
+                "type": "string"
+              },
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "capability_key",
+              "site_id"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_CAPABILITY_UPSTREAM_UNAVAILABLE": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "CAPABILITY_UPSTREAM_UNAVAILABLE"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "capability_key": {
+                "type": "string"
+              },
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "capability_key",
+              "site_id"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_COLLECTION_RETRY_EXHAUSTED": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "COLLECTION_RETRY_EXHAUSTED"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "run_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "run_id",
+              "site_id"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_DATA_BACKFILLING": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "DATA_BACKFILLING"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "progress": {
+                "type": "number"
+              },
+              "scope_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "scope_type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "progress",
+              "scope_id",
+              "scope_type"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_DATA_PARTIAL_SITES": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "DATA_PARTIAL_SITES"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "complete_site_count": {
+                "type": "number"
+              },
+              "expected_site_count": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "complete_site_count",
+              "expected_site_count"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_DATA_PENDING": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "DATA_PENDING"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "progress": {
+                "type": "number"
+              },
+              "scope_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "scope_type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "progress",
+              "scope_id",
+              "scope_type"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_DATA_SCOPE_PAUSED": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "DATA_SCOPE_PAUSED"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "end_timestamp": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "scope_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "scope_type": {
+                "type": "string"
+              },
+              "start_timestamp": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "end_timestamp",
+              "scope_id",
+              "scope_type",
+              "start_timestamp"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_DATA_UPSTREAM_UNAVAILABLE": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "DATA_UPSTREAM_UNAVAILABLE"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "end_timestamp": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "start_timestamp": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "end_timestamp",
+              "site_id",
+              "start_timestamp"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_DATA_VALIDATION_FAILED": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "DATA_VALIDATION_FAILED"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "end_timestamp": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "start_timestamp": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "end_timestamp",
+              "site_id",
+              "start_timestamp"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_DATA_VALIDATION_MISMATCH": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "DATA_VALIDATION_MISMATCH"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "end_timestamp": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "start_timestamp": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "end_timestamp",
+              "site_id",
+              "start_timestamp"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_DATA_WINDOW_MISSING": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "DATA_WINDOW_MISSING"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "end_timestamp": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "start_timestamp": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "end_timestamp",
+              "site_id",
+              "start_timestamp"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_DELIVERY_RETRY_EXHAUSTED": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "DELIVERY_RETRY_EXHAUSTED"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "alert_event_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "delivery_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "alert_event_id",
+              "delivery_id"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_DELIVERY_RETRY_SCHEDULED": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "DELIVERY_RETRY_SCHEDULED"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "delivery_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "next_retry_at": {
+                "pattern": "^(?:0|[1-9][0-9]*)$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "delivery_id",
+              "next_retry_at"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_DEPENDENCY_WINDOWS_MISSING": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "DEPENDENCY_WINDOWS_MISSING"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "end_timestamp": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "run_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "start_timestamp": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "end_timestamp",
+              "run_id",
+              "site_id",
+              "start_timestamp"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_DINGTALK_ADDRESS_FORBIDDEN": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "DINGTALK_ADDRESS_FORBIDDEN"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "alert_event_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "delivery_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "alert_event_id",
+              "delivery_id"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_DINGTALK_REJECTED": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "DINGTALK_REJECTED"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "alert_event_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "delivery_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "errcode": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "alert_event_id",
+              "delivery_id",
+              "errcode"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_EXPORT_DISK_LOW": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "EXPORT_DISK_LOW"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "export_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "free_bytes": {
+                "type": "string"
+              },
+              "threshold_bytes": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "export_id",
+              "free_bytes",
+              "threshold_bytes"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_EXPORT_EXPIRED": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "EXPORT_EXPIRED"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "export_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "export_id"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_EXPORT_FILE_MISSING": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "EXPORT_FILE_MISSING"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "export_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "export_id"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_EXPORT_FILE_TOO_LARGE": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "EXPORT_FILE_TOO_LARGE"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "export_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "file_bytes": {
+                "type": "string"
+              },
+              "limit_bytes": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "export_id",
+              "file_bytes",
+              "limit_bytes"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_EXPORT_SNAPSHOT_FAILED": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "EXPORT_SNAPSHOT_FAILED"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "export_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "export_id"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_EXPORT_WRITE_FAILED": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "EXPORT_WRITE_FAILED"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "export_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "export_id"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_INTERNAL_CONTRACT_ERROR": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "INTERNAL_CONTRACT_ERROR"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "component": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "component"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_NOTIFICATION_DISABLED": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "NOTIFICATION_DISABLED"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "alert_event_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "delivery_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "alert_event_id",
+              "delivery_id"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_NOTIFICATION_NOT_CONFIGURED": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "NOTIFICATION_NOT_CONFIGURED"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "alert_event_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "delivery_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "alert_event_id",
+              "delivery_id"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_NOTIFICATION_TEST_SUCCEEDED": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "NOTIFICATION_TEST_SUCCEEDED"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "delivery_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "delivery_id"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_SITE_CONFIG_CHANGED": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "SITE_CONFIG_CHANGED"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "actual_config_version": {
+                "type": "number"
+              },
+              "expected_config_version": {
+                "type": "number"
+              },
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "actual_config_version",
+              "expected_config_version",
+              "site_id"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_SLO_USAGE_CONCURRENCY_TOO_LOW": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "SLO_USAGE_CONCURRENCY_TOO_LOW"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "threshold": {
+                "type": "number"
+              },
+              "value": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "threshold",
+              "value"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_SLO_USAGE_DELAY_TOO_HIGH": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "SLO_USAGE_DELAY_TOO_HIGH"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "threshold": {
+                "type": "number"
+              },
+              "value": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "threshold",
+              "value"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_UPSTREAM_RESPONSE_INVALID": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "UPSTREAM_RESPONSE_INVALID"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "capability_key": {
+                "type": "string"
+              },
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "site_id"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_UPSTREAM_RESPONSE_TOO_LARGE": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "UPSTREAM_RESPONSE_TOO_LARGE"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "limit_bytes": {
+                "type": "string"
+              },
+              "response_bytes": {
+                "type": "string"
+              },
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "limit_bytes",
+              "response_bytes",
+              "site_id"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_WORKER_LEASE_LOST": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "WORKER_LEASE_LOST"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {
+              "hour_ts": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "run_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              },
+              "site_id": {
+                "pattern": "^[1-9][0-9]*$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "hour_ts",
+              "run_id",
+              "site_id"
+            ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "New API Pilot MessageRef Contract",
+    "version": "1"
+  },
+  "openapi": "3.1.0",
+  "paths": {}
+}

@@ -1,0 +1,9 @@
+services:
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    command:
+      - --collector.textfile.directory=/var/lib/node_exporter/textfile_collector
+    ports:
+      - "9100:9100"
+    volumes:
+      - ${PROMETHEUS_TEXTFILE_DIR:?set PROMETHEUS_TEXTFILE_DIR}:/var/lib/node_exporter/textfile_collector:ro

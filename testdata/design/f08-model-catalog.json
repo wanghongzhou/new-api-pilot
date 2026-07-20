@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "fixture_id": "F08",
+  "clock": { "now_unix": 2101300000, "timezone": "Asia/Shanghai" },
+  "models": [
+    { "site_id": "1", "remote_id": "11", "model_name": "gpt-4o", "vendor_id": "7", "status": 1, "sync_official": 1, "name_rule": 0 },
+    { "site_id": "1", "remote_id": "12", "model_name": "gpt-", "vendor_id": "7", "status": 1, "sync_official": 1, "name_rule": 1 }
+  ],
+  "channels": [
+    { "site_id": "1", "remote_channel_id": "3", "models": "gpt-4o,unlisted-model", "groups": "default,vip" }
+  ],
+  "expected_exact_missing": ["unlisted-model"],
+  "scenarios": ["full_pagination_fence", "hard_cap", "config_fence", "complete_snapshot_edge_replace", "partial_snapshot_preserves_edges", "mapping_dedup", "exact_name_rule"]
+}

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "fixture_id": "F10",
+  "clock": { "now_unix": 2101500000, "timezone": "Asia/Shanghai" },
+  "groups": [
+    { "site_id": "1", "group_name": "default" },
+    { "site_id": "1", "group_name": "vip-zero-usage" },
+    { "site_id": "2", "group_name": "default" }
+  ],
+  "pricing": [
+    { "site_id": "1", "model_name": "gpt-4o", "vendor": "openai", "input_price": "0.0000025000", "output_price": "0.0000100000", "group_ratios": { "default": "1.0000000000", "vip-zero-usage": "0.8500000000" }, "usable_groups": ["default", "vip-zero-usage"], "supported_endpoints": ["chat_completions", "responses"] },
+    { "site_id": "2", "model_name": "gpt-4o", "vendor": "openai", "input_price": "0.0000030000", "output_price": "0.0000120000", "group_ratios": { "default": "1.0000000000" }, "usable_groups": ["default"], "supported_endpoints": ["chat_completions"] }
+  ],
+  "scenarios": ["zero_usage_group_preserved", "exact_decimal_round_trip", "root_visibility", "duplicate_identity_rejected", "invalid_decimal_rejected", "unknown_field_ignored", "body_hard_cap", "config_fence", "complete_missing", "reappear", "resource_independent_completeness", "sensitive_absence", "no_cross_site_price_aggregation", "no_remote_mutation"]
+}

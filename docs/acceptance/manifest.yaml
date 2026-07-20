@@ -1,0 +1,882 @@
+schema_version: 1
+baseline:
+  source: "docs/多站点运营管理平台-详细设计-07-运维与验收.md#51-核心验收矩阵"
+  acceptance_range: "A01-A100"
+  release_policy: "required-no-skip"
+  product_locale: "zh-CN"
+  fixture_checksum_manifest: "testdata/design/manifest.sha256"
+
+fixtures:
+  F01:
+    path: "testdata/design/f01-auth.json"
+    purpose: "认证、平台用户、权限和 bigint ID"
+  F02:
+    path: "testdata/design/f02-upstream/"
+    purpose: "上游站点、用户、pinned flow parity（group/token/node）、flow/data、资源和性能摘要响应"
+  F03:
+    path: "testdata/design/f03-statistics.sql"
+    purpose: "统计事实、模型、通道和完整性状态"
+  F04:
+    path: "testdata/design/f04-state-machines.json"
+    purpose: "生命周期、状态机、并发、恢复、告警和快速任务 Redis fake 边界"
+  F05:
+    path: "testdata/design/f05-ops-capacity.yaml"
+    purpose: "导出磁盘、MySQL/Redis 就绪、备份、密钥和容量画像"
+  F06:
+    path: "testdata/design/f06-finance-operations.json"
+    purpose: "充值订单与兑换码完整快照、精确数值、漂移、missing、过期派生和隐私边界"
+  F07:
+    path: "testdata/design/f07-upstream-tasks.json"
+    purpose: "上游异步任务状态跃迁、重叠窗口、未终态重扫、精确计数、保留和隐私边界"
+
+  F08:
+    path: "testdata/design/f08-model-catalog.json"
+    purpose: "model catalog pagination, channel coverage mapping, exact missing models and privacy boundary"
+
+  F09:
+    path: "testdata/design/f09-subscription-plans.json"
+    purpose: "safe subscription plan catalog, complete snapshot and privacy boundary"
+
+  F10:
+    path: "testdata/design/f10-pricing-groups.json"
+    purpose: "safe pricing and configured group catalogs, exact decimals, completeness and read-only parity boundary"
+
+  F11:
+    path: "testdata/design/f11-system-tasks.json"
+    purpose: "safe system-task list/current monitoring, typed projection, completeness, retention and read-only boundary"
+
+acceptance_cases:
+  - acceptance_id: A01
+    requirement_id: R01
+    fixture: [F01]
+    layer: integration
+    test_or_runbook_path: "tests/integration/auth_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A01/"
+
+  - acceptance_id: A02
+    requirement_id: R01
+    fixture: [F01]
+    layer: contract
+    test_or_runbook_path: "tests/integration/auth_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A02/"
+
+  - acceptance_id: A03
+    requirement_id: R01
+    fixture: [F01]
+    layer: integration
+    test_or_runbook_path: "tests/integration/auth_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A03/"
+
+  - acceptance_id: A04
+    requirement_id: R02
+    fixture: [F02]
+    layer: integration
+    test_or_runbook_path: "tests/integration/site_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A04/"
+
+  - acceptance_id: A05
+    requirement_id: R02
+    fixture: [F02]
+    layer: e2e
+    test_or_runbook_path: "web/e2e/site-authorization.spec.ts"
+    owner_role: frontend
+    evidence_path: "planned:artifacts/acceptance/A05/"
+
+  - acceptance_id: A06
+    requirement_id: R02
+    fixture: [F02, F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/site_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A06/"
+
+  - acceptance_id: A07
+    requirement_id: R02
+    fixture: [F02]
+    layer: integration
+    test_or_runbook_path: "tests/integration/site_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A07/"
+
+  - acceptance_id: A08
+    requirement_id: R04
+    fixture: [F02, F03]
+    layer: integration
+    test_or_runbook_path: "tests/integration/collection_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A08/"
+
+  - acceptance_id: A09
+    requirement_id: R04
+    fixture: [F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/collection_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A09/"
+
+  - acceptance_id: A10
+    requirement_id: R02
+    fixture: [F02, F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/site_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A10/"
+
+  - acceptance_id: A11
+    requirement_id: R03
+    fixture: [F02, F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/account_customer_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A11/"
+
+  - acceptance_id: A12
+    requirement_id: R04
+    fixture: [F03, F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/collection_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A12/"
+
+  - acceptance_id: A13
+    requirement_id: R04
+    fixture: [F03, F04]
+    layer: contract
+    test_or_runbook_path: "tests/contract/statistics_api_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A13/"
+
+  - acceptance_id: A14
+    requirement_id: R04
+    fixture: [F03, F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/worker_recovery_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A14/"
+
+  - acceptance_id: A15
+    requirement_id: R08
+    fixture: [F03, F05]
+    layer: integration
+    test_or_runbook_path: "tests/integration/export_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A15/"
+
+  - acceptance_id: A16
+    requirement_id: R08
+    fixture: [F05]
+    layer: integration
+    test_or_runbook_path: "tests/integration/export_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A16/"
+
+  - acceptance_id: A17
+    requirement_id: R08
+    fixture: [F05]
+    layer: integration
+    test_or_runbook_path: "tests/integration/export_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A17/"
+
+  - acceptance_id: A18
+    requirement_id: R06
+    fixture: [F03, F05]
+    layer: contract
+    test_or_runbook_path: "tests/contract/api_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A18/"
+
+  - acceptance_id: A19
+    requirement_id: R06
+    fixture: [F02, F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/resource_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A19/"
+
+  - acceptance_id: A20
+    requirement_id: R01
+    fixture: [F01, F02, F03, F05]
+    layer: contract
+    test_or_runbook_path: "tests/contract/api_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A20/"
+
+  - acceptance_id: A21
+    requirement_id: R03
+    fixture: [F02, F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/account_customer_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A21/"
+
+  - acceptance_id: A22
+    requirement_id: R09
+    fixture: [F05]
+    layer: runbook
+    test_or_runbook_path: "docs/acceptance/runbooks/backup-pitr-key-recovery.md"
+    owner_role: sre
+    evidence_path: "artifacts/acceptance/A22/"
+
+  - acceptance_id: A23
+    requirement_id: R02
+    fixture: [F02, F03, F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/collection_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A23/"
+
+  - acceptance_id: A24
+    requirement_id: R02
+    fixture: [F02, F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/site_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A24/"
+
+  - acceptance_id: A25
+    requirement_id: R09
+    fixture: [F02, F05]
+    layer: integration
+    test_or_runbook_path: "tests/integration/migration_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A25/"
+
+  - acceptance_id: A26
+    requirement_id: R10
+    fixture: [F01, F03]
+    layer: contract
+    test_or_runbook_path: "tests/contract/api_acceptance_test.go"
+    owner_role: frontend
+    evidence_path: "planned:artifacts/acceptance/A26/"
+
+  - acceptance_id: A27
+    requirement_id: R05
+    fixture: [F03]
+    layer: integration
+    test_or_runbook_path: "tests/integration/statistics_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A27/"
+
+  - acceptance_id: A28
+    requirement_id: R04
+    fixture: [F03, F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/collection_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A28/"
+
+  - acceptance_id: A29
+    requirement_id: R04
+    fixture: [F03, F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/statistics_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A29/"
+
+  - acceptance_id: A30
+    requirement_id: R04
+    fixture: [F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/scheduler_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A30/"
+
+  - acceptance_id: A31
+    requirement_id: R04
+    fixture: [F04, F05]
+    layer: integration
+    test_or_runbook_path: "tests/integration/worker_recovery_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A31/"
+
+  - acceptance_id: A32
+    requirement_id: R03
+    fixture: [F03, F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/account_customer_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A32/"
+
+  - acceptance_id: A33
+    requirement_id: R03
+    fixture: [F03, F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/account_customer_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A33/"
+
+  - acceptance_id: A34
+    requirement_id: R03
+    fixture: [F02, F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/account_customer_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A34/"
+
+  - acceptance_id: A35
+    requirement_id: R03
+    fixture: [F02, F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/account_customer_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A35/"
+
+  - acceptance_id: A36
+    requirement_id: R02
+    fixture: [F02, F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/site_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A36/"
+
+  - acceptance_id: A37
+    requirement_id: R02
+    fixture: [F03, F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/site_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A37/"
+
+  - acceptance_id: A38
+    requirement_id: R05
+    fixture: [F02, F03]
+    layer: integration
+    test_or_runbook_path: "tests/integration/statistics_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A38/"
+  - acceptance_id: A39
+    requirement_id: R05
+    fixture: [F03]
+    layer: integration
+    test_or_runbook_path: "tests/integration/statistics_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A39/"
+
+  - acceptance_id: A40
+    requirement_id: R05
+    fixture: [F03]
+    layer: contract
+    test_or_runbook_path: "tests/integration/statistics_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A40/"
+
+  - acceptance_id: A41
+    requirement_id: R08
+    fixture: [F03, F05]
+    layer: integration
+    test_or_runbook_path: "tests/integration/export_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A41/"
+
+  - acceptance_id: A42
+    requirement_id: R07
+    fixture: [F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/alert_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "artifacts/acceptance/A42/20260716T113746.892993426Z-3067/"
+
+  - acceptance_id: A43
+    requirement_id: R07
+    fixture: [F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/alert_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "artifacts/acceptance/A43/20260716T113838.401620881Z-3063/"
+
+  - acceptance_id: A44
+    requirement_id: R07
+    fixture: [F04, F05]
+    layer: integration
+    test_or_runbook_path: "tests/integration/alert_acceptance_test.go"
+    owner_role: security
+    evidence_path: "artifacts/acceptance/A44/20260716T114125.455614436Z-3083/"
+
+  - acceptance_id: A45
+    requirement_id: R01
+    fixture: [F01, F02]
+    layer: integration
+    test_or_runbook_path: "tests/integration/security_acceptance_test.go"
+    owner_role: security
+    evidence_path: "artifacts/acceptance/A45/"
+
+  - acceptance_id: A46
+    requirement_id: R09
+    fixture: [F01, F05]
+    layer: contract
+    test_or_runbook_path: "tests/contract/settings_api_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "artifacts/acceptance/A46/20260716T111950.325583140Z-3039/"
+
+  - acceptance_id: A47
+    requirement_id: R10
+    fixture: [F01]
+    layer: static-analysis
+    test_or_runbook_path: "web/scripts/i18n-check.ts"
+    owner_role: frontend
+    evidence_path: "planned:artifacts/acceptance/A47/"
+
+  - acceptance_id: A48
+    requirement_id: R09
+    fixture: [F04, F05]
+    layer: contract
+    test_or_runbook_path: "tests/contract/ops_endpoint_acceptance_test.go"
+    owner_role: sre
+    evidence_path: "planned:artifacts/acceptance/A48/"
+
+  - acceptance_id: A49
+    requirement_id: R09
+    fixture: [F05]
+    layer: runbook
+    test_or_runbook_path: "docs/acceptance/runbooks/capacity-performance.md"
+    owner_role: sre
+    evidence_path: "planned:artifacts/acceptance/A49/"
+
+  - acceptance_id: A50
+    requirement_id: R10
+    fixture: [F03, F04]
+    layer: e2e
+    test_or_runbook_path: "web/e2e/statistics-states.spec.ts"
+    owner_role: frontend
+    evidence_path: "artifacts/acceptance/A50/"
+
+  - acceptance_id: A51
+    requirement_id: R01
+    fixture: [F05]
+    layer: runbook
+    test_or_runbook_path: "docs/acceptance/runbooks/backup-pitr-key-recovery.md"
+    owner_role: security
+    evidence_path: "artifacts/acceptance/A51/"
+
+  - acceptance_id: A52
+    requirement_id: R02
+    fixture: [F02, F05]
+    layer: runbook
+    test_or_runbook_path: "docs/acceptance/runbooks/deployment-rollback.md"
+    owner_role: sre
+    evidence_path: "planned:artifacts/acceptance/A52/"
+
+  - acceptance_id: A53
+    requirement_id: R07
+    fixture: [F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/alert_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "artifacts/acceptance/A53/20260716T113935.052512409Z-3070/"
+
+  - acceptance_id: A54
+    requirement_id: R03
+    fixture: [F02, F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/account_customer_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A54/"
+
+  - acceptance_id: A55
+    requirement_id: R02
+    fixture: [F02]
+    layer: e2e
+    test_or_runbook_path: "web/e2e/site-authorization.spec.ts"
+    owner_role: frontend
+    evidence_path: "planned:artifacts/acceptance/A55/"
+
+  - acceptance_id: A56
+    requirement_id: R02
+    fixture: [F02]
+    layer: integration
+    test_or_runbook_path: "tests/integration/site_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A56/"
+
+  - acceptance_id: A57
+    requirement_id: R02
+    fixture: [F02, F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/site_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A57/"
+
+  - acceptance_id: A58
+    requirement_id: R04
+    fixture: [F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/worker_recovery_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A58/"
+
+  - acceptance_id: A59
+    requirement_id: R04
+    fixture: [F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/worker_recovery_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A59/"
+
+  - acceptance_id: A60
+    requirement_id: R04
+    fixture: [F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/worker_recovery_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A60/"
+
+  - acceptance_id: A61
+    requirement_id: R04
+    fixture: [F03, F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/worker_recovery_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A61/"
+
+  - acceptance_id: A62
+    requirement_id: R06
+    fixture: [F03, F05]
+    layer: integration
+    test_or_runbook_path: "tests/integration/resource_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "artifacts/acceptance/A62/"
+
+  - acceptance_id: A63
+    requirement_id: R06
+    fixture: [F02, F04, F05]
+    layer: integration
+    test_or_runbook_path: "tests/integration/performance_history_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A63/"
+
+  - acceptance_id: A64
+    requirement_id: R05
+    fixture: [F03]
+    layer: contract
+    test_or_runbook_path: "tests/contract/statistics_api_acceptance_test.go"
+    owner_role: frontend
+    evidence_path: "planned:artifacts/acceptance/A64/"
+
+  - acceptance_id: A65
+    requirement_id: R05
+    fixture: [F03]
+    layer: integration
+    test_or_runbook_path: "tests/integration/statistics_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A65/"
+
+  - acceptance_id: A66
+    requirement_id: R07
+    fixture: [F01, F04]
+    layer: e2e
+    test_or_runbook_path: "web/e2e/alerts.spec.ts"
+    owner_role: frontend
+    evidence_path: "planned:artifacts/acceptance/A66/"
+
+  - acceptance_id: A67
+    requirement_id: R08
+    fixture: [F03, F05]
+    layer: e2e
+    test_or_runbook_path: "web/e2e/exports.spec.ts"
+    owner_role: frontend
+    evidence_path: "planned:artifacts/acceptance/A67/"
+
+  - acceptance_id: A68
+    requirement_id: R04
+    fixture: [F03, F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/statistics_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A68/"
+
+  - acceptance_id: A69
+    requirement_id: R09
+    fixture: [F05]
+    layer: integration
+    test_or_runbook_path: "tests/integration/settings_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "artifacts/acceptance/A69/20260716T112044.652701855Z-3056/"
+
+  - acceptance_id: A70
+    requirement_id: R10
+    fixture: [F01, F04, F05]
+    layer: contract
+    test_or_runbook_path: "tests/contract/message_ref_acceptance_test.go"
+    owner_role: frontend
+    evidence_path: "planned:artifacts/acceptance/A70/"
+
+  - acceptance_id: A71
+    requirement_id: R07
+    fixture: [F01, F04]
+    layer: e2e
+    test_or_runbook_path: "web/e2e/alert-rules.spec.ts"
+    owner_role: frontend
+    evidence_path: "planned:artifacts/acceptance/A71/"
+
+  - acceptance_id: A72
+    requirement_id: R10
+    fixture: [F01, F03, F04, F05]
+    layer: e2e
+    test_or_runbook_path: "web/e2e/deep-links.spec.ts"
+    owner_role: frontend
+    evidence_path: "planned:artifacts/acceptance/A72/"
+
+  - acceptance_id: A73
+    requirement_id: R09
+    fixture: [F01, F04, F05]
+    layer: e2e
+    test_or_runbook_path: "web/e2e/settings.spec.ts"
+    owner_role: frontend
+    evidence_path: "planned:artifacts/acceptance/A73/"
+
+  - acceptance_id: A74
+    requirement_id: R09
+    fixture: [F05]
+    layer: runbook
+    test_or_runbook_path: "docs/acceptance/runbooks/deployment-rollback.md"
+    owner_role: sre
+    evidence_path: "planned:artifacts/acceptance/A74/"
+
+  - acceptance_id: A75
+    requirement_id: R09
+    fixture: [F05]
+    layer: runbook
+    test_or_runbook_path: "docs/acceptance/runbooks/backup-pitr-key-recovery.md"
+    owner_role: sre
+    evidence_path: "planned:artifacts/acceptance/A75/"
+
+  - acceptance_id: A76
+    requirement_id: R01
+    fixture: [F01, F02, F04]
+    layer: integration
+    test_or_runbook_path: "router/user_router_integration_test.go"
+    owner_role: backend
+    evidence_path: "artifacts/acceptance/A76/20260716T101333.674067856Z-3075/"
+
+  - acceptance_id: A77
+    requirement_id: R10
+    fixture: [F01, F02, F03, F04, F05]
+    layer: e2e
+    test_or_runbook_path: "web/e2e/accessibility-responsive.spec.ts"
+    owner_role: frontend
+    evidence_path: "artifacts/acceptance/A77/"
+
+  - acceptance_id: A78
+    requirement_id: R07
+    fixture: [F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/alert_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "artifacts/acceptance/A78/20260716T114027.662259051Z-3065/"
+
+  - acceptance_id: A79
+    requirement_id: R04
+    fixture: [F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/collection_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A79/"
+
+  - acceptance_id: A80
+    requirement_id: R03
+    fixture: [F02, F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/account_customer_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A80/"
+
+  - acceptance_id: A81
+    requirement_id: R03
+    fixture: [F02, F03, F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/user_inventory_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A81/"
+
+  - acceptance_id: A82
+    requirement_id: R05
+    fixture: [F03]
+    layer: contract
+    test_or_runbook_path: "tests/contract/statistics_api_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A82/"
+
+  - acceptance_id: A83
+    requirement_id: R09
+    fixture: [F01, F02, F03, F04, F05]
+    layer: runbook
+    test_or_runbook_path: "docs/acceptance/runbooks/document-integrity.md"
+    owner_role: qa
+    evidence_path: "artifacts/acceptance/A83/"
+
+  - acceptance_id: A84
+    requirement_id: R04
+    fixture: [F04, F05]
+    layer: integration
+    test_or_runbook_path: "tests/integration/scheduler_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A84/"
+
+  - acceptance_id: A85
+    requirement_id: R07
+    fixture: [F04]
+    layer: runbook
+    test_or_runbook_path: "docs/acceptance/runbooks/monitoring-failure-drills.md"
+    owner_role: sre
+    evidence_path: "artifacts/acceptance/A85/20260716T114447.728444489Z-3075/"
+
+  - acceptance_id: A86
+    requirement_id: R02
+    fixture: [F02, F04]
+    layer: integration
+    test_or_runbook_path: "tests/integration/site_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A86/"
+
+  - acceptance_id: A87
+    requirement_id: R10
+    fixture: [F01, F02, F03, F04, F05]
+    layer: contract
+    test_or_runbook_path: "tests/contract/api_acceptance_test.go"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A87/"
+
+  - acceptance_id: A88
+    requirement_id: R05
+    fixture: [F03, F04]
+    layer: e2e
+    test_or_runbook_path: "web/e2e/f5-dashboard-statistics.spec.ts"
+    owner_role: frontend
+    evidence_path: "artifacts/acceptance/A88/"
+  - acceptance_id: A89
+    requirement_id: R10
+    fixture: [F02, F04, F05]
+    layer: e2e
+    test_or_runbook_paths:
+      - "tests/integration/security_acceptance_test.go"
+      - "web/src/features/logs/api.test.ts"
+      - "web/e2e/logs.spec.ts"
+      - "web/src/lib/acceptance-fixture-consumption.test.ts"
+    owner_role: frontend
+    evidence_path: "planned:artifacts/acceptance/A89/"
+  - acceptance_id: A90
+    requirement_id: R10
+    fixture: [F02, F03, F04, F05]
+    layer: e2e
+    test_or_runbook_paths:
+      - "tests/integration/user_inventory_acceptance_test.go"
+      - "web/src/features/user-inventory/api.test.ts"
+      - "web/e2e/user-inventory.spec.ts"
+      - "web/src/lib/acceptance-fixture-consumption.test.ts"
+    owner_role: frontend
+    evidence_path: "planned:artifacts/acceptance/A90/"
+  - acceptance_id: A91
+    requirement_id: R10
+    fixture: [F02, F03, F04, F05]
+    layer: e2e
+    test_or_runbook_paths:
+      - "tests/integration/channel_inventory_acceptance_test.go"
+      - "web/src/features/channel-inventory/api.test.ts"
+      - "web/e2e/channel-inventory.spec.ts"
+      - "web/src/lib/acceptance-fixture-consumption.test.ts"
+    owner_role: frontend
+    evidence_path: "planned:artifacts/acceptance/A91/"
+  - acceptance_id: A92
+    requirement_id: R10
+    fixture: [F02, F03, F04, F05]
+    layer: e2e
+    test_or_runbook_paths:
+      - "tests/integration/performance_history_acceptance_test.go"
+      - "web/src/features/performance-history/api.test.ts"
+      - "web/e2e/performance-history.spec.ts"
+      - "web/src/lib/acceptance-fixture-consumption.test.ts"
+    owner_role: frontend
+    evidence_path: "planned:artifacts/acceptance/A92/"
+  - acceptance_id: A93
+    requirement_id: R05
+    fixture: [F02, F04, F05, F06]
+    layer: integration
+    test_or_runbook_paths:
+      - "tests/integration/finance_operations_acceptance_test.go"
+      - "web/src/features/financial-operations/api.test.ts"
+      - "web/e2e/financial-operations.spec.ts"
+      - "web/src/lib/acceptance-fixture-consumption.test.ts"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A93/"
+  - acceptance_id: A94
+    requirement_id: R05
+    fixture: [F02, F04, F05, F06]
+    layer: integration
+    test_or_runbook_paths:
+      - "tests/integration/finance_operations_acceptance_test.go"
+      - "web/src/features/financial-operations/export-request.test.ts"
+      - "web/e2e/financial-operations.spec.ts"
+      - "web/src/lib/acceptance-fixture-consumption.test.ts"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A94/"
+  - acceptance_id: A95
+    requirement_id: R04
+    fixture: [F02, F04, F05, F07]
+    layer: integration
+    test_or_runbook_paths:
+      - "tests/integration/upstream_task_acceptance_test.go"
+      - "web/src/features/upstream-tasks/api.test.ts"
+      - "web/e2e/upstream-tasks.spec.ts"
+      - "web/src/lib/acceptance-fixture-consumption.test.ts"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A95/"
+  - acceptance_id: A96
+    requirement_id: R04
+    fixture: [F02, F04, F05, F08]
+    layer: integration
+    test_or_runbook_paths:
+      - "tests/integration/model_catalog_acceptance_test.go"
+      - "web/src/features/model-catalog/icon-boundary.test.ts"
+      - "web/e2e/model-catalog.spec.ts"
+      - "web/src/lib/acceptance-fixture-consumption.test.ts"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A96/"
+  - acceptance_id: A97
+    requirement_id: R04
+    fixture: [F02, F03, F04]
+    layer: integration
+    test_or_runbook_paths:
+      - "tests/integration/local_ranking_acceptance_test.go"
+      - "web/src/features/rankings/api.test.ts"
+      - "web/e2e/rankings.spec.ts"
+      - "web/src/lib/acceptance-fixture-consumption.test.ts"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A97/"
+  - acceptance_id: A98
+    requirement_id: R04
+    fixture: [F02, F04, F05, F09]
+    layer: integration
+    test_or_runbook_paths:
+      - "tests/integration/subscription_plan_acceptance_test.go"
+      - "web/src/features/subscription-plans/privacy-boundary.test.ts"
+      - "web/e2e/subscription-plans.spec.ts"
+      - "web/src/lib/acceptance-fixture-consumption.test.ts"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A98/"
+  - acceptance_id: A99
+    requirement_id: R04
+    fixture: [F02, F04, F05, F10]
+    layer: integration
+    test_or_runbook_paths:
+      - "tests/integration/pricing_group_catalog_acceptance_test.go"
+      - "web/src/features/pricing-groups/privacy-boundary.test.ts"
+      - "web/e2e/pricing-groups.spec.ts"
+      - "web/src/lib/acceptance-fixture-consumption.test.ts"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A99/"
+  - acceptance_id: A100
+    requirement_id: R04
+    fixture: [F02, F04, F05, F11]
+    layer: integration
+    test_or_runbook_paths:
+      - "tests/integration/system_task_catalog_acceptance_test.go"
+      - "web/src/features/system-tasks/privacy-boundary.test.ts"
+      - "web/e2e/system-tasks.spec.ts"
+      - "web/src/lib/acceptance-fixture-consumption.test.ts"
+    owner_role: backend
+    evidence_path: "planned:artifacts/acceptance/A100/"

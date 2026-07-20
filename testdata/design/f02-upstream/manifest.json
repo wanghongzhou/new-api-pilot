@@ -1,0 +1,269 @@
+{
+  "schema_version": 1,
+  "fixture_id": "F02",
+  "description": "Named fake new-api scenarios with exact routes, headers, queries, and response files.",
+  "fixed_now_unix": 1768622400,
+  "scenarios": {
+    "supported": {
+      "routes": [
+        {
+          "id": "status",
+          "method": "GET",
+          "path": "/api/status",
+          "response_file": "responses/status-supported.json",
+          "forbidden_headers": ["Authorization", "New-Api-User"]
+        },
+        {
+          "id": "self",
+          "method": "GET",
+          "path": "/api/user/self",
+          "response_file": "responses/user-self-root.json",
+          "expected_headers": {
+            "Authorization": "fixture-root-token",
+            "New-Api-User": "1"
+          },
+          "required_headers": ["X-Request-ID"]
+        },
+        {
+          "id": "root-user",
+          "method": "GET",
+          "path": "/api/user/1",
+          "response_file": "responses/user-root.json",
+          "expected_headers": {
+            "Authorization": "fixture-root-token",
+            "New-Api-User": "1"
+          },
+          "required_headers": ["X-Request-ID"]
+        },
+        {
+          "id": "users-page-1",
+          "method": "GET",
+          "path": "/api/user/",
+          "query": {"p": "1", "page_size": "100"},
+          "response_file": "responses/users-page-1.json",
+          "expected_headers": {
+            "Authorization": "fixture-root-token",
+            "New-Api-User": "1"
+          },
+          "required_headers": ["X-Request-ID"]
+        },
+        {
+          "id": "users-page-2",
+          "method": "GET",
+          "path": "/api/user/",
+          "query": {"p": "2", "page_size": "100"},
+          "response_file": "responses/users-page-2.json",
+          "expected_headers": {
+            "Authorization": "fixture-root-token",
+            "New-Api-User": "1"
+          },
+          "required_headers": ["X-Request-ID"]
+        },
+        {
+          "id": "channels-page-1",
+          "method": "GET",
+          "path": "/api/channel/",
+          "query": {"p": "1", "page_size": "100"},
+          "response_file": "responses/channels-page-1.json",
+          "expected_headers": {
+            "Authorization": "fixture-root-token",
+            "New-Api-User": "1"
+          },
+          "required_headers": ["X-Request-ID"]
+        },
+        {
+          "id": "flow-hour",
+          "method": "GET",
+          "path": "/api/data/flow",
+          "query": {"start_timestamp": "1768406400", "end_timestamp": "1768409999"},
+          "response_file": "responses/flow-hour.json",
+          "expected_headers": {
+            "Authorization": "fixture-root-token",
+            "New-Api-User": "1"
+          },
+          "required_headers": ["X-Request-ID"]
+        },
+        {
+          "id": "data-hour",
+          "method": "GET",
+          "path": "/api/data",
+          "query": {"start_timestamp": "1768406400", "end_timestamp": "1768409999"},
+          "response_file": "responses/data-hour-consistent.json",
+          "expected_headers": {
+            "Authorization": "fixture-root-token",
+            "New-Api-User": "1"
+          },
+          "required_headers": ["X-Request-ID"]
+        },
+        {
+          "id": "instances",
+          "method": "GET",
+          "path": "/api/system-info/instances",
+          "response_file": "responses/instances-success.json",
+          "expected_headers": {
+            "Authorization": "fixture-root-token",
+            "New-Api-User": "1"
+          },
+          "required_headers": ["X-Request-ID"]
+        },
+        {
+          "id": "realtime",
+          "method": "GET",
+          "path": "/api/log/stat",
+          "response_file": "responses/log-stat.json",
+          "expected_headers": {
+            "Authorization": "fixture-root-token",
+            "New-Api-User": "1"
+          },
+          "required_headers": ["X-Request-ID"]
+        },
+        {
+          "id": "performance-summary-24h",
+          "method": "GET",
+          "path": "/api/perf-metrics/summary",
+          "query": {"hours": "24"},
+          "response_file": "responses/performance-summary-valid.json",
+          "expected_headers": {
+            "Authorization": "fixture-root-token",
+            "New-Api-User": "1"
+          },
+          "required_headers": ["X-Request-ID"]
+        }
+      ]
+    },
+    "export_disabled": {
+      "routes": [
+        {
+          "id": "status-export-disabled",
+          "method": "GET",
+          "path": "/api/status",
+          "response_file": "responses/status-export-disabled.json",
+          "forbidden_headers": ["Authorization", "New-Api-User"]
+        }
+      ]
+    },
+    "flow_username_canonicalization": {
+      "routes": [
+        {
+          "id": "flow-username-canonicalization",
+          "method": "GET",
+          "path": "/api/data/flow",
+          "query": {"start_timestamp": "1768406400", "end_timestamp": "1768409999"},
+          "response_file": "responses/flow-username-canonicalization.json",
+          "expected_headers": {
+            "Authorization": "fixture-root-token",
+            "New-Api-User": "1"
+          },
+          "required_headers": ["X-Request-ID"]
+        }
+      ]
+    },
+    "flow_data_mismatch": {
+      "routes": [
+        {
+          "id": "flow-hour",
+          "method": "GET",
+          "path": "/api/data/flow",
+          "query": {"start_timestamp": "1768406400", "end_timestamp": "1768409999"},
+          "response_file": "responses/flow-hour.json"
+        },
+        {
+          "id": "data-hour-mismatch",
+          "method": "GET",
+          "path": "/api/data",
+          "query": {"start_timestamp": "1768406400", "end_timestamp": "1768409999"},
+          "response_file": "responses/data-hour-mismatch.json"
+        }
+      ]
+    },
+    "users_total_drift": {
+      "routes": [
+        {
+          "id": "users-page-1",
+          "method": "GET",
+          "path": "/api/user/",
+          "query": {"p": "1", "page_size": "100"},
+          "response_file": "responses/users-page-1.json"
+        },
+        {
+          "id": "users-page-2-total-drift",
+          "method": "GET",
+          "path": "/api/user/",
+          "query": {"p": "2", "page_size": "100"},
+          "response_file": "responses/users-page-2-total-drift.json"
+        }
+      ]
+    },
+    "instances_empty": {
+      "routes": [
+        {
+          "id": "instances-empty",
+          "method": "GET",
+          "path": "/api/system-info/instances",
+          "response_file": "responses/instances-empty.json"
+        }
+      ]
+    },
+    "instances_invalid": {
+      "routes": [
+        {
+          "id": "instances-invalid",
+          "method": "GET",
+          "path": "/api/system-info/instances",
+          "response_file": "responses/instances-invalid.json"
+        }
+      ]
+    },
+    "performance_invalid": {
+      "routes": [
+        {
+          "id": "performance-summary-invalid",
+          "method": "GET",
+          "path": "/api/perf-metrics/summary",
+          "query": {"hours": "24"},
+          "response_file": "responses/performance-summary-invalid.json"
+        }
+      ]
+    },
+    "token_rotation_disconnect": {
+      "routes": [
+        {
+          "id": "login",
+          "method": "POST",
+          "path": "/api/user/login",
+          "response_file": "responses/login-root.json"
+        },
+        {
+          "id": "token-disconnect",
+          "method": "GET",
+          "path": "/api/user/token",
+          "required_headers": ["Cookie", "New-Api-User", "X-Request-ID"],
+          "disconnect": true
+        }
+      ]
+    },
+    "upstream_429": {
+      "routes": [
+        {
+          "id": "flow-rate-limited",
+          "method": "GET",
+          "path": "/api/data/flow",
+          "status": 429,
+          "headers": {"Retry-After": "120"},
+          "response_file": "responses/error-rate-limited.json"
+        }
+      ]
+    },
+    "upstream_500": {
+      "routes": [
+        {
+          "id": "flow-upstream-error",
+          "method": "GET",
+          "path": "/api/data/flow",
+          "status": 500,
+          "response_file": "responses/error-upstream.json"
+        }
+      ]
+    }
+  }
+}

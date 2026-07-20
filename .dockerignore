@@ -1,0 +1,11 @@
+.git
+.codegraph
+.env
+**/node_modules
+**/dist
+**/.tmp
+web/playwright-report
+web/test-results
+data
+artifacts
+docs

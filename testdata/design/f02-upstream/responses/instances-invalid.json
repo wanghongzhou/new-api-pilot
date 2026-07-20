@@ -1,0 +1,14 @@
+{
+  "success": true,
+  "message": "",
+  "data": [
+    {
+      "node_name": "alpha-1",
+      "status": "degraded",
+      "stale_after_seconds": 90,
+      "started_at": 1768406400,
+      "last_seen_at": 1768622390,
+      "info": {"resources": {"cpu": {"usage_percent": 101}}}
+    }
+  ]
+}

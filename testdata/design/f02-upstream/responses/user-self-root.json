@@ -1,0 +1,12 @@
+{
+  "success": true,
+  "message": "",
+  "data": {
+    "id": 1,
+    "username": "root",
+    "display_name": "Fixture Root",
+    "role": 100,
+    "status": 1,
+    "group": "default"
+  }
+}

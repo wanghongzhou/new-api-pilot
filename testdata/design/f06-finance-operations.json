@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "fixture_id": "F06",
+  "clock": { "now_unix": 2101100000, "timezone": "Asia/Shanghai" },
+  "topups": [{ "site_id": "1", "remote_id": "9", "remote_user_id": "7", "amount": "9007199254740993", "money": "10.123456789", "payment_method": "stripe", "payment_provider": "stripe", "create_time": 2101099990, "complete_time": 0, "status": "success" }],
+  "redemptions": [{ "site_id": "1", "remote_id": "8", "remote_user_id": "0", "name": "batch", "status": 1, "quota": "9007199254740993", "created_time": 2101099980, "redeemed_time": 0, "used_user_id": "0", "expired_time": 2101099999 }],
+  "snapshot_scenarios": ["complete", "total_drift", "maximum_id_drift", "duplicate_id", "over_100000", "missing", "reappear", "config_fence"],
+  "privacy_contract": "upstream payment references and redemption secrets are intentionally omitted"
+}

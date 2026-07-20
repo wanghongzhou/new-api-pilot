@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "fixture_id": "F11",
+  "clock": {
+    "now_unix": 2101600000,
+    "timezone": "Asia/Shanghai"
+  },
+  "upstream": {
+    "list_path": "/api/system-task/list?limit=100",
+    "current_path": "/api/system-task/current?type={type}",
+    "types": [
+      "log_cleanup",
+      "channel_test",
+      "model_update",
+      "midjourney_poll",
+      "async_task_poll"
+    ],
+    "statuses": ["pending", "running", "succeeded", "failed"]
+  },
+  "tasks": [
+    {
+      "site_id": "1",
+      "remote_id": "105",
+      "task_id": "systask_log_cleanup",
+      "type": "log_cleanup",
+      "status": "running",
+      "created_at": 2101599000,
+      "updated_at": 2101599900,
+      "progress": {
+        "total": "9007199254740993",
+        "processed": "4000000000000000",
+        "progress": 44,
+        "remaining": "5007199254740993"
+      },
+      "result": null,
+      "error_present": false,
+      "error_code": null
+    },
+    {
+      "site_id": "1",
+      "remote_id": "104",
+      "task_id": "systask_channel_test",
+      "type": "channel_test",
+      "status": "succeeded",
+      "created_at": 2101598000,
+      "updated_at": 2101598100,
+      "progress": {"total": "10", "processed": "10", "progress": 100, "remaining": "0"},
+      "result": {"tested": "10", "succeeded": "8", "failed": "1", "disabled": "1", "enabled": "0"},
+      "error_present": false,
+      "error_code": null
+    },
+    {
+      "site_id": "1",
+      "remote_id": "103",
+      "task_id": "systask_model_update",
+      "type": "model_update",
+      "status": "failed",
+      "created_at": 2101597000,
+      "updated_at": 2101597100,
+      "progress": null,
+      "result": {"checked_channels": "6", "changed_channels": "2", "detected_add_models": "3", "detected_remove_models": "1", "failed_channels": "1", "auto_added_models": "2"},
+      "error_present": true,
+      "error_code": "UPSTREAM_SYSTEM_TASK_FAILED"
+    },
+    {
+      "site_id": "1",
+      "remote_id": "102",
+      "task_id": "systask_midjourney_poll",
+      "type": "midjourney_poll",
+      "status": "succeeded",
+      "created_at": 2101596000,
+      "updated_at": 2101596100,
+      "progress": null,
+      "result": {"unfinished_tasks": "7", "channels_scanned": "3", "null_tasks_failed": "1"},
+      "error_present": false,
+      "error_code": null
+    },
+    {
+      "site_id": "1",
+      "remote_id": "101",
+      "task_id": "systask_async_task_poll",
+      "type": "async_task_poll",
+      "status": "succeeded",
+      "created_at": 2101595000,
+      "updated_at": 2101595100,
+      "progress": null,
+      "result": {"unfinished_tasks": "9", "platforms_scanned": "2", "null_tasks_failed": "0"},
+      "error_present": false,
+      "error_code": null
+    }
+  ],
+  "scenarios": [
+    "list_limit_100_truncated_partial",
+    "descending_id_gap_partial",
+    "duplicate_id_invalid",
+    "current_supplements_active_outside_list",
+    "five_current_requests_only_no_per_task_n_plus_one",
+    "current_failure_preserves_known_active",
+    "unknown_type_rejected",
+    "unknown_status_rejected",
+    "typed_progress_result_only",
+    "bigint_string_round_trip",
+    "raw_fields_discarded_at_decode_boundary",
+    "stable_local_error_code_only",
+    "config_fence_discards_stale_response",
+    "durable_failure_and_restart_recovery",
+    "terminal_retention_by_updated_at",
+    "active_never_deleted_by_age",
+    "global_and_forced_site_api_scope",
+    "statistics_completeness_and_export",
+    "no_remote_mutation_or_detail_proxy"
+  ]
+}

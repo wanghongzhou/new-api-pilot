@@ -1,0 +1,33 @@
+{
+  "success": true,
+  "message": "",
+  "data": [
+    {
+      "user_id": 3,
+      "username": "zeta-user",
+      "model_name": "Model-A",
+      "channel_id": 1,
+      "count": 2,
+      "quota": 20,
+      "token_used": 200
+    },
+    {
+      "user_id": 3,
+      "username": "",
+      "model_name": "Model-A",
+      "channel_id": 1,
+      "count": 3,
+      "quota": 30,
+      "token_used": 300
+    },
+    {
+      "user_id": 3,
+      "username": "alpha-user",
+      "model_name": "Model-A",
+      "channel_id": 1,
+      "count": 5,
+      "quota": 50,
+      "token_used": 500
+    }
+  ]
+}
