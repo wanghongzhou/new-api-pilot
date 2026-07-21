@@ -258,6 +258,8 @@ type UsageSummary struct {
 	Quota        *string `json:"quota"`
 	TokenUsed    *string `json:"token_used"`
 	ActiveUsers  *string `json:"active_users"`
+	AvgRPM       *string `json:"avg_rpm"`
+	AvgTPM       *string `json:"avg_tpm"`
 	AsOf         *int64  `json:"as_of"`
 	DataStatus   string  `json:"data_status"`
 	IsFinal      bool    `json:"is_final,omitempty"`

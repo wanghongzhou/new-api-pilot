@@ -500,6 +500,61 @@ func TestWorkerClaimTokensAndRetryMatrix(t *testing.T) {
 	}
 }
 
+func TestInitialBackfillClaimExecutesWindowsConcurrently(t *testing.T) {
+	database := openWorkerTestDatabase(t)
+	now := time.Unix(1_752_400_800, 0)
+	clock := testsupport.NewFakeClock(now)
+	repository := model.NewCollectionTaskRepository(database.GORM)
+	site := createWorkerTestSite(t, database, "initial-parallel", now.Unix())
+	scope, err := model.NewUsageBackfillRunScope(true)
+	if err != nil {
+		t.Fatalf("build initial backfill scope: %v", err)
+	}
+	run := createWorkerWindowRun(t, database, repository, site, constant.TaskTypeUsageBackfill,
+		constant.CollectionTriggerRecovery, constant.CollectionPriorityInitialBackfill, scope,
+		now.Unix()-12*3600, now.Unix(), "req_initial_parallel", now.Unix())
+	claim, err := repository.ClaimNext(context.Background(), model.CollectionTaskClaimOptions{
+		TaskTypes: []string{constant.TaskTypeUsageBackfill}, Now: now.Unix(), RequestID: "wrk_initial_parallel",
+		MaxWindow: 24, ScanLimit: 64,
+	})
+	if err != nil || claim.Run.ID != run.ID || len(claim.Windows) != 12 {
+		t.Fatalf("initial backfill claim = run:%d windows:%d err:%v", claim.Run.ID, len(claim.Windows), err)
+	}
+	var mu sync.Mutex
+	active, maximum := 0, 0
+	handler := JobHandlerFunc(func(context.Context, JobExecution) (JobOutcome, error) {
+		mu.Lock()
+		active++
+		if active > maximum {
+			maximum = active
+		}
+		mu.Unlock()
+		time.Sleep(25 * time.Millisecond)
+		mu.Lock()
+		active--
+		mu.Unlock()
+		return JobOutcome{}, nil
+	})
+	executor, err := NewExecutor(ExecutorOptions{
+		Repository: repository, Settings: model.NewCollectorSettingRepository(database.GORM), Clock: clock,
+		Handlers: map[string]JobHandler{constant.TaskTypeUsageBackfill: handler},
+	})
+	if err != nil {
+		t.Fatalf("create initial parallel executor: %v", err)
+	}
+	executor.executeClaim(context.Background(), claim)
+	if maximum < 2 {
+		t.Fatalf("initial backfill maximum concurrency = %d, want at least 2", maximum)
+	}
+	var completed int64
+	if err := database.GORM.Model(&model.CollectionRunWindow{}).Where("run_id = ? AND status = ?", run.ID, model.CollectionTaskStatusSuccess).Count(&completed).Error; err != nil {
+		t.Fatalf("count completed initial windows: %v", err)
+	}
+	if completed != 12 {
+		t.Fatalf("completed initial windows = %d, want 12", completed)
+	}
+}
+
 func TestExecutorDispatchSharedHonorsGlobalPriorityAcrossTaskTypes(t *testing.T) {
 	database := openWorkerTestDatabase(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -584,6 +639,7 @@ func TestSharedCollectionQueuesUseTheConfiguredCapacityPool(t *testing.T) {
 	}{
 		{queue: QueueUsage, want: QueueUsage},
 		{queue: QueueBackfill, want: QueueBackfill},
+		{queue: QueueInitialBackfill, want: QueueInitialBackfill},
 		{queue: QueueValidation, want: QueueBackfill},
 		{queue: QueueAccountRebuild, want: QueueBackfill},
 		{queue: QueueCustomerRebuild, want: QueueBackfill},
@@ -591,6 +647,15 @@ func TestSharedCollectionQueuesUseTheConfiguredCapacityPool(t *testing.T) {
 		if got := queueCapacityKey(test.queue); got != test.want {
 			t.Errorf("capacity key for %s = %s, want %s", test.queue, got, test.want)
 		}
+	}
+}
+
+func TestInitialBackfillUsesDedicatedConcurrency(t *testing.T) {
+	if initialBackfillConcurrency <= 3 {
+		t.Fatalf("initial backfill concurrency = %d, want greater than ordinary backfill", initialBackfillConcurrency)
+	}
+	if queueConcurrency(QueueBackfill, model.CollectorSettings{BackfillConcurrency: 2}) != 2 {
+		t.Fatal("ordinary backfill concurrency changed unexpectedly")
 	}
 }
 

@@ -10,6 +10,8 @@ type SiteUsageOverview struct {
 	Quota        string `gorm:"column:quota"`
 	TokenUsed    string `gorm:"column:token_used"`
 	ActiveUsers  int64  `gorm:"column:active_users"`
+	AvgRPM       string `gorm:"column:avg_rpm"`
+	AvgTPM       string `gorm:"column:avg_tpm"`
 	AsOf         *int64 `gorm:"column:as_of"`
 }
 
@@ -28,8 +30,12 @@ func (repository *SiteRepository) ListUsageOverviews(
   CAST(COALESCE(SUM(s.quota), 0) AS CHAR) AS quota,
   CAST(COALESCE(SUM(s.token_used), 0) AS CHAR) AS token_used,
   COALESCE(a.active_users, 0) AS active_users,
+  CAST(COALESCE(SUM(s.request_count) / NULLIF(COUNT(DISTINCT s.hour_ts) * 60, 0), 0) AS CHAR) AS avg_rpm,
+  CAST(COALESCE(SUM(s.token_used) / NULLIF(COUNT(DISTINCT s.hour_ts) * 60, 0), 0) AS CHAR) AS avg_tpm,
   MAX(s.last_calculated_at) AS as_of
 FROM site_stat_hourly AS s
+JOIN collection_window AS w
+  ON w.site_id = s.site_id AND w.hour_ts = s.hour_ts AND w.status = 'complete'
 LEFT JOIN (
   SELECT f.site_id, COUNT(DISTINCT f.remote_user_id) AS active_users
   FROM usage_fact_hourly AS f

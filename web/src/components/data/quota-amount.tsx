@@ -7,10 +7,12 @@ import type { MetricString, RateInfo } from '@/lib/api-types'
 import { MetricValue } from './metric-value'
 
 export function QuotaAmount({
+  inline = false,
   quota,
   rate,
   nullLabel,
 }: {
+  inline?: boolean
   nullLabel?: string
   quota: MetricString | null
   rate: RateInfo
@@ -18,7 +20,13 @@ export function QuotaAmount({
   const { t } = useTranslation()
   const amount = useMemo(() => calculateQuotaAmount(quota, rate), [quota, rate])
   return (
-    <div className='grid gap-0.5'>
+    <div
+      className={
+        inline
+          ? 'flex min-w-0 flex-wrap items-baseline gap-x-1 gap-y-0.5'
+          : 'grid gap-0.5'
+      }
+    >
       <span>
         <MetricValue compact nullLabel={nullLabel} value={quota} />
         <span className='text-muted-foreground ml-1 text-xs'>

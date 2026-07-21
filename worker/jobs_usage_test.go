@@ -26,7 +26,7 @@ func TestUsageExecutionErrorClassification(t *testing.T) {
 		wantCode  string
 		retryable bool
 	}{
-		{name: "mismatch", cause: service.ErrUpstreamDataMismatch, wantCode: string(constant.MessageDataValidationMismatch), retryable: true},
+		{name: "mismatch", cause: service.ErrUpstreamDataMismatch, wantCode: string(constant.MessageDataValidationMismatch)},
 		{name: "invalid", cause: service.ErrUpstreamResponseInvalid, wantCode: string(constant.MessageUpstreamResponseInvalid)},
 		{name: "oversized", cause: service.ErrUpstreamResponseTooLarge, wantCode: string(constant.MessageUpstreamResponseTooLarge)},
 		{name: "network", cause: service.ErrUpstreamUnavailable, wantCode: string(constant.MessageDataUpstreamUnavailable), retryable: true},
@@ -50,6 +50,22 @@ func TestUsageExecutionErrorClassification(t *testing.T) {
 	var executionError *TaskExecutionError
 	if !errors.As(err, &executionError) || !executionError.Retryable || executionError.RetryAfter != 2*time.Hour {
 		t.Fatalf("rate-limited usage error = %#v, %v", executionError, err)
+	}
+	for _, status := range []int{401, 404, 500} {
+		err := classifyUsageExecutionError(
+			&service.UpstreamRequestError{Kind: service.UpstreamErrorResponseInvalid, StatusCode: status},
+			&service.UsageCollectionFailure{Code: string(constant.MessageUpstreamResponseInvalid)},
+		)
+		if !errors.As(err, &executionError) || !executionError.Retryable {
+			t.Fatalf("HTTP %d usage error was not retryable: %#v", status, executionError)
+		}
+	}
+	validResponseError := classifyUsageExecutionError(
+		service.ErrUpstreamResponseInvalid,
+		&service.UsageCollectionFailure{Code: string(constant.MessageUpstreamResponseInvalid)},
+	)
+	if !errors.As(validResponseError, &executionError) || executionError.Retryable {
+		t.Fatalf("HTTP 200 validation error became retryable: %#v", executionError)
 	}
 	if !errors.Is(classifyUsageExecutionError(context.Canceled, nil), context.Canceled) {
 		t.Fatal("usage cancellation did not remain context.Canceled")

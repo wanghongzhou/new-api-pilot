@@ -1,17 +1,21 @@
 import {
-  ArrowUpRight01Icon,
   Chart01Icon,
+  Copy01Icon,
+  CpuIcon,
+  Database01Icon,
+  RamMemoryIcon,
   ServerStack01Icon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Link } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 
-import { DataFreshness } from '@/components/data/data-freshness'
 import { MetricValue } from '@/components/data/metric-value'
 import { QuotaAmount } from '@/components/data/quota-amount'
 import { SiteStatusBadges } from '@/components/data/site-status-badges'
+import { Badge } from '@/components/ui/badge'
 import { buildStatisticsSearch } from '@/features/statistics/search'
+import { fromUnixSeconds } from '@/lib/dayjs'
 import { cn } from '@/lib/utils'
 
 import type { SiteListItem } from '../types'
@@ -19,6 +23,115 @@ import { SiteActions, type SiteAction } from './site-actions'
 
 function PercentValue({ value }: { value: number | null }) {
   return <span>{`${(value ?? 0).toFixed(1)}%`}</span>
+}
+
+function ResourceChip({
+  icon,
+  label,
+  value,
+}: {
+  icon: typeof ServerStack01Icon
+  label: string
+  value: React.ReactNode
+}) {
+  return (
+    <div className='bg-muted/35 grid min-w-0 gap-1 rounded-lg px-3 py-2'>
+      <div className='text-muted-foreground flex min-w-0 items-center gap-1 text-[11px]'>
+        <HugeiconsIcon icon={icon} size={13} strokeWidth={2} />
+        <span className='truncate'>{label}</span>
+      </div>
+      <div className='text-foreground text-sm leading-none font-semibold'>
+        {value}
+      </div>
+    </div>
+  )
+}
+
+function MetricCell({
+  children,
+  label,
+  tone = 'default',
+}: {
+  children: React.ReactNode
+  label: string
+  tone?: 'default' | 'success'
+}) {
+  return (
+    <div className='min-w-0'>
+      <p className='text-muted-foreground truncate text-xs'>{label}</p>
+      <div
+        className={cn(
+          'text-foreground mt-1 min-w-0 text-base leading-none font-semibold tabular-nums',
+          tone === 'success' && 'text-success'
+        )}
+      >
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function CompletenessProgress({
+  label,
+  value,
+}: {
+  label: string
+  value: number
+}) {
+  const percent = Math.max(0, Math.min(100, value * 100))
+  return (
+    <div className='grid gap-1.5'>
+      <div className='flex items-center justify-between gap-3'>
+        <p className='text-muted-foreground text-xs'>{label}</p>
+        <p className='text-muted-foreground text-xs font-semibold tabular-nums'>
+          {percent.toFixed(0)}%
+        </p>
+      </div>
+      <div
+        aria-label={label}
+        aria-valuemax={100}
+        aria-valuemin={0}
+        aria-valuenow={percent}
+        className='bg-muted h-1.5 overflow-hidden rounded-full'
+        role='progressbar'
+      >
+        <div
+          className='from-primary to-success h-full rounded-full bg-gradient-to-r transition-[width]'
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+    </div>
+  )
+}
+
+function UpdatedAtLine({
+  expired,
+  timestamp,
+}: {
+  expired: boolean
+  timestamp: number | null
+}) {
+  const { t } = useTranslation()
+  const exact =
+    timestamp == null
+      ? null
+      : fromUnixSeconds(timestamp).format('YYYY-MM-DD HH:mm:ss')
+
+  return (
+    <div className='text-muted-foreground flex min-w-0 items-center gap-2 text-xs'>
+      <span className='bg-success size-1.5 shrink-0 rounded-full' />
+      <span className='truncate'>
+        {exact == null
+          ? t('data.noUpdateTime')
+          : t('site.currentUpdatedAt', { time: exact })}
+      </span>
+      {expired && (
+        <Badge className='shrink-0' variant='destructive'>
+          {t('data.stale')}
+        </Badge>
+      )}
+    </div>
+  )
 }
 
 export function SiteCard({
@@ -31,162 +144,184 @@ export function SiteCard({
   site: SiteListItem
 }) {
   const { t } = useTranslation()
+  const usageAvailable = site.today.data_status === 'complete'
+  const performanceAvailable = site.performance.data_status === 'complete'
+
   return (
     <article
       className={cn(
-        'border-border bg-card grid min-w-0 content-between overflow-visible rounded-lg border',
+        'border-border bg-card grid min-w-0 gap-0 overflow-visible rounded-xl border shadow-xs',
         site.management_status === 'disabled' && 'saturate-50 opacity-75'
       )}
     >
-      <div className='grid min-w-0 gap-4 p-4'>
-        <div className='flex min-w-0 items-start justify-between gap-3'>
+      <div className='grid min-w-0 gap-3 p-4 pb-3'>
+        <header className='flex min-w-0 items-start justify-between gap-3'>
           <div className='min-w-0'>
-            <h2 className='truncate font-semibold' title={site.name}>
-              {site.name}
-            </h2>
-            <p
-              className='text-muted-foreground mt-0.5 truncate text-xs'
-              title={site.base_url}
-            >
-              {site.base_url}
-            </p>
+            <div className='flex min-w-0 items-center gap-1.5'>
+              <Link
+                className='hover:text-primary min-w-0 truncate text-base leading-tight font-semibold transition-colors'
+                params={{ siteId: site.id }}
+                title={site.name}
+                to='/sites/$siteId'
+              >
+                {site.name}
+              </Link>
+              {site.online_status === 'online' && (
+                <span className='bg-success size-1.5 shrink-0 rounded-full' />
+              )}
+            </div>
+            <div className='mt-1 flex min-w-0 items-center gap-1.5'>
+              <p
+                className='text-muted-foreground min-w-0 truncate font-mono text-xs'
+                title={site.base_url}
+              >
+                {site.base_url}
+              </p>
+              <button
+                className='text-muted-foreground hover:text-foreground shrink-0 transition-colors'
+                onClick={() =>
+                  void navigator.clipboard?.writeText(site.base_url)
+                }
+                title={site.base_url}
+                type='button'
+              >
+                <HugeiconsIcon icon={Copy01Icon} size={14} strokeWidth={2} />
+              </button>
+            </div>
           </div>
-          {isAdmin && <SiteActions onAction={onAction} site={site} />}
-        </div>
+          <div className='flex shrink-0 items-center justify-end gap-1'>
+            <Link
+              aria-label={t('site.actions.stats')}
+              className='text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring flex size-8 items-center justify-center rounded-md transition-colors outline-none focus-visible:ring-2'
+              params={{ siteId: site.id }}
+              search={buildStatisticsSearch({})}
+              title={t('site.actions.stats')}
+              to='/sites/$siteId/stats'
+            >
+              <HugeiconsIcon icon={Chart01Icon} size={17} strokeWidth={2} />
+            </Link>
+            <Link
+              aria-label={t('site.instanceStatus')}
+              className='text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring flex size-8 items-center justify-center rounded-md transition-colors outline-none focus-visible:ring-2'
+              params={{ siteId: site.id }}
+              title={t('site.instanceStatus')}
+              to='/sites/$siteId/status'
+            >
+              <HugeiconsIcon
+                icon={ServerStack01Icon}
+                size={17}
+                strokeWidth={2}
+              />
+            </Link>
+            {isAdmin && <SiteActions onAction={onAction} site={site} />}
+          </div>
+        </header>
 
         <SiteStatusBadges site={site} />
 
-        <dl className='grid grid-cols-3 gap-3 text-sm'>
-          <div>
-            <dt className='text-muted-foreground text-xs'>
-              {t('site.instances')}
-            </dt>
-            <dd className='font-medium'>
-              {site.resource.online_instance_count ?? 0}/
-              {site.resource.instance_count ?? 0}
-            </dd>
-          </div>
-          <div>
-            <dt className='text-muted-foreground text-xs'>{t('metric.cpu')}</dt>
-            <dd className='font-medium'>
-              <PercentValue value={site.resource.cpu_max_percent} />
-            </dd>
-          </div>
-          <div>
-            <dt className='text-muted-foreground text-xs'>
-              {t('metric.memory')}
-            </dt>
-            <dd className='font-medium'>
-              <PercentValue value={site.resource.memory_max_percent} />
-            </dd>
-          </div>
-          <div>
-            <dt className='text-muted-foreground text-xs'>{t('metric.rpm')}</dt>
-            <dd className='font-medium'>
-              <MetricValue compact nullLabel='0' value={site.realtime.rpm} />
-            </dd>
-          </div>
-          <div>
-            <dt className='text-muted-foreground text-xs'>{t('metric.tpm')}</dt>
-            <dd className='font-medium'>
-              <MetricValue compact nullLabel='0' value={site.realtime.tpm} />
-            </dd>
-          </div>
-          <div>
-            <dt className='text-muted-foreground text-xs'>
-              {t('metric.disk')}
-            </dt>
-            <dd className='font-medium'>
-              <PercentValue value={site.resource.disk_max_used_percent} />
-            </dd>
-          </div>
-        </dl>
-
-        <div className='border-border grid grid-cols-2 gap-3 border-t pt-3 text-sm'>
-          <div>
-            <p className='text-muted-foreground text-xs'>
-              {t('site.todayRequests')}
-            </p>
-            <p className='font-medium'>
-              <MetricValue
-                compact
-                nullLabel='0'
-                value={site.today.request_count}
-              />
-            </p>
-          </div>
-          <QuotaAmount
-            nullLabel='0'
-            quota={site.today.quota}
-            rate={site.rate}
+        <div className='grid grid-cols-4 gap-2'>
+          <ResourceChip
+            icon={ServerStack01Icon}
+            label={t('site.instances')}
+            value={`${site.resource.online_instance_count ?? 0}/${
+              site.resource.instance_count ?? 0
+            }`}
           />
-          <div>
-            <p className='text-muted-foreground text-xs'>{t('metric.token')}</p>
-            <p className='font-medium'>
-              <MetricValue
-                compact
-                nullLabel='0'
-                value={site.today.token_used}
-              />
-            </p>
-          </div>
-          <div>
-            <p className='text-muted-foreground text-xs'>
-              {t('site.activeUsers')}
-            </p>
-            <p className='font-medium'>
-              <MetricValue
-                compact
-                nullLabel='0'
-                value={site.today.active_users}
-              />
-            </p>
-          </div>
-          <div>
-            <p className='text-muted-foreground text-xs'>
-              {t('site.completeness')}
-            </p>
-            <p className='font-medium'>
-              {(site.completeness_rate * 100).toFixed(1)}%
-            </p>
-          </div>
+          <ResourceChip
+            icon={CpuIcon}
+            label={t('metric.cpu')}
+            value={<PercentValue value={site.resource.cpu_max_percent} />}
+          />
+          <ResourceChip
+            icon={RamMemoryIcon}
+            label={t('metric.memory')}
+            value={<PercentValue value={site.resource.memory_max_percent} />}
+          />
+          <ResourceChip
+            icon={Database01Icon}
+            label={t('metric.disk')}
+            value={<PercentValue value={site.resource.disk_max_used_percent} />}
+          />
         </div>
+      </div>
 
-        <DataFreshness
+      <section className='border-border grid gap-3 border-t px-4 py-3'>
+        <div className='grid grid-cols-3 gap-x-5 gap-y-4'>
+          <MetricCell label={t('site.todayRequests')}>
+            <MetricValue
+              compact
+              nullLabel='0'
+              value={site.today.request_count}
+            />
+          </MetricCell>
+          <MetricCell label={t('site.todayQuota')}>
+            <QuotaAmount
+              inline
+              nullLabel='0'
+              quota={site.today.quota}
+              rate={site.rate}
+            />
+          </MetricCell>
+          <MetricCell label={t('metric.token')}>
+            <MetricValue compact nullLabel='0' value={site.today.token_used} />
+          </MetricCell>
+          <MetricCell label={t('site.activeUsers')}>
+            <MetricValue
+              compact
+              nullLabel='0'
+              value={site.today.active_users}
+            />
+          </MetricCell>
+          <MetricCell label={t('site.averageRpm')}>
+            <MetricValue
+              compact
+              nullLabel='-'
+              value={usageAvailable ? site.today.avg_rpm : null}
+            />
+          </MetricCell>
+          <MetricCell label={t('site.averageTpm')}>
+            <MetricValue
+              compact
+              nullLabel='-'
+              value={usageAvailable ? site.today.avg_tpm : null}
+            />
+          </MetricCell>
+        </div>
+      </section>
+
+      <section className='border-border grid gap-3 border-t px-4 py-3'>
+        <div className='grid grid-cols-3 gap-x-5 gap-y-4'>
+          <MetricCell label={t('site.performance.avgLatency')}>
+            {performanceAvailable
+              ? t('site.performance.latencyValue', {
+                  value: site.performance.avg_latency_ms.toFixed(0),
+                })
+              : '-'}
+          </MetricCell>
+          <MetricCell label={t('site.performance.avgTps')}>
+            {performanceAvailable ? site.performance.avg_tps.toFixed(1) : '-'}
+          </MetricCell>
+          <MetricCell
+            label={t('site.performance.successRate')}
+            tone={performanceAvailable ? 'success' : 'default'}
+          >
+            {performanceAvailable
+              ? `${(site.performance.success_rate * 100).toFixed(2)}%`
+              : '-'}
+          </MetricCell>
+        </div>
+        <CompletenessProgress
+          label={t('site.completeness')}
+          value={site.completeness_rate}
+        />
+      </section>
+
+      <footer className='border-border border-t px-4 py-2.5'>
+        <UpdatedAtLine
           expired={site.realtime.expired}
-          labelKey='site.currentUpdatedAt'
           timestamp={site.realtime.updated_at}
         />
-      </div>
-      <div className='border-border flex items-center gap-1 border-t p-2'>
-        <Link
-          className='hover:bg-muted focus-visible:ring-ring flex min-h-10 flex-1 items-center justify-center gap-2 rounded-md px-2 text-sm font-medium outline-none focus-visible:ring-2'
-          params={{ siteId: site.id }}
-          to='/sites/$siteId'
-        >
-          <HugeiconsIcon icon={ArrowUpRight01Icon} strokeWidth={2} />
-          {t('site.viewDetails')}
-        </Link>
-        <Link
-          aria-label={t('site.actions.stats')}
-          className='hover:bg-muted focus-visible:ring-ring flex size-10 items-center justify-center rounded-md outline-none focus-visible:ring-2'
-          params={{ siteId: site.id }}
-          search={buildStatisticsSearch({})}
-          title={t('site.actions.stats')}
-          to='/sites/$siteId/stats'
-        >
-          <HugeiconsIcon icon={Chart01Icon} strokeWidth={2} />
-        </Link>
-        <Link
-          aria-label={t('site.instanceStatus')}
-          className='hover:bg-muted focus-visible:ring-ring flex size-10 items-center justify-center rounded-md outline-none focus-visible:ring-2'
-          params={{ siteId: site.id }}
-          title={t('site.instanceStatus')}
-          to='/sites/$siteId/status'
-        >
-          <HugeiconsIcon icon={ServerStack01Icon} strokeWidth={2} />
-        </Link>
-      </div>
+      </footer>
     </article>
   )
 }

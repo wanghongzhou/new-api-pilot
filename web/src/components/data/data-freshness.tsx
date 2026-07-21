@@ -8,10 +8,12 @@ import { fromUnixSeconds } from '@/lib/dayjs'
 export function DataFreshness({
   expired = false,
   labelKey,
+  showExpired = true,
   timestamp,
 }: {
   expired?: boolean
   labelKey: string
+  showExpired?: boolean
   timestamp: number | null
 }) {
   const { t } = useTranslation()
@@ -30,7 +32,7 @@ export function DataFreshness({
     >
       <HugeiconsIcon icon={Clock01Icon} size={14} strokeWidth={2} />
       {t(dynamicI18nKey('data', labelKey), { time: exact })}
-      {expired && (
+      {showExpired && expired && (
         <strong className='text-destructive font-medium'>
           {t('data.stale')}
         </strong>

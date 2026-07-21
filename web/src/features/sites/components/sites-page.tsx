@@ -304,38 +304,92 @@ export function SitesPage({
         id: 'resources',
       },
       {
-        cell: ({ row }) => (
-          <div className='whitespace-nowrap'>
-            <MetricValue
-              compact
-              nullLabel='0'
-              value={row.original.realtime.rpm}
-            />{' '}
-            /{' '}
-            <MetricValue
-              compact
-              nullLabel='0'
-              value={row.original.realtime.tpm}
-            />
-          </div>
-        ),
-        header: t('site.rpmTpm'),
-        id: 'realtime',
+        cell: ({ row }) => {
+          const today = row.original.today
+          return (
+            <div className='grid gap-1 whitespace-nowrap'>
+              <span>
+                {t('site.todayRequests')}:{' '}
+                <MetricValue
+                  compact
+                  nullLabel='0'
+                  value={today.request_count}
+                />
+              </span>
+              <span>
+                {t('metric.token')}:{' '}
+                <MetricValue compact nullLabel='0' value={today.token_used} />
+              </span>
+              <span>
+                {t('site.activeUsers')}:{' '}
+                <MetricValue compact nullLabel='0' value={today.active_users} />
+              </span>
+            </div>
+          )
+        },
+        header: t('site.todayUsage'),
+        id: 'usage_24h',
       },
       {
         cell: ({ row }) => (
-          <MetricValue
-            compact
-            nullLabel='0'
-            value={row.original.today.token_used}
-          />
+          <div className='grid gap-1 whitespace-nowrap'>
+            <span>
+              <MetricValue
+                compact
+                nullLabel='-'
+                value={
+                  row.original.today.data_status === 'complete'
+                    ? row.original.today.avg_rpm
+                    : null
+                }
+              />
+            </span>
+            <span>
+              <MetricValue
+                compact
+                nullLabel='-'
+                value={
+                  row.original.today.data_status === 'complete'
+                    ? row.original.today.avg_tpm
+                    : null
+                }
+              />
+            </span>
+          </div>
         ),
-        header: t('metric.token'),
-        id: 'tokens',
+        header: `${t('site.averageRpm')} / ${t('site.averageTpm')}`,
+        id: 'average_throughput',
+      },
+      {
+        cell: ({ row }) => {
+          const performance = row.original.performance
+          if (performance.data_status !== 'complete') return <span>-</span>
+          return (
+            <div className='grid gap-1 whitespace-nowrap'>
+              <span>
+                {(performance.success_rate * 100).toFixed(1)}%{' '}
+                {t('site.performance.successRate')}
+              </span>
+              <span>
+                {t('site.performance.latencyValue', {
+                  value: performance.avg_latency_ms.toFixed(0),
+                })}
+              </span>
+              <span>
+                {t('site.performance.tpsValue', {
+                  value: performance.avg_tps.toFixed(1),
+                })}
+              </span>
+            </div>
+          )
+        },
+        header: t('site.performance.title'),
+        id: 'performance',
       },
       {
         cell: ({ row }) => (
           <QuotaAmount
+            inline
             quota={row.original.today.quota}
             rate={row.original.rate}
           />

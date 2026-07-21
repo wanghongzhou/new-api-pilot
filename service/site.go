@@ -151,8 +151,10 @@ func (service *SiteService) List(ctx context.Context, query dto.SiteListQuery) (
 	if err != nil {
 		return common.PageData[dto.SiteListItem]{}, fmt.Errorf("list latest site resources: %w", err)
 	}
-	now := service.clock.Now().Unix()
-	usage, err := service.sites.ListUsageOverviews(ctx, siteIDs, now-24*60*60, now)
+	nowTime := service.clock.Now()
+	now := nowTime.Unix()
+	usageStart, usageEnd := siteTodayUsageRange(nowTime)
+	usage, err := service.sites.ListUsageOverviews(ctx, siteIDs, usageStart, usageEnd)
 	if err != nil {
 		return common.PageData[dto.SiteListItem]{}, fmt.Errorf("list site usage overviews: %w", err)
 	}
@@ -334,12 +336,14 @@ func effectiveInstanceStatus(snapshot model.SiteInstanceSnapshot, now, staleSeco
 }
 
 func (service *SiteService) detailFromModel(ctx context.Context, site model.Site) (dto.SiteDetail, error) {
-	now := service.clock.Now().Unix()
+	nowTime := service.clock.Now()
+	now := nowTime.Unix()
 	resources, err := service.sites.ListLatestResourceSummaries(ctx, []int64{site.ID})
 	if err != nil {
 		return dto.SiteDetail{}, fmt.Errorf("read latest site resource: %w", err)
 	}
-	usage, err := service.sites.ListUsageOverviews(ctx, []int64{site.ID}, now-24*60*60, now)
+	usageStart, usageEnd := siteTodayUsageRange(nowTime)
+	usage, err := service.sites.ListUsageOverviews(ctx, []int64{site.ID}, usageStart, usageEnd)
 	if err != nil {
 		return dto.SiteDetail{}, fmt.Errorf("read site usage overview: %w", err)
 	}
@@ -364,6 +368,11 @@ func (service *SiteService) detailFromModel(ctx context.Context, site model.Site
 	return detail, nil
 }
 
+func siteTodayUsageRange(now time.Time) (int64, int64) {
+	start, _ := dashboardTodayRange(now)
+	return start, now.Unix()
+}
+
 func siteListItemFromModel(site model.Site, now int64, resource model.SiteStatusMinutely, usage model.SiteUsageOverview, performance dto.SitePerformanceSummary) dto.SiteListItem {
 	zeroCount := 0
 	zeroPercent := 0.0
@@ -381,7 +390,7 @@ func siteListItemFromModel(site model.Site, now int64, resource model.SiteStatus
 		},
 		Today: dto.UsageSummary{
 			RequestCount: &zeroMetric, Quota: &zeroMetric, TokenUsed: &zeroMetric,
-			ActiveUsers: &zeroMetric, DataStatus: "missing",
+			ActiveUsers: &zeroMetric, AvgRPM: &zeroMetric, AvgTPM: &zeroMetric, DataStatus: "missing",
 		}, DisabledAt: site.DisabledAt, UpdatedAt: site.UpdatedAt,
 	}
 	if site.Version != "" {
@@ -419,7 +428,8 @@ func siteListItemFromModel(site model.Site, now int64, resource model.SiteStatus
 		activeUsers := strconv.FormatInt(usage.ActiveUsers, 10)
 		item.Today = dto.UsageSummary{
 			RequestCount: &usage.RequestCount, Quota: &usage.Quota, TokenUsed: &usage.TokenUsed,
-			ActiveUsers: &activeUsers, AsOf: usage.AsOf, DataStatus: "complete",
+			ActiveUsers: &activeUsers, AvgRPM: &usage.AvgRPM, AvgTPM: &usage.AvgTPM,
+			AsOf: usage.AsOf, DataStatus: "complete",
 		}
 	}
 	return item

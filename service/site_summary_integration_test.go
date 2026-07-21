@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -69,7 +70,7 @@ func TestSiteListAndDetailUseLatestResourceSummaryAndDefaultMissingMetricsToZero
 	}
 }
 
-func TestSiteListOverviewAggregatesUsageAndDeduplicatesActiveUsersAcrossHours(t *testing.T) {
+func TestSiteListOverviewAggregatesTodayUsageAndDeduplicatesActiveUsers(t *testing.T) {
 	tx := openSiteTestTransaction(t)
 	now := int64(1_752_400_800)
 	clock := testsupport.NewFakeClock(time.Unix(now, 0))
@@ -82,9 +83,11 @@ func TestSiteListOverviewAggregatesUsageAndDeduplicatesActiveUsersAcrossHours(t 
 		t.Fatalf("create site: %v", err)
 	}
 
+	todayStart, _ := siteTodayUsageRange(clock.Now())
+	yesterdayHour := todayStart - 3600
 	firstHour := now - 2*3600
 	secondHour := now - 3600
-	for _, hour := range []int64{firstHour, secondHour} {
+	for _, hour := range []int64{yesterdayHour, firstHour, secondHour} {
 		if err := tx.Create(&model.CollectionWindow{
 			SiteID: site.ID, HourTS: hour, Status: model.CollectionWindowStatusComplete,
 			FetchedRows: 1, UpdatedAt: now,
@@ -93,6 +96,7 @@ func TestSiteListOverviewAggregatesUsageAndDeduplicatesActiveUsersAcrossHours(t 
 		}
 	}
 	stats := []model.SiteStatHourly{
+		{SiteID: site.ID, HourTS: yesterdayHour, RequestCount: 99, Quota: 990, TokenUsed: 9900, ActiveUsers: 1, DataStatus: "complete", LastCalculatedAt: yesterdayHour + 3600, CreatedAt: now, UpdatedAt: now},
 		{SiteID: site.ID, HourTS: firstHour, RequestCount: 3, Quota: 30, TokenUsed: 300, ActiveUsers: 1, DataStatus: "complete", LastCalculatedAt: firstHour + 3600, CreatedAt: now, UpdatedAt: now},
 		{SiteID: site.ID, HourTS: secondHour, RequestCount: 7, Quota: 70, TokenUsed: 700, ActiveUsers: 2, DataStatus: "complete", LastCalculatedAt: secondHour + 3600, CreatedAt: now, UpdatedAt: now},
 	}
@@ -100,6 +104,7 @@ func TestSiteListOverviewAggregatesUsageAndDeduplicatesActiveUsersAcrossHours(t 
 		t.Fatalf("create site hourly stats: %v", err)
 	}
 	facts := []model.UsageFactHourly{
+		{SiteID: site.ID, RemoteUserID: 303, ModelName: "model-c", ChannelID: 1, HourTS: yesterdayHour, RequestCount: 99, Quota: 990, TokenUsed: 9900, CollectedAt: now},
 		{SiteID: site.ID, RemoteUserID: 101, ModelName: "model-a", ChannelID: 1, HourTS: firstHour, RequestCount: 3, Quota: 30, TokenUsed: 300, CollectedAt: now},
 		{SiteID: site.ID, RemoteUserID: 101, ModelName: "model-a", ChannelID: 1, HourTS: secondHour, RequestCount: 4, Quota: 40, TokenUsed: 400, CollectedAt: now},
 		{SiteID: site.ID, RemoteUserID: 202, ModelName: "model-b", ChannelID: 1, HourTS: secondHour, RequestCount: 3, Quota: 30, TokenUsed: 300, CollectedAt: now},
@@ -121,7 +126,15 @@ func TestSiteListOverviewAggregatesUsageAndDeduplicatesActiveUsersAcrossHours(t 
 		usage.TokenUsed == nil || *usage.TokenUsed != "1000" ||
 		usage.ActiveUsers == nil || *usage.ActiveUsers != "2" ||
 		usage.AsOf == nil || *usage.AsOf != secondHour+3600 || usage.DataStatus != "complete" {
-		t.Fatalf("24-hour usage overview = %#v", usage)
+		t.Fatalf("today usage overview = %#v", usage)
+	}
+	avgRPM, err := strconv.ParseFloat(*usage.AvgRPM, 64)
+	if err != nil || avgRPM < 0.083 || avgRPM > 0.084 {
+		t.Fatalf("average RPM = %q", *usage.AvgRPM)
+	}
+	avgTPM, err := strconv.ParseFloat(*usage.AvgTPM, 64)
+	if err != nil || avgTPM < 8.33 || avgTPM > 8.34 {
+		t.Fatalf("average TPM = %q", *usage.AvgTPM)
 	}
 }
 
@@ -131,6 +144,8 @@ func assertZeroSiteSummary(t *testing.T, item dto.SiteListItem) {
 		item.Realtime.TPM == nil || *item.Realtime.TPM != "0" ||
 		item.Today.RequestCount == nil || *item.Today.RequestCount != "0" ||
 		item.Today.Quota == nil || *item.Today.Quota != "0" ||
+		item.Today.AvgRPM == nil || *item.Today.AvgRPM != "0" ||
+		item.Today.AvgTPM == nil || *item.Today.AvgTPM != "0" ||
 		item.Today.ActiveUsers == nil || *item.Today.ActiveUsers != "0" ||
 		item.Resource.InstanceCount == nil || *item.Resource.InstanceCount != 0 ||
 		item.Resource.OnlineInstanceCount == nil || *item.Resource.OnlineInstanceCount != 0 ||

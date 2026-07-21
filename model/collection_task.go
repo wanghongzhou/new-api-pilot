@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"sort"
@@ -250,11 +251,13 @@ func (repository *CollectionTaskRepository) RecordScheduledSiteTaskDiagnostic(
 }
 
 type CollectionTaskClaimOptions struct {
-	TaskTypes []string
-	Now       int64
-	RequestID string
-	MaxWindow int
-	ScanLimit int
+	TaskTypes       []string
+	Priority        *int
+	ExcludePriority *int
+	Now             int64
+	RequestID       string
+	MaxWindow       int
+	ScanLimit       int
 }
 
 type CollectionTaskClaim struct {
@@ -276,8 +279,12 @@ func (repository *CollectionTaskRepository) ClaimNext(
 			return CollectionTaskClaim{}, ErrCollectionRunContract
 		}
 	}
-	if options.MaxWindow <= 0 || options.MaxWindow > 24 {
-		options.MaxWindow = 24
+	maxWindow := 24
+	if options.Priority != nil && *options.Priority == constant.CollectionPriorityInitialBackfill {
+		maxWindow = 2048
+	}
+	if options.MaxWindow <= 0 || options.MaxWindow > maxWindow {
+		options.MaxWindow = maxWindow
 	}
 	if options.ScanLimit <= 0 || options.ScanLimit > 256 {
 		options.ScanLimit = 64
@@ -288,6 +295,12 @@ func (repository *CollectionTaskRepository) ClaimNext(
 		query := repository.db.WithContext(ctx).
 			Where("status = 'pending' AND windows_initialized_at IS NOT NULL AND next_attempt_at <= ? AND task_type IN ?", options.Now, options.TaskTypes).
 			Order(collectionTaskClaimOrder).Limit(options.ScanLimit)
+		if options.Priority != nil {
+			query = query.Where("priority = ?", *options.Priority)
+		}
+		if options.ExcludePriority != nil {
+			query = query.Where("priority <> ?", *options.ExcludePriority)
+		}
 		if cursor != nil {
 			query = query.Where(collectionTaskClaimAfterCursor,
 				cursor.Priority, cursor.InitialStart, cursor.End, cursor.CreatedWithoutStart,
@@ -968,13 +981,19 @@ func (repository *CollectionTaskRepository) commitWindowResults(
 	}
 	run.FetchedRows += fetched
 	run.WrittenRows += written
-	var allWindows []CollectionRunWindow
-	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("run_id = ?", run.ID).
-		Order("hour_ts ASC, id ASC").Find(&allWindows).Error; err != nil {
-		return err
-	}
-	if err := NewSiteRepository(tx).RecalculateLockedCollectionRun(ctx, run, allWindows, request.Now, nil); err != nil {
-		return err
+	if run.Priority == constant.CollectionPriorityInitialBackfill {
+		if err := recalculateInitialBackfillRun(ctx, tx, run, request.Now); err != nil {
+			return err
+		}
+	} else {
+		var allWindows []CollectionRunWindow
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("run_id = ?", run.ID).
+			Order("hour_ts ASC, id ASC").Find(&allWindows).Error; err != nil {
+			return err
+		}
+		if err := NewSiteRepository(tx).RecalculateLockedCollectionRun(ctx, run, allWindows, request.Now, nil); err != nil {
+			return err
+		}
 	}
 	if run.Status == CollectionTaskStatusPending {
 		run.HeartbeatAt = nil
@@ -989,6 +1008,93 @@ func (repository *CollectionTaskRepository) commitWindowResults(
 		}
 	}
 	return nil
+}
+
+type initialBackfillWindowStatusCount struct {
+	Status string
+	Count  int64
+}
+
+func recalculateInitialBackfillRun(ctx context.Context, tx *gorm.DB, run *CollectionRun, now int64) error {
+	if tx == nil || run == nil || run.ID <= 0 || now <= 0 {
+		return ErrCollectionRunContract
+	}
+	var counts []initialBackfillWindowStatusCount
+	if err := tx.WithContext(ctx).Model(&CollectionRunWindow{}).
+		Select("status, COUNT(*) AS count").Where("run_id = ?", run.ID).
+		Group("status").Scan(&counts).Error; err != nil {
+		return err
+	}
+	completed, failed, unavailable, pending, running := 0, 0, 0, 0, 0
+	for _, item := range counts {
+		switch item.Status {
+		case CollectionTaskStatusSuccess:
+			completed = int(item.Count)
+		case CollectionTaskStatusFailed:
+			failed = int(item.Count)
+		case CollectionTaskStatusUnavailable:
+			unavailable = int(item.Count)
+		case CollectionTaskStatusPending:
+			pending = int(item.Count)
+		case CollectionTaskStatusRunning:
+			running = int(item.Count)
+		default:
+			return ErrCollectionRunContract
+		}
+	}
+	var nextAttempt *int64
+	if pending > 0 {
+		var next sql.NullInt64
+		if err := tx.WithContext(ctx).Model(&CollectionRunWindow{}).Select("MIN(next_retry_at)").
+			Where("run_id = ? AND status = ?", run.ID, CollectionTaskStatusPending).Scan(&next).Error; err != nil {
+			return err
+		}
+		candidate := now
+		if next.Valid && next.Int64 > candidate {
+			candidate = next.Int64
+		}
+		nextAttempt = &candidate
+	}
+	terminal := completed+failed+unavailable == run.TotalWindows
+	status := CollectionTaskStatusRunning
+	if terminal {
+		status = CollectionTaskStatusSuccess
+		if failed > 0 {
+			status = CollectionTaskStatusFailed
+		}
+	} else if running == 0 && pending > 0 {
+		status = CollectionTaskStatusPending
+	}
+	updates := map[string]any{
+		"status": status, "completed_windows": completed, "failed_windows": failed,
+		"unavailable_windows": unavailable, "updated_at": now,
+	}
+	if nextAttempt != nil {
+		updates["next_attempt_at"] = *nextAttempt
+		run.NextAttemptAt = *nextAttempt
+	}
+	run.Status = status
+	run.CompletedWindows = completed
+	run.FailedWindows = failed
+	run.UnavailableWindows = unavailable
+	run.UpdatedAt = now
+	if terminal {
+		updates["active_key"] = nil
+		updates["heartbeat_at"] = nil
+		updates["finished_at"] = now
+		run.ActiveKey = nil
+		run.HeartbeatAt = nil
+		run.FinishedAt = int64Pointer(now)
+		if status == CollectionTaskStatusSuccess {
+			updates["error_code"] = ""
+			updates["error_params"] = nil
+			updates["error_message"] = nil
+			run.ErrorCode = ""
+			run.ErrorParams = nil
+			run.ErrorMessage = sql.NullString{}
+		}
+	}
+	return tx.WithContext(ctx).Model(&CollectionRun{}).Where("id = ? AND status = 'running' AND last_request_id = ?", run.ID, run.LastRequestID).Updates(updates).Error
 }
 
 func (repository *CollectionTaskRepository) commitNonWindowResult(

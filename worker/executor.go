@@ -189,6 +189,29 @@ func (executor *Executor) dispatchShared(
 	executionCtx context.Context,
 	settings model.CollectorSettings,
 ) error {
+	initialPriority := constant.CollectionPriorityInitialBackfill
+	for executor.limiter.tryAcquire(QueueInitialBackfill, initialBackfillConcurrency) {
+		now := executor.clock.Now().Unix()
+		claim, err := executor.repository.ClaimNext(admissionCtx, model.CollectionTaskClaimOptions{
+			TaskTypes: []string{constant.TaskTypeUsageBackfill}, Priority: &initialPriority,
+			Now: now, RequestID: executor.nextRequestID(now), MaxWindow: 2048, ScanLimit: 64,
+		})
+		if err != nil {
+			executor.limiter.release(QueueInitialBackfill)
+			if errors.Is(err, model.ErrCollectionTaskUnavailable) || errors.Is(err, context.Canceled) {
+				break
+			}
+			return err
+		}
+		executor.recordClaim(QueueBackfill, claim.Run.TaskType)
+		executor.active.Add(1)
+		go func(claim model.CollectionTaskClaim) {
+			defer executor.active.Done()
+			defer executor.limiter.release(QueueInitialBackfill)
+			executor.executeClaim(executionCtx, claim)
+		}(claim)
+	}
+
 	for {
 		taskTypes := executor.registeredSharedTaskTypes(settings)
 		if len(taskTypes) == 0 {
@@ -196,7 +219,8 @@ func (executor *Executor) dispatchShared(
 		}
 		now := executor.clock.Now().Unix()
 		claim, err := executor.repository.ClaimNext(admissionCtx, model.CollectionTaskClaimOptions{
-			TaskTypes: taskTypes, Now: now, RequestID: executor.nextRequestID(now), MaxWindow: 24, ScanLimit: 64,
+			TaskTypes: taskTypes, ExcludePriority: &initialPriority,
+			Now: now, RequestID: executor.nextRequestID(now), MaxWindow: 24, ScanLimit: 64,
 		})
 		if err != nil {
 			if errors.Is(err, model.ErrCollectionTaskUnavailable) || errors.Is(err, context.Canceled) {
@@ -274,6 +298,11 @@ func (executor *Executor) executeClaim(ctx context.Context, claim model.Collecti
 		executor.executeNonWindow(ctx, claim, handler)
 		return
 	}
+	if claim.Run.TaskType == constant.TaskTypeUsageBackfill &&
+		claim.Run.Priority == constant.CollectionPriorityInitialBackfill {
+		executor.executeInitialBackfillClaim(ctx, claim, handler)
+		return
+	}
 	startedAt := executor.clock.Now()
 	lastCommitAt := claim.Run.UpdatedAt
 	for index := range claim.Windows {
@@ -318,8 +347,61 @@ func (executor *Executor) executeClaim(ctx context.Context, claim model.Collecti
 			return
 		}
 		executor.recordOutcome(claim.Run.TaskType, windowOutcome.Status, "")
-		executor.notifyWindowAfterCommit(claim, window, completedRun, commitAt, jobOutcome.TransactionMutation != nil)
+		executor.notifyWindowAfterCommitAsync(claim, window, completedRun, commitAt, jobOutcome.TransactionMutation != nil)
 	}
+}
+
+func (executor *Executor) executeInitialBackfillClaim(
+	ctx context.Context,
+	claim model.CollectionTaskClaim,
+	handler JobHandler,
+) {
+	limit := initialBackfillConcurrency
+	if limit > len(claim.Windows) {
+		limit = len(claim.Windows)
+	}
+	semaphore := make(chan struct{}, limit)
+	var waitGroup sync.WaitGroup
+
+	for index := range claim.Windows {
+		window := claim.Windows[index]
+		select {
+		case semaphore <- struct{}{}:
+		case <-ctx.Done():
+			break
+		}
+		if ctx.Err() != nil {
+			break
+		}
+		waitGroup.Add(1)
+		go func(window model.CollectionRunWindow) {
+			defer waitGroup.Done()
+			defer func() { <-semaphore }()
+			if ctx.Err() != nil {
+				return
+			}
+			windowContext, cancel := context.WithTimeout(ctx, initialBackfillWindowTimeout)
+			jobOutcome, executionErr := handler.Execute(windowContext, JobExecution{
+				Claim: claim, Window: &window, RequestID: claim.RequestID,
+			})
+			cancel()
+			if ctx.Err() != nil {
+				return
+			}
+			windowOutcome := executor.windowOutcome(claim.Run.TaskType, window, jobOutcome.Result, executionErr)
+			commitAt := executor.clock.Now().Unix()
+			completedRun, commitErr := executor.repository.CompleteClaimedWindow(context.Background(), model.CompleteClaimedWindowRequest{
+				RunID: claim.Run.ID, RequestID: claim.RequestID, Now: commitAt,
+				Window: windowOutcome, Mutation: jobOutcome.TransactionMutation,
+			})
+			if commitErr != nil {
+				return
+			}
+			executor.recordOutcome(claim.Run.TaskType, windowOutcome.Status, "")
+			executor.notifyWindowAfterCommitAsync(claim, window, completedRun, commitAt, jobOutcome.TransactionMutation != nil)
+		}(window)
+	}
+	waitGroup.Wait()
 }
 
 func (executor *Executor) notifyWindowAfterCommit(
@@ -373,6 +455,19 @@ func (executor *Executor) notifyWindowAfterCommit(
 			})
 		}
 	}
+}
+
+func (executor *Executor) notifyWindowAfterCommitAsync(
+	claim model.CollectionTaskClaim,
+	window model.CollectionRunWindow,
+	completedRun model.CollectionRun,
+	committedAt int64,
+	hasMutation bool,
+) {
+	if executor.postCommit == nil {
+		return
+	}
+	go executor.notifyWindowAfterCommit(claim, window, completedRun, committedAt, hasMutation)
 }
 
 func monotonicWorkerCommitTime(now int64, previous ...int64) int64 {

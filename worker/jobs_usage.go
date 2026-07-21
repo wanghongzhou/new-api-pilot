@@ -71,6 +71,8 @@ func classifyUsageExecutionError(cause error, failure *service.UsageCollectionFa
 	if failure != nil {
 		params = append(params, failure.Params...)
 	}
+	var requestError *service.UpstreamRequestError
+	errors.As(cause, &requestError)
 	code := model.CollectionTaskExecutionFailedCode
 	retryable := false
 	retryAfter := time.Duration(0)
@@ -79,7 +81,6 @@ func classifyUsageExecutionError(cause error, failure *service.UsageCollectionFa
 		code = constant.CodeSiteConfigChanged
 	case errors.Is(cause, service.ErrUpstreamDataMismatch):
 		code = string(constant.MessageDataValidationMismatch)
-		retryable = true
 	case errors.Is(cause, service.ErrUpstreamResponseInvalid), errors.Is(cause, service.ErrUpstreamEnvelopeInvalid):
 		code = string(constant.MessageUpstreamResponseInvalid)
 	case errors.Is(cause, service.ErrUpstreamResponseTooLarge):
@@ -98,19 +99,25 @@ func classifyUsageExecutionError(cause error, failure *service.UsageCollectionFa
 	case errors.Is(cause, context.Canceled):
 		return context.Canceled
 	case errors.Is(cause, context.DeadlineExceeded),
-		errors.Is(cause, service.ErrUpstreamUnavailable),
-		errors.Is(cause, service.ErrUpstreamRateLimited),
-		errors.Is(cause, service.ErrUpstreamRemote):
+		errors.Is(cause, service.ErrUpstreamUnavailable):
 		code = string(constant.MessageDataUpstreamUnavailable)
 		retryable = true
+	case errors.Is(cause, service.ErrUpstreamRateLimited), errors.Is(cause, service.ErrUpstreamRemote):
+		if failure != nil && failure.Code != "" {
+			code = failure.Code
+		} else {
+			code = string(constant.MessageDataUpstreamUnavailable)
+		}
 	default:
 		if failure != nil && failure.Code != "" {
 			code = failure.Code
 		}
 	}
-	var requestError *service.UpstreamRequestError
-	if errors.As(cause, &requestError) {
+	if requestError != nil {
 		retryAfter = requestError.RetryAfter
+		if requestError.StatusCode < 200 || requestError.StatusCode >= 300 {
+			retryable = true
+		}
 	}
 	return &TaskExecutionError{
 		Code: code, Params: params, Retryable: retryable, RetryAfter: retryAfter,

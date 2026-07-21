@@ -64,6 +64,8 @@ export interface UsageSummary {
   quota: MetricString | null
   token_used: MetricString | null
   active_users: MetricString | null
+  avg_rpm: MetricString | null
+  avg_tpm: MetricString | null
   as_of: Timestamp | null
   data_status: DataStatus
   is_final?: boolean
