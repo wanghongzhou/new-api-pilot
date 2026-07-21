@@ -26,15 +26,19 @@ function taskParams(values: UpstreamTaskQueryParams) {
   appendValues(params, 'statuses', values.statuses)
   appendValues(params, 'models', values.models)
   if (values.remote_id) params.set('remote_id', values.remote_id)
-  if (values.remote_user_id != null)
+  if (values.remote_user_id != null) {
     params.set('remote_user_id', values.remote_user_id)
-  if (values.remote_channel_id != null)
+  }
+  if (values.remote_channel_id != null) {
     params.set('remote_channel_id', values.remote_channel_id)
+  }
   if (values.task_id) params.set('task_id', values.task_id)
-  if (values.start_timestamp != null)
+  if (values.start_timestamp != null) {
     params.set('start_timestamp', String(values.start_timestamp))
-  if (values.end_timestamp != null)
+  }
+  if (values.end_timestamp != null) {
     params.set('end_timestamp', String(values.end_timestamp))
+  }
   return params
 }
 

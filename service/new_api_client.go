@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptrace"
@@ -835,7 +836,8 @@ func (client *NewAPIClient) FlowHour(ctx context.Context, requestID string, hour
 	if _, err := client.get(ctx, client.httpClient, "/api/data/flow", query, requestID, upstreamAuthManagement, client.exportTimeout, &wire, false); err != nil {
 		return nil, err
 	}
-	return validateAndAggregateFlowRows(wire)
+	rows, err := validateAndAggregateFlowRows(wire)
+	return rows, annotateUpstreamRequestError(err, http.MethodGet, "/api/data/flow", "", 0, 0)
 }
 
 func (client *NewAPIClient) LogPage(ctx context.Context, requestID string, start, end int64, page int) (dto.UpstreamLogPage, error) {
@@ -864,7 +866,8 @@ func (client *NewAPIClient) DataHour(ctx context.Context, requestID string, hour
 	if _, err := client.get(ctx, client.httpClient, "/api/data", query, requestID, upstreamAuthManagement, client.exportTimeout, &wire, false); err != nil {
 		return nil, err
 	}
-	return validateAndAggregateDataRows(wire, hourStart)
+	rows, err := validateAndAggregateDataRows(wire, hourStart)
+	return rows, annotateUpstreamRequestError(err, http.MethodGet, "/api/data", "", 0, 0)
 }
 
 func hourQuery(hourStart int64) (url.Values, error) {
@@ -1089,6 +1092,20 @@ func (client *NewAPIClient) do(
 	sessionUserID ...int64,
 ) (payloadSize int64, resultErr error) {
 	startedAt := time.Now()
+	responseStatus := 0
+	responseContentType := ""
+	if client != nil {
+		defer func() {
+			if resultErr != nil {
+				var requestError *UpstreamRequestError
+				if errors.As(resultErr, &requestError) {
+					log.Printf("upstream request failed request_id=%s method=%s endpoint=%s status=%d content_type=%q payload_bytes=%d error_kind=%s detail=%s", requestID, method, endpoint, requestError.StatusCode, requestError.ContentType, requestError.PayloadBytes, requestError.Kind, requestError.Detail)
+				} else {
+					log.Printf("upstream request failed request_id=%s method=%s endpoint=%s status=%d error_type=%T", requestID, method, endpoint, responseStatus, resultErr)
+				}
+			}
+		}()
+	}
 	if client != nil && client.metrics != nil {
 		operation := upstreamMetricOperation(method, endpoint)
 		defer func() {
@@ -1156,9 +1173,11 @@ func (client *NewAPIClient) do(
 		if errors.Is(err, ErrUpstreamAddressForbidden) {
 			return 0, newUpstreamRequestError(UpstreamErrorAddressForbidden)
 		}
-		return 0, newUpstreamRequestError(UpstreamErrorUnavailable)
+		return 0, annotateUpstreamRequestError(newUpstreamRequestError(UpstreamErrorUnavailable), method, endpoint, "", 0, 0)
 	}
 	defer response.Body.Close()
+	responseStatus = response.StatusCode
+	responseContentType = response.Header.Get("Content-Type")
 	if tokenMutation && response.StatusCode >= http.StatusMultipleChoices && response.StatusCode < http.StatusBadRequest {
 		drainUpstreamResponse(response.Body)
 		return 0, newUpstreamRequestError(UpstreamErrorTokenRotationResultUnknown)
@@ -1166,27 +1185,28 @@ func (client *NewAPIClient) do(
 	retryAfter, hasRetryAfter := parseRetryAfter(response.Header.Get("Retry-After"), client.now())
 	if statusErr := classifyUpstreamHTTPStatus(response.StatusCode, retryAfter, hasRetryAfter); statusErr != nil {
 		drainUpstreamResponse(response.Body)
-		return 0, statusErr
+		return 0, annotateUpstreamRequestError(statusErr, method, endpoint, responseContentType, responseStatus, 0)
 	}
 	if response.ContentLength > client.maxResponseBytes {
 		if tokenMutation {
 			return 0, newUpstreamRequestError(UpstreamErrorTokenRotationResultUnknown)
 		}
-		return 0, newUpstreamResponseTooLargeError(response.ContentLength, client.maxResponseBytes)
+		return 0, annotateUpstreamRequestError(newUpstreamResponseTooLargeError(response.ContentLength, client.maxResponseBytes), method, endpoint, responseContentType, responseStatus, response.ContentLength)
 	}
 	payload, err := io.ReadAll(io.LimitReader(response.Body, client.maxResponseBytes+1))
 	if err != nil {
 		if tokenMutation {
 			return 0, newUpstreamRequestError(UpstreamErrorTokenRotationResultUnknown)
 		}
-		return 0, newUpstreamRequestError(UpstreamErrorUnavailable)
+		return 0, annotateUpstreamRequestError(newUpstreamRequestError(UpstreamErrorUnavailable), method, endpoint, responseContentType, responseStatus, 0)
 	}
 	if int64(len(payload)) > client.maxResponseBytes {
 		if tokenMutation {
 			return 0, newUpstreamRequestError(UpstreamErrorTokenRotationResultUnknown)
 		}
-		return 0, newUpstreamResponseTooLargeError(int64(len(payload)), client.maxResponseBytes)
+		return 0, annotateUpstreamRequestError(newUpstreamResponseTooLargeError(int64(len(payload)), client.maxResponseBytes), method, endpoint, responseContentType, responseStatus, int64(len(payload)))
 	}
+	payloadSize = int64(len(payload))
 	var decodeErr error
 	if decoder, ok := destination.(upstreamResponseDecoder); ok {
 		decodeErr = decoder.decodeUpstreamResponse(payload)
@@ -1197,7 +1217,7 @@ func (client *NewAPIClient) do(
 		if tokenMutation {
 			return 0, newUpstreamRequestError(UpstreamErrorTokenRotationResultUnknown)
 		}
-		return 0, decodeErr
+		return 0, annotateUpstreamRequestError(decodeErr, method, endpoint, responseContentType, responseStatus, payloadSize)
 	}
 	return int64(len(payload)), nil
 }

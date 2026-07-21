@@ -42,13 +42,9 @@ import {
 
 function Timestamp({ value }: { value: number | null }) {
   const { t } = useTranslation()
-  return (
-    <>
-      {value == null
-        ? t('common.none')
-        : fromUnixSeconds(value).format('YYYY-MM-DD HH:mm:ss')}
-    </>
-  )
+  return value == null
+    ? t('common.none')
+    : fromUnixSeconds(value).format('YYYY-MM-DD HH:mm:ss')
 }
 
 function MetricCell({

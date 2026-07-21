@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -88,6 +89,28 @@ func TestUsageCollectionStillCallsBothEndpointsOnPartialFailure(t *testing.T) {
 	}
 	if client.flowCalls != 1 || client.dataCalls != 1 {
 		t.Fatalf("partial failure calls flow=%d data=%d", client.flowCalls, client.dataCalls)
+	}
+}
+
+func TestUsageDiagnosticFailureParamsPersistOnlyTypedMetadata(t *testing.T) {
+	base := usageFailureParams(constant.CodeUpstreamUnavailable, ErrUpstreamUnavailable, 7, 1_752_400_800)
+	cause := &UpstreamRequestError{
+		Kind: UpstreamErrorResponseInvalid, Detail: "invalid_data_json", Method: "GET",
+		Endpoint: "/api/data", StatusCode: 200, ContentType: "application/json", PayloadBytes: 321,
+	}
+	encoded := usageDiagnosticFailureParams(base, cause, "fetch")
+	var params map[string]any
+	if err := json.Unmarshal(encoded, &params); err != nil {
+		t.Fatalf("decode diagnostic failure params: %v", err)
+	}
+	for key, want := range map[string]any{
+		"failure_phase": "fetch", "upstream_error_kind": string(UpstreamErrorResponseInvalid),
+		"upstream_error_detail": "invalid_data_json", "method": "GET", "endpoint": "/api/data",
+		"status_code": float64(200), "content_type": "application/json", "payload_bytes": float64(321),
+	} {
+		if params[key] != want {
+			t.Fatalf("diagnostic param %s = %#v, want %#v", key, params[key], want)
+		}
 	}
 }
 

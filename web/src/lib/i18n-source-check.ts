@@ -317,8 +317,9 @@ export function parseDynamicI18nRegistries(
       value.type === 'VariableDeclarator' &&
       nodeName(value.id) === 'DYNAMIC_I18N_REGISTRIES'
     ) {
-      if (isAstNode(value.init))
+      if (isAstNode(value.init)) {
         registryObject = unwrapTypeExpression(value.init)
+      }
     }
     for (const [key, child] of Object.entries(value)) {
       if (!ignoredNodeKeys.has(key)) visit(child)
@@ -565,7 +566,7 @@ export function findHardcodedVisibleText(
         violations.push({
           column: (value.loc?.start.column ?? 0) + 1,
           line,
-          value: literal.trim().replace(/\s+/g, ' ').slice(0, 80),
+          value: literal.trim().replaceAll(/\s+/g, ' ').slice(0, 80),
         })
       }
     }

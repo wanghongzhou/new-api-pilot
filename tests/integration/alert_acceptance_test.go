@@ -633,6 +633,7 @@ WHERE e.site_id = ?`, siteID).Error
 	}
 	_ = database.Where("site_id = ?", siteID).Delete(&model.SiteInstanceStatusMinutely{}).Error
 	_ = database.Where("site_id = ?", siteID).Delete(&model.SiteStatusMinutely{}).Error
+	_ = database.Where("site_id = ?", siteID).Delete(&model.SiteInstanceLifecycle{}).Error
 	_ = database.Where("site_id = ?", siteID).Delete(&model.SiteInstance{}).Error
 	_ = database.Where("site_id = ?", siteID).Delete(&model.SiteCapability{}).Error
 	_ = database.Where("site_id = ?", siteID).Delete(&model.SiteMonitoringPause{}).Error

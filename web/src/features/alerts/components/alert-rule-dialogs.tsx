@@ -1,11 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation } from '@tanstack/react-query'
 import { useMemo } from 'react'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import {
   Dialog,
@@ -88,6 +89,7 @@ export function AlertRuleFormDialog({
     },
   })
   const {
+    control,
     formState: { errors, isDirty },
     handleSubmit,
     register,
@@ -186,11 +188,18 @@ export function AlertRuleFormDialog({
               className='flex min-h-10 items-center gap-3'
               htmlFor='alert-rule-enabled'
             >
-              <input
-                className='border-input text-primary focus-visible:ring-ring size-4 rounded border focus-visible:ring-2'
-                id='alert-rule-enabled'
-                type='checkbox'
-                {...register('enabled')}
+              <Controller
+                control={control}
+                name='enabled'
+                render={({ field }) => (
+                  <Checkbox
+                    checked={field.value}
+                    id='alert-rule-enabled'
+                    onBlur={field.onBlur}
+                    onCheckedChange={field.onChange}
+                    ref={field.ref}
+                  />
+                )}
               />
               <span className='text-sm'>
                 {t('alerts.rules.enabledDescription')}

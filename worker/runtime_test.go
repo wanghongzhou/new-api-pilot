@@ -336,11 +336,11 @@ func TestSchedulerControllableClockCadenceAndNoDuplicates(t *testing.T) {
 		t.Fatalf("scheduler startup: %v", err)
 	}
 	waitForSiteJobCalls(t, runner, 3)
-	assertWorkerRunCount(t, database, site.ID, 6)
+	assertWorkerRunCount(t, database, site.ID, 8)
 	if err := scheduler.RunOnce(context.Background()); err != nil {
 		t.Fatalf("repeat startup slot: %v", err)
 	}
-	assertWorkerRunCount(t, database, site.ID, 6)
+	assertWorkerRunCount(t, database, site.ID, 8)
 	restartedScheduler, err := NewScheduler(SchedulerOptions{
 		Repository: model.NewCollectionTaskRepository(database.GORM),
 		Settings:   model.NewCollectorSettingRepository(database.GORM), Clock: clock, SiteJobs: runner,
@@ -352,7 +352,7 @@ func TestSchedulerControllableClockCadenceAndNoDuplicates(t *testing.T) {
 		t.Fatalf("restarted scheduler startup: %v", err)
 	}
 	waitForSiteJobCalls(t, runner, 3)
-	assertWorkerRunCount(t, database, site.ID, 6)
+	assertWorkerRunCount(t, database, site.ID, 8)
 
 	jitter := time.Duration(stableSiteJitterSeconds(site.ID)) * time.Second
 	clock.Advance(time.Minute)
@@ -362,18 +362,18 @@ func TestSchedulerControllableClockCadenceAndNoDuplicates(t *testing.T) {
 	if jitter == 0 {
 		waitForSiteJobCalls(t, runner, 3)
 	} else {
-		assertWorkerRunCount(t, database, site.ID, 6)
+		assertWorkerRunCount(t, database, site.ID, 8)
 		clock.Advance(jitter)
 		if err := scheduler.RunOnce(context.Background()); err != nil {
 			t.Fatalf("minute schedule at jitter: %v", err)
 		}
 		waitForSiteJobCalls(t, runner, 3)
 	}
-	assertWorkerRunCount(t, database, site.ID, 6)
+	assertWorkerRunCount(t, database, site.ID, 8)
 	if err := scheduler.RunOnce(context.Background()); err != nil {
 		t.Fatalf("repeat minute slot: %v", err)
 	}
-	assertWorkerRunCount(t, database, site.ID, 6)
+	assertWorkerRunCount(t, database, site.ID, 8)
 
 	clock.Advance(59 * time.Minute)
 	if err := scheduler.RunOnce(context.Background()); err != nil {
@@ -386,7 +386,7 @@ func TestSchedulerControllableClockCadenceAndNoDuplicates(t *testing.T) {
 	).Count(&metadata).Error; err != nil || metadata != 3 {
 		t.Fatalf("hourly metadata runs = %d, %v", metadata, err)
 	}
-	assertWorkerRunCount(t, database, site.ID, 9)
+	assertWorkerRunCount(t, database, site.ID, 11)
 }
 
 func TestQueueConcurrencyUsesLiveSettings(t *testing.T) {
@@ -615,8 +615,8 @@ func TestExecutorDispatchSharedHonorsGlobalPriorityAcrossTaskTypes(t *testing.T)
 	for _, run := range loaded {
 		byID[run.ID] = run
 	}
-	wantFirstRequest := "wrk_" + executor.bootNonce + "_1"
-	wantSecondRequest := "wrk_" + executor.bootNonce + "_2"
+	wantFirstRequest := "wrk_" + executor.bootNonce + "_2"
+	wantSecondRequest := "wrk_" + executor.bootNonce + "_3"
 	if got := byID[usage.ID]; got.Status != model.CollectionTaskStatusRunning || got.LastRequestID != wantFirstRequest {
 		t.Errorf("usage global-priority claim = status:%s request:%s, want running/%s", got.Status, got.LastRequestID, wantFirstRequest)
 	}
@@ -684,7 +684,7 @@ func TestCollectorSettingsHotReloadCadenceAndConcurrency(t *testing.T) {
 		t.Fatalf("hot settings startup: %v", err)
 	}
 	waitForSiteJobCalls(t, runner, 3)
-	assertWorkerRunCount(t, database, site.ID, 6)
+	assertWorkerRunCount(t, database, site.ID, 8)
 	for _, key := range []string{
 		"collector.probe_interval_seconds",
 		"collector.realtime_interval_seconds",
@@ -696,14 +696,14 @@ func TestCollectorSettingsHotReloadCadenceAndConcurrency(t *testing.T) {
 	if err := scheduler.RunOnce(context.Background()); err != nil {
 		t.Fatalf("reload 120 second cadence: %v", err)
 	}
-	assertWorkerRunCount(t, database, site.ID, 6)
+	assertWorkerRunCount(t, database, site.ID, 8)
 	jitter := time.Duration(stableSiteJitterSeconds(site.ID)) * time.Second
 	clock.Advance(time.Minute + jitter)
 	if err := scheduler.RunOnce(context.Background()); err != nil {
 		t.Fatalf("run reloaded 120 second cadence: %v", err)
 	}
 	waitForSiteJobCalls(t, runner, 3)
-	assertWorkerRunCount(t, database, site.ID, 6)
+	assertWorkerRunCount(t, database, site.ID, 8)
 	for _, key := range []string{
 		"collector.probe_interval_seconds",
 		"collector.realtime_interval_seconds",
@@ -714,13 +714,13 @@ func TestCollectorSettingsHotReloadCadenceAndConcurrency(t *testing.T) {
 	if err := scheduler.RunOnce(context.Background()); err != nil {
 		t.Fatalf("reload 30 second cadence: %v", err)
 	}
-	assertWorkerRunCount(t, database, site.ID, 6)
+	assertWorkerRunCount(t, database, site.ID, 8)
 	clock.Advance(30 * time.Second)
 	if err := scheduler.RunOnce(context.Background()); err != nil {
 		t.Fatalf("run reloaded 30 second cadence: %v", err)
 	}
 	waitForSiteJobCalls(t, runner, 3)
-	assertWorkerRunCount(t, database, site.ID, 6)
+	assertWorkerRunCount(t, database, site.ID, 8)
 
 	handler := JobHandlerFunc(func(context.Context, JobExecution) (JobOutcome, error) { return JobOutcome{}, nil })
 	executor, err := NewExecutor(ExecutorOptions{

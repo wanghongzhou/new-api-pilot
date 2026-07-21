@@ -234,6 +234,29 @@ async function seedAuth(page: Page) {
   await page.route('**/api/user/self', async (route) => {
     await route.fulfill({ json: envelope(viewer, 'req_self_f5') })
   })
+  await page.route(/\/api\/sites(?:\?.*)?$/, async (route) => {
+    await route.fulfill({
+      json: envelope({ items: [], page: 1, page_size: 100, total: 0 }),
+    })
+  })
+  await page.route(/\/api\/customers(?:\?.*)?$/, async (route) => {
+    await route.fulfill({
+      json: envelope({ items: [], page: 1, page_size: 100, total: 0 }),
+    })
+  })
+  await page.route(/\/api\/accounts(?:\?.*)?$/, async (route) => {
+    await route.fulfill({
+      json: envelope({ items: [], page: 1, page_size: 100, total: 0 }),
+    })
+  })
+  await page.route(
+    /\/api\/statistics\/options\/[a-z]+(?:\?.*)?$/,
+    async (route) => {
+      await route.fulfill({
+        json: envelope({ items: [], page: 1, page_size: 50, total: 0 }),
+      })
+    }
+  )
 }
 
 async function hideDeveloperOverlays(page: Page) {
@@ -380,7 +403,7 @@ test('Dashboard renders the complete fixture across all five sections', async ({
   await expect(
     health.getByText('华东超长名称生产站点用于验证移动端不会横向溢出')
   ).toBeVisible()
-  await expect(health.getByText('统计就绪')).toBeVisible()
+  await expect(health.getByText('就绪', { exact: true })).toBeVisible()
   await expect(
     health.getByText('CPU 使用率连续超过阈值的超长实例名称')
   ).toBeVisible()
@@ -438,7 +461,7 @@ test('Dashboard renders partial values without presenting missing data as zero',
   await expect(
     health.getByText('9007199254740993', { exact: true })
   ).toBeVisible()
-  await expect(health.getByText('统计部分完整')).toBeVisible()
+  await expect(health.getByRole('link', { name: /部分完整/ })).toBeVisible()
   await expect(health.getByTestId('dashboard-health-reason')).toHaveText(
     '该范围的数据缺失'
   )
@@ -806,20 +829,19 @@ test('nine statistics scopes preserve URL filters, partial and null contracts', 
   await scopeNavigation.getByRole('link', { name: '模型' }).click()
   await expect(page.getByRole('heading', { name: '模型统计' })).toBeVisible()
 
-  await page.getByRole('button', { name: '对象筛选' }).click()
-  const filter = page.getByRole('dialog', { name: '统计对象筛选' })
+  const filter = page.getByRole('region', { name: '统计对象筛选' })
   await expect(filter).toBeVisible()
   await filter
-    .getByLabel(
-      '华东超长名称生产站点用于验证移动端不会横向溢出（ID 9007199254740993）'
-    )
-    .check()
+    .getByRole('checkbox', {
+      name: '华东超长名称生产站点用于验证移动端不会横向溢出（ID 9007199254740993）',
+    })
+    .click()
   await filter.getByPlaceholder('输入名称或标识').fill('跨区域')
   await filter
-    .getByLabel(
-      '华东超长名称生产站点用于验证移动端不会横向溢出 / 跨区域超长中文模型名称'
-    )
-    .check()
+    .getByRole('checkbox', {
+      name: '华东超长名称生产站点用于验证移动端不会横向溢出 / 跨区域超长中文模型名称',
+    })
+    .click()
   await filter.getByRole('button', { name: '应用' }).click()
   await expect
     .poll(() =>
@@ -976,9 +998,7 @@ test('group token and node pages preserve identity filters, states, export and m
     await expect(
       page.getByRole('button', { name: '导出', exact: true })
     ).toBeVisible()
-    await expect(page.getByRole('button', { name: '对象筛选' })).toBeVisible()
-    await page.getByRole('button', { name: '对象筛选' }).click()
-    const filter = page.getByRole('dialog', { name: '统计对象筛选' })
+    const filter = page.getByRole('region', { name: '统计对象筛选' })
     await expect(filter.getByText(item.filterLabel)).toBeVisible()
     await filter.getByRole('button', { name: '应用', exact: true }).click()
     await expect

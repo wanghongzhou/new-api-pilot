@@ -52,13 +52,9 @@ import {
 
 function Timestamp({ value }: { value: number | null }) {
   const { t } = useTranslation()
-  return (
-    <>
-      {value == null
-        ? t('common.none')
-        : fromUnixSeconds(value).format('YYYY-MM-DD HH:mm:ss')}
-    </>
-  )
+  return value == null
+    ? t('common.none')
+    : fromUnixSeconds(value).format('YYYY-MM-DD HH:mm:ss')
 }
 
 function MetricCell({
@@ -238,6 +234,22 @@ export function CustomerDetailPage({
             <CustomerStatusBadge status={customer.status} />
           </div>
           <dl className='grid gap-x-6 gap-y-3 border-t pt-4 sm:grid-cols-2 lg:grid-cols-3'>
+            <div>
+              <dt className='text-muted-foreground text-xs'>
+                {t('customer.contractAmount')}
+              </dt>
+              <dd className='mt-1 text-sm font-medium break-words'>
+                {customer.contract_amount}
+              </dd>
+            </div>
+            <div>
+              <dt className='text-muted-foreground text-xs'>
+                {t('customer.paymentAmount')}
+              </dt>
+              <dd className='mt-1 text-sm font-medium break-words'>
+                {customer.payment_amount}
+              </dd>
+            </div>
             <div>
               <dt className='text-muted-foreground text-xs'>
                 {t('customer.contact')}

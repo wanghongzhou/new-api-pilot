@@ -320,10 +320,10 @@ function Breakdown({
         </p>
       ) : (
         <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-3'>
-          {items.map((item, index) => (
+          {items.map((item) => (
             <article
               className='border-border bg-card grid gap-2 rounded-lg border p-4'
-              key={`${item.site_id}:${item.dimension_id}:${index}`}
+              key={`${item.site_id}:${item.dimension_id}:${item.as_of ?? 'na'}:${item.count}:${item.missing_count}`}
             >
               <div className='flex items-start justify-between gap-2'>
                 <div>
@@ -375,6 +375,7 @@ function TopupTable({
   fetching,
   loading,
   onPageChange,
+  onPageSizeChange,
   onRetry,
   page,
   pageSize,
@@ -384,6 +385,7 @@ function TopupTable({
   fetching: boolean
   loading: boolean
   onPageChange: (page: number) => void
+  onPageSizeChange: (pageSize: number) => void
   onRetry: () => void
   page: number
   pageSize: number
@@ -455,6 +457,7 @@ function TopupTable({
       fetching={fetching}
       loading={loading}
       onPageChange={onPageChange}
+      onPageSizeChange={onPageSizeChange}
       onRetry={onRetry}
       page={page}
       pageSize={pageSize}
@@ -507,6 +510,7 @@ function RedemptionTable(props: {
   fetching: boolean
   loading: boolean
   onPageChange: (page: number) => void
+  onPageSizeChange: (pageSize: number) => void
   onRetry: () => void
   page: number
   pageSize: number
@@ -603,6 +607,7 @@ function RedemptionTable(props: {
       fetching={props.fetching}
       loading={props.loading}
       onPageChange={props.onPageChange}
+      onPageSizeChange={props.onPageSizeChange}
       onRetry={props.onRetry}
       page={props.page}
       pageSize={props.pageSize}
@@ -836,6 +841,9 @@ export function FinancialOperationsPage({
             fetching={activeListQuery.isFetching}
             loading={activeListQuery.isPending}
             onPageChange={(page) => onSearchChange({ page })}
+            onPageSizeChange={(pageSize) =>
+              onSearchChange({ page: 1, pageSize })
+            }
             onRetry={() => void activeListQuery.refetch()}
             page={search.page}
             pageSize={search.pageSize}
@@ -847,6 +855,9 @@ export function FinancialOperationsPage({
             fetching={activeListQuery.isFetching}
             loading={activeListQuery.isPending}
             onPageChange={(page) => onSearchChange({ page })}
+            onPageSizeChange={(pageSize) =>
+              onSearchChange({ page: 1, pageSize })
+            }
             onRetry={() => void activeListQuery.refetch()}
             page={search.page}
             pageSize={search.pageSize}

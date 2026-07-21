@@ -8,6 +8,7 @@ import { MetricValue } from './metric-value'
 
 export function QuotaAmount({
   inline = false,
+  showQuota = true,
   quota,
   rate,
   nullLabel,
@@ -16,6 +17,7 @@ export function QuotaAmount({
   nullLabel?: string
   quota: MetricString | null
   rate: RateInfo
+  showQuota?: boolean
 }) {
   const { t } = useTranslation()
   const amount = useMemo(() => calculateQuotaAmount(quota, rate), [quota, rate])
@@ -27,12 +29,14 @@ export function QuotaAmount({
           : 'grid gap-0.5'
       }
     >
-      <span>
-        <MetricValue compact nullLabel={nullLabel} value={quota} />
-        <span className='text-muted-foreground ml-1 text-xs'>
-          {t('metric.quota')}
+      {showQuota && (
+        <span>
+          <MetricValue compact nullLabel={nullLabel} value={quota} />
+          <span className='text-muted-foreground ml-1 text-xs'>
+            {t('metric.quota')}
+          </span>
         </span>
-      </span>
+      )}
       {amount.status === 'available' && (
         <span className='text-muted-foreground text-xs'>
           {t('amount.summary', {

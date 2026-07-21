@@ -1,9 +1,6 @@
 import {
   Add01Icon,
-  ArrowLeft01Icon,
-  ArrowRight01Icon,
   Edit03Icon,
-  FilterIcon,
   Key01Icon,
   Refresh01Icon,
   UserAdd01Icon,
@@ -21,15 +18,9 @@ import { useTranslation } from 'react-i18next'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { DataTablePagination } from '@/components/ui/data-table-pagination'
 import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
+import { NativeSelect as Select } from '@/components/ui/native-select'
 import { Spinner } from '@/components/ui/spinner'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { fromUnixSeconds } from '@/lib/dayjs'
@@ -149,7 +140,6 @@ export function PlatformUsersPage({
   const currentUser = useAuthStore((state) => state.user)
   const isAdmin = currentUser?.role === 'admin'
   const [filter, setFilter] = useState(search.filter)
-  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [editUser, setEditUser] = useState<PlatformUserItem | null>(null)
   const [resetUser, setResetUser] = useState<PlatformUserItem | null>(null)
@@ -197,13 +187,9 @@ export function PlatformUsersPage({
   const submitFilter = (event: FormEvent) => {
     event.preventDefault()
     onSearchChange({ filter: filter.trim(), page: 1 })
-    setMobileFiltersOpen(false)
   }
   const enabledAdminTotal = enabledAdminQuery.data?.total ?? 0
   const pageData = usersQuery.data
-  const totalPages = pageData
-    ? Math.max(1, Math.ceil(pageData.total / pageData.page_size))
-    : 1
   const initialLoading = usersQuery.isPending && !pageData
   const initialError = usersQuery.isError && !pageData
   const empty = pageData?.items.length === 0
@@ -223,15 +209,7 @@ export function PlatformUsersPage({
       title={t('Platform users')}
     >
       <div className='grid gap-4'>
-        <div className='flex items-center gap-2 sm:hidden'>
-          <Button
-            onClick={() => setMobileFiltersOpen(true)}
-            type='button'
-            variant='outline'
-          >
-            <HugeiconsIcon icon={FilterIcon} strokeWidth={2} />
-            {t('Filter users')}
-          </Button>
+        <div className='flex items-center gap-2'>
           <Button
             aria-label={t('Refresh')}
             disabled={usersQuery.isFetching}
@@ -249,7 +227,7 @@ export function PlatformUsersPage({
           </Button>
         </div>
         <form
-          className='hidden gap-2 sm:flex sm:items-center'
+          className='flex flex-wrap items-center gap-2'
           onSubmit={submitFilter}
         >
           <UserFilterFields
@@ -277,27 +255,6 @@ export function PlatformUsersPage({
             )}
           </Button>
         </form>
-
-        <Sheet onOpenChange={setMobileFiltersOpen} open={mobileFiltersOpen}>
-          <SheetContent className='sm:hidden'>
-            <SheetHeader>
-              <SheetTitle>{t('Filter platform users')}</SheetTitle>
-              <SheetDescription>
-                {t('Filter the platform user list')}
-              </SheetDescription>
-            </SheetHeader>
-            <form className='grid gap-4' onSubmit={submitFilter}>
-              <UserFilterFields
-                filter={filter}
-                mobile
-                onFilterChange={setFilter}
-                onSearchChange={onSearchChange}
-                search={search}
-              />
-              <Button type='submit'>{t('Apply filters')}</Button>
-            </form>
-          </SheetContent>
-        </Sheet>
 
         {initialLoading && (
           <div
@@ -396,39 +353,15 @@ export function PlatformUsersPage({
         )}
 
         {pageData && pageData.total > 0 && (
-          <div className='flex flex-wrap items-center justify-between gap-3'>
-            <p className='text-muted-foreground text-sm'>
-              {t('{{total}} users', { total: pageData.total })}
-            </p>
-            <div className='flex items-center gap-2'>
-              <Button
-                aria-label={t('Previous page')}
-                disabled={search.page <= 1}
-                onClick={() => onSearchChange({ page: search.page - 1 })}
-                size='icon'
-                title={t('Previous page')}
-                variant='outline'
-              >
-                <HugeiconsIcon icon={ArrowLeft01Icon} strokeWidth={2} />
-              </Button>
-              <span className='min-w-20 text-center text-sm'>
-                {t('{{page}} / {{pages}}', {
-                  page: search.page,
-                  pages: totalPages,
-                })}
-              </span>
-              <Button
-                aria-label={t('Next page')}
-                disabled={search.page >= totalPages}
-                onClick={() => onSearchChange({ page: search.page + 1 })}
-                size='icon'
-                title={t('Next page')}
-                variant='outline'
-              >
-                <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={2} />
-              </Button>
-            </div>
-          </div>
+          <DataTablePagination
+            onPageChange={(page) => onSearchChange({ page })}
+            onPageSizeChange={(pageSize) =>
+              onSearchChange({ page: 1, pageSize })
+            }
+            page={search.page}
+            pageSize={pageData.page_size}
+            total={pageData.total}
+          />
         )}
       </div>
 

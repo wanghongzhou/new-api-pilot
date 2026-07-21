@@ -11,6 +11,7 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
+  Controller,
   useForm,
   type FieldErrors,
   type FieldPath,
@@ -22,6 +23,7 @@ import { toast } from 'sonner'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { FormField } from '@/components/ui/form-field'
 import { Input } from '@/components/ui/input'
@@ -139,11 +141,18 @@ function EditableSetting({
           className='flex min-h-10 items-center gap-3'
           htmlFor='setting-dingtalk-enabled'
         >
-          <input
-            className='border-input text-primary focus-visible:ring-ring size-4 rounded border focus-visible:ring-2'
-            id='setting-dingtalk-enabled'
-            type='checkbox'
-            {...form.register('dingTalkEnabled')}
+          <Controller
+            control={form.control}
+            name='dingTalkEnabled'
+            render={({ field }) => (
+              <Checkbox
+                checked={field.value}
+                id='setting-dingtalk-enabled'
+                onBlur={field.onBlur}
+                onCheckedChange={field.onChange}
+                ref={field.ref}
+              />
+            )}
           />
           <span className='text-sm'>
             {form.watch('dingTalkEnabled')

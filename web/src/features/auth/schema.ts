@@ -16,7 +16,7 @@ export const passwordSchema = z
   .string()
   .min(1, { message: 'Password is required' })
   .superRefine((value, context) => {
-    if (Array.from(value).length < 8) {
+    if ([...value].length < 8) {
       context.addIssue({
         code: 'custom',
         message: 'Password must contain at least 8 Unicode characters',
@@ -35,7 +35,7 @@ export const displayNameSchema = z
   .trim()
   .min(1, { message: 'Display name is required' })
   .superRefine((value, context) => {
-    if (Array.from(value).length > 128) {
+    if ([...value].length > 128) {
       context.addIssue({
         code: 'custom',
         message: 'Display name must not exceed 128 Unicode characters',

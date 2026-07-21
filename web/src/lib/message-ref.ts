@@ -197,8 +197,9 @@ export function translateMessageRef(
   ref: AnyMessageRef | UnknownMessageRef | null | undefined,
   fallbackKey = 'Request failed'
 ): string {
-  if (!ref || !isStableI18nCode(ref.code))
+  if (!ref || !isStableI18nCode(ref.code)) {
     return i18n.t(dynamicI18nKey('api', fallbackKey))
+  }
   const params =
     ref.params && typeof ref.params === 'object'
       ? (ref.params as Record<string, unknown>)

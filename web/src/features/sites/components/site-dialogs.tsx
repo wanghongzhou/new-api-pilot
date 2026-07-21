@@ -7,13 +7,14 @@ import {
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import {
   Dialog,
@@ -26,6 +27,7 @@ import {
 import { FormField } from '@/components/ui/form-field'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
+import { Textarea } from '@/components/ui/textarea'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey, normalizeApiError } from '@/lib/api'
 import { BEIJING_TIMEZONE, dayjs, fromUnixSeconds } from '@/lib/dayjs'
@@ -394,8 +396,8 @@ function EditSiteDialog({
               htmlFor='edit-site-remark'
               label={t('site.remark')}
             >
-              <textarea
-                className='border-input bg-background min-h-24 rounded-md border p-3 text-sm'
+              <Textarea
+                className='min-h-24'
                 id='edit-site-remark'
                 {...register('remark')}
               />
@@ -513,14 +515,13 @@ function EditSiteDialog({
                 )}
                 {preflight.contract_status === 'compatible' && (
                   <label className='border-border mt-3 flex min-h-12 items-start gap-3 rounded-md border p-3'>
-                    <input
+                    <Checkbox
                       checked={confirmSameSite}
-                      className='accent-primary mt-0.5 size-4'
-                      onChange={(event) => {
-                        setConfirmSameSite(event.target.checked)
-                        if (event.target.checked) clearErrors('root')
+                      className='mt-0.5'
+                      onCheckedChange={(checked) => {
+                        setConfirmSameSite(checked)
+                        if (checked) clearErrors('root')
                       }}
-                      type='checkbox'
                     />
                     <span>{t('site.preflight.confirmSameSite')}</span>
                   </label>
@@ -683,6 +684,7 @@ function BackfillDialog({
   const { t } = useTranslation()
   const [pending, setPending] = useState(false)
   const {
+    control,
     formState: { errors },
     handleSubmit,
     register,
@@ -746,10 +748,17 @@ function BackfillDialog({
             />
           </FormField>
           <label className='flex min-h-10 items-center gap-2 text-sm'>
-            <input
-              className='accent-primary size-4'
-              type='checkbox'
-              {...register('onlyMissing')}
+            <Controller
+              control={control}
+              name='onlyMissing'
+              render={({ field }) => (
+                <Checkbox
+                  checked={field.value}
+                  onBlur={field.onBlur}
+                  onCheckedChange={field.onChange}
+                  ref={field.ref}
+                />
+              )}
             />
             {t('site.backfill.onlyMissing')}
           </label>

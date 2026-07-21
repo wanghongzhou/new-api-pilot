@@ -15,10 +15,12 @@ function params(values: FinanceInventoryQueryParams) {
   result.set('page_size', String(values.page_size))
   if (values.remote_id) result.set('remote_id', values.remote_id)
   if (values.remote_user_id) result.set('remote_user_id', values.remote_user_id)
-  if (values.start_timestamp)
+  if (values.start_timestamp) {
     result.set('start_timestamp', String(values.start_timestamp))
-  if (values.end_timestamp)
+  }
+  if (values.end_timestamp) {
     result.set('end_timestamp', String(values.end_timestamp))
+  }
   if (values.keyword) result.set('keyword', values.keyword)
   for (const value of values.site_ids ?? []) result.append('site_ids', value)
   for (const value of values.statuses ?? []) result.append('statuses', value)

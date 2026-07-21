@@ -111,8 +111,9 @@ async function assertKeyboardFocus(page: Page) {
   await page.keyboard.press('Tab')
   const focused = await page.evaluate(() => {
     const element = document.activeElement
-    if (!(element instanceof HTMLElement) || element === document.body)
+    if (!(element instanceof HTMLElement) || element === document.body) {
       return null
+    }
     const rectangle = element.getBoundingClientRect()
     const style = getComputedStyle(element)
     return {
@@ -133,7 +134,14 @@ async function assertNoAccessibilityViolations(page: Page, route: string) {
     .exclude("button[aria-label='Open Tanstack query devtools']")
     .analyze()
   expect(
-    result.violations.map(({ id, nodes }) => ({ id, nodes: nodes.length })),
+    result.violations.map(({ id, nodes }) => ({
+      id,
+      nodes: nodes.map(({ failureSummary, html, target }) => ({
+        failureSummary,
+        html,
+        target,
+      })),
+    })),
     `axe violations on ${route}`
   ).toEqual([])
 }
@@ -141,7 +149,7 @@ async function assertNoAccessibilityViolations(page: Page, route: string) {
 async function assertTouchTargets(page: Page, route: string) {
   const undersized = await page
     .locator(
-      "button:not([disabled]), a[href], input:not([type='hidden']):not([disabled]), select:not([disabled]), textarea:not([disabled]), [role='button']:not([aria-disabled='true']), [role='tab']:not([aria-disabled='true'])"
+      "button:not([disabled]), a[href], input:not([type='hidden']):not([aria-hidden='true']):not([disabled]), select:not([disabled]), textarea:not([disabled]), [role='button']:not([aria-disabled='true']), [role='tab']:not([aria-disabled='true'])"
     )
     .evaluateAll((elements) =>
       elements.flatMap((element) => {
@@ -159,8 +167,17 @@ async function assertTouchTargets(page: Page, route: string) {
           (element.type === 'checkbox' || element.type === 'radio')
         ) {
           const associatedLabel = element.labels?.item(0)
-          if (associatedLabel instanceof HTMLElement)
+          if (associatedLabel instanceof HTMLElement) {
             hitTarget = associatedLabel
+          }
+        } else if (
+          element.getAttribute('role') === 'checkbox' ||
+          element.getAttribute('role') === 'radio'
+        ) {
+          const associatedLabel = element.closest('label')
+          if (associatedLabel instanceof HTMLElement) {
+            hitTarget = associatedLabel
+          }
         }
         const rectangle = hitTarget.getBoundingClientRect()
         const style = getComputedStyle(hitTarget)
@@ -212,27 +229,27 @@ async function assertRouteSurface(
   }
 }
 
-test('audits every authenticated file route at desktop and 375px mobile', async ({
-  page,
+test('discovers the authenticated file-route surface', async ({
+  page: _page,
 }, testInfo) => {
-  test.setTimeout(240_000)
   expect(authenticatedRoutes.length).toBeGreaterThanOrEqual(20)
   await testInfo.attach('audited-routes.json', {
     body: JSON.stringify(authenticatedRoutes, null, 2),
     contentType: 'application/json',
   })
-  await installAuthenticatedFailureBoundary(page)
-  if (testInfo.project.name === 'chromium-mobile') {
-    await page.setViewportSize({ height: 844, width: 375 })
-  } else {
-    await page.setViewportSize({ height: 900, width: 1440 })
-  }
-  for (const route of authenticatedRoutes) {
-    await test.step(route, async () => {
-      await assertRouteSurface(page, route, testInfo)
-    })
-  }
 })
+
+for (const route of authenticatedRoutes) {
+  test(`audits authenticated route ${route}`, async ({ page }, testInfo) => {
+    await installAuthenticatedFailureBoundary(page)
+    if (testInfo.project.name === 'chromium-mobile') {
+      await page.setViewportSize({ height: 844, width: 375 })
+    } else {
+      await page.setViewportSize({ height: 900, width: 1440 })
+    }
+    await assertRouteSurface(page, route, testInfo)
+  })
+}
 
 test('keeps the unauthenticated sign-in file route accessible and responsive', async ({
   page,

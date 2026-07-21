@@ -51,8 +51,9 @@ describe('A101 frontend site task catalog', () => {
       'realtime_stat',
       'resource_snapshot',
     ])
-    for (const taskType of fastCollectionTaskTypes)
+    for (const taskType of fastCollectionTaskTypes) {
       expect(isFastCollectionTaskType(taskType)).toBe(true)
+    }
     expect(isFastCollectionTaskType('performance_sync')).toBe(false)
     expect(isFastCollectionTaskType('unknown_task')).toBe(false)
 

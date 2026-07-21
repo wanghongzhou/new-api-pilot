@@ -86,8 +86,9 @@ function VisibilityBadge({ visible }: { visible: boolean }) {
 
 function TextBadges({ values }: { values: string[] }) {
   const { t } = useTranslation()
-  if (values.length === 0)
+  if (values.length === 0) {
     return <span className='text-muted-foreground'>{t('common.none')}</span>
+  }
   return (
     <div className='flex max-w-72 flex-wrap gap-1'>
       {values.map((value) => (
@@ -584,6 +585,9 @@ export function PricingGroupsPage({
             fetching={pricingQuery.isFetching}
             loading={pricingQuery.isPending}
             onPageChange={(page) => onSearchChange({ page })}
+            onPageSizeChange={(pageSize) =>
+              onSearchChange({ page: 1, pageSize })
+            }
             onRetry={() => void pricingQuery.refetch()}
             page={search.page}
             pageSize={search.pageSize}
@@ -626,6 +630,9 @@ export function PricingGroupsPage({
             fetching={groupsQuery.isFetching}
             loading={groupsQuery.isPending}
             onPageChange={(page) => onSearchChange({ page })}
+            onPageSizeChange={(pageSize) =>
+              onSearchChange({ page: 1, pageSize })
+            }
             onRetry={() => void groupsQuery.refetch()}
             page={search.page}
             pageSize={search.pageSize}

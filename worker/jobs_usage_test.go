@@ -148,7 +148,7 @@ func TestUsageWorkerMismatchKeepsOldFactsButIsolatesSummaries(t *testing.T) {
 	})
 	executeUsageWorkerClaim(t, database, repository, clock, collector, claim)
 
-	assertUsageWorkerTaskState(t, database.GORM, claim, model.CollectionTaskStatusPending, 0, 1, 0)
+	assertUsageWorkerTaskState(t, database.GORM, claim, model.CollectionTaskStatusFailed, 0, 1, 0)
 	assertUsageWorkerCount(t, database.GORM, &model.UsageFactHourly{}, "site_id = ? AND hour_ts = ?", []any{fixture.site.ID, hour}, 1)
 	assertUsageWorkerSummaryCounts(t, database.GORM, fixture, hour, 0)
 	var collectionWindow model.CollectionWindow

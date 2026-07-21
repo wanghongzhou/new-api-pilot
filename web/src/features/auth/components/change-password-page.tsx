@@ -75,7 +75,7 @@ export function ChangePasswordPage() {
       className='flex min-h-full items-center justify-center px-4 py-8'
       id='main-content'
     >
-      <section className='bg-card border-border w-full max-w-lg rounded-lg border p-5 sm:p-6'>
+      <section className='bg-card border-border w-full max-w-lg rounded-2xl border p-5 shadow-lg shadow-black/5 sm:p-6'>
         <h1 className='text-lg font-semibold'>{t('Change password')}</h1>
         <p className='text-muted-foreground mt-1 text-sm'>
           {t('A new password is required before you can use the workspace')}

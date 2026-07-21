@@ -7,12 +7,13 @@ import {
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useState, type CompositionEvent } from 'react'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import {
   Drawer,
@@ -24,8 +25,9 @@ import {
 } from '@/components/ui/drawer'
 import { FormField } from '@/components/ui/form-field'
 import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
+import { NativeSelect as Select } from '@/components/ui/native-select'
 import { Spinner } from '@/components/ui/spinner'
+import { Textarea } from '@/components/ui/textarea'
 import { listCustomers } from '@/features/customers/api'
 import { customerKeys } from '@/features/customers/query-keys'
 import type { CustomerListParams } from '@/features/customers/types'
@@ -123,6 +125,7 @@ export function AccountOnboardingDrawer({
   const [reviewError, setReviewError] = useState<string | null>(null)
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false)
   const {
+    control,
     formState: { errors, isDirty },
     getValues,
     register,
@@ -352,9 +355,9 @@ export function AccountOnboardingDrawer({
           else requestClose()
         }}
         open={open}
-        swipeDirection='right'
+        direction='right'
       >
-        <DrawerContent>
+        <DrawerContent className='data-[vaul-drawer-direction=right]:sm:max-w-3xl'>
           <DrawerHeader>
             <DrawerTitle>{t('account.onboarding.title')}</DrawerTitle>
             <DrawerDescription>
@@ -626,17 +629,25 @@ export function AccountOnboardingDrawer({
                 htmlFor='account-onboarding-remark'
                 label={t('account.remark')}
               >
-                <textarea
-                  className='border-input bg-background min-h-24 rounded-md border p-3 text-sm'
+                <Textarea
+                  className='min-h-24'
                   id='account-onboarding-remark'
                   {...register('remark')}
                 />
               </FormField>
               <label className='border-border flex min-h-12 items-start gap-3 rounded-md border p-3 text-sm'>
-                <input
-                  className='accent-primary mt-0.5 size-4'
-                  type='checkbox'
-                  {...register('bindingConfirmed')}
+                <Controller
+                  control={control}
+                  name='bindingConfirmed'
+                  render={({ field }) => (
+                    <Checkbox
+                      checked={field.value}
+                      className='mt-0.5'
+                      onBlur={field.onBlur}
+                      onCheckedChange={field.onChange}
+                      ref={field.ref}
+                    />
+                  )}
                 />
                 <span>{t('account.onboarding.bindingConfirm')}</span>
               </label>

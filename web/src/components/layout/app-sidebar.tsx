@@ -1,49 +1,34 @@
-import { useTranslation } from 'react-i18next'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 
-import type { LoginUser } from '@/features/auth/types'
-import { dynamicI18nKey } from '@/i18n/dynamic-keys'
+import { Sidebar, SidebarContent, SidebarRail } from '@/components/ui/sidebar'
+import { useLayout } from '@/context/layout-provider'
+import { MOTION_TRANSITION, MOTION_VARIANTS } from '@/lib/motion'
 
-import { Badge } from '../ui/badge'
 import { AppNav } from './app-nav'
-import { Brand } from './brand'
 
-export function AppSidebar({
-  onNavigate,
-  user,
-}: {
-  onNavigate?: () => void
-  user: LoginUser
-}) {
-  const { t } = useTranslation()
+export function AppSidebar() {
+  const { collapsible, variant } = useLayout()
+  const shouldReduce = useReducedMotion()
 
   return (
-    <div className='flex h-full flex-col'>
-      <div className='flex h-14 shrink-0 items-center border-b px-4'>
-        <Brand />
-      </div>
-      <div className='flex-1 overflow-y-auto p-3'>
-        <AppNav onNavigate={onNavigate} />
-      </div>
-      <div className='border-t p-3'>
-        <div className='min-w-0 rounded-md px-2 py-2'>
-          <div className='truncate text-sm font-medium'>
-            {user.display_name}
-          </div>
-          <div className='mt-1 flex items-center justify-between gap-2'>
-            <span className='text-muted-foreground truncate text-xs'>
-              {user.username}
-            </span>
-            <Badge variant={user.role === 'admin' ? 'primary' : 'neutral'}>
-              {t(
-                dynamicI18nKey(
-                  'layout',
-                  user.role === 'admin' ? 'Administrator' : 'Viewer'
-                )
-              )}
-            </Badge>
-          </div>
-        </div>
-      </div>
-    </div>
+    <Sidebar collapsible={collapsible} variant={variant}>
+      <SidebarContent className='py-2'>
+        <AnimatePresence initial={false} mode='wait'>
+          <motion.div
+            animate={MOTION_VARIANTS.sidebarSlide.animate}
+            className='flex flex-col'
+            exit={shouldReduce ? undefined : MOTION_VARIANTS.sidebarSlide.exit}
+            initial={
+              shouldReduce ? false : MOTION_VARIANTS.sidebarSlide.initial
+            }
+            key='main-navigation'
+            transition={MOTION_TRANSITION.fast}
+          >
+            <AppNav />
+          </motion.div>
+        </AnimatePresence>
+      </SidebarContent>
+      <SidebarRail />
+    </Sidebar>
   )
 }

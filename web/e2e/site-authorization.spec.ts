@@ -45,6 +45,16 @@ function siteFixture() {
     management_status: 'active',
     name: '华东站点',
     online_status: 'online',
+    performance: {
+      avg_latency_ms: 120,
+      avg_tps: 18.5,
+      data_status: 'complete',
+      hours: 24,
+      models: [],
+      request_count: '42',
+      sampled_at: 1_783_872_000,
+      success_rate: 0.998,
+    },
     rate: {
       quota_per_unit: '500000',
       source: 'site',
@@ -151,7 +161,7 @@ test('A05/A55 makes Token rotation explicit and requires an explicit retry after
   const dialog = page.getByRole('dialog', { name: '站点授权' })
   await dialog
     .getByRole('radio', { name: '登录并生成 Token', exact: true })
-    .check()
+    .click()
   await expect(
     dialog.getByText(
       '此方式会覆盖远端原有 Access Token；请确认依赖旧 Token 的系统已做好切换准备。'
@@ -161,7 +171,7 @@ test('A05/A55 makes Token rotation explicit and requires an explicit retry after
   await dialog.getByLabel('root 密码').fill('rotation-password')
   await dialog
     .getByRole('checkbox', { name: '我确认该操作会覆盖远端原有 Access Token' })
-    .check()
+    .click()
   await dialog
     .getByRole('button', { name: '验证并检查能力', exact: true })
     .click()

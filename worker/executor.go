@@ -337,6 +337,9 @@ func (executor *Executor) executeClaim(ctx context.Context, claim model.Collecti
 			return
 		}
 		windowOutcome := executor.windowOutcome(claim.Run.TaskType, window, jobOutcome.Result, executionErr)
+		if executionErr != nil {
+			executor.logWindowExecutionFailure(claim, window, executionErr, windowOutcome)
+		}
 		commitAt := monotonicWorkerCommitTime(executor.clock.Now().Unix(), lastCommitAt, window.UpdatedAt)
 		lastCommitAt = commitAt
 		completedRun, commitErr := executor.repository.CompleteClaimedWindow(context.Background(), model.CompleteClaimedWindowRequest{
@@ -344,6 +347,7 @@ func (executor *Executor) executeClaim(ctx context.Context, claim model.Collecti
 			Window: windowOutcome, Mutation: jobOutcome.TransactionMutation,
 		})
 		if commitErr != nil {
+			log.Printf("collection window completion failed run_id=%d window_id=%d site_id=%d hour_ts=%d attempt=%d error_type=%T", claim.Run.ID, window.ID, window.SiteID, window.HourTS, window.AttemptCount, commitErr)
 			return
 		}
 		executor.recordOutcome(claim.Run.TaskType, windowOutcome.Status, "")
@@ -389,12 +393,16 @@ func (executor *Executor) executeInitialBackfillClaim(
 				return
 			}
 			windowOutcome := executor.windowOutcome(claim.Run.TaskType, window, jobOutcome.Result, executionErr)
+			if executionErr != nil {
+				executor.logWindowExecutionFailure(claim, window, executionErr, windowOutcome)
+			}
 			commitAt := executor.clock.Now().Unix()
 			completedRun, commitErr := executor.repository.CompleteClaimedWindow(context.Background(), model.CompleteClaimedWindowRequest{
 				RunID: claim.Run.ID, RequestID: claim.RequestID, Now: commitAt,
 				Window: windowOutcome, Mutation: jobOutcome.TransactionMutation,
 			})
 			if commitErr != nil {
+				log.Printf("collection window completion failed run_id=%d window_id=%d site_id=%d hour_ts=%d attempt=%d error_type=%T", claim.Run.ID, window.ID, window.SiteID, window.HourTS, window.AttemptCount, commitErr)
 				return
 			}
 			executor.recordOutcome(claim.Run.TaskType, windowOutcome.Status, "")
@@ -402,6 +410,20 @@ func (executor *Executor) executeInitialBackfillClaim(
 		}(window)
 	}
 	waitGroup.Wait()
+}
+
+func (executor *Executor) logWindowExecutionFailure(
+	claim model.CollectionTaskClaim,
+	window model.CollectionRunWindow,
+	cause error,
+	outcome model.CollectionTaskWindowResult,
+) {
+	var taskError *TaskExecutionError
+	if errors.As(cause, &taskError) {
+		log.Printf("collection window failed run_id=%d window_id=%d site_id=%d hour_ts=%d task_type=%s attempt=%d status=%s error_code=%s retryable=%t retry_after=%s", claim.Run.ID, window.ID, window.SiteID, window.HourTS, claim.Run.TaskType, window.AttemptCount, outcome.Status, taskError.Code, taskError.Retryable, taskError.RetryAfter)
+		return
+	}
+	log.Printf("collection window failed run_id=%d window_id=%d site_id=%d hour_ts=%d task_type=%s attempt=%d status=%s error_type=%T", claim.Run.ID, window.ID, window.SiteID, window.HourTS, claim.Run.TaskType, window.AttemptCount, outcome.Status, cause)
 }
 
 func (executor *Executor) notifyWindowAfterCommit(

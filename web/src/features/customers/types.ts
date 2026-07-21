@@ -13,6 +13,8 @@ export interface CustomerListItem {
   name: string
   contact: string
   remark: string
+  contract_amount: string
+  payment_amount: string
   status: CustomerStatus
   account_count: number
   active_account_count: number
@@ -33,6 +35,8 @@ export interface CustomerCreateRequest {
   name: string
   contact?: string
   remark?: string
+  contract_amount?: string
+  payment_amount?: string
   status: Exclude<CustomerStatus, 'disabled'>
 }
 

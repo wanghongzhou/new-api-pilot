@@ -334,7 +334,7 @@ function SiteMetadata({ site }: { site: SiteDetail }) {
       label: t('site.baseUrl'),
       value: (
         <a
-          className='text-primary break-all hover:underline'
+          className='text-primary-strong break-all hover:underline'
           href={site.base_url}
           rel='noreferrer'
           target='_blank'

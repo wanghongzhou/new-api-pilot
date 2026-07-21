@@ -62,6 +62,7 @@ type SchemaVerificationSummary struct {
 var (
 	schemaCreateTablePattern = regexp.MustCompile(`(?s)^CREATE TABLE IF NOT EXISTS ([a-z0-9_]+) \((.*)\) ENGINE=([A-Za-z0-9]+) DEFAULT CHARSET=([a-z0-9_]+) COLLATE=([a-z0-9_]+)$`)
 	schemaColumnNamePattern  = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+	schemaColumnTypePattern  = regexp.MustCompile(`^(?:bigint|char\([0-9]+\)|decimal\([0-9]+,[0-9]+\)|int|json|mediumtext|text|tinyint(?:\(1\))?|varchar\([0-9]+\))$`)
 	schemaColumnDefault      = regexp.MustCompile(`\bDEFAULT\s+('(?:''|[^'])*'|[^\s,]+)`)
 	schemaColumnCharset      = regexp.MustCompile(`\bCHARACTER SET\s+([a-z0-9_]+)`)
 	schemaColumnCollation    = regexp.MustCompile(`\bCOLLATE\s+([a-z0-9_]+)`)
@@ -81,6 +82,7 @@ func AuthoritativeSchemaContracts() (map[string]TableContract, error) {
 	if err != nil {
 		return nil, err
 	}
+	applySchemaCustomerAmountsContract(contracts)
 	applySchemaCollectionRunScopeContract(contracts)
 	applySchemaAlertReliabilityContract(contracts)
 	applySchemaExportClaimLeaseContract(contracts)
@@ -313,6 +315,28 @@ func AuthoritativeSchemaContracts() (map[string]TableContract, error) {
 	return contracts, nil
 }
 
+func applySchemaCustomerAmountsContract(contracts map[string]TableContract) {
+	contract, ok := contracts["customer"]
+	if !ok {
+		return
+	}
+	amounts := []ColumnContract{
+		{Name: "contract_amount", ColumnType: "decimal(38,10)", IsNullable: "NO", Default: sql.NullString{String: "0.0000000000", Valid: true}},
+		{Name: "payment_amount", ColumnType: "decimal(38,10)", IsNullable: "NO", Default: sql.NullString{String: "0.0000000000", Valid: true}},
+	}
+	insertAt := len(contract.Columns)
+	for index, column := range contract.Columns {
+		if column.Name == "remark" {
+			insertAt = index + 1
+			break
+		}
+	}
+	contract.Columns = append(contract.Columns, amounts...)
+	copy(contract.Columns[insertAt+len(amounts):], contract.Columns[insertAt:len(contract.Columns)-len(amounts)])
+	copy(contract.Columns[insertAt:], amounts)
+	contracts["customer"] = contract
+}
+
 func applySchemaUsageFlowDimensionsContract(contracts map[string]TableContract) {
 	for _, spec := range []struct {
 		table      string
@@ -387,7 +411,7 @@ func VerifyAuthoritativeSchema(
 		if actual.Engine != contract.Engine || actual.Charset != contract.Charset || actual.Collation != contract.Collation {
 			return SchemaVerificationSummary{}, fmt.Errorf("table %s engine or collation differs from the authoritative schema", table)
 		}
-		if !reflect.DeepEqual(actual.Columns, contract.Columns) {
+		if !schemaColumnsEqual(actual.Columns, contract.Columns) {
 			return SchemaVerificationSummary{}, fmt.Errorf("table %s columns differ from the authoritative schema: actual=%#v expected=%#v", table, actual.Columns, contract.Columns)
 		}
 		if !reflect.DeepEqual(actual.Indexes, contract.Indexes) {
@@ -424,8 +448,8 @@ func parseCreateTableContracts(statements []string) (map[string]TableContract, e
 		tableCharset := matches[4]
 		tableCollation := matches[5]
 		columns := make([]ColumnContract, 0)
-		for _, line := range strings.Split(body, "\n") {
-			if column, ok := parseSchemaColumnContract(line, tableCharset, tableCollation); ok {
+		for _, definition := range splitSchemaDefinitions(body) {
+			if column, ok := parseSchemaColumnContract(definition, tableCharset, tableCollation); ok {
 				columns = append(columns, column)
 			}
 		}
@@ -465,6 +489,70 @@ func parseCreateTableContracts(statements []string) (map[string]TableContract, e
 	return contracts, nil
 }
 
+func splitSchemaDefinitions(body string) []string {
+	definitions := make([]string, 0)
+	start, depth := 0, 0
+	inString := false
+	for index := 0; index < len(body); index++ {
+		switch body[index] {
+		case '\'':
+			if inString && index+1 < len(body) && body[index+1] == '\'' {
+				index++
+				continue
+			}
+			inString = !inString
+		case '(':
+			if !inString {
+				depth++
+			}
+		case ')':
+			if !inString && depth > 0 {
+				depth--
+			}
+		case ',':
+			if !inString && depth == 0 {
+				definitions = append(definitions, strings.TrimSpace(body[start:index]))
+				start = index + 1
+			}
+		}
+	}
+	if tail := strings.TrimSpace(body[start:]); tail != "" {
+		definitions = append(definitions, tail)
+	}
+	return definitions
+}
+
+func schemaColumnsEqual(actual, expected []ColumnContract) bool {
+	if len(actual) != len(expected) {
+		return false
+	}
+	for index := range actual {
+		left, right := actual[index], expected[index]
+		left.GenerationExpression = normalizeSchemaGenerationExpression(left.GenerationExpression)
+		right.GenerationExpression = normalizeSchemaGenerationExpression(right.GenerationExpression)
+		if !reflect.DeepEqual(left, right) {
+			return false
+		}
+	}
+	return true
+}
+
+func normalizeSchemaGenerationExpression(value string) string {
+	value = strings.ToLower(strings.ReplaceAll(value, "`", ""))
+	value = strings.Join(strings.Fields(value), " ")
+	for len(value) >= 2 && value[0] == '(' && value[len(value)-1] == ')' {
+		value = strings.TrimSpace(value[1 : len(value)-1])
+	}
+	if start := strings.Index(value, "case when ("); start >= 0 {
+		conditionStart := start + len("case when ")
+		if conditionEnd := strings.Index(value[conditionStart:], ") then"); conditionEnd >= 0 {
+			conditionEnd += conditionStart
+			value = value[:conditionStart] + value[conditionStart+1:conditionEnd] + value[conditionEnd+1:]
+		}
+	}
+	return value
+}
+
 func parseSchemaColumnContract(line, tableCharset, tableCollation string) (ColumnContract, bool) {
 	definition := strings.TrimSuffix(strings.TrimSpace(line), ",")
 	fields := strings.Fields(definition)
@@ -476,6 +564,9 @@ func parseSchemaColumnContract(line, tableCharset, tableCollation string) (Colum
 		return ColumnContract{}, false
 	}
 	columnType := strings.ToLower(fields[1])
+	if !schemaColumnTypePattern.MatchString(columnType) {
+		return ColumnContract{}, false
+	}
 	contract := ColumnContract{Name: name, ColumnType: columnType, IsNullable: "YES"}
 	upperDefinition := strings.ToUpper(definition)
 	if strings.Contains(upperDefinition, " NOT NULL") {

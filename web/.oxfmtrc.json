@@ -17,7 +17,11 @@
   "ignorePatterns": [
     "node_modules",
     "dist",
+    "build",
+    "coverage",
     ".tanstack",
+    ".eslintrc.cjs",
+    "**/routeTree.gen.ts",
     "src/routeTree.gen.ts"
   ]
 }

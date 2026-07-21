@@ -11,6 +11,10 @@ const availableSecrets: SettingsSecretState = {
 const validValues: SettingsFormValues = {
   usageDelayMinutes: '5',
   minuteRetentionDays: '90',
+  logRetentionDays: '30',
+  performanceRetentionDays: '90',
+  taskRetentionDays: '90',
+  systemTaskTerminalRetentionDays: '90',
   probeConcurrency: '20',
   realtimeConcurrency: '10',
   resourceConcurrency: '10',

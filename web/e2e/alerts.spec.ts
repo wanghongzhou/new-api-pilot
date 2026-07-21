@@ -221,8 +221,9 @@ async function seedAuth(page: Page, user: TestUser) {
     `
     const appendStyle = () => document.documentElement?.append(style)
     if (document.documentElement) appendStyle()
-    else
+    else {
       document.addEventListener('DOMContentLoaded', appendStyle, { once: true })
+    }
   })
   await page.addInitScript(
     ({ authKey, authUser, uidKey }) => {
@@ -483,17 +484,29 @@ test('supports URL filters, sorting, pagination, detail retry, and all delivery 
     .evaluate((button: HTMLButtonElement) => button.click())
   await expect(page).toHaveURL(/page=2/)
 
-  await page.getByRole('button', { name: '筛选', exact: true }).click()
-  const filters = page.getByRole('dialog', { name: '筛选' })
+  const filters = page.getByRole('region', { name: '筛选' })
   const statusFilters = filters.getByRole('group', { name: '状态' })
-  await statusFilters.getByLabel('触发中', { exact: true }).check()
-  await statusFilters.getByLabel('累计中', { exact: true }).check()
+  await statusFilters
+    .getByRole('checkbox', { name: '触发中', exact: true })
+    .click()
+  await statusFilters
+    .getByRole('checkbox', { name: '累计中', exact: true })
+    .click()
   const levelFilters = filters.getByRole('group', { name: '级别' })
-  await levelFilters.getByLabel('严重', { exact: true }).check()
-  await levelFilters.getByLabel('警告', { exact: true }).check()
+  await levelFilters
+    .getByRole('checkbox', { name: '严重', exact: true })
+    .click()
+  await levelFilters
+    .getByRole('checkbox', { name: '警告', exact: true })
+    .click()
   const targetFilters = filters.getByRole('group', { name: '目标类型' })
-  await targetFilters.getByLabel('实例', { exact: true }).check()
-  await targetFilters.getByLabel('账户', { exact: true }).check()
+  await targetFilters
+    .getByRole('checkbox', { name: '实例', exact: true })
+    .click()
+  await targetFilters
+    .getByRole('checkbox', { name: '账户', exact: true })
+    .click()
+  await filters.getByRole('button', { name: '展开', exact: true }).click()
   await filters.locator('#alerts-filter-site').selectOption(siteId)
   await hideDeveloperOverlays(page)
   await assertNoHorizontalOverflow(page)
@@ -583,12 +596,11 @@ test('isolates summary and missing-detail failures, renders empty state, and kee
     page.getByText(longTargetName).filter({ visible: true }).first()
   ).toBeVisible()
 
-  await page.getByRole('button', { name: '筛选', exact: true }).click()
-  const filters = page.getByRole('dialog', { name: '筛选' })
+  const filters = page.getByRole('region', { name: '筛选' })
   await filters
     .getByRole('group', { name: '状态' })
-    .getByLabel('已恢复', { exact: true })
-    .check()
+    .getByRole('checkbox', { name: '已恢复', exact: true })
+    .click()
   await filters.getByRole('button', { name: '应用', exact: true }).click()
   await expect(
     page.getByRole('heading', { name: '当前没有匹配告警' })

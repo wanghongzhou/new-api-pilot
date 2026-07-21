@@ -57,9 +57,16 @@ func (service *CustomerService) Create(ctx context.Context, request dto.Customer
 	if request.Validate() != nil {
 		return dto.CustomerDetail{}, ErrCustomerInvalid
 	}
+	if request.ContractAmount == "" {
+		request.ContractAmount = "0"
+	}
+	if request.PaymentAmount == "" {
+		request.PaymentAmount = "0"
+	}
 	now := service.clock.Now().Unix()
 	customer := model.Customer{
-		Name: request.Name, Contact: request.Contact, Remark: request.Remark, Status: request.Status,
+		Name: request.Name, Contact: request.Contact, Remark: request.Remark,
+		ContractAmount: request.ContractAmount, PaymentAmount: request.PaymentAmount, Status: request.Status,
 		StatisticsBackfillStatus: "none", CreatedAt: now, UpdatedAt: now,
 	}
 	if err := model.NewCustomerRepository(service.db).Create(ctx, &customer); err != nil {
@@ -107,6 +114,12 @@ func (service *CustomerService) Update(ctx context.Context, id int64, request dt
 	if request.Validate() != nil {
 		return dto.CustomerDetail{}, ErrCustomerInvalid
 	}
+	if request.ContractAmount == "" {
+		request.ContractAmount = "0"
+	}
+	if request.PaymentAmount == "" {
+		request.PaymentAmount = "0"
+	}
 	committedAt := int64(0)
 	err := service.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		current, err := model.NewCustomerRepository(tx).FindByIDForUpdate(ctx, id)
@@ -116,6 +129,8 @@ func (service *CustomerService) Update(ctx context.Context, id int64, request dt
 		current.Name = request.Name
 		current.Contact = request.Contact
 		current.Remark = request.Remark
+		current.ContractAmount = request.ContractAmount
+		current.PaymentAmount = request.PaymentAmount
 		current.Status = request.Status
 		committedAt = monotonicMutationTime(service.clock.Now().Unix(), current.UpdatedAt)
 		current.UpdatedAt = committedAt
@@ -262,7 +277,8 @@ func (service *CustomerService) listItemFromModel(ctx context.Context, customer 
 	}
 	return dto.CustomerListItem{
 		ID: strconv.FormatInt(customer.ID, 10), Name: customer.Name, Contact: customer.Contact,
-		Remark: customer.Remark, Status: customer.Status, AccountCount: counts.AccountCount,
+		Remark: customer.Remark, ContractAmount: customer.ContractAmount, PaymentAmount: customer.PaymentAmount,
+		Status: customer.Status, AccountCount: counts.AccountCount,
 		ActiveAccountCount: counts.ActiveAccountCount, ArchivedAccountCount: counts.ArchivedAccountCount,
 		SiteCount: counts.SiteCount,
 		Today:     dto.CustomerUsageSummary{UsageSummary: missingUsageSummary(), SiteBreakdown: []dto.SiteQuotaBreakdown{}},

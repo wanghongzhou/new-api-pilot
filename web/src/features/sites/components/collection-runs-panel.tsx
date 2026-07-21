@@ -15,7 +15,7 @@ import { MetricValue } from '@/components/data/metric-value'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
-import { Select } from '@/components/ui/select'
+import { NativeSelect as Select } from '@/components/ui/native-select'
 import {
   Sheet,
   SheetContent,

@@ -566,9 +566,37 @@ WHERE table_schema = DATABASE() AND table_name = ? AND table_type = 'BASE TABLE'
 			return false, fmt.Errorf("no postcondition for DDL statement %d", index+1)
 		}
 		return verifySiteInstanceLifecycleTable(ctx, connection)
+	case "0021_customer_amounts":
+		if index < 0 || index > 1 {
+			return false, fmt.Errorf("no postcondition for DDL statement %d", index+1)
+		}
+		return verifyCustomerAmountsSchema(ctx, connection, index == 1)
 	default:
 		return false, fmt.Errorf("migration %s has no registered DDL postconditions", version)
 	}
+}
+
+func verifyCustomerAmountsSchema(ctx context.Context, connection *sql.Conn, requireCheck bool) (bool, error) {
+	var columns int
+	if err := connection.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.columns
+WHERE table_schema = DATABASE() AND table_name = 'customer'
+  AND column_name IN ('contract_amount', 'payment_amount')
+  AND column_type = 'decimal(38,10)' AND is_nullable = 'NO'`).Scan(&columns); err != nil {
+		return false, err
+	}
+	if columns != 2 {
+		return false, nil
+	}
+	if !requireCheck {
+		return true, nil
+	}
+	var checks int
+	if err := connection.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.check_constraints
+WHERE constraint_schema = DATABASE()
+  AND constraint_name = 'chk_customer_amounts_non_negative'`).Scan(&checks); err != nil {
+		return false, err
+	}
+	return checks == 1, nil
 }
 
 func verifySiteInstanceLifecycleTable(ctx context.Context, connection *sql.Conn) (bool, error) {

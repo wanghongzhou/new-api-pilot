@@ -24,6 +24,52 @@ type accountTestClient struct {
 	searchPages map[int]dto.UpstreamUserPage
 }
 
+func TestCustomerAmountsPersistAcrossCreateUpdateAndRead(t *testing.T) {
+	tx := openSiteTestTransaction(t)
+	clock := testsupport.NewFakeClock(time.Unix(1_752_400_800, 0))
+	customers, err := NewCustomerService(CustomerServiceOptions{Database: tx, Clock: clock})
+	if err != nil {
+		t.Fatalf("create customer service: %v", err)
+	}
+
+	created, err := customers.Create(context.Background(), dto.CustomerCreateRequest{
+		Name: "Amount Customer", ContractAmount: "123.45", PaymentAmount: "23.4",
+		Status: dto.CustomerStatusUsing,
+	})
+	if err != nil {
+		t.Fatalf("create customer with amounts: %v", err)
+	}
+	if created.ContractAmount != "123.4500000000" || created.PaymentAmount != "23.4000000000" {
+		t.Fatalf("created customer amounts = %q/%q", created.ContractAmount, created.PaymentAmount)
+	}
+
+	id, err := strconv.ParseInt(created.ID, 10, 64)
+	if err != nil {
+		t.Fatalf("parse customer ID: %v", err)
+	}
+	clock.Advance(time.Second)
+	updated, err := customers.Update(context.Background(), id, dto.CustomerUpdateRequest{
+		Name: "Amount Customer", ContractAmount: "456.789", PaymentAmount: "100",
+		Status: dto.CustomerStatusUsing,
+	})
+	if err != nil {
+		t.Fatalf("update customer amounts: %v", err)
+	}
+	if updated.ContractAmount != "456.7890000000" || updated.PaymentAmount != "100.0000000000" {
+		t.Fatalf("updated customer amounts = %q/%q", updated.ContractAmount, updated.PaymentAmount)
+	}
+
+	page, err := customers.List(context.Background(), dto.CustomerListQuery{
+		Page: 1, PageSize: 20, SortBy: "updated_at", SortOrder: "desc",
+	})
+	if err != nil || page.Total != 1 || len(page.Items) != 1 {
+		t.Fatalf("list customers = %#v, %v", page, err)
+	}
+	if page.Items[0].ContractAmount != updated.ContractAmount || page.Items[0].PaymentAmount != updated.PaymentAmount {
+		t.Fatalf("listed customer amounts = %q/%q", page.Items[0].ContractAmount, page.Items[0].PaymentAmount)
+	}
+}
+
 func (client *accountTestClient) ListUsersPage(_ context.Context, _ string, page int) (dto.UpstreamUserPage, error) {
 	result, exists := client.listPages[page]
 	if !exists {

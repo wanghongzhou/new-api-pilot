@@ -99,7 +99,7 @@ func TestMySQLMigrationAndSeeds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verify authoritative schema contract: %v", err)
 	}
-	if schemaSummary.Tables != 67 || schemaSummary.ForeignKeys != 60 {
+	if schemaSummary.Tables != 69 || schemaSummary.ForeignKeys != 63 {
 		t.Fatalf("authoritative schema summary = %#v", schemaSummary)
 	}
 	assertChecksumMismatchIsRejected(t, ctx, database.SQL, runner)

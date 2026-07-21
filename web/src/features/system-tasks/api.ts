@@ -11,16 +11,20 @@ function params(values: SystemTaskQueryParams, forcedSite = false) {
   const result = new URLSearchParams()
   result.set('p', String(values.p))
   result.set('page_size', String(values.page_size))
-  if (!forcedSite)
+  if (!forcedSite) {
     for (const value of values.site_ids ?? []) result.append('site_ids', value)
+  }
   for (const value of values.types ?? []) result.append('types', value)
   for (const value of values.statuses ?? []) result.append('statuses', value)
-  if (values.error_present != null)
+  if (values.error_present != null) {
     result.set('error_present', String(values.error_present))
-  if (values.created_start != null)
+  }
+  if (values.created_start != null) {
     result.set('created_start', String(values.created_start))
-  if (values.created_end != null)
+  }
+  if (values.created_end != null) {
     result.set('created_end', String(values.created_end))
+  }
   return result
 }
 

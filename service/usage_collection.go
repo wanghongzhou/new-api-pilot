@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 
 	"new-api-pilot/common"
@@ -104,6 +106,8 @@ func (service *UsageCollectionService) CollectHour(
 		cause := firstError(flowErr, dataErr)
 		failureCode := usageFailureCode(cause)
 		failureParams := usageFailureParams(failureCode, cause, site.ID, request.Window.HourTS)
+		failureParams = usageDiagnosticFailureParams(failureParams, cause, "fetch")
+		logUsageCollectionFailure(request, "fetch", flowErr, dataErr, cause)
 		reasonCode, reasonParams := usageWindowFailureReason(cause, false, site.ID, request.Window.HourTS)
 		baseFailureRequest.ReasonCode = reasonCode
 		baseFailureRequest.ReasonParams = reasonParams
@@ -135,6 +139,8 @@ func (service *UsageCollectionService) CollectHour(
 			failureCode = string(constant.MessageDataValidationMismatch)
 		}
 		failureParams := usageFailureParams(failureCode, cause, site.ID, request.Window.HourTS)
+		failureParams = usageDiagnosticFailureParams(failureParams, cause, "validate")
+		logUsageCollectionFailure(request, "validate", factErr, consistencyErr, cause)
 		reasonCode, reasonParams := usageWindowFailureReason(cause, dataMismatch, site.ID, request.Window.HourTS)
 		baseFailureRequest.ReasonCode = reasonCode
 		baseFailureRequest.ReasonParams = reasonParams
@@ -336,4 +342,47 @@ func usageFailureParams(code string, err error, siteID, hourTS int64) []byte {
 		return nil
 	}
 	return encoded
+}
+
+func usageDiagnosticFailureParams(base []byte, err error, phase string) []byte {
+	params := map[string]any{}
+	if json.Unmarshal(base, &params) != nil {
+		return base
+	}
+	params["failure_phase"] = phase
+	var requestError *UpstreamRequestError
+	if errors.As(err, &requestError) {
+		params["upstream_error_kind"] = string(requestError.Kind)
+		if requestError.Detail != "" {
+			params["upstream_error_detail"] = requestError.Detail
+		}
+		if requestError.Method != "" {
+			params["method"] = requestError.Method
+		}
+		if requestError.Endpoint != "" {
+			params["endpoint"] = requestError.Endpoint
+		}
+		if requestError.StatusCode > 0 {
+			params["status_code"] = requestError.StatusCode
+		}
+		if requestError.ContentType != "" {
+			params["content_type"] = requestError.ContentType
+		}
+		if requestError.PayloadBytes > 0 {
+			params["payload_bytes"] = requestError.PayloadBytes
+		}
+	}
+	encoded, marshalErr := common.Marshal(params)
+	if marshalErr != nil {
+		return base
+	}
+	return encoded
+}
+
+func logUsageCollectionFailure(request UsageCollectionRequest, phase string, first, second, cause error) {
+	log.Printf("usage collection failed run_id=%d window_id=%d site_id=%d hour_ts=%d attempt=%d phase=%s first_error_type=%T second_error_type=%T cause_type=%T", request.Run.ID, request.Window.ID, request.Window.SiteID, request.Window.HourTS, request.Window.AttemptCount, phase, first, second, cause)
+	var requestError *UpstreamRequestError
+	if errors.As(cause, &requestError) {
+		log.Printf("usage collection upstream detail run_id=%d window_id=%d request_id=%s method=%s endpoint=%s status=%d content_type=%q payload_bytes=%d kind=%s detail=%s", request.Run.ID, request.Window.ID, request.RequestID, requestError.Method, requestError.Endpoint, requestError.StatusCode, requestError.ContentType, requestError.PayloadBytes, requestError.Kind, requestError.Detail)
+	}
 }

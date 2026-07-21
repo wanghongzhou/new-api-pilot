@@ -58,11 +58,35 @@ func (err *UpstreamUserIdentityConflictError) Unwrap() error {
 // retains an access token, request URL, response body, or raw transport error.
 type UpstreamRequestError struct {
 	Kind          UpstreamErrorKind
+	Detail        string
+	Method        string
+	Endpoint      string
 	StatusCode    int
+	ContentType   string
+	PayloadBytes  int64
 	RetryAfter    time.Duration
 	HasRetryAfter bool
 	ResponseBytes int64
 	LimitBytes    int64
+}
+
+func annotateUpstreamRequestError(err error, method, endpoint, contentType string, statusCode int, payloadBytes int64) error {
+	var requestError *UpstreamRequestError
+	if !errors.As(err, &requestError) || requestError == nil {
+		return err
+	}
+	requestError.Method = method
+	requestError.Endpoint = endpoint
+	if statusCode > 0 {
+		requestError.StatusCode = statusCode
+	}
+	if contentType != "" {
+		requestError.ContentType = contentType
+	}
+	if payloadBytes > 0 {
+		requestError.PayloadBytes = payloadBytes
+	}
+	return err
 }
 
 func (err *UpstreamRequestError) Error() string {
@@ -117,6 +141,10 @@ func (err *UpstreamRequestError) sentinel() error {
 
 func newUpstreamRequestError(kind UpstreamErrorKind) *UpstreamRequestError {
 	return &UpstreamRequestError{Kind: kind}
+}
+
+func newUpstreamRequestErrorWithDetail(kind UpstreamErrorKind, detail string) *UpstreamRequestError {
+	return &UpstreamRequestError{Kind: kind, Detail: detail}
 }
 
 func newUpstreamHTTPError(

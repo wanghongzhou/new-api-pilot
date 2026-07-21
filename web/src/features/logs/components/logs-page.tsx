@@ -27,7 +27,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
+import { NativeSelect as Select } from '@/components/ui/native-select'
 import { createStatisticsExport } from '@/features/statistics/api'
 import { ExportTaskSheet } from '@/features/statistics/components/export-task-sheet'
 import type {
@@ -569,6 +569,7 @@ export function LogsPage({
           fetching={logsQuery.isFetching}
           loading={logsQuery.isPending}
           onPageChange={(page) => onSearchChange({ page })}
+          onPageSizeChange={(pageSize) => onSearchChange({ page: 1, pageSize })}
           onRetry={() => void logsQuery.refetch()}
           page={search.page}
           pageSize={search.pageSize}

@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/dialog'
 import { FormField } from '@/components/ui/form-field'
 import { Spinner } from '@/components/ui/spinner'
+import { Textarea } from '@/components/ui/textarea'
 import type { CollectionRunItem } from '@/features/sites/types'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
@@ -79,8 +80,9 @@ function EditAccountDialog({
       onClose()
     } catch (error) {
       const mapped = applyApiFieldErrors(error, setError, { remark: 'remark' })
-      if (!mapped)
+      if (!mapped) {
         setError('root', { message: getApiErrorTranslationKey(error) })
+      }
     } finally {
       setPending(false)
     }
@@ -122,8 +124,8 @@ function EditAccountDialog({
           htmlFor='account-remark'
           label={t('account.remark')}
         >
-          <textarea
-            className='border-input bg-background min-h-28 rounded-md border p-3 text-sm'
+          <Textarea
+            className='min-h-28'
             id='account-remark'
             {...register('remark')}
           />
@@ -190,9 +192,9 @@ export function AccountDialogs({
     try {
       if (state.action === 'archive') await archiveAccount(state.account.id)
       else if (state.action === 'delete') await deleteAccount(state.account.id)
-      else if (state.action === 'refresh')
+      else if (state.action === 'refresh') {
         await refreshAccount(state.account.id)
-      else {
+      } else {
         const run = await restoreAccount(state.account.id)
         onRecovery(run, state.account)
       }

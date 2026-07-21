@@ -12,8 +12,7 @@ import {
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 
-import { Badge } from '@/components/ui/badge'
-import type { Badge as BadgeComponent } from '@/components/ui/badge'
+import { Badge, type Badge as BadgeComponent } from '@/components/ui/badge'
 import type { SiteListItem } from '@/features/sites/types'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 

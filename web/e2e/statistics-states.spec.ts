@@ -448,7 +448,7 @@ function statisticsResponse(
 }
 
 function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 async function seedAuth(page: Page) {
@@ -462,6 +462,29 @@ async function seedAuth(page: Page) {
   await page.route('**/api/user/self', async (route) => {
     await route.fulfill({ json: envelope(viewer, 'req_self_a50') })
   })
+  await page.route(/\/api\/sites(?:\?.*)?$/, async (route) => {
+    await route.fulfill({
+      json: envelope({ items: [], page: 1, page_size: 100, total: 0 }),
+    })
+  })
+  await page.route(/\/api\/customers(?:\?.*)?$/, async (route) => {
+    await route.fulfill({
+      json: envelope({ items: [], page: 1, page_size: 100, total: 0 }),
+    })
+  })
+  await page.route(/\/api\/accounts(?:\?.*)?$/, async (route) => {
+    await route.fulfill({
+      json: envelope({ items: [], page: 1, page_size: 100, total: 0 }),
+    })
+  })
+  await page.route(
+    /\/api\/statistics\/options\/[a-z]+(?:\?.*)?$/,
+    async (route) => {
+      await route.fulfill({
+        json: envelope({ items: [], page: 1, page_size: 50, total: 0 }),
+      })
+    }
+  )
 }
 
 function detailFixture(kind: StatisticsRouteCase['detailKind']) {
@@ -542,11 +565,11 @@ function metric(summary: Locator, label: string) {
 }
 
 function beijingHour(timestamp: number) {
-  return new Date((timestamp + 8 * 3600) * 1000)
+  const hour = new Date((timestamp + 8 * 3600) * 1000)
     .toISOString()
     .slice(0, 13)
     .replace('T', ' ')
-    .concat(':00')
+  return `${hour}:00`
 }
 
 async function expectNoHorizontalOverflow(page: Page) {

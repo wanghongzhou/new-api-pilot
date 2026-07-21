@@ -1,7 +1,5 @@
 import {
   Add01Icon,
-  ArrowLeft01Icon,
-  ArrowRight01Icon,
   GridViewIcon,
   TableIcon,
   ViewIcon,
@@ -24,6 +22,7 @@ import { RunFeedbackSheet } from '@/components/data/run-feedback-sheet'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
+import { DataTablePagination } from '@/components/ui/data-table-pagination'
 import { Input } from '@/components/ui/input'
 import { accountKeys } from '@/features/accounts/query-keys'
 import type { CollectionRunItem } from '@/features/sites/types'
@@ -151,6 +150,14 @@ export function CustomersPage({
         id: 'status',
       },
       {
+        accessorKey: 'contract_amount',
+        header: t('customer.contractAmount'),
+      },
+      {
+        accessorKey: 'payment_amount',
+        header: t('customer.paymentAmount'),
+      },
+      {
         cell: ({ row }) =>
           `${row.original.active_account_count}/${row.original.account_count}`,
         enableSorting: true,
@@ -232,46 +239,48 @@ export function CustomersPage({
       title={t('customers.title')}
     >
       <div className='grid min-w-0 gap-4'>
-        <div className='flex flex-wrap items-center gap-2'>
-          <Input
-            aria-label={t('customers.search')}
-            className='min-w-0 flex-1 sm:max-w-sm'
-            onChange={(event) => setDraftFilter(event.target.value)}
-            onCompositionEnd={(event: CompositionEvent<HTMLInputElement>) => {
-              setComposing(false)
-              setDraftFilter(event.currentTarget.value)
-            }}
-            onCompositionStart={() => setComposing(true)}
-            placeholder={t('customers.searchPlaceholder')}
-            value={draftFilter}
-          />
+        <div className='grid gap-2'>
+          <div className='flex flex-wrap items-center gap-2'>
+            <Input
+              aria-label={t('customers.search')}
+              className='min-w-0 flex-1 sm:max-w-sm'
+              onChange={(event) => setDraftFilter(event.target.value)}
+              onCompositionEnd={(event: CompositionEvent<HTMLInputElement>) => {
+                setComposing(false)
+                setDraftFilter(event.currentTarget.value)
+              }}
+              onCompositionStart={() => setComposing(true)}
+              placeholder={t('customers.searchPlaceholder')}
+              value={draftFilter}
+            />
+            <div
+              className='border-border flex w-fit rounded-md border p-0.5'
+              role='group'
+            >
+              <Button
+                aria-label={t('customers.cardView')}
+                aria-pressed={search.view === 'card'}
+                onClick={() => onSearchChange({ view: 'card' })}
+                size='icon'
+                variant={search.view === 'card' ? 'secondary' : 'ghost'}
+              >
+                <HugeiconsIcon icon={GridViewIcon} strokeWidth={2} />
+              </Button>
+              <Button
+                aria-label={t('customers.tableView')}
+                aria-pressed={search.view === 'table'}
+                onClick={() => onSearchChange({ view: 'table' })}
+                size='icon'
+                variant={search.view === 'table' ? 'secondary' : 'ghost'}
+              >
+                <HugeiconsIcon icon={TableIcon} strokeWidth={2} />
+              </Button>
+            </div>
+          </div>
           <CustomerFilters
             onApply={(status) => onSearchChange({ page: 1, status })}
             value={search.status}
           />
-          <div
-            className='border-border ml-auto flex rounded-md border p-0.5'
-            role='group'
-          >
-            <Button
-              aria-label={t('customers.cardView')}
-              aria-pressed={search.view === 'card'}
-              onClick={() => onSearchChange({ view: 'card' })}
-              size='icon'
-              variant={search.view === 'card' ? 'secondary' : 'ghost'}
-            >
-              <HugeiconsIcon icon={GridViewIcon} strokeWidth={2} />
-            </Button>
-            <Button
-              aria-label={t('customers.tableView')}
-              aria-pressed={search.view === 'table'}
-              onClick={() => onSearchChange({ view: 'table' })}
-              size='icon'
-              variant={search.view === 'table' ? 'secondary' : 'ghost'}
-            >
-              <HugeiconsIcon icon={TableIcon} strokeWidth={2} />
-            </Button>
-          </div>
         </div>
         {search.view === 'card' && customers.length > 0 ? (
           <>
@@ -286,39 +295,15 @@ export function CustomersPage({
                 />
               ))}
             </div>
-            <div className='flex flex-wrap items-center justify-between gap-3'>
-              <p className='text-muted-foreground text-sm'>
-                {t('table.total', { total })}
-              </p>
-              <div className='flex items-center gap-2'>
-                <Button
-                  aria-label={t('table.previous')}
-                  disabled={search.page <= 1}
-                  onClick={() => onSearchChange({ page: search.page - 1 })}
-                  size='icon'
-                  title={t('table.previous')}
-                  variant='outline'
-                >
-                  <HugeiconsIcon icon={ArrowLeft01Icon} strokeWidth={2} />
-                </Button>
-                <span className='min-w-24 text-center text-sm'>
-                  {t('table.page', {
-                    page: search.page,
-                    pages: Math.max(1, Math.ceil(total / search.pageSize)),
-                  })}
-                </span>
-                <Button
-                  aria-label={t('table.next')}
-                  disabled={search.page >= Math.ceil(total / search.pageSize)}
-                  onClick={() => onSearchChange({ page: search.page + 1 })}
-                  size='icon'
-                  title={t('table.next')}
-                  variant='outline'
-                >
-                  <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={2} />
-                </Button>
-              </div>
-            </div>
+            <DataTablePagination
+              onPageChange={(page) => onSearchChange({ page })}
+              onPageSizeChange={(pageSize) =>
+                onSearchChange({ page: 1, pageSize })
+              }
+              page={search.page}
+              pageSize={search.pageSize}
+              total={total}
+            />
           </>
         ) : (
           <DataTable
@@ -338,6 +323,9 @@ export function CustomersPage({
             fetching={customersQuery.isFetching}
             loading={customersQuery.isPending}
             onPageChange={(page) => onSearchChange({ page })}
+            onPageSizeChange={(pageSize) =>
+              onSearchChange({ page: 1, pageSize })
+            }
             onRetry={() => void customersQuery.refetch()}
             onSortingChange={updateSorting}
             page={search.page}

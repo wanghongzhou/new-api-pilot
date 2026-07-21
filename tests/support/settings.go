@@ -25,6 +25,7 @@ var platformSettingSeeds = []platformSettingSeed{
 	{key: "logs.retention_days", value: "30", typeID: "int"},
 	{key: "performance.retention_days", value: "90", typeID: "int"},
 	{key: "task.retention_days", value: "90", typeID: "int"},
+	{key: "system_task_terminal_retention_days", value: "90", typeID: "int"},
 	{key: "collector.probe_concurrency", value: "20", typeID: "int"},
 	{key: "collector.realtime_concurrency", value: "10", typeID: "int"},
 	{key: "collector.resource_concurrency", value: "10", typeID: "int"},

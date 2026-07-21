@@ -86,7 +86,8 @@ describe('system task read-only API contract', () => {
       'get:/api/sites/9007199254740993/system-tasks',
       'get:/api/sites/9007199254740993/system-tasks/statistics',
     ])
-    for (const request of requests)
+    for (const request of requests) {
       expect((request.params as URLSearchParams).has('site_ids')).toBe(false)
+    }
   })
 })

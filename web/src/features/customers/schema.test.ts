@@ -9,26 +9,32 @@ describe('customer schemas', () => {
     ])
   })
 
-  test('trims profile fields and rejects disabled through the generic form', () => {
+  test('trims profile fields and validates amounts', () => {
     expect(
       customerFormSchema.parse({
-        contact: ' 张经理 ',
-        name: ' 示例客户 ',
-        remark: ' 重点客户 ',
+        contact: ' contact ',
+        contract_amount: '123.45',
+        name: ' customer ',
+        payment_amount: '23.45',
+        remark: ' remark ',
         status: 'using',
       })
     ).toEqual({
-      contact: '张经理',
-      name: '示例客户',
-      remark: '重点客户',
+      contact: 'contact',
+      contract_amount: '123.45',
+      name: 'customer',
+      payment_amount: '23.45',
+      remark: 'remark',
       status: 'using',
     })
     expect(
       customerFormSchema.safeParse({
         contact: '',
-        name: '示例客户',
+        contract_amount: '-1',
+        name: 'customer',
+        payment_amount: '1.12345678901',
         remark: '',
-        status: 'disabled',
+        status: 'using',
       }).success
     ).toBeFalse()
   })

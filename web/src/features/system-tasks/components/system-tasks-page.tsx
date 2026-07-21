@@ -90,12 +90,15 @@ function errorCodeText(
   t: (key: string) => string,
   code: SystemTaskItem['error_code']
 ) {
-  if (code === 'UPSTREAM_SYSTEM_TASK_FAILED')
+  if (code === 'UPSTREAM_SYSTEM_TASK_FAILED') {
     return t('systemTasks.errorCode.UPSTREAM_SYSTEM_TASK_FAILED')
-  if (code === 'UPSTREAM_SYSTEM_TASK_LEASE_EXPIRED')
+  }
+  if (code === 'UPSTREAM_SYSTEM_TASK_LEASE_EXPIRED') {
     return t('systemTasks.errorCode.UPSTREAM_SYSTEM_TASK_LEASE_EXPIRED')
-  if (code === 'UPSTREAM_SYSTEM_TASK_INVALID_RESPONSE')
+  }
+  if (code === 'UPSTREAM_SYSTEM_TASK_INVALID_RESPONSE') {
     return t('systemTasks.errorCode.UPSTREAM_SYSTEM_TASK_INVALID_RESPONSE')
+  }
   return t('systemTasks.errorCode.unknown')
 }
 function StatusBadge({ status }: { status: SystemTaskStatus }) {
@@ -341,12 +344,13 @@ function ResultView({ item }: { item: SystemTaskItem }) {
   const { t } = useTranslation()
   if (!item.result) return <span className='text-muted-foreground'>-</span>
   const entries: [string, string | null][] = []
-  if (item.type === 'log_cleanup')
+  if (item.type === 'log_cleanup') {
     entries.push([
       t('systemTasks.result.deletedCount'),
       item.result.deleted_count,
     ])
-  if (item.type === 'channel_test')
+  }
+  if (item.type === 'channel_test') {
     entries.push(
       [t('systemTasks.result.tested'), item.result.tested],
       [t('systemTasks.metric.succeeded'), item.result.succeeded],
@@ -354,7 +358,8 @@ function ResultView({ item }: { item: SystemTaskItem }) {
       [t('systemTasks.result.disabled'), item.result.disabled],
       [t('systemTasks.result.enabled'), item.result.enabled]
     )
-  if (item.type === 'model_update')
+  }
+  if (item.type === 'model_update') {
     entries.push(
       [t('systemTasks.result.checkedChannels'), item.result.checked_channels],
       [t('systemTasks.result.changedChannels'), item.result.changed_channels],
@@ -369,18 +374,21 @@ function ResultView({ item }: { item: SystemTaskItem }) {
       [t('systemTasks.result.failedChannels'), item.result.failed_channels],
       [t('systemTasks.result.autoAddedModels'), item.result.auto_added_models]
     )
-  if (item.type === 'midjourney_poll')
+  }
+  if (item.type === 'midjourney_poll') {
     entries.push(
       [t('systemTasks.result.unfinishedTasks'), item.result.unfinished_tasks],
       [t('systemTasks.result.channelsScanned'), item.result.channels_scanned],
       [t('systemTasks.result.nullTasksFailed'), item.result.null_tasks_failed]
     )
-  if (item.type === 'async_task_poll')
+  }
+  if (item.type === 'async_task_poll') {
     entries.push(
       [t('systemTasks.result.unfinishedTasks'), item.result.unfinished_tasks],
       [t('systemTasks.result.platformsScanned'), item.result.platforms_scanned],
       [t('systemTasks.result.nullTasksFailed'), item.result.null_tasks_failed]
     )
+  }
   return (
     <dl className='grid min-w-48 gap-1 text-xs'>
       {entries.map(([label, value]) => (
@@ -618,6 +626,7 @@ export function SystemTasksPage({
           fetching={listQuery.isFetching}
           loading={listQuery.isPending}
           onPageChange={(page) => onSearchChange({ page })}
+          onPageSizeChange={(pageSize) => onSearchChange({ page: 1, pageSize })}
           onRetry={() => void listQuery.refetch()}
           page={search.page}
           pageSize={search.pageSize}

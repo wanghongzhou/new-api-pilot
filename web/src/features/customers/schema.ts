@@ -39,6 +39,20 @@ export const customerFormSchema = z.object({
     .max(128, 'customer.validation.nameLength'),
   contact: z.string().trim().max(255, 'customer.validation.contactLength'),
   remark: z.string().trim().max(500, 'customer.validation.remarkLength'),
+  contract_amount: z
+    .string()
+    .trim()
+    .regex(
+      /^$|^(0|[1-9][0-9]*)(\.[0-9]{1,10})?$/,
+      'customer.validation.amount'
+    ),
+  payment_amount: z
+    .string()
+    .trim()
+    .regex(
+      /^$|^(0|[1-9][0-9]*)(\.[0-9]{1,10})?$/,
+      'customer.validation.amount'
+    ),
   status: z.enum(editableCustomerStatuses),
 })
 

@@ -88,6 +88,47 @@ func TestPricingGroupCatalogSchemaContract(t *testing.T) {
 	}
 }
 
+func TestCustomerAmountSchemaContract(t *testing.T) {
+	contracts, err := AuthoritativeSchemaContracts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	columns := make(map[string]ColumnContract)
+	for _, column := range contracts["customer"].Columns {
+		columns[column.Name] = column
+	}
+	for _, name := range []string{"contract_amount", "payment_amount"} {
+		column, exists := columns[name]
+		if !exists || column.ColumnType != "decimal(38,10)" || column.IsNullable != "NO" ||
+			!column.Default.Valid || column.Default.String != "0.0000000000" {
+			t.Fatalf("customer.%s contract = %#v", name, column)
+		}
+	}
+}
+
+func TestParseCreateTableContractsIgnoresMultilineCheckExpressions(t *testing.T) {
+	contracts, err := parseCreateTableContracts([]string{`CREATE TABLE IF NOT EXISTS check_fixture (
+  id BIGINT NOT NULL,
+  status VARCHAR(16) NOT NULL,
+  open_status VARCHAR(16)
+    GENERATED ALWAYS AS (CASE WHEN id >= 0 THEN status ELSE NULL END) STORED,
+  CONSTRAINT chk_check_fixture CHECK (
+    id >= 0 AND
+    status IN ('ready', 'done')
+  ),
+  PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	columns := contracts["check_fixture"].Columns
+	if len(columns) != 3 || columns[0].Name != "id" || columns[1].Name != "status" ||
+		columns[2].Name != "open_status" || columns[2].Extra != "STORED GENERATED" ||
+		columns[2].GenerationExpression == "" {
+		t.Fatalf("multiline CHECK expression parsed as columns: %#v", columns)
+	}
+}
+
 func TestSystemTaskMonitoringSchemaContractExcludesRawPrivateFields(t *testing.T) {
 	contracts, err := AuthoritativeSchemaContracts()
 	if err != nil {

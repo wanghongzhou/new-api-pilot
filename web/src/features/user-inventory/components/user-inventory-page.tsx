@@ -688,7 +688,7 @@ export function UserInventoryPage({
         cell: ({ row }) =>
           row.original.account_id ? (
             <Link
-              className='text-primary underline-offset-4 hover:underline'
+              className='text-primary-strong underline-offset-4 hover:underline'
               params={{ accountId: row.original.account_id }}
               to='/accounts/$accountId'
             >
@@ -787,6 +787,7 @@ export function UserInventoryPage({
           fetching={listQuery.isFetching}
           loading={listQuery.isPending}
           onPageChange={(page) => onSearchChange({ page })}
+          onPageSizeChange={(pageSize) => onSearchChange({ page: 1, pageSize })}
           onRetry={() => void listQuery.refetch()}
           page={search.page}
           pageSize={search.pageSize}
@@ -832,7 +833,7 @@ export function UserInventoryPage({
               </dl>
               {item.account_id ? (
                 <Link
-                  className='text-primary text-sm underline-offset-4 hover:underline'
+                  className='text-primary-strong text-sm underline-offset-4 hover:underline'
                   params={{ accountId: item.account_id }}
                   to='/accounts/$accountId'
                 >

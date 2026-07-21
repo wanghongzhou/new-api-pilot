@@ -7,6 +7,10 @@ export const platformSettingKeys = [
   'collector.resource_interval_seconds',
   'collector.usage_delay_minutes',
   'collector.minute_retention_days',
+  'logs.retention_days',
+  'performance.retention_days',
+  'task.retention_days',
+  'system_task_terminal_retention_days',
   'collector.probe_concurrency',
   'collector.realtime_concurrency',
   'collector.resource_concurrency',
@@ -82,6 +86,10 @@ export type SecretAction = 'clear' | 'keep' | 'replace'
 export interface SettingsFormValues {
   usageDelayMinutes: string
   minuteRetentionDays: string
+  logRetentionDays: string
+  performanceRetentionDays: string
+  taskRetentionDays: string
+  systemTaskTerminalRetentionDays: string
   probeConcurrency: string
   realtimeConcurrency: string
   resourceConcurrency: string

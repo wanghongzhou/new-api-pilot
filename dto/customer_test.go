@@ -68,6 +68,18 @@ func TestCustomerListQueryDefaultsAndWhitelist(t *testing.T) {
 	}
 }
 
+func TestCustomerAmountsValidateAsNonNegativeDecimals(t *testing.T) {
+	valid := CustomerCreateRequest{Name: "customer", ContractAmount: "123.45", PaymentAmount: "23.45", Status: CustomerStatusUsing}
+	valid.Normalize()
+	if fieldErrors := valid.Validate(); fieldErrors != nil {
+		t.Fatalf("valid customer amounts rejected: %#v", fieldErrors)
+	}
+	invalid := CustomerCreateRequest{Name: "customer", ContractAmount: "-1", PaymentAmount: "1.12345678901", Status: CustomerStatusUsing}
+	if fieldErrors := invalid.Validate(); fieldErrors == nil || fieldErrors["contract_amount"] == "" || fieldErrors["payment_amount"] == "" {
+		t.Fatalf("invalid customer amounts accepted: %#v", fieldErrors)
+	}
+}
+
 func TestCustomerResponseBigintsMarshalAsStrings(t *testing.T) {
 	metric := "9223372036854775807"
 	item := CustomerListItem{

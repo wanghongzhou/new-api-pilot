@@ -35,8 +35,9 @@ const f10 = JSON.parse(
 }
 const f10Pricing = f10.pricing[0]
 const f10ZeroUsageGroup = f10.groups[1]
-if (!f10Pricing || !f10ZeroUsageGroup)
+if (!f10Pricing || !f10ZeroUsageGroup) {
   throw new Error('F10 pricing/group fixture is incomplete')
+}
 
 function envelope<T>(data: T, requestId = 'req_pricing_groups_e2e') {
   return { code: '', data, message: '', request_id: requestId, success: true }
@@ -49,8 +50,9 @@ function assertAuthenticated(route: Route) {
 }
 
 async function seedAuth(page: Page, testInfo: TestInfo) {
-  if (testInfo.project.name === 'chromium-mobile')
+  if (testInfo.project.name === 'chromium-mobile') {
     await page.setViewportSize({ height: 812, width: 375 })
+  }
   await page.addInitScript((user) => {
     window.localStorage.setItem('pilot-auth-user', JSON.stringify(user))
     window.localStorage.setItem('uid', user.id)
@@ -267,8 +269,9 @@ test('A99 keeps pricing and configured groups exact, passive, private and respon
     'oauth_token',
     'header_override',
     'param_override',
-  ])
+  ]) {
     expect(serialized).not.toContain(forbidden)
+  }
 
   reads.length = 0
   await page.goto(
@@ -282,8 +285,9 @@ test('A99 keeps pricing and configured groups exact, passive, private and respon
 
   const iconRequests: string[] = []
   page.on('request', (request) => {
-    if (request.url().includes('icons.invalid'))
+    if (request.url().includes('icons.invalid')) {
       iconRequests.push(request.url())
+    }
   })
   await page.waitForTimeout(50)
   expect(iconRequests).toEqual([])

@@ -108,6 +108,16 @@ function siteFixture(id = '1') {
     monitoring_start_at: 1_780_000_000,
     name: id === '1' ? '华东站点' : '新建站点',
     online_status: 'online',
+    performance: {
+      avg_latency_ms: 120,
+      avg_tps: 18.5,
+      data_status: 'complete',
+      hours: 24,
+      models: [],
+      request_count: '128340',
+      sampled_at: 1_783_872_000,
+      success_rate: 0.998,
+    },
     rate: {
       quota_per_unit: '500000',
       source: 'site',
@@ -613,7 +623,7 @@ async function reachOnboardingBackfillStep(page: Page) {
     .getByRole('button', { name: '验证并检查能力', exact: true })
     .click()
   await expect(drawer.getByText('首用户证明通过')).toBeVisible()
-  await drawer.getByRole('checkbox', { name: /我确认历史起点/ }).check()
+  await drawer.getByRole('checkbox', { name: /我确认历史起点/ }).click()
   await drawer.getByRole('button', { name: '继续', exact: true }).click()
   return drawer
 }
@@ -745,7 +755,7 @@ test('completes four-step onboarding without persisting site secrets', async ({
   await expect(drawer.getByText('站点身份或 API 不兼容')).toBeVisible()
   await drawer
     .getByRole('radio', { name: '登录并生成 Token', exact: true })
-    .check()
+    .click()
   await drawer.getByLabel('root 用户名').fill('root')
   await expect(drawer.getByLabel('root 密码')).toHaveAttribute(
     'type',
@@ -754,12 +764,12 @@ test('completes four-step onboarding without persisting site secrets', async ({
   await drawer.getByLabel('root 密码').fill('root-password-secret')
   await drawer
     .getByRole('checkbox', { name: /覆盖远端原有 Access Token/ })
-    .check()
+    .click()
   await drawer
     .getByRole('button', { name: '验证并检查能力', exact: true })
     .click()
   await expect(drawer.getByText('首用户证明通过')).toBeVisible()
-  await drawer.getByRole('checkbox', { name: /我确认历史起点/ }).check()
+  await drawer.getByRole('checkbox', { name: /我确认历史起点/ }).click()
   await drawer.getByRole('button', { name: '继续', exact: true }).click()
   await expect(drawer.getByText('回填任务 ID')).toBeVisible()
   await expect(drawer.getByText('10', { exact: true })).toBeVisible()
@@ -800,7 +810,7 @@ test('completes four-step onboarding without persisting site secrets', async ({
       cache: auditWindow.__PILOT_CACHE_SNAPSHOT__?.(),
       currentHistoryState: window.history.state,
       history: auditWindow.__PILOT_HISTORY_AUDIT__,
-      inputValues: Array.from(document.querySelectorAll('input')).map(
+      inputValues: [...document.querySelectorAll('input')].map(
         (input) => input.value
       ),
       localStorage: Object.fromEntries(Object.entries(window.localStorage)),
@@ -1063,7 +1073,7 @@ test('preflights edits and enforces lifecycle mutation boundaries', async ({
   await expect(editDialog.getByText('https://moved.example.com')).toBeVisible()
   await editDialog
     .getByRole('checkbox', { name: /确认它们代表同一逻辑站点/ })
-    .check()
+    .click()
   await editDialog.getByRole('button', { name: '保存', exact: true }).click()
   await expect(editDialog).toHaveCount(0)
   expect(updateBody).toEqual({
@@ -1101,7 +1111,10 @@ test('preflights edits and enforces lifecycle mutation boundaries', async ({
   await expect(
     lifecycleDialog.getByRole('button', { name: '恢复站点' })
   ).toHaveCount(0)
-  await lifecycleDialog.getByText('关闭', { exact: true }).click()
+  await lifecycleDialog
+    .getByRole('button', { name: '关闭', exact: true })
+    .first()
+    .click()
 
   await page.getByLabel('打开站点操作').click()
   await page.getByRole('button', { name: '删除站点' }).click()

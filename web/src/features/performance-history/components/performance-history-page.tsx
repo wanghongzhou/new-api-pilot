@@ -211,8 +211,9 @@ function Filters({
           <Input
             onChange={(event) => {
               const start = parseDateTime(event.target.value)
-              if (start != null)
+              if (start != null) {
                 onChange({ hours: search.hours, page: 1, start })
+              }
             }}
             type='datetime-local'
             value={dateTimeValue(search.start)}
@@ -556,6 +557,7 @@ export function PerformanceHistoryPage({
           fetching={listQuery.isFetching}
           loading={listQuery.isPending}
           onPageChange={(page) => onSearchChange({ page })}
+          onPageSizeChange={(pageSize) => onSearchChange({ page: 1, pageSize })}
           onRetry={() => void listQuery.refetch()}
           page={search.page}
           pageSize={search.pageSize}

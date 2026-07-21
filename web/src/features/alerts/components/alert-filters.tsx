@@ -1,19 +1,11 @@
-import { FilterIcon } from '@hugeicons/core-free-icons'
-import { HugeiconsIcon } from '@hugeicons/react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { Button } from '@/components/ui/button'
+import { FilterPanel } from '@/components/data/filter-panel'
+import { Checkbox } from '@/components/ui/checkbox'
 import { FormField } from '@/components/ui/form-field'
 import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
+import { NativeSelect as Select } from '@/components/ui/native-select'
 import type { SiteListItem } from '@/features/sites/types'
 import { isIdString } from '@/lib/api-types'
 import { BEIJING_TIMEZONE, dayjs, fromUnixSeconds } from '@/lib/dayjs'
@@ -67,15 +59,12 @@ export function AlertFilters({
   value: AlertFilterValue
 }) {
   const { t } = useTranslation()
-  const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState<Draft>(() => draftValue(value))
   const [rangeError, setRangeError] = useState(false)
   useEffect(() => {
-    if (open) {
-      setDraft(draftValue(value))
-      setRangeError(false)
-    }
-  }, [open, value])
+    setDraft(draftValue(value))
+    setRangeError(false)
+  }, [value])
   const toggle = (key: 'level' | 'status' | 'targetType', item: string) => {
     setDraft((current) => {
       const values = current[key] as string[]
@@ -87,83 +76,10 @@ export function AlertFilters({
       }
     })
   }
-  const count =
-    value.status.length +
-    value.level.length +
-    value.targetType.length +
-    Number(Boolean(value.siteId)) +
-    Number(Boolean(value.start)) +
-    Number(Boolean(value.end))
   return (
-    <Sheet onOpenChange={setOpen} open={open}>
-      <Button onClick={() => setOpen(true)} variant='outline'>
-        <HugeiconsIcon icon={FilterIcon} strokeWidth={2} />
-        {t('alerts.filters.title')}
-        {count > 0 && <span className='text-xs'>({count})</span>}
-      </Button>
-      <SheetContent>
-        <SheetHeader>
-          <SheetTitle>{t('alerts.filters.title')}</SheetTitle>
-          <SheetDescription>{t('alerts.filters.description')}</SheetDescription>
-        </SheetHeader>
-        <div className='grid gap-4 sm:grid-cols-2'>
-          <fieldset className='grid gap-1'>
-            <legend className='mb-1 text-sm font-medium'>
-              {t('alerts.table.status')}
-            </legend>
-            {alertStatuses.map((status) => (
-              <label
-                className='hover:bg-muted flex min-h-10 items-center gap-2 rounded-md px-2 text-sm'
-                key={status}
-              >
-                <input
-                  checked={draft.status.includes(status)}
-                  className='accent-primary size-4'
-                  onChange={() => toggle('status', status)}
-                  type='checkbox'
-                />
-                {alertStatusText(t, status)}
-              </label>
-            ))}
-          </fieldset>
-          <fieldset className='grid gap-1'>
-            <legend className='mb-1 text-sm font-medium'>
-              {t('alerts.table.level')}
-            </legend>
-            {alertLevels.map((level) => (
-              <label
-                className='hover:bg-muted flex min-h-10 items-center gap-2 rounded-md px-2 text-sm'
-                key={level}
-              >
-                <input
-                  checked={draft.level.includes(level)}
-                  className='accent-primary size-4'
-                  onChange={() => toggle('level', level)}
-                  type='checkbox'
-                />
-                {alertLevelText(t, level)}
-              </label>
-            ))}
-          </fieldset>
-          <fieldset className='grid gap-1'>
-            <legend className='mb-1 text-sm font-medium'>
-              {t('alerts.filters.targetType')}
-            </legend>
-            {alertTargetTypes.map((targetType) => (
-              <label
-                className='hover:bg-muted flex min-h-10 items-center gap-2 rounded-md px-2 text-sm'
-                key={targetType}
-              >
-                <input
-                  checked={draft.targetType.includes(targetType)}
-                  className='accent-primary size-4'
-                  onChange={() => toggle('targetType', targetType)}
-                  type='checkbox'
-                />
-                {alertTargetTypeText(t, targetType)}
-              </label>
-            ))}
-          </fieldset>
+    <FilterPanel
+      advanced={
+        <div className='flex flex-wrap items-end gap-2'>
           <FormField
             htmlFor='alerts-filter-site'
             label={t('alerts.table.site')}
@@ -214,55 +130,93 @@ export function AlertFilters({
               className='min-w-0'
               id='alerts-filter-end'
               onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  end: event.target.value,
-                }))
+                setDraft((current) => ({ ...current, end: event.target.value }))
               }
               type='datetime-local'
               value={draft.end}
             />
           </FormField>
         </div>
-        <div className='border-border mt-4 flex flex-wrap gap-2 border-t pt-4'>
-          <Button
-            onClick={() => {
-              setDraft({
-                end: '',
-                level: [],
-                start: '',
-                status: [],
-                targetType: [],
-              })
-              setRangeError(false)
-            }}
-            variant='outline'
-          >
-            {t('common.reset')}
-          </Button>
-          <Button
-            onClick={() => {
-              const start = timestamp(draft.start)
-              const end = timestamp(draft.end)
-              if (start != null && end != null && start >= end) {
-                setRangeError(true)
-                return
-              }
-              onApply({
-                end,
-                level: draft.level,
-                siteId: draft.siteId,
-                start,
-                status: draft.status,
-                targetType: draft.targetType,
-              })
-              setOpen(false)
-            }}
-          >
-            {t('common.apply')}
-          </Button>
-        </div>
-      </SheetContent>
-    </Sheet>
+      }
+      description={t('alerts.filters.description')}
+      hasAdvancedActive={Boolean(value.siteId || value.start || value.end)}
+      onApply={() => {
+        const start = timestamp(draft.start)
+        const end = timestamp(draft.end)
+        if (start != null && end != null && start >= end) {
+          setRangeError(true)
+          return
+        }
+        onApply({
+          end,
+          level: draft.level,
+          siteId: draft.siteId,
+          start,
+          status: draft.status,
+          targetType: draft.targetType,
+        })
+      }}
+      onReset={() => {
+        setDraft({ end: '', level: [], start: '', status: [], targetType: [] })
+        setRangeError(false)
+      }}
+      title={t('alerts.filters.title')}
+    >
+      <div className='grid w-full gap-3 lg:grid-cols-3'>
+        <fieldset className='min-w-0'>
+          <legend className='mb-1 text-sm'>{t('alerts.table.status')}</legend>
+          <div className='flex flex-wrap gap-1.5'>
+            {alertStatuses.map((status) => (
+              <label
+                className='hover:bg-muted flex min-h-10 items-center gap-2 rounded-md border px-2.5 text-sm'
+                key={status}
+              >
+                <Checkbox
+                  checked={draft.status.includes(status)}
+                  onCheckedChange={() => toggle('status', status)}
+                />
+                {alertStatusText(t, status)}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <fieldset className='min-w-0'>
+          <legend className='mb-1 text-sm'>{t('alerts.table.level')}</legend>
+          <div className='flex flex-wrap gap-1.5'>
+            {alertLevels.map((level) => (
+              <label
+                className='hover:bg-muted flex min-h-10 items-center gap-2 rounded-md border px-2.5 text-sm'
+                key={level}
+              >
+                <Checkbox
+                  checked={draft.level.includes(level)}
+                  onCheckedChange={() => toggle('level', level)}
+                />
+                {alertLevelText(t, level)}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <fieldset className='min-w-0'>
+          <legend className='mb-1 text-sm'>
+            {t('alerts.filters.targetType')}
+          </legend>
+          <div className='flex flex-wrap gap-1.5'>
+            {alertTargetTypes.map((targetType) => (
+              <label
+                className='hover:bg-muted flex min-h-10 items-center gap-2 rounded-md border px-2.5 text-sm'
+                key={targetType}
+              >
+                <Checkbox
+                  checked={draft.targetType.includes(targetType)}
+                  onCheckedChange={() => toggle('targetType', targetType)}
+                />
+                {alertTargetTypeText(t, targetType)}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      </div>
+    </FilterPanel>
   )
 }

@@ -14,8 +14,9 @@ function params(values: PricingCatalogQueryParams, forcedSite = false) {
   result.set('p', String(values.p))
   result.set('page_size', String(values.page_size))
   if (!forcedSite) {
-    for (const siteId of values.site_ids ?? [])
+    for (const siteId of values.site_ids ?? []) {
       result.append('site_ids', siteId)
+    }
   }
   for (const state of values.states ?? []) result.append('states', state)
   if (values.keyword) result.set('keyword', values.keyword)

@@ -22,8 +22,9 @@ describe('system task frontend is passive and uses no private task fields', () =
       ['credential'].join('_'),
       ['payload'].join('_'),
       ['private', 'data'].join('_'),
-    ])
+    ]) {
       expect(source).not.toContain(field)
+    }
     expect(source).not.toMatch(/method:\s*['"](?:post|put|patch|delete)['"]/)
     expect(source).not.toMatch(/system-tasks\/\$\{|system-tasks\/\d/)
   })

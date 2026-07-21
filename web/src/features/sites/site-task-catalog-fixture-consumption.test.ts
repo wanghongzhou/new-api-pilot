@@ -5,10 +5,8 @@ import {
   collectionTaskCatalog,
   collectionTaskTypes,
   fastCollectionTaskTypes,
-} from './constants'
-import type {
-  CollectionTaskCategory,
-  CollectionTaskTriggerClass,
+  type CollectionTaskCategory,
+  type CollectionTaskTriggerClass,
 } from './constants'
 import type { CollectionTaskType } from './types'
 

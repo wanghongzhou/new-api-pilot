@@ -12,13 +12,7 @@ import {
 } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import type { ColumnDef, SortingState } from '@tanstack/react-table'
-import {
-  useEffect,
-  useMemo,
-  useState,
-  type CompositionEvent,
-  type ReactNode,
-} from 'react'
+import { useEffect, useMemo, useState, type CompositionEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -29,6 +23,7 @@ import { SiteStatusBadges } from '@/components/data/site-status-badges'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
+import { DataTablePagination } from '@/components/ui/data-table-pagination'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
@@ -83,7 +78,7 @@ function CardGridState({
     return (
       <div
         aria-hidden='true'
-        className='grid gap-4 min-[1440px]:grid-cols-4 sm:grid-cols-2 lg:grid-cols-3'
+        className='grid gap-4 min-[1800px]:grid-cols-5 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'
       >
         {Array.from({ length: 6 }, (_, index) => (
           <div
@@ -131,7 +126,7 @@ function CardGridState({
           {t('table.refreshing')}
         </div>
       )}
-      <div className='grid min-w-0 gap-4 min-[1440px]:grid-cols-4 sm:grid-cols-2 lg:grid-cols-3'>
+      <div className='grid min-w-0 gap-4 min-[1800px]:grid-cols-5 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'>
         {items.map((site) => (
           <SiteCard
             isAdmin={isAdmin}
@@ -141,28 +136,6 @@ function CardGridState({
           />
         ))}
       </div>
-    </div>
-  )
-}
-
-function PageFooter({
-  children,
-  page,
-  pageSize,
-  total,
-}: {
-  children: ReactNode
-  page: number
-  pageSize: number
-  total: number
-}) {
-  if (total === 0) return null
-  return (
-    <div className='border-border flex flex-wrap items-center justify-between gap-3 border-t pt-3'>
-      <span className='text-muted-foreground text-sm'>
-        {`${page}/${Math.max(1, Math.ceil(total / pageSize))}`}
-      </span>
-      {children}
     </div>
   )
 }
@@ -218,7 +191,6 @@ export function SitesPage({
   const pageData = sitesQuery.data
   const items = pageData?.items ?? []
   const total = pageData?.total ?? 0
-  const pages = Math.max(1, Math.ceil(total / search.pageSize))
 
   const invalidateSites = () => {
     void queryClient.invalidateQueries({ queryKey: siteKeys.all })
@@ -431,32 +403,6 @@ export function SitesPage({
     setDialogState({ action, site })
   }
 
-  const pagination = (
-    <div className='flex items-center gap-2'>
-      <Button
-        aria-label={t('table.previous')}
-        disabled={search.page <= 1}
-        onClick={() => onSearchChange({ page: search.page - 1 })}
-        size='sm'
-        variant='outline'
-      >
-        {t('table.previous')}
-      </Button>
-      <span className='min-w-20 text-center text-sm'>
-        {t('table.page', { page: search.page, pages })}
-      </span>
-      <Button
-        aria-label={t('table.next')}
-        disabled={search.page >= pages}
-        onClick={() => onSearchChange({ page: search.page + 1 })}
-        size='sm'
-        variant='outline'
-      >
-        {t('table.next')}
-      </Button>
-    </div>
-  )
-
   return (
     <SectionPageLayout
       actions={
@@ -484,11 +430,11 @@ export function SitesPage({
       description={t('sites.description')}
       title={t('sites.title')}
     >
-      <div className='grid min-w-0 gap-4'>
-        <div className='flex flex-wrap items-center gap-2'>
+      <div className='grid min-w-0 gap-5'>
+        <div className='flex min-w-0 items-center gap-2'>
           <Input
             aria-label={t('sites.search')}
-            className='min-w-0 flex-1 sm:max-w-sm'
+            className='min-w-0 flex-1 sm:max-w-xl'
             onChange={(event) => setDraftFilter(event.target.value)}
             onCompositionEnd={(event: CompositionEvent<HTMLInputElement>) => {
               setComposing(false)
@@ -498,13 +444,15 @@ export function SitesPage({
             placeholder={t('sites.searchPlaceholder')}
             value={draftFilter}
           />
-          <SiteFilters
-            onApply={(filters) => onSearchChange({ ...filters, page: 1 })}
-            value={search}
-          />
+        </div>
+        <SiteFilters
+          onApply={(filters) => onSearchChange({ ...filters, page: 1 })}
+          value={search}
+        />
+        <div className='flex justify-end'>
           <div
             aria-label={t('sites.viewMode')}
-            className='border-border ml-auto flex rounded-md border p-0.5'
+            className='border-border flex w-fit rounded-md border p-0.5'
             role='group'
           >
             <Button
@@ -540,13 +488,15 @@ export function SitesPage({
               onCreate={() => setOnboardingOpen(true)}
               onRetry={() => void sitesQuery.refetch()}
             />
-            <PageFooter
+            <DataTablePagination
+              onPageChange={(page) => onSearchChange({ page })}
+              onPageSizeChange={(pageSize) =>
+                onSearchChange({ page: 1, pageSize })
+              }
               page={search.page}
               pageSize={search.pageSize}
               total={total}
-            >
-              {pagination}
-            </PageFooter>
+            />
           </>
         ) : (
           <DataTable
@@ -566,6 +516,9 @@ export function SitesPage({
             fetching={sitesQuery.isFetching}
             loading={sitesQuery.isPending}
             onPageChange={(page) => onSearchChange({ page })}
+            onPageSizeChange={(pageSize) =>
+              onSearchChange({ page: 1, pageSize })
+            }
             onRetry={() => void sitesQuery.refetch()}
             onSortingChange={updateSorting}
             page={search.page}

@@ -22,23 +22,31 @@ func decodeUpstreamEnvelope(payload []byte, destination any) error {
 		return decoder.decodeUpstreamResponse(payload)
 	}
 	if err := validateStrictJSONFor(payload, upstreamEnvelope{}); err != nil {
-		return newUpstreamRequestError(UpstreamErrorResponseInvalid)
+		return newUpstreamRequestErrorWithDetail(UpstreamErrorResponseInvalid, "invalid_envelope_json")
 	}
 	var envelope upstreamEnvelope
 	if err := json.Unmarshal(payload, &envelope); err != nil {
-		return newUpstreamRequestError(UpstreamErrorEnvelopeInvalid)
+		return newUpstreamRequestErrorWithDetail(UpstreamErrorEnvelopeInvalid, "invalid_envelope_json")
 	}
-	if envelope.Success == nil || envelope.Message == nil || !*envelope.Success {
-		return newUpstreamRequestError(UpstreamErrorEnvelopeInvalid)
+	if envelope.Success == nil {
+		return newUpstreamRequestErrorWithDetail(UpstreamErrorEnvelopeInvalid, "missing_success")
+	}
+	if envelope.Message == nil {
+		return newUpstreamRequestErrorWithDetail(UpstreamErrorEnvelopeInvalid, "missing_message")
+	}
+	if !*envelope.Success {
+		// Upstream messages are deliberately not retained: they are untrusted and
+		// may echo credentials, webhook URLs, or other site secrets.
+		return newUpstreamRequestErrorWithDetail(UpstreamErrorEnvelopeInvalid, "success_false")
 	}
 	if len(envelope.Data) == 0 || bytes.Equal(bytes.TrimSpace(envelope.Data), []byte("null")) {
-		return newUpstreamRequestError(UpstreamErrorEnvelopeInvalid)
+		return newUpstreamRequestErrorWithDetail(UpstreamErrorEnvelopeInvalid, "missing_data")
 	}
 	if err := validateStrictJSONFor(envelope.Data, destination); err != nil {
-		return newUpstreamRequestError(UpstreamErrorResponseInvalid)
+		return newUpstreamRequestErrorWithDetail(UpstreamErrorResponseInvalid, "invalid_data_json")
 	}
 	if err := json.Unmarshal(envelope.Data, destination); err != nil {
-		return newUpstreamRequestError(UpstreamErrorResponseInvalid)
+		return newUpstreamRequestErrorWithDetail(UpstreamErrorResponseInvalid, "invalid_data_schema")
 	}
 	return nil
 }

@@ -4,15 +4,15 @@ go 1.25.1
 
 require (
 	github.com/gin-gonic/gin v1.9.1
-	github.com/go-sql-driver/mysql v1.6.0
+	github.com/go-sql-driver/mysql v1.7.0
 	github.com/joho/godotenv v1.5.1
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/common v0.66.1
 	github.com/redis/go-redis/v9 v9.7.0
 	github.com/xuri/excelize/v2 v2.10.0
-	golang.org/x/crypto v0.43.0
-	golang.org/x/net v0.46.0
-	golang.org/x/sys v0.37.0
+	golang.org/x/crypto v0.52.0
+	golang.org/x/net v0.55.0
+	golang.org/x/sys v0.45.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/mysql v1.4.3
 	gorm.io/gorm v1.25.2
@@ -52,6 +52,6 @@ require (
 	github.com/xuri/nfp v0.0.2-0.20250530014748-2ddeb826f9a9 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	golang.org/x/arch v0.3.0 // indirect
-	golang.org/x/text v0.30.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 	google.golang.org/protobuf v1.36.8 // indirect
 )

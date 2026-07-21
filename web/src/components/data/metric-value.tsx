@@ -12,8 +12,9 @@ export function MetricValue({
   value: DecimalString | MetricString | null
 }) {
   const { t } = useTranslation()
-  if (value == null)
+  if (value == null) {
     return <span>{nullLabel ?? t('data.unavailableValue')}</span>
+  }
 
   let display: string = value
   try {

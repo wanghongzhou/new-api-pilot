@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 
 import { DataStatusBadge } from '@/components/data/data-status'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -159,13 +160,10 @@ export function ExportDialog({
               </p>
             </div>
             <label className='flex min-h-10 items-start gap-3 text-sm'>
-              <input
+              <Checkbox
                 checked={incompleteConfirmed}
-                className='accent-primary mt-0.5 size-4'
-                onChange={(event) =>
-                  setIncompleteConfirmed(event.target.checked)
-                }
-                type='checkbox'
+                className='mt-0.5'
+                onCheckedChange={setIncompleteConfirmed}
               />
               <span>{t('statistics.export.incomplete.confirm')}</span>
             </label>

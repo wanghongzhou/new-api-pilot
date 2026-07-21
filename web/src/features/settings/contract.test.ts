@@ -7,12 +7,19 @@ import {
   getMinuteRetentionDays,
   settingFieldDefinitions,
 } from './contract'
-import type { SettingGroup, SettingsFormValues } from './types'
-import { platformSettingKeys } from './types'
+import {
+  platformSettingKeys,
+  type SettingGroup,
+  type SettingsFormValues,
+} from './types'
 
 const validValues: SettingsFormValues = {
   usageDelayMinutes: '5',
   minuteRetentionDays: '90',
+  logRetentionDays: '30',
+  performanceRetentionDays: '90',
+  taskRetentionDays: '90',
+  systemTaskTerminalRetentionDays: '90',
   probeConcurrency: '20',
   realtimeConcurrency: '10',
   resourceConcurrency: '10',
@@ -63,13 +70,13 @@ function groupsFixture(retentionValue: unknown = 90): SettingGroup[] {
 }
 
 describe('settings frontend contract', () => {
-  test('covers each of the 22 persisted settings exactly once', () => {
-    expect(platformSettingKeys).toHaveLength(22)
-    expect(new Set(platformSettingKeys).size).toBe(22)
+  test('covers each of the 26 persisted settings exactly once', () => {
+    expect(platformSettingKeys).toHaveLength(26)
+    expect(new Set(platformSettingKeys).size).toBe(26)
     const renderedPersistedKeys = settingFieldDefinitions
       .map((definition) => definition.key)
       .filter((key) => key !== 'system.public_origin')
-    expect(new Set(renderedPersistedKeys).size).toBe(22)
+    expect(new Set(renderedPersistedKeys).size).toBe(26)
     expect([...renderedPersistedKeys].sort()).toEqual(
       [...platformSettingKeys].sort()
     )

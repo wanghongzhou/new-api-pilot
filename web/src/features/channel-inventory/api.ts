@@ -7,6 +7,7 @@ import type {
   ChannelInventoryStatisticsQueryParams,
   ChannelInventoryStatisticsResponse,
 } from './types'
+
 function append(
   p: URLSearchParams,
   k: string,
@@ -27,10 +28,12 @@ function listParams(v: ChannelInventoryQueryParams) {
   if (v.keyword) p.set('keyword', v.keyword)
   if (v.min_balance) p.set('min_balance', v.min_balance)
   if (v.max_balance) p.set('max_balance', v.max_balance)
-  if (v.min_response_time_ms)
+  if (v.min_response_time_ms) {
     p.set('min_response_time_ms', v.min_response_time_ms)
-  if (v.max_response_time_ms)
+  }
+  if (v.max_response_time_ms) {
     p.set('max_response_time_ms', v.max_response_time_ms)
+  }
   return p
 }
 function statParams(v: ChannelInventoryStatisticsQueryParams) {

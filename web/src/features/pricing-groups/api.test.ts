@@ -90,7 +90,8 @@ describe('pricing/group API contract', () => {
       '/api/sites/9007199254740993/pricing-catalog/statistics',
       '/api/sites/9007199254740993/group-catalog',
     ])
-    for (const request of requests)
+    for (const request of requests) {
       expect((request.params as URLSearchParams).has('site_ids')).toBe(false)
+    }
   })
 })

@@ -181,19 +181,22 @@ async function mockDashboard(page: Page) {
 }
 
 async function followAppNavigation(page: Page, name: string) {
-  const mobileNavigationButton = page.getByRole('button', {
-    name: '打开导航',
-  })
-  if (await mobileNavigationButton.isVisible()) {
-    await mobileNavigationButton.click()
-    await page
-      .getByRole('dialog', { name: '主导航' })
-      .getByRole('link', { name, exact: true })
-      .click()
+  const directLink = page
+    .getByRole('navigation', { name: '主导航' })
+    .getByRole('link', { name, exact: true })
+  if (await directLink.isVisible()) {
+    await directLink.click()
     return
   }
 
-  await page.getByRole('link', { name, exact: true }).click()
+  const mobileNavigationButton = page.getByRole('button', {
+    name: '打开导航',
+  })
+  await mobileNavigationButton.click()
+  await page
+    .getByRole('dialog', { name: '主导航' })
+    .getByRole('link', { name, exact: true })
+    .click()
 }
 
 test('signs in, enforces password change, and keeps passwords out of storage', async ({
@@ -513,12 +516,23 @@ test('keeps the current user identity in sync after editing it', async ({
   await dialog.getByRole('button', { name: '保存更改', exact: true }).click()
 
   expect(updateHeader).toBe(admin.id)
-  const visibleUpdatedName = page
-    .getByText('值班管理员', { exact: true })
-    .filter({ visible: true })
-  const mobileNavigation = page.getByRole('button', { name: '打开导航' })
-  if (await mobileNavigation.isVisible()) await mobileNavigation.click()
-  await expect(visibleUpdatedName.first()).toBeVisible()
+  const profileTrigger = page.getByRole('button', { name: '值班管理员' })
+  const triggerAvatar = profileTrigger.locator('[data-slot="avatar"]')
+  await expect(triggerAvatar).toHaveCSS('width', '24px')
+  await expect(
+    triggerAvatar.locator('[data-slot="avatar-fallback"]')
+  ).toHaveText('A')
+
+  await profileTrigger.click()
+  const profileMenu = page.getByRole('menu')
+  await expect(
+    profileMenu.getByText('值班管理员', { exact: true })
+  ).toBeVisible()
+  await expect(profileMenu.getByText('管理员', { exact: true })).toBeVisible()
+  await expect(profileMenu.locator('[data-slot="avatar"]')).toHaveCSS(
+    'width',
+    '32px'
+  )
   const stored = await page.evaluate(
     ({ authKey, uidKey }) => ({
       auth: JSON.parse(window.localStorage.getItem(authKey) ?? 'null'),
@@ -594,7 +608,8 @@ test('sends the user header on logout and clears it with the session', async ({
   })
 
   await page.goto('/dashboard')
-  await page.getByRole('button', { name: '退出登录', exact: true }).click()
+  await page.getByRole('button', { name: admin.display_name }).click()
+  await page.getByRole('menuitem', { name: '退出登录', exact: true }).click()
   await expect(page).toHaveURL(/\/sign-in$/)
   expect(logoutUserHeader).toBe(admin.id)
   const storage = await page.evaluate(
@@ -698,11 +713,8 @@ test('keeps the 375px workspace within the viewport and exposes mobile navigatio
   )
   expect(horizontalOverflow).toBe(false)
   await expect(
-    page.getByRole('button', { name: '筛选用户', exact: true })
-  ).toBeVisible()
-  await expect(
     page.getByLabel('按角色筛选', { exact: true }).filter({ visible: true })
-  ).toHaveCount(0)
+  ).toBeVisible()
 
   await page.getByRole('button', { name: '打开导航' }).click()
   await expect(page.getByRole('dialog', { name: '主导航' })).toBeVisible()

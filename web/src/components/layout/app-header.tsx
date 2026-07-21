@@ -1,102 +1,115 @@
-import {
-  FileExportIcon,
-  Key01Icon,
-  Logout01Icon,
-  Menu02Icon,
-  Moon02Icon,
-  Sun01Icon,
-} from '@hugeicons/core-free-icons'
+import { Menu } from '@base-ui/react/menu'
+import { Key01Icon, Logout01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { Link } from '@tanstack/react-router'
+import { useRouter } from '@tanstack/react-router'
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { useTheme } from '@/context/theme-provider'
 import type { LoginUser } from '@/features/auth/types'
-import { dynamicI18nKey } from '@/i18n/dynamic-keys'
+import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
 
-import { Button, buttonVariants } from '../ui/button'
+import { Avatar, AvatarFallback } from '../ui/avatar'
+import { buttonVariants } from '../ui/button'
 import { Brand } from './brand'
+import { Header } from './header'
+import { ThemeSettingsDrawer } from './theme-settings-drawer'
 
 export function AppHeader({
   isLoggingOut,
   onLogout,
-  onOpenMenu,
   showMenu = true,
   user,
 }: {
   isLoggingOut: boolean
   onLogout: () => void
-  onOpenMenu: () => void
   showMenu?: boolean
   user: LoginUser
 }) {
   const { t } = useTranslation()
-  const { resolvedTheme, setPreference } = useTheme()
-  const nextTheme = resolvedTheme === 'dark' ? 'light' : 'dark'
-  const themeLabel =
-    nextTheme === 'dark' ? 'Switch to dark theme' : 'Switch to light theme'
+  const router = useRouter()
+  const avatarName = user.username || user.display_name
+  const avatarFallback = getUserAvatarFallback(avatarName)
+  const avatarFallbackStyle = useMemo(
+    () => getUserAvatarStyle(avatarName),
+    [avatarName]
+  )
+  const roleLabel =
+    user.role === 'admin' ? t('user.role.admin') : t('user.role.viewer')
 
   return (
-    <header className='bg-background flex h-14 shrink-0 items-center gap-2 border-b px-2 sm:px-4'>
-      {showMenu && (
-        <Button
-          aria-label={t('Open navigation')}
-          className='lg:hidden'
-          onClick={onOpenMenu}
-          size='icon'
-          title={t('Open navigation')}
-          variant='ghost'
-        >
-          <HugeiconsIcon icon={Menu02Icon} strokeWidth={2} />
-        </Button>
-      )}
-      <div className='lg:hidden'>
-        <Brand compact />
+    <Header showTrigger={showMenu}>
+      <Brand variant='inline' />
+      <div className='ms-auto flex items-center gap-1 sm:gap-2'>
+        <ThemeSettingsDrawer />
+        <Menu.Root>
+          <Menu.Trigger
+            aria-label={user.display_name}
+            className={buttonVariants({
+              className: 'relative size-6 p-0',
+              variant: 'ghost',
+            })}
+            title={user.display_name}
+          >
+            <Avatar className='size-6'>
+              <AvatarFallback
+                className='text-[11px] font-semibold text-white'
+                style={avatarFallbackStyle}
+              >
+                {avatarFallback}
+              </AvatarFallback>
+            </Avatar>
+          </Menu.Trigger>
+          <Menu.Portal>
+            <Menu.Positioner align='end' sideOffset={8}>
+              <Menu.Popup className='bg-popover text-popover-foreground ring-foreground/10 z-50 w-56 rounded-lg p-1 shadow-md ring-1 outline-none'>
+                <div className='flex items-center gap-2 px-1.5 py-1.5'>
+                  <Avatar className='size-8'>
+                    <AvatarFallback
+                      className='text-xs font-semibold text-white'
+                      style={avatarFallbackStyle}
+                    >
+                      {avatarFallback}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className='flex min-w-0 flex-1 flex-col gap-0.5 overflow-hidden'>
+                    <p className='text-foreground truncate text-sm font-medium'>
+                      {user.display_name}
+                    </p>
+                    <span className='text-muted-foreground truncate text-xs'>
+                      {roleLabel}
+                    </span>
+                  </div>
+                </div>
+                <div className='bg-border -mx-1 my-1 h-px' />
+                {!user.must_change_password && (
+                  <Menu.Item
+                    className='data-highlighted:bg-accent data-highlighted:text-accent-foreground flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-sm outline-none'
+                    onClick={() =>
+                      void router.navigate({ to: '/change-password' })
+                    }
+                  >
+                    <HugeiconsIcon icon={Key01Icon} size={16} strokeWidth={2} />
+                    {t('Change password')}
+                  </Menu.Item>
+                )}
+                <div className='bg-border -mx-1 my-1 h-px' />
+                <Menu.Item
+                  className='data-highlighted:bg-destructive/10 text-destructive flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-sm outline-none'
+                  disabled={isLoggingOut}
+                  onClick={onLogout}
+                >
+                  <HugeiconsIcon
+                    icon={Logout01Icon}
+                    size={16}
+                    strokeWidth={2}
+                  />
+                  {t('Sign out')}
+                </Menu.Item>
+              </Menu.Popup>
+            </Menu.Positioner>
+          </Menu.Portal>
+        </Menu.Root>
       </div>
-      <div className='flex-1' />
-      <Link
-        aria-label={t('exports.open')}
-        className={buttonVariants({ size: 'icon', variant: 'ghost' })}
-        title={t('exports.open')}
-        to='/exports'
-      >
-        <HugeiconsIcon icon={FileExportIcon} strokeWidth={2} />
-      </Link>
-      {!user.must_change_password && (
-        <Link
-          aria-label={t('Change password')}
-          className={buttonVariants({ size: 'icon', variant: 'ghost' })}
-          title={t('Change password')}
-          to='/change-password'
-        >
-          <HugeiconsIcon icon={Key01Icon} strokeWidth={2} />
-        </Link>
-      )}
-      <Button
-        aria-label={t(dynamicI18nKey('layout', themeLabel))}
-        onClick={() => setPreference(nextTheme)}
-        size='icon'
-        title={t(dynamicI18nKey('layout', themeLabel))}
-        variant='ghost'
-      >
-        <HugeiconsIcon
-          icon={resolvedTheme === 'dark' ? Sun01Icon : Moon02Icon}
-          strokeWidth={2}
-        />
-      </Button>
-      <span className='text-muted-foreground hidden max-w-36 truncate text-sm sm:inline'>
-        {user.display_name}
-      </span>
-      <Button
-        aria-label={t('Sign out')}
-        disabled={isLoggingOut}
-        onClick={onLogout}
-        size='icon'
-        title={t('Sign out')}
-        variant='ghost'
-      >
-        <HugeiconsIcon icon={Logout01Icon} strokeWidth={2} />
-      </Button>
-    </header>
+    </Header>
   )
 }

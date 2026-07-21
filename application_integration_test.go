@@ -23,6 +23,7 @@ import (
 	"new-api-pilot/dto"
 	"new-api-pilot/model"
 	testsupport "new-api-pilot/tests/support"
+	"new-api-pilot/worker"
 )
 
 const applicationIntegrationLock = "new-api-pilot-application-integration"
@@ -69,8 +70,32 @@ func TestBootstrapApplicationRegistersSettingsNotificationsAndCompositeRuntime(t
 		}
 	}
 	group, ok := app.runtime.(*runtimeGroup)
-	if !ok || len(group.components) != 5 {
+	if !ok || len(group.components) != 6 {
 		t.Fatalf("application runtime = %#v", app.runtime)
+	}
+	runtimeTypes := map[string]bool{}
+	for _, component := range group.components {
+		switch component.(type) {
+		case *worker.Runtime:
+			runtimeTypes["collection"] = true
+		case *worker.AlertRuntime:
+			runtimeTypes["alert"] = true
+		case *worker.ExportRuntime:
+			runtimeTypes["export"] = true
+		case *worker.ResourceRetentionRuntime:
+			runtimeTypes["resource_retention"] = true
+		case *worker.UpstreamLogRetentionRuntime:
+			runtimeTypes["upstream_log_retention"] = true
+		case *worker.DataMaintenanceRuntime:
+			runtimeTypes["data_maintenance"] = true
+		}
+	}
+	for _, name := range []string{
+		"collection", "alert", "export", "resource_retention", "upstream_log_retention", "data_maintenance",
+	} {
+		if !runtimeTypes[name] {
+			t.Errorf("application runtime is missing %s", name)
+		}
 	}
 	assertApplicationReadiness(t, app.Handler, http.StatusServiceUnavailable)
 }

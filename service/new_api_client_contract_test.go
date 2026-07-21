@@ -56,6 +56,21 @@ func TestStrictUpstreamJSON(t *testing.T) {
 	}
 }
 
+func TestFailedUpstreamEnvelopeDoesNotRetainUntrustedMessage(t *testing.T) {
+	const secret = "site-token-must-not-survive"
+	err := decodeUpstreamEnvelope(
+		[]byte(`{"success":false,"message":"`+secret+`","data":{}}`),
+		&dto.UpstreamStatus{},
+	)
+	var requestError *UpstreamRequestError
+	if !errors.As(err, &requestError) {
+		t.Fatalf("failed envelope error = %T, want *UpstreamRequestError", err)
+	}
+	if strings.Contains(requestError.Detail, secret) || requestError.Detail != "success_false" {
+		t.Fatalf("failed envelope retained untrusted message: %#v", requestError)
+	}
+}
+
 func TestSnapshotUsersRejectsInventoryOverLimitBeforeSecondPage(t *testing.T) {
 	var hits atomic.Int64
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {

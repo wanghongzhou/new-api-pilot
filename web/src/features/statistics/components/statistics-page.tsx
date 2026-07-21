@@ -98,10 +98,10 @@ function ScopeNavigation({ scope }: { scope: StatisticsScope }) {
     >
       {scopeLinks.map(([value, to]) => (
         <Link
-          className={buttonVariants({
+          className={`${buttonVariants({
             size: 'sm',
             variant: scope === value ? 'secondary' : 'ghost',
-          })}
+          })} statistics-scope-link`}
           key={value}
           search={buildStatisticsSearch({})}
           to={to}
@@ -494,6 +494,7 @@ function BreakdownTable({
       emptyDescription={emptyCopy.description}
       emptyTitle={emptyCopy.title}
       onPageChange={(page) => onSearchChange({ page })}
+      onPageSizeChange={(pageSize) => onSearchChange({ page: 1, pageSize })}
       onSortingChange={updateSorting}
       page={search.page}
       pageSize={search.pageSize}
@@ -701,15 +702,13 @@ export function StatisticsPage({
         <ScopeNavigation scope={scope} />
         <StatisticsToolbar
           exportDisabled={!data || rangeTransition}
-          filterAction={
-            <StatisticsFilters
-              onApply={onSearchChange}
-              scope={scope}
-              search={search}
-            />
-          }
           onExportOpen={() => data && setExportDraft(true)}
           onSearchChange={onSearchChange}
+          search={search}
+        />
+        <StatisticsFilters
+          onApply={onSearchChange}
+          scope={scope}
           search={search}
         />
         {body}

@@ -1,16 +1,8 @@
-import { FilterIcon } from '@hugeicons/core-free-icons'
-import { HugeiconsIcon } from '@hugeicons/react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { Button } from '@/components/ui/button'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
+import { FilterPanel } from '@/components/data/filter-panel'
+import { NativeSelect as Select } from '@/components/ui/native-select'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 
 import {
@@ -24,10 +16,13 @@ import type { SiteSearch } from '../types'
 
 type FilterKey = 'management' | 'online' | 'auth' | 'statistics' | 'health'
 
-const groups = [
-  ['management', siteManagementStatuses],
+const primaryGroups = [
   ['online', siteOnlineStatuses],
   ['auth', siteAuthStatuses],
+] as const
+
+const advancedGroups = [
+  ['management', siteManagementStatuses],
   ['statistics', siteStatisticsStatuses],
   ['health', siteHealthStatuses],
 ] as const
@@ -42,88 +37,65 @@ export function SiteFilters({
   value: FilterState
 }) {
   const { t } = useTranslation()
-  const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState<FilterState>(value)
   useEffect(() => {
-    if (open) setDraft(value)
-  }, [open, value])
+    setDraft(value)
+  }, [value])
   const count = useMemo(
     () => Object.values(value).reduce((sum, items) => sum + items.length, 0),
     [value]
   )
 
-  const toggle = (group: FilterKey, item: string) => {
-    setDraft((current) => {
-      const values = current[group] as string[]
-      const next = values.includes(item)
-        ? values.filter((value) => value !== item)
-        : [...values, item]
-      return { ...current, [group]: next }
-    })
-  }
+  const renderGroups = (
+    groups: readonly (readonly [FilterKey, readonly string[]])[]
+  ) =>
+    groups.map(([group, statuses]) => (
+      <label className='grid w-full gap-1 text-sm sm:w-52' key={group}>
+        <span>{t(dynamicI18nKey('site', `site.filters.${group}`))}</span>
+        <Select
+          onChange={(event) =>
+            setDraft((current) => ({
+              ...current,
+              [group]: event.target.value ? [event.target.value] : [],
+            }))
+          }
+          value={(draft[group] as string[])[0] ?? ''}
+        >
+          <option value=''>{t('common.all')}</option>
+          {statuses.map((status) => (
+            <option key={status} value={status}>
+              {t(dynamicI18nKey('site', `site.${group}.${status}`))}
+            </option>
+          ))}
+        </Select>
+      </label>
+    ))
 
   return (
-    <Sheet onOpenChange={setOpen} open={open}>
-      <Button onClick={() => setOpen(true)} type='button' variant='outline'>
-        <HugeiconsIcon icon={FilterIcon} strokeWidth={2} />
-        {t('site.filters.title')}
-        {count > 0 && <span className='text-xs'>({count})</span>}
-      </Button>
-      <SheetContent>
-        <SheetHeader>
-          <SheetTitle>{t('site.filters.title')}</SheetTitle>
-          <SheetDescription>{t('site.filters.description')}</SheetDescription>
-        </SheetHeader>
-        <div className='grid gap-5 sm:grid-cols-2'>
-          {groups.map(([group, statuses]) => (
-            <fieldset className='grid gap-1' key={group}>
-              <legend className='mb-1 text-sm font-medium'>
-                {t(dynamicI18nKey('site', `site.filters.${group}`))}
-              </legend>
-              {statuses.map((status) => (
-                <label
-                  className='hover:bg-muted flex min-h-10 items-center gap-2 rounded-md px-2 text-sm'
-                  key={status}
-                >
-                  <input
-                    checked={(draft[group] as string[]).includes(status)}
-                    className='accent-primary size-4'
-                    onChange={() => toggle(group, status)}
-                    type='checkbox'
-                  />
-                  {t(dynamicI18nKey('site', `site.${group}.${status}`))}
-                </label>
-              ))}
-            </fieldset>
-          ))}
+    <FilterPanel
+      advanced={
+        <div className='flex flex-wrap items-end gap-2'>
+          {renderGroups(advancedGroups)}
         </div>
-        <div className='border-border mt-2 flex flex-col-reverse gap-2 border-t pt-4 sm:flex-row sm:justify-end'>
-          <Button
-            onClick={() =>
-              setDraft({
-                auth: [],
-                health: [],
-                management: [],
-                online: [],
-                statistics: [],
-              })
-            }
-            type='button'
-            variant='ghost'
-          >
-            {t('common.clear')}
-          </Button>
-          <Button
-            onClick={() => {
-              onApply(draft)
-              setOpen(false)
-            }}
-            type='button'
-          >
-            {t('common.apply')}
-          </Button>
-        </div>
-      </SheetContent>
-    </Sheet>
+      }
+      description={t('site.filters.description')}
+      expandOnLargeScreen
+      hasAdvancedActive={count > 0}
+      onApply={() => onApply(draft)}
+      onReset={() =>
+        setDraft({
+          auth: [],
+          health: [],
+          management: [],
+          online: [],
+          statistics: [],
+        })
+      }
+      title={t('site.filters.title')}
+    >
+      <div className='flex flex-wrap items-center gap-x-4 gap-y-1'>
+        {renderGroups(primaryGroups)}
+      </div>
+    </FilterPanel>
   )
 }

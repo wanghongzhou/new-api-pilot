@@ -1,8 +1,4 @@
-import {
-  ArrowLeft01Icon,
-  ArrowRight01Icon,
-  ArrowUpDownIcon,
-} from '@hugeicons/core-free-icons'
+import { ArrowUpDownIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   flexRender,
@@ -18,7 +14,16 @@ import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 
 import { Button } from './button'
+import { DataTablePagination } from './data-table-pagination'
 import { Spinner } from './spinner'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from './table'
 
 interface DataTableProps<TData> {
   ariaLabel: string
@@ -31,6 +36,7 @@ interface DataTableProps<TData> {
   fetching?: boolean
   loading?: boolean
   onPageChange?: (page: number) => void
+  onPageSizeChange?: (pageSize: number) => void
   onRetry?: () => void
   onSortingChange?: OnChangeFn<SortingState>
   page?: number
@@ -51,6 +57,7 @@ export function DataTable<TData>({
   fetching = false,
   loading = false,
   onPageChange,
+  onPageSizeChange,
   onRetry,
   onSortingChange,
   page = 1,
@@ -68,8 +75,6 @@ export function DataTable<TData>({
     onSortingChange,
     state: { sorting },
   })
-  const pageCount = Math.max(1, Math.ceil(total / pageSize))
-
   if (loading && data.length === 0) {
     return (
       <div
@@ -122,7 +127,7 @@ export function DataTable<TData>({
       )}
       <div
         className={cn(
-          'overflow-hidden rounded-lg border',
+          'border-border bg-background overflow-hidden rounded-md border',
           renderMobileCard && 'hidden sm:block'
         )}
       >
@@ -132,13 +137,13 @@ export function DataTable<TData>({
           role='region'
           tabIndex={0}
         >
-          <table
+          <Table
             aria-label={ariaLabel}
             className='w-full border-collapse text-sm'
           >
-            <thead className='bg-muted/70 text-left'>
+            <TableHeader className='bg-[var(--table-header)] text-left'>
               {table.getHeaderGroups().map((headerGroup) => (
-                <tr key={headerGroup.id}>
+                <TableRow key={headerGroup.id}>
                   {headerGroup.headers.map((header) => {
                     const sorted = header.column.getIsSorted()
                     let ariaSort: 'ascending' | 'descending' | undefined
@@ -153,7 +158,7 @@ export function DataTable<TData>({
                       )
                       content = header.column.getCanSort() ? (
                         <button
-                          className='focus-visible:ring-ring inline-flex min-h-10 items-center gap-1 rounded-sm outline-none focus-visible:ring-2'
+                          className='focus-visible:ring-ring inline-flex min-h-8 items-center gap-1 rounded-md outline-none focus-visible:ring-2'
                           onClick={header.column.getToggleSortingHandler()}
                           type='button'
                         >
@@ -170,33 +175,36 @@ export function DataTable<TData>({
                       )
                     }
                     return (
-                      <th
+                      <TableHead
                         aria-sort={ariaSort}
-                        className='px-3 py-2.5 font-medium whitespace-nowrap'
+                        className='text-muted-foreground px-3 py-2 text-[10px] font-medium tracking-wider whitespace-nowrap uppercase'
                         key={header.id}
                       >
                         {content}
-                      </th>
+                      </TableHead>
                     )
                   })}
-                </tr>
+                </TableRow>
               ))}
-            </thead>
-            <tbody>
+            </TableHeader>
+            <TableBody>
               {table.getRowModel().rows.map((row) => (
-                <tr className='border-t align-top' key={row.id}>
+                <TableRow
+                  className='border-t align-top transition-colors hover:bg-[var(--table-header-hover)]'
+                  key={row.id}
+                >
                   {row.getVisibleCells().map((cell) => (
-                    <td className='px-3 py-3' key={cell.id}>
+                    <TableCell className='px-3 py-2.5' key={cell.id}>
                       {flexRender(
                         cell.column.columnDef.cell,
                         cell.getContext()
                       )}
-                    </td>
+                    </TableCell>
                   ))}
-                </tr>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </div>
       {renderMobileCard && (
@@ -209,36 +217,13 @@ export function DataTable<TData>({
         </div>
       )}
       {onPageChange && total > 0 && (
-        <div className='flex flex-wrap items-center justify-between gap-3'>
-          <p className='text-muted-foreground text-sm'>
-            {t('table.total', { total })}
-          </p>
-          <div className='flex items-center gap-2'>
-            <Button
-              aria-label={t('table.previous')}
-              disabled={page <= 1}
-              onClick={() => onPageChange(page - 1)}
-              size='icon'
-              title={t('table.previous')}
-              variant='outline'
-            >
-              <HugeiconsIcon icon={ArrowLeft01Icon} strokeWidth={2} />
-            </Button>
-            <span className='min-w-24 text-center text-sm'>
-              {t('table.page', { page, pages: pageCount })}
-            </span>
-            <Button
-              aria-label={t('table.next')}
-              disabled={page >= pageCount}
-              onClick={() => onPageChange(page + 1)}
-              size='icon'
-              title={t('table.next')}
-              variant='outline'
-            >
-              <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={2} />
-            </Button>
-          </div>
-        </div>
+        <DataTablePagination
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+          page={page}
+          pageSize={pageSize}
+          total={total}
+        />
       )}
     </div>
   )

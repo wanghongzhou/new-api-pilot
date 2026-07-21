@@ -657,7 +657,7 @@ test('uses four onboarding steps with IME debounce, race protection, exact revie
     .analyze()
   expect(onboardingAccessibility.violations).toEqual([])
   await page.locator('#account-onboarding-remark').fill('生产账户')
-  await page.getByRole('checkbox').check()
+  await page.getByRole('checkbox').click()
   await page.getByRole('button', { name: '创建并开始回填' }).click()
 
   await expect(page).toHaveURL(/\/accounts\/88/)
@@ -703,7 +703,7 @@ test('blocks account creation when the final precise review drifts', async ({
   await page.getByRole('button', { name: /customer_prod/ }).click()
   await page.getByRole('button', { name: '继续' }).click()
   await page.getByRole('button', { name: '继续' }).click()
-  await page.getByRole('checkbox').check()
+  await page.getByRole('checkbox').click()
   await page.getByRole('button', { name: '创建并开始回填' }).click()
 
   await expect(
@@ -870,7 +870,7 @@ test('keeps authoritative statistics exact, exportable, accessible, and responsi
     .getByRole('checkbox', {
       name: '我确认按当前不完整范围创建导出任务',
     })
-    .check()
+    .click()
   await createExport.click()
 
   await expect

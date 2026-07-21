@@ -14,6 +14,7 @@ import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Drawer,
   DrawerContent,
@@ -25,6 +26,7 @@ import {
 import { FormField } from '@/components/ui/form-field'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
+import { Textarea } from '@/components/ui/textarea'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import { isIdString, parseIdString } from '@/lib/api-types'
@@ -443,8 +445,8 @@ export function SiteOnboardingDrawer({
     capabilityReadiness.state !== 'ready'
 
   return (
-    <Drawer onOpenChange={onOpenChange} open={open} swipeDirection='right'>
-      <DrawerContent>
+    <Drawer direction='right' onOpenChange={onOpenChange} open={open}>
+      <DrawerContent className='data-[vaul-drawer-direction=right]:sm:max-w-3xl'>
         <DrawerHeader>
           <DrawerTitle>{t('site.onboarding.title')}</DrawerTitle>
           <DrawerDescription>
@@ -530,8 +532,8 @@ export function SiteOnboardingDrawer({
               htmlFor='onboarding-site-remark'
               label={t('site.remark')}
             >
-              <textarea
-                className='border-input bg-background min-h-24 rounded-md border p-3 text-sm outline-none focus-visible:ring-2'
+              <Textarea
+                className='min-h-24'
                 disabled={site != null}
                 id='onboarding-site-remark'
                 {...register('remark')}
@@ -709,11 +711,10 @@ export function SiteOnboardingDrawer({
               </p>
             </section>
             <label className='border-border flex min-h-12 items-start gap-3 rounded-md border p-3 text-sm'>
-              <input
+              <Checkbox
                 checked={historyConfirmed}
-                className='accent-primary mt-0.5 size-4'
-                onChange={(event) => setHistoryConfirmed(event.target.checked)}
-                type='checkbox'
+                className='mt-0.5'
+                onCheckedChange={setHistoryConfirmed}
               />
               {t('site.history.confirm')}
             </label>

@@ -39,6 +39,8 @@ type Customer struct {
 	Name                     string `gorm:"column:name"`
 	Contact                  string `gorm:"column:contact"`
 	Remark                   string `gorm:"column:remark"`
+	ContractAmount           string `gorm:"column:contract_amount"`
+	PaymentAmount            string `gorm:"column:payment_amount"`
 	Status                   string `gorm:"column:status"`
 	StatisticsPausedAt       *int64 `gorm:"column:statistics_paused_at"`
 	StatisticsBackfillStatus string `gorm:"column:statistics_backfill_status"`
@@ -47,6 +49,16 @@ type Customer struct {
 }
 
 func (Customer) TableName() string { return "customer" }
+
+func (customer *Customer) BeforeSave(tx *gorm.DB) error {
+	if customer.ContractAmount == "" {
+		customer.ContractAmount = "0"
+	}
+	if customer.PaymentAmount == "" {
+		customer.PaymentAmount = "0"
+	}
+	return nil
+}
 
 type CustomerFilter struct {
 	Keyword      string
@@ -119,6 +131,12 @@ func (repository *CustomerRepository) UpdateProfile(ctx context.Context, custome
 	if customer.Status == "disabled" {
 		return ErrCustomerLifecycleContract
 	}
+	if customer.ContractAmount == "" {
+		customer.ContractAmount = "0"
+	}
+	if customer.PaymentAmount == "" {
+		customer.PaymentAmount = "0"
+	}
 	return repository.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		current, err := findCustomerForUpdate(tx, customer.ID)
 		if err != nil {
@@ -128,11 +146,13 @@ func (repository *CustomerRepository) UpdateProfile(ctx context.Context, custome
 			return ErrCustomerLifecycleContract
 		}
 		return tx.Model(&Customer{}).Where("id = ?", customer.ID).Updates(map[string]any{
-			"name":       customer.Name,
-			"contact":    customer.Contact,
-			"remark":     customer.Remark,
-			"status":     customer.Status,
-			"updated_at": customer.UpdatedAt,
+			"name":            customer.Name,
+			"contact":         customer.Contact,
+			"remark":          customer.Remark,
+			"contract_amount": customer.ContractAmount,
+			"payment_amount":  customer.PaymentAmount,
+			"status":          customer.Status,
+			"updated_at":      customer.UpdatedAt,
 		}).Error
 	})
 }

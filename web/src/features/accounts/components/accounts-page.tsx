@@ -324,6 +324,8 @@ export function AccountsPage({
             placeholder={t('accounts.searchPlaceholder')}
             value={draftFilter}
           />
+        </div>
+        <div>
           <AccountFilters
             customers={customersQuery.data?.items ?? []}
             onApply={(filters) => onSearchChange({ ...filters, page: 1 })}
@@ -354,6 +356,7 @@ export function AccountsPage({
           fetching={accountsQuery.isFetching}
           loading={accountsQuery.isPending}
           onPageChange={(page) => onSearchChange({ page })}
+          onPageSizeChange={(pageSize) => onSearchChange({ page: 1, pageSize })}
           onRetry={() => void accountsQuery.refetch()}
           onSortingChange={updateSorting}
           page={search.page}

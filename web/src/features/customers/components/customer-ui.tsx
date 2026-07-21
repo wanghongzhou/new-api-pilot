@@ -179,6 +179,18 @@ export function CustomerCard({
       <dl className='grid grid-cols-2 gap-3 text-sm'>
         <div>
           <dt className='text-muted-foreground text-xs'>
+            {t('customer.contractAmount')}
+          </dt>
+          <dd>{customer.contract_amount}</dd>
+        </div>
+        <div>
+          <dt className='text-muted-foreground text-xs'>
+            {t('customer.paymentAmount')}
+          </dt>
+          <dd>{customer.payment_amount}</dd>
+        </div>
+        <div>
+          <dt className='text-muted-foreground text-xs'>
             {t('customer.accounts')}
           </dt>
           <dd>

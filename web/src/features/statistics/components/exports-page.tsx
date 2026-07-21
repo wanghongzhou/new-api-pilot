@@ -13,8 +13,9 @@ import { toast } from 'sonner'
 
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { DataTable } from '@/components/ui/data-table'
-import { Select } from '@/components/ui/select'
+import { NativeSelect as Select } from '@/components/ui/native-select'
 import { Spinner } from '@/components/ui/spinner'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
@@ -73,12 +74,12 @@ export const exportScopes: StatisticsExportScope[] = [
   'group_catalog',
   'system_tasks',
 ]
-const exportSorts: StatisticsExportListSort[] = [
+const exportSorts: ReadonlySet<StatisticsExportListSort> = new Set([
   'created_at',
   'finished_at',
   'status',
   'file_size',
-]
+])
 
 function ExportProgress({ job }: { job: StatisticsExportJobItem }) {
   const { t } = useTranslation()
@@ -246,7 +247,7 @@ export function ExportsPage({
     const current = [{ desc: search.order === 'desc', id: search.sort }]
     const next = typeof updater === 'function' ? updater(current) : updater
     const first = next[0]
-    if (!first || !exportSorts.includes(first.id as StatisticsExportListSort)) {
+    if (!first || !exportSorts.has(first.id as StatisticsExportListSort)) {
       return
     }
     onSearchChange({
@@ -377,10 +378,9 @@ export function ExportsPage({
                   className='hover:bg-muted flex min-h-10 items-center gap-2 rounded-md px-2'
                   key={status}
                 >
-                  <input
+                  <Checkbox
                     checked={search.status.includes(status)}
-                    className='accent-primary size-4'
-                    onChange={() =>
+                    onCheckedChange={() =>
                       onSearchChange({
                         page: 1,
                         status: search.status.includes(status)
@@ -388,7 +388,6 @@ export function ExportsPage({
                           : [...search.status, status],
                       })
                     }
-                    type='checkbox'
                   />
                   {exportStatusText(t, status)}
                 </label>
@@ -461,6 +460,7 @@ export function ExportsPage({
           fetching={exportsQuery.isFetching}
           loading={exportsQuery.isPending}
           onPageChange={(page) => onSearchChange({ page })}
+          onPageSizeChange={(pageSize) => onSearchChange({ page: 1, pageSize })}
           onRetry={() => void exportsQuery.refetch()}
           onSortingChange={updateSorting}
           page={search.page}

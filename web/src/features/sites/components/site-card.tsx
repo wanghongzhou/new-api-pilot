@@ -1,4 +1,5 @@
 import {
+  ArrowRight01Icon,
   Chart01Icon,
   Copy01Icon,
   CpuIcon,
@@ -158,14 +159,9 @@ export function SiteCard({
         <header className='flex min-w-0 items-start justify-between gap-3'>
           <div className='min-w-0'>
             <div className='flex min-w-0 items-center gap-1.5'>
-              <Link
-                className='hover:text-primary min-w-0 truncate text-base leading-tight font-semibold transition-colors'
-                params={{ siteId: site.id }}
-                title={site.name}
-                to='/sites/$siteId'
-              >
+              <span className='text-foreground min-w-0 truncate text-base leading-tight font-semibold'>
                 {site.name}
-              </Link>
+              </span>
               {site.online_status === 'online' && (
                 <span className='bg-success size-1.5 shrink-0 rounded-full' />
               )}
@@ -189,37 +185,12 @@ export function SiteCard({
               </button>
             </div>
           </div>
-          <div className='flex shrink-0 items-center justify-end gap-1'>
-            <Link
-              aria-label={t('site.actions.stats')}
-              className='text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring flex size-8 items-center justify-center rounded-md transition-colors outline-none focus-visible:ring-2'
-              params={{ siteId: site.id }}
-              search={buildStatisticsSearch({})}
-              title={t('site.actions.stats')}
-              to='/sites/$siteId/stats'
-            >
-              <HugeiconsIcon icon={Chart01Icon} size={17} strokeWidth={2} />
-            </Link>
-            <Link
-              aria-label={t('site.instanceStatus')}
-              className='text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring flex size-8 items-center justify-center rounded-md transition-colors outline-none focus-visible:ring-2'
-              params={{ siteId: site.id }}
-              title={t('site.instanceStatus')}
-              to='/sites/$siteId/status'
-            >
-              <HugeiconsIcon
-                icon={ServerStack01Icon}
-                size={17}
-                strokeWidth={2}
-              />
-            </Link>
-            {isAdmin && <SiteActions onAction={onAction} site={site} />}
-          </div>
+          {isAdmin && <SiteActions onAction={onAction} site={site} />}
         </header>
 
         <SiteStatusBadges site={site} />
 
-        <div className='grid grid-cols-4 gap-2'>
+        <div className='grid grid-cols-2 gap-2 sm:grid-cols-4'>
           <ResourceChip
             icon={ServerStack01Icon}
             label={t('site.instances')}
@@ -246,7 +217,7 @@ export function SiteCard({
       </div>
 
       <section className='border-border grid gap-3 border-t px-4 py-3'>
-        <div className='grid grid-cols-3 gap-x-5 gap-y-4'>
+        <div className='grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-3'>
           <MetricCell label={t('site.todayRequests')}>
             <MetricValue
               compact
@@ -260,6 +231,7 @@ export function SiteCard({
               nullLabel='0'
               quota={site.today.quota}
               rate={site.rate}
+              showQuota={false}
             />
           </MetricCell>
           <MetricCell label={t('metric.token')}>
@@ -290,7 +262,7 @@ export function SiteCard({
       </section>
 
       <section className='border-border grid gap-3 border-t px-4 py-3'>
-        <div className='grid grid-cols-3 gap-x-5 gap-y-4'>
+        <div className='grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-3'>
           <MetricCell label={t('site.performance.avgLatency')}>
             {performanceAvailable
               ? t('site.performance.latencyValue', {
@@ -316,11 +288,41 @@ export function SiteCard({
         />
       </section>
 
-      <footer className='border-border border-t px-4 py-2.5'>
+      <footer className='border-border flex items-center justify-between gap-3 border-t px-4 py-2.5'>
         <UpdatedAtLine
           expired={site.realtime.expired}
           timestamp={site.realtime.updated_at}
         />
+        <div className='flex shrink-0 items-center justify-end gap-1'>
+          <Link
+            aria-label={t('site.actions.stats')}
+            className='text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring flex size-8 items-center justify-center rounded-md transition-colors outline-none focus-visible:ring-2'
+            params={{ siteId: site.id }}
+            search={buildStatisticsSearch({})}
+            title={t('site.actions.stats')}
+            to='/sites/$siteId/stats'
+          >
+            <HugeiconsIcon icon={Chart01Icon} size={17} strokeWidth={2} />
+          </Link>
+          <Link
+            aria-label={t('site.instanceStatus')}
+            className='text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring flex size-8 items-center justify-center rounded-md transition-colors outline-none focus-visible:ring-2'
+            params={{ siteId: site.id }}
+            title={t('site.instanceStatus')}
+            to='/sites/$siteId/status'
+          >
+            <HugeiconsIcon icon={ServerStack01Icon} size={17} strokeWidth={2} />
+          </Link>
+          <Link
+            aria-label={t('site.viewDetails')}
+            className='text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring flex size-8 items-center justify-center rounded-md transition-colors outline-none focus-visible:ring-2'
+            params={{ siteId: site.id }}
+            title={t('site.viewDetails')}
+            to='/sites/$siteId'
+          >
+            <HugeiconsIcon icon={ArrowRight01Icon} size={17} strokeWidth={2} />
+          </Link>
+        </div>
       </footer>
     </article>
   )

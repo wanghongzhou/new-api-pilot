@@ -1,12 +1,14 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useEffect, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { FormField } from '@/components/ui/form-field'
 import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/ui/password-input'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Spinner } from '@/components/ui/spinner'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
@@ -34,6 +36,7 @@ export function SiteAuthorizationForm({
   const { t } = useTranslation()
   const [submitting, setSubmitting] = useState(false)
   const {
+    control,
     formState: { errors },
     handleSubmit,
     register,
@@ -111,40 +114,38 @@ export function SiteAuthorizationForm({
         <legend className='text-sm font-medium'>
           {t('site.authorization.mode')}
         </legend>
-        <div className='grid grid-cols-2 gap-2'>
-          <label
-            className={
-              mode === 'existing_token'
-                ? 'border-primary bg-primary/8 flex min-h-12 items-center gap-2 rounded-md border px-3 text-sm font-medium'
-                : 'border-border hover:bg-muted flex min-h-12 items-center gap-2 rounded-md border px-3 text-sm'
-            }
-          >
-            <input
-              checked={mode === 'existing_token'}
-              className='accent-primary'
-              onChange={() => setValue('mode', 'existing_token')}
-              type='radio'
-              value='existing_token'
-            />
-            {t('site.authorization.existingToken')}
-          </label>
-          <label
-            className={
-              mode === 'login_generate_token'
-                ? 'border-primary bg-primary/8 flex min-h-12 items-center gap-2 rounded-md border px-3 text-sm font-medium'
-                : 'border-border hover:bg-muted flex min-h-12 items-center gap-2 rounded-md border px-3 text-sm'
-            }
-          >
-            <input
-              checked={mode === 'login_generate_token'}
-              className='accent-primary'
-              onChange={() => setValue('mode', 'login_generate_token')}
-              type='radio'
-              value='login_generate_token'
-            />
-            {t('site.authorization.rotateToken')}
-          </label>
-        </div>
+        <Controller
+          control={control}
+          name='mode'
+          render={({ field }) => (
+            <RadioGroup
+              className='grid-cols-2'
+              onValueChange={field.onChange}
+              value={field.value}
+            >
+              <label
+                className={
+                  mode === 'existing_token'
+                    ? 'border-primary bg-primary/8 flex min-h-12 items-center gap-2 rounded-md border px-3 text-sm font-medium'
+                    : 'border-border hover:bg-muted flex min-h-12 items-center gap-2 rounded-md border px-3 text-sm'
+                }
+              >
+                <RadioGroupItem value='existing_token' />
+                {t('site.authorization.existingToken')}
+              </label>
+              <label
+                className={
+                  mode === 'login_generate_token'
+                    ? 'border-primary bg-primary/8 flex min-h-12 items-center gap-2 rounded-md border px-3 text-sm font-medium'
+                    : 'border-border hover:bg-muted flex min-h-12 items-center gap-2 rounded-md border px-3 text-sm'
+                }
+              >
+                <RadioGroupItem value='login_generate_token' />
+                {t('site.authorization.rotateToken')}
+              </label>
+            </RadioGroup>
+          )}
+        />
       </fieldset>
 
       {mode === 'existing_token' ? (
@@ -223,10 +224,18 @@ export function SiteAuthorizationForm({
             />
           </FormField>
           <label className='border-border flex min-h-12 items-start gap-3 rounded-md border p-3 text-sm'>
-            <input
-              className='accent-primary mt-0.5 size-4'
-              type='checkbox'
-              {...register('confirmTokenRotation')}
+            <Controller
+              control={control}
+              name='confirmTokenRotation'
+              render={({ field }) => (
+                <Checkbox
+                  checked={field.value}
+                  className='mt-0.5'
+                  onBlur={field.onBlur}
+                  onCheckedChange={field.onChange}
+                  ref={field.ref}
+                />
+              )}
             />
             <span>{t('site.authorization.confirmRotation')}</span>
           </label>

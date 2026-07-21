@@ -12,8 +12,9 @@ function params(values: SubscriptionPlanQueryParams, forcedSite = false) {
   params.set('p', String(values.p))
   params.set('page_size', String(values.page_size))
   if (!forcedSite) {
-    for (const siteId of values.site_ids ?? [])
+    for (const siteId of values.site_ids ?? []) {
       params.append('site_ids', siteId)
+    }
   }
   for (const state of values.states ?? []) params.append('states', state)
   if (values.enabled != null) params.set('enabled', String(values.enabled))

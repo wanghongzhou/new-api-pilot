@@ -771,6 +771,7 @@ export function ChannelInventoryPage({
           fetching={listQuery.isFetching}
           loading={listQuery.isPending}
           onPageChange={(page) => onSearchChange({ page })}
+          onPageSizeChange={(pageSize) => onSearchChange({ page: 1, pageSize })}
           onRetry={() => void listQuery.refetch()}
           page={search.page}
           pageSize={search.pageSize}

@@ -83,6 +83,21 @@ function errorEnvelope(code: string, exportId: string) {
   }
 }
 
+async function followAppNavigation(page: Page, name: string) {
+  const directLink = page
+    .getByRole('navigation', { name: '主导航' })
+    .getByRole('link', { name, exact: true })
+  if (await directLink.isVisible()) {
+    await directLink.click()
+    return
+  }
+  await page.getByRole('button', { name: '打开导航' }).click()
+  await page
+    .getByRole('dialog', { name: '主导航' })
+    .getByRole('link', { name, exact: true })
+    .click()
+}
+
 function exportError(
   code: 'EXPORT_SNAPSHOT_FAILED' | 'EXPORT_WRITE_FAILED',
   id: string
@@ -227,6 +242,14 @@ async function mockSelf(page: Page, user: TestUser) {
 async function setup(page: Page, user: TestUser) {
   await seedAuth(page, user)
   await mockSelf(page, user)
+  await page.route(
+    /\/api\/statistics\/options\/models(?:\?.*)?$/,
+    async (route) => {
+      await route.fulfill({
+        json: envelope({ items: [], page: 1, page_size: 50, total: 0 }),
+      })
+    }
+  )
 }
 
 async function hideDeveloperOverlays(page: Page) {
@@ -361,10 +384,7 @@ test('creates CSV and XLSX from the complete current filters and surfaces active
     expect(request.filters).not.toHaveProperty('page_size')
   }
 
-  await page
-    .getByRole('banner')
-    .getByRole('link', { name: '打开导出任务' })
-    .click()
+  await followAppNavigation(page, '导出任务')
   await expect(page).toHaveURL(/\/exports/)
   await expect(
     page.getByRole('heading', { name: '导出任务', exact: true })
@@ -457,8 +477,12 @@ test('polls active jobs, preserves URL list controls, shows two failures, recrea
   ).toBeVisible()
 
   const statusFilters = page.getByRole('group', { name: '状态' })
-  await statusFilters.getByLabel('失败', { exact: true }).check()
-  await statusFilters.getByLabel('已过期', { exact: true }).check()
+  await statusFilters
+    .getByRole('checkbox', { name: '失败', exact: true })
+    .click()
+  await statusFilters
+    .getByRole('checkbox', { name: '已过期', exact: true })
+    .click()
   await expect
     .poll(() =>
       JSON.parse(new URL(page.url()).searchParams.get('status') ?? '[]')
@@ -491,7 +515,7 @@ test('polls active jobs, preserves URL list controls, shows two failures, recrea
   })
 
   await openFirstVisibleTask(page)
-  let sheet = page.getByRole('dialog', { name: '导出任务' })
+  const sheet = page.getByRole('dialog', { name: '导出任务' })
   await expect(sheet.getByText('无法写入导出文件')).toBeVisible()
   await sheet.getByRole('button', { name: '按相同条件重新导出' }).click()
   await expect(sheet.getByText('无法创建导出数据快照')).toBeVisible()

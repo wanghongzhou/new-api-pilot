@@ -19,7 +19,7 @@ import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
-import { Select } from '@/components/ui/select'
+import { NativeSelect as Select } from '@/components/ui/native-select'
 import { Spinner } from '@/components/ui/spinner'
 import { dashboardKeys } from '@/features/dashboard/query-keys'
 import { listSites } from '@/features/sites/api'
@@ -629,25 +629,18 @@ export function AlertsPage({
                 </Button>
               </section>
             )}
-            <div className='flex flex-wrap items-center gap-2'>
-              <AlertFilters
-                onApply={(filters) => onSearchChange({ ...filters, page: 1 })}
-                sites={sites}
-                value={{
-                  end: search.end,
-                  level: search.level,
-                  siteId: search.siteId,
-                  start: search.start,
-                  status: search.status,
-                  targetType: search.targetType,
-                }}
-              />
-              {activeFilters && (
-                <Button onClick={resetFilters} variant='ghost'>
-                  {t('alerts.filters.reset')}
-                </Button>
-              )}
-            </div>
+            <AlertFilters
+              onApply={(filters) => onSearchChange({ ...filters, page: 1 })}
+              sites={sites}
+              value={{
+                end: search.end,
+                level: search.level,
+                siteId: search.siteId,
+                start: search.start,
+                status: search.status,
+                targetType: search.targetType,
+              }}
+            />
             <DataTable
               ariaLabel={t('alerts.table.label')}
               columns={eventColumns}
@@ -665,6 +658,9 @@ export function AlertsPage({
               fetching={alertsQuery.isFetching}
               loading={alertsQuery.isPending}
               onPageChange={(page) => onSearchChange({ page })}
+              onPageSizeChange={(pageSize) =>
+                onSearchChange({ page: 1, pageSize })
+              }
               onRetry={() => void alertsQuery.refetch()}
               onSortingChange={updateSorting}
               page={search.page}

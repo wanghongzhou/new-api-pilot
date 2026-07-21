@@ -18,6 +18,32 @@ export default defineConfig(({ envMode }) => {
 
   return {
     plugins: [pluginReact(), pluginTailwindcss({ optimize: false })],
+    splitChunks: {
+      preset: 'default',
+      cacheGroups: {
+        'vendor-react': {
+          test: /node_modules[\\/](react|react-dom)[\\/]/,
+          name: 'vendor-react',
+          chunks: 'all',
+          priority: 0,
+          enforce: true,
+        },
+        'vendor-ui-primitives': {
+          test: /node_modules[\\/](@base-ui|@radix-ui)[\\/]/,
+          name: 'vendor-ui-primitives',
+          chunks: 'all',
+          priority: 0,
+          enforce: true,
+        },
+        'vendor-tanstack': {
+          test: /node_modules[\\/]@tanstack[\\/]/,
+          name: 'vendor-tanstack',
+          chunks: 'all',
+          priority: 0,
+          enforce: true,
+        },
+      },
+    },
     source: {
       entry: {
         index: './src/main.tsx',

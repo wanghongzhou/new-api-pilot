@@ -73,6 +73,10 @@ export function createSettingsFormSchema(secretState: SettingsSecretState) {
     .object({
       usageDelayMinutes: positiveInteger(1, 59),
       minuteRetentionDays: positiveInteger(1, 3650),
+      logRetentionDays: positiveInteger(1, 3650),
+      performanceRetentionDays: positiveInteger(1, 3650),
+      taskRetentionDays: positiveInteger(1, 3650),
+      systemTaskTerminalRetentionDays: positiveInteger(1, 3650),
       probeConcurrency: positiveInteger(1, 100),
       realtimeConcurrency: positiveInteger(1, 100),
       resourceConcurrency: positiveInteger(1, 100),

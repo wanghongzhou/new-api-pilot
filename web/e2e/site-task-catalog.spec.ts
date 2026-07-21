@@ -347,13 +347,14 @@ test('A101 shows the F12 nineteen-task catalog and exact fast-task subset', asyn
     ).toHaveText(label)
   }
 
-  for (const status of ['pending', 'running', 'success', 'failed'])
+  for (const status of ['pending', 'running', 'success', 'failed']) {
     await expect(
       page
         .getByText(zh[`collection.status.${status}`], { exact: true })
         .filter({ visible: true })
         .first()
     ).toBeVisible()
+  }
 
   for (const task of f12.tasks) {
     await collectionFilter.selectOption(task.task_type)

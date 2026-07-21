@@ -5,6 +5,7 @@ import type {
   MetricString,
   Timestamp,
 } from '@/lib/api-types'
+
 export type ChannelInventoryState = 'normal' | 'missing'
 export interface ChannelInventoryItem {
   id: IdString

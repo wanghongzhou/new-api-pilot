@@ -526,6 +526,9 @@ export function ModelCatalogPage({
             fetching={catalogQuery.isFetching}
             loading={catalogQuery.isPending}
             onPageChange={(page) => onSearchChange({ page })}
+            onPageSizeChange={(pageSize) =>
+              onSearchChange({ page: 1, pageSize })
+            }
             onRetry={() => void catalogQuery.refetch()}
             page={search.page}
             pageSize={search.pageSize}
@@ -624,6 +627,9 @@ export function ModelCatalogPage({
               fetching={missingQuery.isFetching}
               loading={missingQuery.isPending}
               onPageChange={(page) => onSearchChange({ page })}
+              onPageSizeChange={(pageSize) =>
+                onSearchChange({ page: 1, pageSize })
+              }
               onRetry={() => void missingQuery.refetch()}
               page={search.page}
               pageSize={search.pageSize}

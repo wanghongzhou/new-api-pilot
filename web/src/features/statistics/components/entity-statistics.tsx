@@ -18,7 +18,7 @@ import { MetricValue } from '@/components/data/metric-value'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
 import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
+import { NativeSelect as Select } from '@/components/ui/native-select'
 import { Spinner } from '@/components/ui/spinner'
 import { useTheme } from '@/context/theme-provider'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
@@ -227,8 +227,9 @@ export function StatisticsToolbar({
             max={inputValue(search.end, search.granularity)}
             onChange={(event) => {
               const start = parseInput(event.target.value, search.granularity)
-              if (start != null && start < search.end)
+              if (start != null && start < search.end) {
                 onSearchChange({ page: 1, start })
+              }
             }}
             type={inputType(search.granularity)}
             value={inputValue(search.start, search.granularity)}
@@ -240,8 +241,9 @@ export function StatisticsToolbar({
             min={inputValue(search.start, search.granularity)}
             onChange={(event) => {
               const end = parseInput(event.target.value, search.granularity)
-              if (end != null && end > search.start)
+              if (end != null && end > search.start) {
                 onSearchChange({ end, page: 1 })
+              }
             }}
             type={inputType(search.granularity)}
             value={inputValue(search.end, search.granularity)}
@@ -1048,6 +1050,7 @@ function BreakdownTable<TBreakdown extends StatisticsBreakdownBase>({
       emptyDescription={emptyCopy.description}
       emptyTitle={emptyCopy.title}
       onPageChange={(page) => onSearchChange({ page })}
+      onPageSizeChange={(pageSize) => onSearchChange({ page: 1, pageSize })}
       onSortingChange={updateSorting}
       page={search.page}
       pageSize={search.pageSize}

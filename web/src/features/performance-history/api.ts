@@ -6,6 +6,7 @@ import type {
   PerformanceHistoryQueryParams,
   PerformanceHistoryStatisticsResponse,
 } from './types'
+
 function params(v: PerformanceHistoryQueryParams) {
   const p = new URLSearchParams()
   p.set('p', String(v.p))

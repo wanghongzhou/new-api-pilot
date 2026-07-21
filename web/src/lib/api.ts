@@ -258,10 +258,11 @@ api.get = ((url: string, config: AxiosRequestConfig = {}) => {
   const externalSignal = config.signal
   const abortFromExternal = () => controller.abort()
   if (externalSignal?.aborted) abortFromExternal()
-  else
+  else {
     externalSignal?.addEventListener?.('abort', abortFromExternal, {
       once: true,
     })
+  }
   const request = originalGet(url, {
     ...config,
     signal: controller.signal,

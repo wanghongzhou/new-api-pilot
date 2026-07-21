@@ -50,8 +50,9 @@ const envelope = <T>(data: T, requestId = 'req_system_task_e2e') => ({
   success: true,
 })
 async function seedAuth(page: Page, testInfo: TestInfo) {
-  if (testInfo.project.name === 'chromium-mobile')
+  if (testInfo.project.name === 'chromium-mobile') {
     await page.setViewportSize({ height: 812, width: 375 })
+  }
   await page.addInitScript((user) => {
     localStorage.setItem('pilot-auth-user', JSON.stringify(user))
     localStorage.setItem('uid', user.id)
@@ -221,10 +222,11 @@ test('A100 system tasks stay read-only, typed, bounded and responsive', async ({
     '异步任务轮询',
     '9007199254740993',
     '上游任务失败',
-  ])
+  ]) {
     await expect(
       page.getByText(text).filter({ visible: true }).first()
     ).toBeVisible()
+  }
   expect(systemRequests.every((request) => request.method === 'GET')).toBe(true)
   expect(
     systemRequests.some((request) => /\/system-tasks\/[^s]/.test(request.path))
@@ -257,8 +259,9 @@ test('A100 system tasks stay read-only, typed, bounded and responsive', async ({
     'credential',
     'payload',
     'private_data',
-  ])
+  ]) {
     expect(safe).not.toContain(field)
+  }
 
   systemRequests.length = 0
   await page.goto('/sites/9007199254740997/system-tasks?siteIds=9')

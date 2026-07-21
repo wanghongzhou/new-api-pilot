@@ -21,8 +21,9 @@ describe('pricing/group privacy and passive rendering boundary', () => {
       ['param', 'override'].join('_'),
       ['bound', 'channel'].join('_'),
       ['oauth', 'token'].join('_'),
-    ])
+    ]) {
       expect(source).not.toContain(field)
+    }
     expect(source).not.toMatch(/<img|src=|href=.*endpoint|window\.open/)
   })
 })

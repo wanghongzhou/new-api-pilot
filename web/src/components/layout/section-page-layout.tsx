@@ -1,50 +1,139 @@
-import type { ReactNode } from 'react'
+/*
+Copyright (C) 2023-2026 QuantumNous
 
-import { cn } from '@/lib/utils'
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
 
-export interface SectionPageLayoutProps {
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+import {
+  Children,
+  isValidElement,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from 'react'
+
+import { Main } from './main'
+import { PageFooterProvider } from './page-footer'
+
+type SlotProps = { children?: ReactNode }
+
+function SectionPageLayoutTitle(_props: SlotProps) {
+  return null
+}
+SectionPageLayoutTitle.displayName = 'SectionPageLayout.Title'
+
+function SectionPageLayoutActions(_props: SlotProps) {
+  return null
+}
+SectionPageLayoutActions.displayName = 'SectionPageLayout.Actions'
+
+function SectionPageLayoutContent(_props: SlotProps) {
+  return null
+}
+SectionPageLayoutContent.displayName = 'SectionPageLayout.Content'
+
+function SectionPageLayoutBreadcrumb(_props: SlotProps) {
+  return null
+}
+SectionPageLayoutBreadcrumb.displayName = 'SectionPageLayout.Breadcrumb'
+
+export type SectionPageLayoutProps = {
   actions?: ReactNode
   children: ReactNode
   description?: ReactNode
   fixedContent?: boolean
-  title: ReactNode
+  title?: ReactNode
 }
 
-export function SectionPageLayout({
-  actions,
-  children,
-  description,
-  fixedContent = false,
-  title,
-}: SectionPageLayoutProps) {
+export function SectionPageLayout(props: SectionPageLayoutProps) {
+  const [footerContainer, setFooterContainer] = useState<HTMLDivElement | null>(
+    null
+  )
+
+  let title: ReactNode = props.title ?? null
+  let actions: ReactNode = props.actions ?? null
+  let content: ReactNode = props.children
+  let breadcrumb: ReactNode = null
+  let hasSlots = false
+
+  Children.forEach(props.children, (node) => {
+    if (!isValidElement(node)) return
+    const child = node as ReactElement<SlotProps>
+    if (child.type === SectionPageLayoutTitle) {
+      title = child.props.children
+      hasSlots = true
+    } else if (child.type === SectionPageLayoutActions) {
+      actions = child.props.children
+      hasSlots = true
+    } else if (child.type === SectionPageLayoutContent) {
+      content = child.props.children
+      hasSlots = true
+    } else if (child.type === SectionPageLayoutBreadcrumb) {
+      breadcrumb = child.props.children
+      hasSlots = true
+    }
+  })
+
+  if (hasSlots && content === props.children) content = null
+
   return (
-    <main
-      className={cn(
-        'flex h-full min-h-0 max-h-full flex-1 flex-col',
-        fixedContent
-          ? 'overflow-hidden'
-          : 'overflow-y-auto overscroll-y-contain'
-      )}
-      id='main-content'
-      tabIndex={-1}
-    >
-      <header className='border-border bg-background sticky top-0 z-10 flex flex-wrap items-start justify-between gap-3 border-b px-4 py-4 sm:px-6'>
-        <div className='min-w-0'>
-          <h1 className='text-xl font-semibold'>{title}</h1>
-          {description && (
-            <p className='text-muted-foreground mt-1 text-sm'>{description}</p>
+    <PageFooterProvider container={footerContainer}>
+      <Main id='main-content' tabIndex={-1}>
+        <div className='shrink-0 px-3 pt-3 pb-2.5 sm:px-4 sm:pt-5 sm:pb-3'>
+          {breadcrumb != null && (
+            <div className='mb-2 sm:mb-3'>{breadcrumb}</div>
           )}
+          <div className='flex flex-wrap items-center justify-between gap-x-3 gap-y-2 sm:gap-x-4'>
+            <div className='min-w-0 flex-1'>
+              <h1 className='truncate text-base font-bold tracking-tight sm:text-lg'>
+                {title}
+              </h1>
+              {props.description != null && (
+                <p className='text-muted-foreground mt-1 text-sm'>
+                  {props.description}
+                </p>
+              )}
+            </div>
+            {actions != null && (
+              <div className='flex shrink-0 flex-wrap items-center justify-end gap-2 sm:gap-x-4'>
+                {actions}
+              </div>
+            )}
+          </div>
         </div>
-        {actions && <div className='flex flex-wrap gap-2'>{actions}</div>}
-      </header>
-      <div
-        className={cn(
-          'w-full flex-1 px-4 py-4 sm:px-6 sm:py-6',
-          fixedContent && 'min-h-0 overflow-hidden'
-        )}
-      >
-        {children}
-      </div>
-    </main>
+
+        <div
+          className={
+            props.fixedContent
+              ? 'min-h-0 flex-1 overflow-hidden px-3 pt-1 pb-3 sm:px-4 sm:pt-1.5 sm:pb-4'
+              : 'min-h-0 flex-1 overflow-auto px-3 pt-1 pb-3 sm:px-4 sm:pt-1.5 sm:pb-4'
+          }
+        >
+          {content}
+        </div>
+
+        <div
+          className='bg-background shrink-0 border-t px-3 py-2.5 empty:hidden sm:px-4 sm:py-3'
+          ref={setFooterContainer}
+        />
+      </Main>
+    </PageFooterProvider>
   )
 }
+
+SectionPageLayout.Title = SectionPageLayoutTitle
+SectionPageLayout.Actions = SectionPageLayoutActions
+SectionPageLayout.Content = SectionPageLayoutContent
+SectionPageLayout.Breadcrumb = SectionPageLayoutBreadcrumb

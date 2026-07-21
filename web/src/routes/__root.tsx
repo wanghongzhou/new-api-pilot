@@ -4,24 +4,41 @@ import { Outlet, createRootRouteWithContext } from '@tanstack/react-router'
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
 import { Toaster } from 'sonner'
 
+import { ThemeCustomizationProvider } from '@/context/theme-customization-provider'
 import { ThemeProvider, useTheme } from '@/context/theme-provider'
+import { useIsMobile } from '@/hooks/use-mobile'
 
 function AppToaster() {
   const { resolvedTheme } = useTheme()
-  return <Toaster closeButton position='top-center' theme={resolvedTheme} />
+  const isMobile = useIsMobile()
+  return (
+    <Toaster
+      closeButton
+      position={isMobile ? 'bottom-center' : 'top-center'}
+      theme={resolvedTheme}
+      toastOptions={{
+        classNames: {
+          closeButton: 'pointer-events-auto',
+          toast: 'pointer-events-none',
+        },
+      }}
+    />
+  )
 }
 
 function RootComponent() {
   return (
     <ThemeProvider>
-      <Outlet />
-      <AppToaster />
-      {import.meta.env.MODE === 'development' && (
-        <>
-          <ReactQueryDevtools buttonPosition='bottom-left' />
-          <TanStackRouterDevtools position='bottom-right' />
-        </>
-      )}
+      <ThemeCustomizationProvider>
+        <Outlet />
+        <AppToaster />
+        {import.meta.env.MODE === 'development' && (
+          <>
+            <ReactQueryDevtools buttonPosition='bottom-left' />
+            <TanStackRouterDevtools position='bottom-right' />
+          </>
+        )}
+      </ThemeCustomizationProvider>
     </ThemeProvider>
   )
 }
