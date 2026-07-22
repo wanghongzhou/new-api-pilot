@@ -1,6 +1,8 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page, type Route } from '@playwright/test'
 
+import { clickOpenSelectOption } from './helpers/select-control'
+
 const authStorageKey = 'pilot-auth-user'
 const uidStorageKey = 'uid'
 const siteId = '9007199254740993'
@@ -507,7 +509,8 @@ test('supports URL filters, sorting, pagination, detail retry, and all delivery 
     .getByRole('checkbox', { name: '账户', exact: true })
     .click()
   await filters.getByRole('button', { name: '展开', exact: true }).click()
-  await filters.locator('#alerts-filter-site').selectOption(siteId)
+  await filters.locator('#alerts-filter-site').click()
+  await clickOpenSelectOption(page, siteId)
   await hideDeveloperOverlays(page)
   await assertNoHorizontalOverflow(page)
   await page.screenshot({
@@ -607,12 +610,10 @@ test('isolates summary and missing-detail failures, renders empty state, and kee
   ).toBeVisible()
 
   await page.getByRole('tab', { name: '规则', exact: true }).click()
-  await page
-    .getByRole('combobox', { name: '作用域', exact: true })
-    .selectOption('site')
-  await page
-    .getByRole('combobox', { name: '站点', exact: true })
-    .selectOption(siteId)
+  await page.getByRole('combobox', { name: '作用域', exact: true }).click()
+  await clickOpenSelectOption(page, 'site')
+  await page.getByRole('combobox', { name: '站点', exact: true }).click()
+  await clickOpenSelectOption(page, siteId)
   await expect(
     page.getByText('继承全局').filter({ visible: true }).first()
   ).toBeVisible()

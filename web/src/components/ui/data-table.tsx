@@ -1,4 +1,8 @@
-import { ArrowUpDownIcon } from '@hugeicons/core-free-icons'
+import {
+  Alert02Icon,
+  ArrowUpDownIcon,
+  Database01Icon,
+} from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   flexRender,
@@ -15,6 +19,14 @@ import { cn } from '@/lib/utils'
 
 import { Button } from './button'
 import { DataTablePagination } from './data-table-pagination'
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from './empty'
 import { Spinner } from './spinner'
 import {
   Table,
@@ -75,42 +87,79 @@ export function DataTable<TData>({
     onSortingChange,
     state: { sorting },
   })
+  const pagination = onPageChange ? (
+    <DataTablePagination
+      onPageChange={onPageChange}
+      onPageSizeChange={onPageSizeChange}
+      page={page}
+      pageSize={pageSize}
+      total={total}
+    />
+  ) : null
+
   if (loading && data.length === 0) {
     return (
-      <div
-        aria-hidden='true'
-        className='border-border bg-muted/40 h-64 animate-pulse rounded-lg border'
-      />
+      <div className='grid min-w-0 gap-3'>
+        <div
+          aria-hidden='true'
+          className='border-border bg-muted/40 h-64 animate-pulse rounded-lg border'
+        />
+        {pagination}
+      </div>
     )
   }
 
   if (error && data.length === 0) {
     return (
-      <section className='border-destructive/30 bg-destructive/5 rounded-lg border p-5'>
-        <h2 className='font-medium'>{t('table.loadError')}</h2>
-        <p className='text-muted-foreground mt-1 text-sm'>
-          {t('table.loadErrorDescription')}
-        </p>
-        {onRetry && (
-          <Button className='mt-3' onClick={onRetry} variant='outline'>
-            {t('common.retry')}
-          </Button>
-        )}
-      </section>
+      <div className='grid min-w-0 gap-3'>
+        <Empty className='border-border bg-background min-h-64 border'>
+          <EmptyHeader>
+            <EmptyMedia variant='icon'>
+              <HugeiconsIcon
+                className='text-destructive size-6'
+                icon={Alert02Icon}
+                strokeWidth={2}
+              />
+            </EmptyMedia>
+            <EmptyTitle>{t('table.loadError')}</EmptyTitle>
+            <EmptyDescription>
+              {t('table.loadErrorDescription')}
+            </EmptyDescription>
+          </EmptyHeader>
+          {onRetry && (
+            <EmptyContent>
+              <Button onClick={onRetry} size='sm' variant='outline'>
+                {t('common.retry')}
+              </Button>
+            </EmptyContent>
+          )}
+        </Empty>
+        {pagination}
+      </div>
     )
   }
 
   if (data.length === 0) {
     return (
-      <section className='border-border bg-card rounded-lg border px-5 py-10 text-center'>
-        <h2 className='font-medium'>{emptyTitle ?? t('table.empty')}</h2>
-        {emptyDescription && (
-          <p className='text-muted-foreground mt-1 text-sm'>
-            {emptyDescription}
-          </p>
-        )}
-        {emptyAction && <div className='mt-4'>{emptyAction}</div>}
-      </section>
+      <div className='grid min-w-0 gap-3'>
+        <Empty className='border-border bg-background min-h-64 border'>
+          <EmptyHeader>
+            <EmptyMedia variant='icon'>
+              <HugeiconsIcon
+                className='size-6'
+                icon={Database01Icon}
+                strokeWidth={2}
+              />
+            </EmptyMedia>
+            <EmptyTitle>{emptyTitle ?? t('table.empty')}</EmptyTitle>
+            {emptyDescription && (
+              <EmptyDescription>{emptyDescription}</EmptyDescription>
+            )}
+          </EmptyHeader>
+          {emptyAction && <EmptyContent>{emptyAction}</EmptyContent>}
+        </Empty>
+        {pagination}
+      </div>
     )
   }
 
@@ -128,7 +177,7 @@ export function DataTable<TData>({
       <div
         className={cn(
           'border-border bg-background overflow-hidden rounded-md border',
-          renderMobileCard && 'hidden sm:block'
+          renderMobileCard && 'hidden min-[641px]:block'
         )}
       >
         <div
@@ -208,7 +257,7 @@ export function DataTable<TData>({
         </div>
       </div>
       {renderMobileCard && (
-        <div className='grid gap-3 sm:hidden'>
+        <div className='grid gap-3 min-[641px]:hidden'>
           {data.map((item, index) => (
             <div key={table.getRowModel().rows[index]?.id ?? index}>
               {renderMobileCard(item)}
@@ -216,15 +265,7 @@ export function DataTable<TData>({
           ))}
         </div>
       )}
-      {onPageChange && total > 0 && (
-        <DataTablePagination
-          onPageChange={onPageChange}
-          onPageSizeChange={onPageSizeChange}
-          page={page}
-          pageSize={pageSize}
-          total={total}
-        />
-      )}
+      {pagination}
     </div>
   )
 }

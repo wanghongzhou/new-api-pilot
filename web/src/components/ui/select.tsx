@@ -88,6 +88,7 @@ function SelectTrigger({
 function SelectContent({
   className,
   children,
+  portalled,
   side = 'bottom',
   sideOffset = 4,
   align = 'center',
@@ -98,7 +99,9 @@ function SelectContent({
   Pick<
     SelectPrimitive.Positioner.Props,
     'align' | 'alignOffset' | 'side' | 'sideOffset' | 'alignItemWithTrigger'
-  >) {
+  > & {
+    portalled?: boolean
+  }) {
   const isMobile = useMediaQuery('(max-width: 640px)')
 
   const content = (
@@ -126,7 +129,7 @@ function SelectContent({
     </SelectPrimitive.Positioner>
   )
 
-  if (isMobile) {
+  if (portalled === false || (portalled == null && isMobile)) {
     return content
   }
 

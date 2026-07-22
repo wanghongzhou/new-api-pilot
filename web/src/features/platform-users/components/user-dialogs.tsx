@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useEffect, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -17,8 +17,8 @@ import {
 } from '@/components/ui/dialog'
 import { FormField } from '@/components/ui/form-field'
 import { Input } from '@/components/ui/input'
-import { NativeSelect as Select } from '@/components/ui/native-select'
 import { PasswordInput } from '@/components/ui/password-input'
+import { SelectControl as Select } from '@/components/ui/select-control'
 import { Spinner } from '@/components/ui/spinner'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
@@ -63,6 +63,7 @@ export function CreateUserDialog({
   const { t } = useTranslation()
   const [submitting, setSubmitting] = useState(false)
   const {
+    control,
     formState: { errors },
     handleSubmit,
     register,
@@ -157,10 +158,21 @@ export function CreateUserDialog({
             />
           </FormField>
           <FormField htmlFor='create-role' label={t('Role')} required>
-            <Select id='create-role' {...register('role')}>
-              <option value='viewer'>{t('Viewer')}</option>
-              <option value='admin'>{t('Administrator')}</option>
-            </Select>
+            <Controller
+              control={control}
+              name='role'
+              render={({ field }) => (
+                <Select
+                  id='create-role'
+                  name={field.name}
+                  onChange={(event) => field.onChange(event.target.value)}
+                  value={field.value}
+                >
+                  <option value='viewer'>{t('Viewer')}</option>
+                  <option value='admin'>{t('Administrator')}</option>
+                </Select>
+              )}
+            />
           </FormField>
           <FormField
             description={t(
@@ -222,6 +234,7 @@ export function EditUserDialog({
   const { t } = useTranslation()
   const [submitting, setSubmitting] = useState(false)
   const {
+    control,
     formState: { errors },
     handleSubmit,
     register,
@@ -326,15 +339,26 @@ export function EditUserDialog({
             label={t('Role')}
             required
           >
-            <Select id='edit-role' {...register('role')}>
-              <option
-                disabled={isLastEnabledAdmin && user?.role === 'admin'}
-                value='viewer'
-              >
-                {t('Viewer')}
-              </option>
-              <option value='admin'>{t('Administrator')}</option>
-            </Select>
+            <Controller
+              control={control}
+              name='role'
+              render={({ field }) => (
+                <Select
+                  id='edit-role'
+                  name={field.name}
+                  onChange={(event) => field.onChange(event.target.value)}
+                  value={field.value}
+                >
+                  <option
+                    disabled={isLastEnabledAdmin && user?.role === 'admin'}
+                    value='viewer'
+                  >
+                    {t('Viewer')}
+                  </option>
+                  <option value='admin'>{t('Administrator')}</option>
+                </Select>
+              )}
+            />
           </FormField>
           {errors.root?.message && (
             <p className='text-destructive text-sm' role='alert'>

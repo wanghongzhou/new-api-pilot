@@ -5,7 +5,7 @@ import { FilterPanel } from '@/components/data/filter-panel'
 import { Checkbox } from '@/components/ui/checkbox'
 import { FormField } from '@/components/ui/form-field'
 import { Input } from '@/components/ui/input'
-import { NativeSelect as Select } from '@/components/ui/native-select'
+import { SelectControl as Select } from '@/components/ui/select-control'
 import type { SiteListItem } from '@/features/sites/types'
 import { isIdString } from '@/lib/api-types'
 import { BEIJING_TIMEZONE, dayjs, fromUnixSeconds } from '@/lib/dayjs'
@@ -157,8 +157,17 @@ export function AlertFilters({
         })
       }}
       onReset={() => {
-        setDraft({ end: '', level: [], start: '', status: [], targetType: [] })
+        const reset: AlertFilterValue = {
+          end: undefined,
+          level: [],
+          siteId: undefined,
+          start: undefined,
+          status: [],
+          targetType: [],
+        }
+        setDraft(draftValue(reset))
         setRangeError(false)
+        onApply(reset)
       }}
       title={t('alerts.filters.title')}
     >

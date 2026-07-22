@@ -1,9 +1,4 @@
-import {
-  Add01Icon,
-  GridViewIcon,
-  Refresh01Icon,
-  TableIcon,
-} from '@hugeicons/core-free-icons'
+import { Add01Icon, Refresh01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   keepPreviousData,
@@ -12,11 +7,12 @@ import {
 } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import type { ColumnDef, SortingState } from '@tanstack/react-table'
-import { useEffect, useMemo, useState, type CompositionEvent } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { DataFreshness } from '@/components/data/data-freshness'
+import { DataViewModeToggle } from '@/components/data/data-view-mode-toggle'
 import { MetricValue } from '@/components/data/metric-value'
 import { QuotaAmount } from '@/components/data/quota-amount'
 import { SiteStatusBadges } from '@/components/data/site-status-badges'
@@ -24,7 +20,6 @@ import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
 import { DataTablePagination } from '@/components/ui/data-table-pagination'
-import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
@@ -149,20 +144,9 @@ export function SitesPage({
   const queryClient = useQueryClient()
   const currentUser = useAuthStore((state) => state.user)
   const isAdmin = currentUser?.role === 'admin'
-  const [draftFilter, setDraftFilter] = useState(search.filter)
-  const [composing, setComposing] = useState(false)
   const [onboardingOpen, setOnboardingOpen] = useState(false)
   const [dialogState, setDialogState] = useState<SiteDialogState | null>(null)
   const [batchRefreshing, setBatchRefreshing] = useState(false)
-
-  useEffect(() => setDraftFilter(search.filter), [search.filter])
-  useEffect(() => {
-    if (composing || draftFilter === search.filter) return
-    const timer = window.setTimeout(() => {
-      onSearchChange({ filter: draftFilter.trim(), page: 1 })
-    }, 500)
-    return () => window.clearTimeout(timer)
-  }, [composing, draftFilter, onSearchChange, search.filter])
 
   const params = useMemo<SiteListParams>(
     () => ({
@@ -431,49 +415,18 @@ export function SitesPage({
       title={t('sites.title')}
     >
       <div className='grid min-w-0 gap-5'>
-        <div className='flex min-w-0 items-center gap-2'>
-          <Input
-            aria-label={t('sites.search')}
-            className='min-w-0 flex-1 sm:max-w-xl'
-            onChange={(event) => setDraftFilter(event.target.value)}
-            onCompositionEnd={(event: CompositionEvent<HTMLInputElement>) => {
-              setComposing(false)
-              setDraftFilter(event.currentTarget.value)
-            }}
-            onCompositionStart={() => setComposing(true)}
-            placeholder={t('sites.searchPlaceholder')}
-            value={draftFilter}
-          />
-        </div>
         <SiteFilters
           onApply={(filters) => onSearchChange({ ...filters, page: 1 })}
           value={search}
         />
         <div className='flex justify-end'>
-          <div
-            aria-label={t('sites.viewMode')}
-            className='border-border flex w-fit rounded-md border p-0.5'
-            role='group'
-          >
-            <Button
-              aria-pressed={search.view === 'card'}
-              onClick={() => saveView('card')}
-              size='icon'
-              title={t('sites.cardView')}
-              variant={search.view === 'card' ? 'secondary' : 'ghost'}
-            >
-              <HugeiconsIcon icon={GridViewIcon} strokeWidth={2} />
-            </Button>
-            <Button
-              aria-pressed={search.view === 'table'}
-              onClick={() => saveView('table')}
-              size='icon'
-              title={t('sites.tableView')}
-              variant={search.view === 'table' ? 'secondary' : 'ghost'}
-            >
-              <HugeiconsIcon icon={TableIcon} strokeWidth={2} />
-            </Button>
-          </div>
+          <DataViewModeToggle
+            ariaLabel={t('sites.viewMode')}
+            cardLabel={t('sites.cardView')}
+            onChange={saveView}
+            tableLabel={t('sites.tableView')}
+            value={search.view}
+          />
         </div>
 
         {search.view === 'card' ? (

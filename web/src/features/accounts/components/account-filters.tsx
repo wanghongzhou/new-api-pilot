@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { FilterPanel } from '@/components/data/filter-panel'
-import { NativeSelect as Select } from '@/components/ui/native-select'
+import { Input } from '@/components/ui/input'
+import { SelectControl as Select } from '@/components/ui/select-control'
 import type { CustomerListItem } from '@/features/customers/types'
 import type { SiteListItem } from '@/features/sites/types'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
@@ -17,7 +18,12 @@ import type { AccountSearch } from '../types'
 
 type Draft = Pick<
   AccountSearch,
-  'customerId' | 'managedStatus' | 'remoteState' | 'remoteStatus' | 'siteId'
+  | 'customerId'
+  | 'filter'
+  | 'managedStatus'
+  | 'remoteState'
+  | 'remoteStatus'
+  | 'siteId'
 >
 
 export function AccountFilters({
@@ -45,19 +51,35 @@ export function AccountFilters({
   return (
     <FilterPanel
       description={t('account.filters.description')}
-      onApply={() => onApply(draft)}
-      onReset={() =>
-        setDraft({
+      onApply={() => onApply({ ...draft, filter: draft.filter.trim() })}
+      onReset={() => {
+        const reset: Draft = {
           customerId: undefined,
+          filter: '',
           managedStatus: [],
           remoteState: [],
           remoteStatus: [],
           siteId: undefined,
-        })
-      }
+        }
+        setDraft(reset)
+        onApply(reset)
+      }}
       title={t('account.filters.title')}
     >
       <div className='flex flex-wrap items-end gap-2'>
+        <label className='grid w-full gap-1 text-sm sm:w-64'>
+          <span>{t('accounts.search')}</span>
+          <Input
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                filter: event.target.value,
+              }))
+            }
+            placeholder={t('accounts.searchPlaceholder')}
+            value={draft.filter}
+          />
+        </label>
         <label className='grid w-full gap-1 text-sm sm:w-52'>
           <span>{t('account.site')}</span>
           <Select

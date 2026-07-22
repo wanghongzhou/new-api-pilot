@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { DataStatusBadge } from '@/components/data/data-status'
+import { FilterPanel } from '@/components/data/filter-panel'
 import { MetricValue } from '@/components/data/metric-value'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
@@ -34,7 +35,7 @@ import {
 } from '../api'
 import { buildSystemTaskExportRequest } from '../export-request'
 import { systemTaskKeys } from '../query-keys'
-import type { SystemTaskSearch } from '../search'
+import { buildSystemTaskSearch, type SystemTaskSearch } from '../search'
 import {
   systemTaskStatuses,
   systemTaskTypes,
@@ -199,19 +200,14 @@ function Filters({
       page: 1,
     })
   return (
-    <section
-      aria-labelledby='system-task-filters'
-      className='border-border bg-card grid gap-4 rounded-lg border p-4'
+    <FilterPanel
+      description={t('systemTasks.filters.description')}
+      onReset={() =>
+        onChange(buildSystemTaskSearch({ pageSize: search.pageSize }))
+      }
+      title={t('systemTasks.filters.title')}
     >
-      <div>
-        <h2 className='font-medium' id='system-task-filters'>
-          {t('systemTasks.filters.title')}
-        </h2>
-        <p className='text-muted-foreground mt-1 text-sm'>
-          {t('systemTasks.filters.description')}
-        </p>
-      </div>
-      <div className='grid gap-3 md:grid-cols-3'>
+      <div className='grid min-w-0 flex-1 gap-3 md:grid-cols-3'>
         {global && (
           <label className='grid gap-1 text-sm'>
             <span>{t('systemTasks.filters.siteIds')}</span>
@@ -313,7 +309,7 @@ function Filters({
           ))}
         </div>
       </fieldset>
-    </section>
+    </FilterPanel>
   )
 }
 

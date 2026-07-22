@@ -1,6 +1,8 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page, type Route } from '@playwright/test'
 
+import { clickOpenSelectOption } from './helpers/select-control'
+
 const authStorageKey = 'pilot-auth-user'
 const uidStorageKey = 'uid'
 const rangeStart = 1_783_789_200
@@ -465,9 +467,11 @@ async function mockOnboardingLists(page: Page, user: TestUser) {
 async function beginOnboarding(page: Page) {
   await page.goto('/accounts')
   await page.getByRole('button', { name: '添加账户' }).first().click()
-  await page.locator('#account-onboarding-customer').selectOption('7')
+  await page.locator('#account-onboarding-customer').click()
+  await clickOpenSelectOption(page, '7')
   await page.getByRole('button', { name: '继续' }).click()
-  await page.locator('#account-onboarding-site').selectOption('1')
+  await page.locator('#account-onboarding-site').click()
+  await clickOpenSelectOption(page, '1')
 }
 
 test('keeps viewer customer and account detail read-only, accessible, and responsive', async ({
@@ -926,7 +930,8 @@ test('keeps authoritative statistics exact, exportable, accessible, and responsi
   await recoveredSheet.getByRole('button', { name: '关闭' }).click()
   await expect(page).not.toHaveURL(/exportId=/)
 
-  await page.getByLabel('金额显示').selectOption('quota')
+  await page.getByLabel('金额显示').click()
+  await clickOpenSelectOption(page, 'quota')
   await page.getByRole('button', { name: '图表视图' }).click()
   await expect(page.getByRole('img', { name: '统计趋势图' })).toBeVisible()
   await expect(page.getByText('部分或未最终确认的数据')).toBeVisible()
@@ -1128,7 +1133,7 @@ test('allows a disabled customer to recover only through the enable run', async 
   await expect(
     page.getByRole('heading', { name: '恢复与回填进度' })
   ).toBeVisible()
-  await expect(page.getByText('700')).toBeVisible()
+  await expect(page.getByText('700', { exact: true })).toBeVisible()
   expect(puts).toBe(0)
   expect(enables).toBe(1)
 })

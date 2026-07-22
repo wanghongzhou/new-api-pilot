@@ -12,15 +12,14 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import type { ColumnDef } from '@tanstack/react-table'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { DataTablePagination } from '@/components/ui/data-table-pagination'
-import { Input } from '@/components/ui/input'
-import { NativeSelect as Select } from '@/components/ui/native-select'
+import { DataTable } from '@/components/ui/data-table'
 import { Spinner } from '@/components/ui/spinner'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { fromUnixSeconds } from '@/lib/dayjs'
@@ -33,6 +32,7 @@ import type {
   PlatformUserListParams,
   PlatformUserSearch,
 } from '../types'
+import { PlatformUserFilters } from './platform-user-filters'
 import {
   CreateUserDialog,
   EditUserDialog,
@@ -49,72 +49,6 @@ function formatTime(timestamp: number | null): string | null {
   return timestamp == null
     ? null
     : fromUnixSeconds(timestamp).format('YYYY-MM-DD HH:mm:ss')
-}
-
-function parseStatusFilter(value: string): 1 | 2 | undefined {
-  if (value === '1') return 1
-  if (value === '2') return 2
-  return undefined
-}
-
-function UserFilterFields({
-  filter,
-  mobile = false,
-  onFilterChange,
-  onSearchChange,
-  search,
-}: {
-  filter: string
-  mobile?: boolean
-  onFilterChange: (value: string) => void
-  onSearchChange: (changes: Partial<PlatformUserSearch>) => void
-  search: PlatformUserSearch
-}) {
-  const { t } = useTranslation()
-  return (
-    <>
-      <Input
-        aria-label={t('Search platform users')}
-        className={mobile ? 'w-full' : 'max-w-xs'}
-        onChange={(event) => onFilterChange(event.target.value)}
-        placeholder={t('Search username or display name')}
-        value={filter}
-      />
-      <Select
-        aria-label={t('Filter by role')}
-        className={mobile ? 'w-full' : undefined}
-        onChange={(event) =>
-          onSearchChange({
-            page: 1,
-            role:
-              event.target.value === ''
-                ? undefined
-                : (event.target.value as 'admin' | 'viewer'),
-          })
-        }
-        value={search.role ?? ''}
-      >
-        <option value=''>{t('All roles')}</option>
-        <option value='admin'>{t('Administrator')}</option>
-        <option value='viewer'>{t('Viewer')}</option>
-      </Select>
-      <Select
-        aria-label={t('Filter by status')}
-        className={mobile ? 'w-full' : undefined}
-        onChange={(event) =>
-          onSearchChange({
-            page: 1,
-            status: parseStatusFilter(event.target.value),
-          })
-        }
-        value={search.status?.toString() ?? ''}
-      >
-        <option value=''>{t('All statuses')}</option>
-        <option value='1'>{t('Enabled')}</option>
-        <option value='2'>{t('Disabled')}</option>
-      </Select>
-    </>
-  )
 }
 
 function UserStatusBadge({ user }: { user: PlatformUserItem }) {
@@ -139,7 +73,6 @@ export function PlatformUsersPage({
   const queryClient = useQueryClient()
   const currentUser = useAuthStore((state) => state.user)
   const isAdmin = currentUser?.role === 'admin'
-  const [filter, setFilter] = useState(search.filter)
   const [createOpen, setCreateOpen] = useState(false)
   const [editUser, setEditUser] = useState<PlatformUserItem | null>(null)
   const [resetUser, setResetUser] = useState<PlatformUserItem | null>(null)
@@ -147,8 +80,6 @@ export function PlatformUsersPage({
     action: 'enable' | 'disable'
     user: PlatformUserItem
   } | null>(null)
-
-  useEffect(() => setFilter(search.filter), [search.filter])
 
   const params = useMemo<PlatformUserListParams>(
     () => ({
@@ -184,185 +115,147 @@ export function PlatformUsersPage({
   const invalidateUsers = () => {
     void queryClient.invalidateQueries({ queryKey: platformUserKeys.all })
   }
-  const submitFilter = (event: FormEvent) => {
-    event.preventDefault()
-    onSearchChange({ filter: filter.trim(), page: 1 })
-  }
   const enabledAdminTotal = enabledAdminQuery.data?.total ?? 0
   const pageData = usersQuery.data
   const initialLoading = usersQuery.isPending && !pageData
-  const initialError = usersQuery.isError && !pageData
-  const empty = pageData?.items.length === 0
-  const hasRows = (pageData?.items.length ?? 0) > 0
-
-  return (
-    <SectionPageLayout
-      actions={
-        isAdmin ? (
-          <Button onClick={() => setCreateOpen(true)}>
-            <HugeiconsIcon icon={Add01Icon} strokeWidth={2} />
-            {t('Create user')}
-          </Button>
-        ) : undefined
-      }
-      description={t('Manage platform access and roles')}
-      title={t('Platform users')}
-    >
-      <div className='grid gap-4'>
-        <div className='flex items-center gap-2'>
-          <Button
-            aria-label={t('Refresh')}
-            disabled={usersQuery.isFetching}
-            onClick={() => void usersQuery.refetch()}
-            size='icon'
-            title={t('Refresh')}
-            type='button'
-            variant='ghost'
-          >
-            {usersQuery.isFetching ? (
-              <Spinner />
-            ) : (
-              <HugeiconsIcon icon={Refresh01Icon} strokeWidth={2} />
-            )}
-          </Button>
-        </div>
-        <form
-          className='flex flex-wrap items-center gap-2'
-          onSubmit={submitFilter}
-        >
-          <UserFilterFields
-            filter={filter}
-            onFilterChange={setFilter}
-            onSearchChange={onSearchChange}
-            search={search}
-          />
-          <Button type='submit' variant='outline'>
-            {t('Search')}
-          </Button>
-          <Button
-            aria-label={t('Refresh')}
-            disabled={usersQuery.isFetching}
-            onClick={() => void usersQuery.refetch()}
-            size='icon'
-            title={t('Refresh')}
-            type='button'
-            variant='ghost'
-          >
-            {usersQuery.isFetching ? (
-              <Spinner />
-            ) : (
-              <HugeiconsIcon icon={Refresh01Icon} strokeWidth={2} />
-            )}
-          </Button>
-        </form>
-
-        {initialLoading && (
-          <div
-            aria-hidden='true'
-            className='border-border bg-card h-64 animate-pulse rounded-lg border'
-          />
-        )}
-        {initialError && (
-          <section className='border-destructive/30 bg-destructive/5 rounded-lg border p-5'>
-            <h2 className='font-medium'>
-              {t('Unable to load platform users')}
-            </h2>
-            <Button
-              className='mt-3'
-              onClick={() => void usersQuery.refetch()}
-              variant='outline'
-            >
-              {t('Retry')}
-            </Button>
-          </section>
-        )}
-        {empty && (
-          <section className='border-border bg-card rounded-lg border p-8 text-center'>
-            <h2 className='font-medium'>{t('No platform users found')}</h2>
-            <p className='text-muted-foreground mt-1 text-sm'>
-              {t('Adjust the filters and try again')}
-            </p>
-          </section>
-        )}
-        {hasRows && (
-          <>
-            <div className='hidden overflow-hidden rounded-lg border xl:block'>
-              <table className='w-full border-collapse text-sm'>
-                <thead className='bg-muted/70 text-left'>
-                  <tr>
-                    <th className='px-3 py-2.5 font-medium'>{t('Username')}</th>
-                    <th className='px-3 py-2.5 font-medium'>
-                      {t('Display name')}
-                    </th>
-                    <th className='px-3 py-2.5 font-medium'>{t('Role')}</th>
-                    <th className='px-3 py-2.5 font-medium'>{t('Status')}</th>
-                    <th className='px-3 py-2.5 font-medium'>
-                      {t('Password change')}
-                    </th>
-                    <th className='px-3 py-2.5 font-medium'>
-                      {t('Last signed in')}
-                    </th>
-                    <th
-                      aria-sort='descending'
-                      className='px-3 py-2.5 font-medium'
-                    >
-                      {t('Created at')}
-                    </th>
-                    {isAdmin && (
-                      <th className='px-3 py-2.5 text-right font-medium'>
-                        {t('Actions')}
-                      </th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {pageData?.items.map((user) => (
-                    <UserTableRow
-                      currentUserId={currentUser?.id}
-                      enabledAdminTotal={enabledAdminTotal}
-                      isAdmin={isAdmin}
-                      key={user.id}
-                      onEdit={setEditUser}
-                      onReset={setResetUser}
-                      onToggle={(target, action) =>
-                        setToggleState({ action, user: target })
-                      }
-                      user={user}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:hidden'>
-              {pageData?.items.map((user) => (
-                <UserCard
+  const columns = useMemo<ColumnDef<PlatformUserItem, unknown>[]>(
+    () => [
+      {
+        accessorKey: 'username',
+        cell: ({ row }) => (
+          <span className='font-medium'>{row.original.username}</span>
+        ),
+        header: t('Username'),
+      },
+      {
+        accessorKey: 'display_name',
+        header: t('Display name'),
+      },
+      {
+        cell: ({ row }) =>
+          t(
+            dynamicI18nKey(
+              'platformUser',
+              row.original.role === 'admin' ? 'Administrator' : 'Viewer'
+            )
+          ),
+        header: t('Role'),
+        id: 'role',
+      },
+      {
+        cell: ({ row }) => <UserStatusBadge user={row.original} />,
+        header: t('Status'),
+        id: 'status',
+      },
+      {
+        cell: ({ row }) =>
+          row.original.must_change_password ? t('Required') : t('Not required'),
+        header: t('Password change'),
+        id: 'passwordChange',
+      },
+      {
+        cell: ({ row }) => formatTime(row.original.last_login_at) ?? t('Never'),
+        header: t('Last signed in'),
+        id: 'lastLogin',
+      },
+      {
+        cell: ({ row }) => formatTime(row.original.created_at),
+        header: t('Created at'),
+        id: 'createdAt',
+      },
+      ...(isAdmin
+        ? [
+            {
+              cell: ({ row }: { row: { original: PlatformUserItem } }) => (
+                <UserActions
                   currentUserId={currentUser?.id}
                   enabledAdminTotal={enabledAdminTotal}
                   isAdmin={isAdmin}
-                  key={user.id}
                   onEdit={setEditUser}
                   onReset={setResetUser}
                   onToggle={(target, action) =>
                     setToggleState({ action, user: target })
                   }
-                  user={user}
+                  user={row.original}
                 />
-              ))}
-            </div>
-          </>
-        )}
+              ),
+              header: t('Actions'),
+              id: 'actions',
+            },
+          ]
+        : []),
+    ],
+    [currentUser?.id, enabledAdminTotal, isAdmin, t]
+  )
 
-        {pageData && pageData.total > 0 && (
-          <DataTablePagination
-            onPageChange={(page) => onSearchChange({ page })}
-            onPageSizeChange={(pageSize) =>
-              onSearchChange({ page: 1, pageSize })
-            }
-            page={search.page}
-            pageSize={pageData.page_size}
-            total={pageData.total}
-          />
-        )}
+  return (
+    <SectionPageLayout
+      actions={
+        <>
+          <Button
+            aria-label={t('common.refresh')}
+            disabled={usersQuery.isFetching}
+            onClick={() => void usersQuery.refetch()}
+            size='icon'
+            title={t('common.refresh')}
+            variant='outline'
+          >
+            {usersQuery.isFetching ? (
+              <Spinner />
+            ) : (
+              <HugeiconsIcon icon={Refresh01Icon} strokeWidth={2} />
+            )}
+          </Button>
+          {isAdmin && (
+            <Button onClick={() => setCreateOpen(true)}>
+              <HugeiconsIcon icon={Add01Icon} strokeWidth={2} />
+              {t('Create user')}
+            </Button>
+          )}
+        </>
+      }
+      description={t('Manage platform access and roles')}
+      title={t('Platform users')}
+    >
+      <div className='grid min-w-0 gap-5'>
+        <PlatformUserFilters
+          onApply={(filters) => onSearchChange({ ...filters, page: 1 })}
+          value={{
+            filter: search.filter,
+            role: search.role,
+            status: search.status,
+          }}
+        />
+
+        <DataTable
+          ariaLabel={t('Platform users')}
+          columns={columns}
+          data={pageData?.items ?? []}
+          emptyDescription={t('Adjust the filters and try again')}
+          emptyTitle={t('No platform users found')}
+          error={usersQuery.isError}
+          fetching={usersQuery.isFetching && !initialLoading}
+          loading={initialLoading}
+          onPageChange={(page) => onSearchChange({ page })}
+          onPageSizeChange={(pageSize) => onSearchChange({ page: 1, pageSize })}
+          onRetry={() => void usersQuery.refetch()}
+          page={search.page}
+          pageSize={pageData?.page_size ?? search.pageSize}
+          renderMobileCard={(user) => (
+            <UserCard
+              currentUserId={currentUser?.id}
+              enabledAdminTotal={enabledAdminTotal}
+              isAdmin={isAdmin}
+              onEdit={setEditUser}
+              onReset={setResetUser}
+              onToggle={(target, action) =>
+                setToggleState({ action, user: target })
+              }
+              user={user}
+            />
+          )}
+          total={pageData?.total ?? 0}
+        />
       </div>
 
       <CreateUserDialog
@@ -470,44 +363,6 @@ function UserActions({
         />
       </Button>
     </div>
-  )
-}
-
-function UserTableRow(props: UserActionsProps) {
-  const { t } = useTranslation()
-  const { user } = props
-  const lastLogin = formatTime(user.last_login_at)
-  const createdAt = formatTime(user.created_at)
-  return (
-    <tr className='border-t'>
-      <td className='px-3 py-3 font-medium'>{user.username}</td>
-      <td className='px-3 py-3'>{user.display_name}</td>
-      <td className='px-3 py-3'>
-        {t(
-          dynamicI18nKey(
-            'platformUser',
-            user.role === 'admin' ? 'Administrator' : 'Viewer'
-          )
-        )}
-      </td>
-      <td className='px-3 py-3'>
-        <UserStatusBadge user={user} />
-      </td>
-      <td className='px-3 py-3'>
-        {user.must_change_password ? t('Required') : t('Not required')}
-      </td>
-      <td className='px-3 py-3' title={lastLogin ?? undefined}>
-        {lastLogin ?? t('Never')}
-      </td>
-      <td className='px-3 py-3' title={createdAt ?? undefined}>
-        {createdAt}
-      </td>
-      {props.isAdmin && (
-        <td className='px-2 py-1'>
-          <UserActions {...props} />
-        </td>
-      )}
-    </tr>
   )
 }
 

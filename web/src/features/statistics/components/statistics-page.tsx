@@ -15,9 +15,10 @@ import { DataStatusBadge } from '@/components/data/data-status'
 import { MetricValue } from '@/components/data/metric-value'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Badge } from '@/components/ui/badge'
-import { Button, buttonVariants } from '@/components/ui/button'
+import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
 import { Spinner } from '@/components/ui/spinner'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import { formatBeijingTimestamp } from '@/lib/dayjs'
@@ -92,24 +93,23 @@ function queryParams(search: StatisticsSearch): StatisticsQueryParams {
 function ScopeNavigation({ scope }: { scope: StatisticsScope }) {
   const { t } = useTranslation()
   return (
-    <nav
-      aria-label={t('statistics.scopeNavigation')}
-      className='border-border flex min-w-0 gap-1 overflow-x-auto border-b pb-2'
-    >
-      {scopeLinks.map(([value, to]) => (
-        <Link
-          className={`${buttonVariants({
-            size: 'sm',
-            variant: scope === value ? 'secondary' : 'ghost',
-          })} statistics-scope-link`}
-          key={value}
-          search={buildStatisticsSearch({})}
-          to={to}
-        >
-          {t(dynamicI18nKey('statistics', `statistics.scope.${value}`))}
-        </Link>
-      ))}
-    </nav>
+    <Tabs value={scope}>
+      <TabsList
+        aria-label={t('statistics.scopeNavigation')}
+        className='max-w-full flex-wrap justify-start group-data-horizontal/tabs:h-auto'
+      >
+        {scopeLinks.map(([value, to]) => (
+          <TabsTrigger
+            className='statistics-scope-link'
+            key={value}
+            render={<Link search={buildStatisticsSearch({})} to={to} />}
+            value={value}
+          >
+            {t(dynamicI18nKey('statistics', `statistics.scope.${value}`))}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
   )
 }
 

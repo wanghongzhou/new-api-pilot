@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { DataStatusBadge } from '@/components/data/data-status'
+import { FilterPanel } from '@/components/data/filter-panel'
 import { MetricValue } from '@/components/data/metric-value'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
@@ -39,7 +40,7 @@ import {
 } from '../api'
 import { buildUserInventoryExportRequest } from '../export-request'
 import { userInventoryKeys } from '../query-keys'
-import type { UserInventorySearch } from '../search'
+import { buildUserInventorySearch, type UserInventorySearch } from '../search'
 import type {
   UserInventoryBreakdown,
   UserInventoryItem,
@@ -222,19 +223,14 @@ function InventoryFilters({
       }
     }
   return (
-    <section
-      aria-labelledby='user-inventory-filters-title'
-      className='border-border bg-card grid gap-4 rounded-lg border p-4'
+    <FilterPanel
+      description={t('userInventory.filters.description')}
+      onReset={() =>
+        onChange(buildUserInventorySearch({ pageSize: search.pageSize }))
+      }
+      title={t('userInventory.filters.title')}
     >
-      <div>
-        <h2 className='font-medium' id='user-inventory-filters-title'>
-          {t('userInventory.filters.title')}
-        </h2>
-        <p className='text-muted-foreground mt-1 text-sm'>
-          {t('userInventory.filters.description')}
-        </p>
-      </div>
-      <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
+      <div className='grid w-full min-w-0 flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-4'>
         <label className='grid gap-1 text-sm'>
           <span>{t('userInventory.filters.keyword')}</span>
           <Input
@@ -337,7 +333,7 @@ function InventoryFilters({
           />
         </label>
       </div>
-      <div className='grid gap-3 xl:grid-cols-3'>
+      <div className='grid w-full gap-3 xl:grid-cols-3'>
         <MultiChoice
           label={t('userInventory.filters.roles')}
           onChange={(values) =>
@@ -380,7 +376,7 @@ function InventoryFilters({
           selected={search.states}
         />
       </div>
-    </section>
+    </FilterPanel>
   )
 }
 
@@ -398,7 +394,7 @@ function TrendTable({ points }: { points: UserInventoryTrendPoint[] }) {
       ) : (
         <div className='overflow-x-auto rounded-lg border'>
           <table className='w-full min-w-3xl text-sm'>
-            <thead className='bg-muted/70 text-left'>
+            <thead className='bg-[var(--table-header)] text-left'>
               <tr>
                 <th className='px-3 py-2'>{t('userInventory.trend.bucket')}</th>
                 <th className='px-3 py-2'>
@@ -418,7 +414,10 @@ function TrendTable({ points }: { points: UserInventoryTrendPoint[] }) {
             </thead>
             <tbody>
               {points.map((point) => (
-                <tr className='border-t' key={point.bucket_start}>
+                <tr
+                  className='border-t transition-colors hover:bg-[var(--table-header-hover)]'
+                  key={point.bucket_start}
+                >
                   <td className='px-3 py-2 whitespace-nowrap'>
                     {timestamp(point.bucket_start)}
                   </td>

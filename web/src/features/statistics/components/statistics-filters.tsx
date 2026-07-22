@@ -346,8 +346,8 @@ export function StatisticsFilters({
       description={t('statistics.filter.description')}
       hasAdvancedActive={count > 0}
       onApply={() => void submit()}
-      onReset={() =>
-        form.reset({
+      onReset={() => {
+        const reset = {
           accountIds: [],
           channelKeys: [],
           customerIds: [],
@@ -356,8 +356,10 @@ export function StatisticsFilters({
           siteIds: [],
           tokenKeys: [],
           useGroups: [],
-        })
-      }
+        }
+        form.reset(reset)
+        onApply({ ...reset, page: 1 })
+      }}
       title={t('statistics.filter.title')}
     >
       <form

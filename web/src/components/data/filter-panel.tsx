@@ -1,3 +1,5 @@
+import { Cancel01Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import {
   Children,
   cloneElement,
@@ -11,7 +13,7 @@ import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { NativeSelect as Select } from '@/components/ui/native-select'
+import { SelectControl as Select } from '@/components/ui/select-control'
 import { cn } from '@/lib/utils'
 
 type FilterElementProps = {
@@ -134,49 +136,54 @@ export function FilterPanel({
   const advancedVisible = expanded || (expandOnLargeScreen && isLargeScreen)
 
   return (
-    <section
-      aria-label={title}
-      className='flex min-w-0 flex-col gap-2 rounded-lg border p-2.5 sm:p-3'
-    >
+    <section aria-label={title} className='flex min-w-0 flex-col gap-2'>
       <span className='sr-only'>{description}</span>
-      <div className='flex flex-wrap items-end gap-2'>
-        <div className='min-w-0 flex-1'>{compactFilterFields(children)}</div>
-        {hasAdvanced && !(expandOnLargeScreen && isLargeScreen) && (
-          <Button
-            aria-expanded={expanded}
-            className={cn(
-              'shrink-0',
-              hasAdvancedActive && !expanded && 'text-primary-strong'
-            )}
-            onClick={() => setExpanded((current) => !current)}
-            type='button'
-            variant='ghost'
-          >
-            {expanded ? t('common.collapse') : t('common.expand')}
-          </Button>
-        )}
-      </div>
-      {advancedVisible && advanced && (
-        <div className='flex flex-wrap items-end gap-2'>
-          {compactFilterFields(advanced)}
+      <div className='flex flex-wrap items-center gap-2 sm:gap-3'>
+        <div className='flex w-full min-w-0 flex-1 flex-wrap items-center gap-2 sm:w-auto sm:gap-3'>
+          {compactFilterFields(children)}
         </div>
-      )}
-      {(onApply || onReset) && (
-        <div className='flex flex-wrap justify-end gap-2'>
+        <div className='ms-auto flex shrink-0 items-center gap-1.5 sm:gap-2'>
           {onReset && (
-            <Button onClick={onReset} type='button' variant='outline'>
+            <Button
+              className={
+                onApply
+                  ? undefined
+                  : 'text-muted-foreground hover:text-foreground gap-1 px-2'
+              }
+              onClick={onReset}
+              type='button'
+              variant={onApply ? 'outline' : 'ghost'}
+            >
               {t('common.reset')}
+              {!onApply && (
+                <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
+              )}
             </Button>
           )}
           {onApply && (
-            <Button
-              className='bg-primary-strong hover:bg-primary-strong-hover text-white'
-              onClick={onApply}
-              type='button'
-            >
+            <Button onClick={onApply} type='button'>
               {t('common.apply')}
             </Button>
           )}
+          {hasAdvanced && !(expandOnLargeScreen && isLargeScreen) && (
+            <Button
+              aria-expanded={expanded}
+              className={cn(
+                'shrink-0',
+                hasAdvancedActive && !expanded && 'text-primary-strong'
+              )}
+              onClick={() => setExpanded((current) => !current)}
+              type='button'
+              variant='ghost'
+            >
+              {expanded ? t('common.collapse') : t('common.expand')}
+            </Button>
+          )}
+        </div>
+      </div>
+      {advancedVisible && advanced && (
+        <div className='flex flex-wrap items-center gap-2 sm:gap-3'>
+          {compactFilterFields(advanced)}
         </div>
       )}
     </section>

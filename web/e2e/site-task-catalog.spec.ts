@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs'
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page, type Route } from '@playwright/test'
 
+import { clickOpenSelectOption } from './helpers/select-control'
+
 type F12Task = {
   category: 'durable' | 'fast' | 'hourly' | 'rebuild' | 'usage'
   purpose_key: string
@@ -319,6 +321,7 @@ async function mockPage(page: Page) {
 test('A101 shows the F12 nineteen-task catalog and exact fast-task subset', async ({
   page,
 }, testInfo) => {
+  test.setTimeout(90_000)
   expect(f12.fixture_id).toBe('F12')
   expect(f12.tasks).toHaveLength(19)
   await seedAuth(page)
@@ -334,8 +337,14 @@ test('A101 shows the F12 nineteen-task catalog and exact fast-task subset', asyn
   await expect(taskFilters).toHaveCount(2)
   const collectionFilter = taskFilters.nth(0)
   const fastFilter = taskFilters.nth(1)
-  await expect(collectionFilter.locator('option')).toHaveCount(20)
-  await expect(fastFilter.locator('option')).toHaveCount(3)
+  await collectionFilter.click()
+  await expect(
+    page
+      .getByRole('listbox')
+      .filter({ visible: true })
+      .last()
+      .getByRole('option')
+  ).toHaveCount(20)
 
   for (const task of f12.tasks) {
     const label = zh[`collection.task.${task.task_type}`]
@@ -343,9 +352,23 @@ test('A101 shows the F12 nineteen-task catalog and exact fast-task subset', asyn
     expect(label).toBeTruthy()
     expect(purpose).toBeTruthy()
     await expect(
-      collectionFilter.locator(`option[value="${task.task_type}"]`)
+      page
+        .getByRole('listbox')
+        .filter({ visible: true })
+        .last()
+        .locator(`[role='option'][data-select-value='${task.task_type}']`)
     ).toHaveText(label)
   }
+  await page.keyboard.press('Escape')
+  await fastFilter.click()
+  await expect(
+    page
+      .getByRole('listbox')
+      .filter({ visible: true })
+      .last()
+      .getByRole('option')
+  ).toHaveCount(3)
+  await page.keyboard.press('Escape')
 
   for (const status of ['pending', 'running', 'success', 'failed']) {
     await expect(
@@ -357,7 +380,8 @@ test('A101 shows the F12 nineteen-task catalog and exact fast-task subset', asyn
   }
 
   for (const task of f12.tasks) {
-    await collectionFilter.selectOption(task.task_type)
+    await collectionFilter.click()
+    await clickOpenSelectOption(page, task.task_type)
     await expect
       .poll(() => requests.collectionRequests.at(-1))
       .toBe(task.task_type)
@@ -369,7 +393,8 @@ test('A101 shows the F12 nineteen-task catalog and exact fast-task subset', asyn
     ).toBeVisible()
   }
 
-  await fastFilter.selectOption('resource_snapshot')
+  await fastFilter.click()
+  await clickOpenSelectOption(page, 'resource_snapshot')
   await expect
     .poll(() => requests.fastRequests.at(-1))
     .toBe('resource_snapshot')

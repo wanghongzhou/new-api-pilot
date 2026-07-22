@@ -15,12 +15,14 @@ import type { ColumnDef, SortingState } from '@tanstack/react-table'
 import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { FilterPanel } from '@/components/data/filter-panel'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
-import { NativeSelect as Select } from '@/components/ui/native-select'
+import { SelectControl as Select } from '@/components/ui/select-control'
 import { Spinner } from '@/components/ui/spinner'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { dashboardKeys } from '@/features/dashboard/query-keys'
 import { listSites } from '@/features/sites/api'
 import { siteKeys } from '@/features/sites/query-keys'
@@ -579,34 +581,20 @@ export function AlertsPage({
       title={t('alerts.title')}
     >
       <div className='grid min-w-0 gap-5'>
-        <div
-          aria-label={t('alerts.tabs.label')}
-          className='border-border flex w-fit max-w-full rounded-md border p-0.5'
-          role='tablist'
+        <Tabs
+          onValueChange={(tab) =>
+            onSearchChange({
+              alertId: undefined,
+              tab: tab as AlertSearch['tab'],
+            })
+          }
+          value={search.tab}
         >
-          <Button
-            aria-controls='alerts-events-panel'
-            aria-selected={search.tab === 'events'}
-            onClick={() =>
-              onSearchChange({ alertId: undefined, tab: 'events' })
-            }
-            role='tab'
-            size='sm'
-            variant={search.tab === 'events' ? 'secondary' : 'ghost'}
-          >
-            {t('alerts.tabs.events')}
-          </Button>
-          <Button
-            aria-controls='alerts-rules-panel'
-            aria-selected={search.tab === 'rules'}
-            onClick={() => onSearchChange({ alertId: undefined, tab: 'rules' })}
-            role='tab'
-            size='sm'
-            variant={search.tab === 'rules' ? 'secondary' : 'ghost'}
-          >
-            {t('alerts.tabs.rules')}
-          </Button>
-        </div>
+          <TabsList aria-label={t('alerts.tabs.label')}>
+            <TabsTrigger value='events'>{t('alerts.tabs.events')}</TabsTrigger>
+            <TabsTrigger value='rules'>{t('alerts.tabs.rules')}</TabsTrigger>
+          </TabsList>
+        </Tabs>
 
         {search.tab === 'events' ? (
           <div className='grid gap-5' id='alerts-events-panel' role='tabpanel'>
@@ -678,53 +666,60 @@ export function AlertsPage({
           </div>
         ) : (
           <div className='grid gap-5' id='alerts-rules-panel' role='tabpanel'>
-            <section
-              aria-label={t('alerts.rules.scopeControls')}
-              className='border-border grid gap-4 border-y py-4 sm:grid-cols-2'
+            <FilterPanel
+              description={t('alerts.rules.scopeControls')}
+              onReset={() =>
+                onSearchChange({ ruleSiteId: undefined, scope: 'global' })
+              }
+              title={t('alerts.rules.scopeControls')}
             >
-              <label className='grid gap-1.5 text-sm'>
-                <span className='font-medium'>{t('alerts.rules.scope')}</span>
-                <Select
-                  onChange={(event) =>
-                    onSearchChange({
-                      ruleSiteId:
-                        event.target.value === 'site'
-                          ? search.ruleSiteId
-                          : undefined,
-                      scope: event.target.value as AlertSearch['scope'],
-                    })
-                  }
-                  value={search.scope}
-                >
-                  <option value='global'>
-                    {t('alerts.rules.scope.global')}
-                  </option>
-                  <option value='site'>{t('alerts.rules.scope.site')}</option>
-                </Select>
-              </label>
-              {search.scope === 'site' && (
+              <div className='grid min-w-0 flex-1 gap-3 sm:grid-cols-2'>
                 <label className='grid gap-1.5 text-sm'>
-                  <span className='font-medium'>{t('alerts.rules.site')}</span>
+                  <span className='font-medium'>{t('alerts.rules.scope')}</span>
                   <Select
                     onChange={(event) =>
                       onSearchChange({
-                        ruleSiteId: isIdString(event.target.value)
-                          ? event.target.value
-                          : undefined,
+                        ruleSiteId:
+                          event.target.value === 'site'
+                            ? search.ruleSiteId
+                            : undefined,
+                        scope: event.target.value as AlertSearch['scope'],
                       })
                     }
-                    value={search.ruleSiteId ?? ''}
+                    value={search.scope}
                   >
-                    <option value=''>{t('alerts.rules.selectSite')}</option>
-                    {sites.map((site: SiteListItem) => (
-                      <option key={site.id} value={site.id}>
-                        {site.name}
-                      </option>
-                    ))}
+                    <option value='global'>
+                      {t('alerts.rules.scope.global')}
+                    </option>
+                    <option value='site'>{t('alerts.rules.scope.site')}</option>
                   </Select>
                 </label>
-              )}
-            </section>
+                {search.scope === 'site' && (
+                  <label className='grid gap-1.5 text-sm'>
+                    <span className='font-medium'>
+                      {t('alerts.rules.site')}
+                    </span>
+                    <Select
+                      onChange={(event) =>
+                        onSearchChange({
+                          ruleSiteId: isIdString(event.target.value)
+                            ? event.target.value
+                            : undefined,
+                        })
+                      }
+                      value={search.ruleSiteId ?? ''}
+                    >
+                      <option value=''>{t('alerts.rules.selectSite')}</option>
+                      {sites.map((site: SiteListItem) => (
+                        <option key={site.id} value={site.id}>
+                          {site.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </label>
+                )}
+              </div>
+            </FilterPanel>
             {search.scope === 'site' && !search.ruleSiteId ? (
               <section className='border-border border-y py-10 text-center'>
                 <h2 className='font-medium'>

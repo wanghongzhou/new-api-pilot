@@ -7,7 +7,7 @@ import {
 } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import type { ColumnDef, SortingState } from '@tanstack/react-table'
-import { useEffect, useMemo, useState, type CompositionEvent } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -19,7 +19,6 @@ import { RunFeedbackSheet } from '@/components/data/run-feedback-sheet'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
-import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { listCustomers } from '@/features/customers/api'
 import { customerKeys } from '@/features/customers/query-keys'
@@ -60,8 +59,6 @@ export function AccountsPage({
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const isAdmin = useAuthStore((state) => state.user?.role === 'admin')
-  const [draftFilter, setDraftFilter] = useState(search.filter)
-  const [composing, setComposing] = useState(false)
   const [onboardingOpen, setOnboardingOpen] = useState(false)
   const [dialogState, setDialogState] = useState<AccountDialogState>(null)
   const [refreshing, setRefreshing] = useState(false)
@@ -69,16 +66,6 @@ export function AccountsPage({
     account: AccountListItem
     run: CollectionRunItem
   } | null>(null)
-
-  useEffect(() => setDraftFilter(search.filter), [search.filter])
-  useEffect(() => {
-    if (composing || draftFilter === search.filter) return
-    const timer = window.setTimeout(
-      () => onSearchChange({ filter: draftFilter, page: 1 }),
-      500
-    )
-    return () => window.clearTimeout(timer)
-  }, [composing, draftFilter, onSearchChange, search.filter])
 
   const params = useMemo<AccountListParams>(
     () => ({
@@ -310,35 +297,20 @@ export function AccountsPage({
       description={t('accounts.description')}
       title={t('accounts.title')}
     >
-      <div className='grid min-w-0 gap-4'>
-        <div className='flex flex-wrap items-center gap-2'>
-          <Input
-            aria-label={t('accounts.search')}
-            className='min-w-0 flex-1 sm:max-w-sm'
-            onChange={(event) => setDraftFilter(event.target.value)}
-            onCompositionEnd={(event: CompositionEvent<HTMLInputElement>) => {
-              setComposing(false)
-              setDraftFilter(event.currentTarget.value)
-            }}
-            onCompositionStart={() => setComposing(true)}
-            placeholder={t('accounts.searchPlaceholder')}
-            value={draftFilter}
-          />
-        </div>
-        <div>
-          <AccountFilters
-            customers={customersQuery.data?.items ?? []}
-            onApply={(filters) => onSearchChange({ ...filters, page: 1 })}
-            sites={sitesQuery.data?.items ?? []}
-            value={{
-              customerId: search.customerId,
-              managedStatus: search.managedStatus,
-              remoteState: search.remoteState,
-              remoteStatus: search.remoteStatus,
-              siteId: search.siteId,
-            }}
-          />
-        </div>
+      <div className='grid min-w-0 gap-5'>
+        <AccountFilters
+          customers={customersQuery.data?.items ?? []}
+          onApply={(filters) => onSearchChange({ ...filters, page: 1 })}
+          sites={sitesQuery.data?.items ?? []}
+          value={{
+            customerId: search.customerId,
+            filter: search.filter,
+            managedStatus: search.managedStatus,
+            remoteState: search.remoteState,
+            remoteStatus: search.remoteStatus,
+            siteId: search.siteId,
+          }}
+        />
         <DataTable
           ariaLabel={t('accounts.table')}
           columns={columns}

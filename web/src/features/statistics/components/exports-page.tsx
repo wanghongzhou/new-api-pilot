@@ -1,4 +1,4 @@
-import { Refresh01Icon, RepeatIcon, ViewIcon } from '@hugeicons/core-free-icons'
+import { Refresh01Icon, ViewIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   keepPreviousData,
@@ -11,11 +11,12 @@ import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import { FilterPanel } from '@/components/data/filter-panel'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { DataTable } from '@/components/ui/data-table'
-import { NativeSelect as Select } from '@/components/ui/native-select'
+import { SelectControl as Select } from '@/components/ui/select-control'
 import { Spinner } from '@/components/ui/spinner'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
@@ -366,83 +367,86 @@ export function ExportsPage({
       title={t('exports.title')}
     >
       <div className='grid min-w-0 gap-5'>
-        <section
-          aria-label={t('exports.filters.title')}
-          className='border-border grid gap-4 border-y py-4 sm:grid-cols-3'
+        <FilterPanel
+          description={t('exports.description')}
+          onReset={activeFilters ? resetFilters : undefined}
+          title={t('exports.filters.title')}
         >
-          <fieldset className='grid gap-1.5 text-sm'>
-            <legend className='font-medium'>{t('exports.table.status')}</legend>
-            <div className='flex flex-wrap gap-x-4 gap-y-1'>
-              {exportStatuses.map((status) => (
-                <label
-                  className='hover:bg-muted flex min-h-10 items-center gap-2 rounded-md px-2'
-                  key={status}
-                >
-                  <Checkbox
-                    checked={search.status.includes(status)}
-                    onCheckedChange={() =>
-                      onSearchChange({
-                        page: 1,
-                        status: search.status.includes(status)
-                          ? search.status.filter((value) => value !== status)
-                          : [...search.status, status],
-                      })
-                    }
-                  />
-                  {exportStatusText(t, status)}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-          <label className='grid gap-1.5 text-sm'>
-            <span className='font-medium'>{t('statistics.export.format')}</span>
-            <Select
-              onChange={(event) =>
-                onSearchChange({
-                  format: event.target.value
-                    ? (event.target.value as StatisticsExportFormat)
-                    : undefined,
-                  page: 1,
-                })
-              }
-              value={search.format ?? ''}
-            >
-              <option value=''>{t('common.all')}</option>
-              {exportFormats.map((format) => (
-                <option key={format} value={format}>
-                  {exportFormatText(t, format)}
-                </option>
-              ))}
-            </Select>
-          </label>
-          <label className='grid gap-1.5 text-sm'>
-            <span className='font-medium'>{t('statistics.export.scope')}</span>
-            <Select
-              onChange={(event) =>
-                onSearchChange({
-                  page: 1,
-                  scope: event.target.value
-                    ? (event.target.value as StatisticsExportScope)
-                    : undefined,
-                })
-              }
-              value={search.scope ?? ''}
-            >
-              <option value=''>{t('common.all')}</option>
-              {exportScopes.map((scope) => (
-                <option key={scope} value={scope}>
-                  {exportScopeText(t, scope)}
-                </option>
-              ))}
-            </Select>
-          </label>
-        </section>
-        {activeFilters && (
-          <Button className='w-fit' onClick={resetFilters} variant='ghost'>
-            <HugeiconsIcon icon={RepeatIcon} strokeWidth={2} />
-            {t('exports.filters.reset')}
-          </Button>
-        )}
+          <div className='grid min-w-0 flex-1 gap-3 sm:grid-cols-3'>
+            <fieldset className='grid gap-1.5 text-sm'>
+              <legend className='font-medium'>
+                {t('exports.table.status')}
+              </legend>
+              <div className='flex flex-wrap gap-x-4 gap-y-1'>
+                {exportStatuses.map((status) => (
+                  <label
+                    className='hover:bg-muted flex min-h-10 items-center gap-2 rounded-md px-2'
+                    key={status}
+                  >
+                    <Checkbox
+                      checked={search.status.includes(status)}
+                      onCheckedChange={() =>
+                        onSearchChange({
+                          page: 1,
+                          status: search.status.includes(status)
+                            ? search.status.filter((value) => value !== status)
+                            : [...search.status, status],
+                        })
+                      }
+                    />
+                    {exportStatusText(t, status)}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <label className='grid gap-1.5 text-sm'>
+              <span className='font-medium'>
+                {t('statistics.export.format')}
+              </span>
+              <Select
+                onChange={(event) =>
+                  onSearchChange({
+                    format: event.target.value
+                      ? (event.target.value as StatisticsExportFormat)
+                      : undefined,
+                    page: 1,
+                  })
+                }
+                value={search.format ?? ''}
+              >
+                <option value=''>{t('common.all')}</option>
+                {exportFormats.map((format) => (
+                  <option key={format} value={format}>
+                    {exportFormatText(t, format)}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <label className='grid gap-1.5 text-sm'>
+              <span className='font-medium'>
+                {t('statistics.export.scope')}
+              </span>
+              <Select
+                onChange={(event) =>
+                  onSearchChange({
+                    page: 1,
+                    scope: event.target.value
+                      ? (event.target.value as StatisticsExportScope)
+                      : undefined,
+                  })
+                }
+                value={search.scope ?? ''}
+              >
+                <option value=''>{t('common.all')}</option>
+                {exportScopes.map((scope) => (
+                  <option key={scope} value={scope}>
+                    {exportScopeText(t, scope)}
+                  </option>
+                ))}
+              </Select>
+            </label>
+          </div>
+        </FilterPanel>
         <DataTable
           ariaLabel={t('exports.table.label')}
           columns={columns}

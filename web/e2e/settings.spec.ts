@@ -413,7 +413,9 @@ test('keeps Viewer settings read-only while retaining both settings navigation e
   await mockSettings(page, viewer)
   await page.goto('/settings')
 
-  await expect(page.getByText('查看当前平台运行参数。')).toBeVisible()
+  await expect(
+    page.getByRole('heading', { level: 1, name: '系统设置' })
+  ).toBeVisible()
   await expect(page.locator('#settings-form input')).toHaveCount(0)
   await expect(
     page.getByRole('button', { name: '保存', exact: true })

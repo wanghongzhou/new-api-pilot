@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { DataStatusBadge } from '@/components/data/data-status'
+import { FilterPanel } from '@/components/data/filter-panel'
 import { MetricValue } from '@/components/data/metric-value'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
@@ -15,6 +16,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
 import { Input } from '@/components/ui/input'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { createStatisticsExport } from '@/features/statistics/api'
 import { ExportTaskSheet } from '@/features/statistics/components/export-task-sheet'
 import type {
@@ -41,7 +43,7 @@ import {
 } from '../api'
 import { buildModelCatalogExportRequest } from '../export-request'
 import { modelCatalogKeys } from '../query-keys'
-import type { ModelCatalogSearch } from '../search'
+import { buildModelCatalogSearch, type ModelCatalogSearch } from '../search'
 import type {
   MissingModelItem,
   ModelBinaryState,
@@ -131,19 +133,19 @@ function Filters({
     </fieldset>
   )
   return (
-    <section
-      aria-labelledby='model-catalog-filters-title'
-      className='border-border bg-card grid gap-4 rounded-lg border p-4'
+    <FilterPanel
+      description={t('modelCatalog.filters.description')}
+      onReset={() =>
+        onChange(
+          buildModelCatalogSearch({
+            pageSize: search.pageSize,
+            tab: search.tab,
+          })
+        )
+      }
+      title={t('modelCatalog.filters.title')}
     >
-      <div>
-        <h2 className='font-medium' id='model-catalog-filters-title'>
-          {t('modelCatalog.filters.title')}
-        </h2>
-        <p className='text-muted-foreground mt-1 text-sm'>
-          {t('modelCatalog.filters.description')}
-        </p>
-      </div>
-      <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
+      <div className='grid min-w-0 flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-4'>
         <label className='grid gap-1 text-sm'>
           <span>{t('modelCatalog.filters.keyword')}</span>
           <Input
@@ -189,11 +191,11 @@ function Filters({
           />
         </label>
       </div>
-      <div className='grid gap-3 sm:grid-cols-2'>
+      <div className='grid min-w-0 flex-1 gap-3 sm:grid-cols-2'>
         {choices('statuses', t('modelCatalog.filters.statuses'))}
         {choices('syncOfficial', t('modelCatalog.filters.syncOfficial'))}
       </div>
-    </section>
+    </FilterPanel>
   )
 }
 
@@ -497,23 +499,26 @@ export function ModelCatalogPage({
             {t('modelCatalog.boundary.description')}
           </p>
         </section>
-        <div
-          aria-label={t('modelCatalog.tabs.label')}
-          className='flex flex-wrap gap-2'
-          role='tablist'
+        <Tabs
+          onValueChange={(tab) =>
+            onSearchChange({
+              page: 1,
+              tab: tab as ModelCatalogSearch['tab'],
+            })
+          }
+          value={search.tab}
         >
-          {tabs.map(([tab, label]) => (
-            <Button
-              aria-selected={search.tab === tab}
-              key={tab}
-              onClick={() => onSearchChange({ page: 1, tab })}
-              role='tab'
-              variant={search.tab === tab ? 'secondary' : 'outline'}
-            >
-              {label}
-            </Button>
-          ))}
-        </div>
+          <TabsList
+            aria-label={t('modelCatalog.tabs.label')}
+            className='max-w-full flex-wrap justify-start group-data-horizontal/tabs:h-auto'
+          >
+            {tabs.map(([tab, label]) => (
+              <TabsTrigger key={tab} value={tab}>
+                {label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
         <Filters global={!siteId} onChange={onSearchChange} search={search} />
         {search.tab === 'catalog' && (
           <DataTable

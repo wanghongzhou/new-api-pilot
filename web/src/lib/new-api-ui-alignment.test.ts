@@ -12,6 +12,13 @@ test('shared Select remains the Base UI primitive instead of a native alias', as
 
   expect(source).toContain("from '@base-ui/react/select'")
   expect(source).not.toContain('NativeSelect as Select')
+
+  const controlSource = await readFile(
+    new URL('../components/ui/select-control.tsx', import.meta.url),
+    'utf8'
+  )
+  expect(controlSource).toContain("from '@/components/ui/select'")
+  expect(controlSource).not.toContain('<select')
 })
 
 test('shared pagination keeps the reference numbered-page contract', async () => {
@@ -45,4 +52,30 @@ test('profile avatar uses the reference stable fallback and color model', async 
   )
   expect(source).toContain("from '../ui/avatar'")
   expect(source).toContain('getUserAvatarStyle')
+})
+
+test('theme settings keep the official config drawer structure', async () => {
+  const drawerSource = await readFile(
+    new URL('../components/layout/theme-settings-drawer.tsx', import.meta.url),
+    'utf8'
+  )
+  const rootSource = await readFile(
+    new URL('../routes/__root.tsx', import.meta.url),
+    'utf8'
+  )
+  const globalStyles = await readFile(
+    new URL('../styles/index.css', import.meta.url),
+    'utf8'
+  )
+
+  expect(drawerSource).toContain("from '@base-ui/react/radio'")
+  expect(drawerSource).toContain("from '@base-ui/react/radio-group'")
+  expect(drawerSource).toContain('useDirection')
+  expect(drawerSource).toContain('sideDrawerContentClassName')
+  expect(drawerSource).toContain('function SectionTitle')
+  expect(drawerSource).toContain('<RotateCcw')
+  expect(rootSource).toContain('<DirectionProvider>')
+  expect(rootSource).toContain('<Toaster closeButton />')
+  expect(globalStyles).toContain('@media (pointer: coarse)')
+  expect(globalStyles).toContain('min-height: 2.5rem')
 })

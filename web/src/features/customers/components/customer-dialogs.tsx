@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/dialog'
 import { FormField } from '@/components/ui/form-field'
 import { Input } from '@/components/ui/input'
-import { NativeSelect as Select } from '@/components/ui/native-select'
+import { SelectControl as Select } from '@/components/ui/select-control'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
 import type { CollectionRunItem } from '@/features/sites/types'
@@ -57,6 +57,7 @@ function CustomerFormDialog({
   const { t } = useTranslation()
   const [pending, setPending] = useState(false)
   const {
+    control,
     formState: { errors },
     handleSubmit,
     register,
@@ -207,13 +208,26 @@ function CustomerFormDialog({
             label={t('customer.statusLabel')}
             required
           >
-            <Select id='customer-status' {...register('status')}>
-              {editableCustomerStatuses.map((status) => (
-                <option key={status} value={status}>
-                  {t(dynamicI18nKey('customer', `customer.status.${status}`))}
-                </option>
-              ))}
-            </Select>
+            <Controller
+              control={control}
+              name='status'
+              render={({ field }) => (
+                <Select
+                  id='customer-status'
+                  name={field.name}
+                  onChange={(event) => field.onChange(event.target.value)}
+                  value={field.value}
+                >
+                  {editableCustomerStatuses.map((status) => (
+                    <option key={status} value={status}>
+                      {t(
+                        dynamicI18nKey('customer', `customer.status.${status}`)
+                      )}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            />
           </FormField>
           <FormField
             error={

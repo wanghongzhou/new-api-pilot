@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { FilterPanel } from '@/components/data/filter-panel'
-import { NativeSelect as Select } from '@/components/ui/native-select'
+import { Input } from '@/components/ui/input'
+import { SelectControl as Select } from '@/components/ui/select-control'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 
 import {
@@ -27,7 +28,7 @@ const advancedGroups = [
   ['health', siteHealthStatuses],
 ] as const
 
-type FilterState = Pick<SiteSearch, FilterKey>
+type FilterState = Pick<SiteSearch, FilterKey | 'filter'>
 
 export function SiteFilters({
   onApply,
@@ -42,8 +43,12 @@ export function SiteFilters({
     setDraft(value)
   }, [value])
   const count = useMemo(
-    () => Object.values(value).reduce((sum, items) => sum + items.length, 0),
-    [value]
+    () =>
+      [...primaryGroups, ...advancedGroups].reduce(
+        (sum, [key]) => sum + draft[key].length,
+        0
+      ),
+    [draft]
   )
 
   const renderGroups = (
@@ -81,19 +86,35 @@ export function SiteFilters({
       description={t('site.filters.description')}
       expandOnLargeScreen
       hasAdvancedActive={count > 0}
-      onApply={() => onApply(draft)}
-      onReset={() =>
-        setDraft({
+      onApply={() => onApply({ ...draft, filter: draft.filter.trim() })}
+      onReset={() => {
+        const reset: FilterState = {
           auth: [],
+          filter: '',
           health: [],
           management: [],
           online: [],
           statistics: [],
-        })
-      }
+        }
+        setDraft(reset)
+        onApply(reset)
+      }}
       title={t('site.filters.title')}
     >
-      <div className='flex flex-wrap items-center gap-x-4 gap-y-1'>
+      <div className='flex flex-wrap items-end gap-2'>
+        <label className='grid w-full gap-1 text-sm sm:w-64'>
+          <span>{t('sites.search')}</span>
+          <Input
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                filter: event.target.value,
+              }))
+            }
+            placeholder={t('sites.searchPlaceholder')}
+            value={draft.filter}
+          />
+        </label>
         {renderGroups(primaryGroups)}
       </div>
     </FilterPanel>

@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { DataStatusBadge } from '@/components/data/data-status'
+import { FilterPanel } from '@/components/data/filter-panel'
 import { MetricValue } from '@/components/data/metric-value'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
@@ -15,6 +16,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
 import { Input } from '@/components/ui/input'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { createStatisticsExport } from '@/features/statistics/api'
 import { ExportTaskSheet } from '@/features/statistics/components/export-task-sheet'
 import type {
@@ -36,7 +38,7 @@ import {
 } from '../api'
 import { buildPricingGroupExportRequest } from '../export-request'
 import { pricingGroupKeys } from '../query-keys'
-import type { PricingGroupSearch } from '../search'
+import { buildPricingGroupSearch, type PricingGroupSearch } from '../search'
 import type {
   PricingCatalogItem,
   PricingCatalogQueryParams,
@@ -118,19 +120,19 @@ function Filters({
         : [...search.states, state],
     })
   return (
-    <section
-      aria-labelledby='pricing-group-filters-title'
-      className='border-border bg-card grid gap-4 rounded-lg border p-4'
+    <FilterPanel
+      description={t('pricingGroups.filters.description')}
+      onReset={() =>
+        onChange(
+          buildPricingGroupSearch({
+            pageSize: search.pageSize,
+            tab: search.tab,
+          })
+        )
+      }
+      title={t('pricingGroups.filters.title')}
     >
-      <div>
-        <h2 className='font-medium' id='pricing-group-filters-title'>
-          {t('pricingGroups.filters.title')}
-        </h2>
-        <p className='text-muted-foreground mt-1 text-sm'>
-          {t('pricingGroups.filters.description')}
-        </p>
-      </div>
-      <div className='grid gap-3 md:grid-cols-3'>
+      <div className='grid min-w-0 flex-1 gap-3 md:grid-cols-3'>
         <label className='grid gap-1 text-sm'>
           <span>{t('pricingGroups.filters.keyword')}</span>
           <Input
@@ -188,7 +190,7 @@ function Filters({
           ))}
         </div>
       </fieldset>
-    </section>
+    </FilterPanel>
   )
 }
 
@@ -514,25 +516,24 @@ export function PricingGroupsPage({
             {t('pricingGroups.boundary.description')}
           </p>
         </section>
-        <div
-          className='flex flex-wrap gap-2'
-          role='tablist'
-          aria-label={t('pricingGroups.tabs.label')}
+        <Tabs
+          onValueChange={(tab) =>
+            onSearchChange({
+              page: 1,
+              tab: tab as PricingGroupSearch['tab'],
+            })
+          }
+          value={search.tab}
         >
-          {(['pricing', 'groups'] as const).map((tab) => (
-            <Button
-              aria-selected={search.tab === tab}
-              key={tab}
-              onClick={() => onSearchChange({ page: 1, tab })}
-              role='tab'
-              variant={search.tab === tab ? 'secondary' : 'outline'}
-            >
-              {tab === 'pricing'
-                ? t('pricingGroups.tabs.pricing')
-                : t('pricingGroups.tabs.groups')}
-            </Button>
-          ))}
-        </div>
+          <TabsList aria-label={t('pricingGroups.tabs.label')}>
+            <TabsTrigger value='pricing'>
+              {t('pricingGroups.tabs.pricing')}
+            </TabsTrigger>
+            <TabsTrigger value='groups'>
+              {t('pricingGroups.tabs.groups')}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
         <Filters global={!siteId} onChange={onSearchChange} search={search} />
         {statistics && (
           <div className='grid gap-5'>

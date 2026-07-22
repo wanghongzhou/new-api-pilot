@@ -19,6 +19,7 @@ import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { translateMessageRef } from '@/lib/message-ref'
 
@@ -425,26 +426,18 @@ function Ranking({
   return (
     <div className='grid gap-4'>
       <div className='flex flex-wrap items-end justify-between gap-3'>
-        <div
-          aria-label={t('dashboard.ranking.dimension')}
-          className='border-border flex flex-wrap rounded-md border p-0.5'
-          role='tablist'
+        <Tabs
+          onValueChange={(value) => onTypeChange(value as DashboardTopType)}
+          value={type}
         >
-          {types.map((value) => (
-            <Button
-              aria-controls='dashboard-ranking-panel'
-              aria-selected={type === value}
-              id={`dashboard-ranking-tab-${value}`}
-              key={value}
-              onClick={() => onTypeChange(value)}
-              role='tab'
-              size='sm'
-              variant={type === value ? 'secondary' : 'ghost'}
-            >
-              {typeLabels[value]}
-            </Button>
-          ))}
-        </div>
+          <TabsList aria-label={t('dashboard.ranking.dimension')}>
+            {types.map((value) => (
+              <TabsTrigger key={value} value={value}>
+                {typeLabels[value]}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
         <div className='flex flex-wrap items-end gap-3'>
           <fieldset className='grid gap-1'>
             <legend className='text-muted-foreground text-xs'>

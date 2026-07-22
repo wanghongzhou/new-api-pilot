@@ -1,6 +1,8 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page, type Route } from '@playwright/test'
 
+import { clickOpenSelectOption } from './helpers/select-control'
+
 const authStorageKey = 'pilot-auth-user'
 const uidStorageKey = 'uid'
 const viewer = {
@@ -161,7 +163,8 @@ test('queries, inspects and exports global redacted logs without treating them a
   ).toBeVisible()
 
   await page.getByLabel('用户名').fill('alice')
-  await page.getByLabel('日志类型').selectOption('5')
+  await page.getByLabel('日志类型').click()
+  await clickOpenSelectOption(page, '5')
   await page.getByLabel('Channel ID').fill('9007199254740997')
   await page.getByLabel('分组').fill('vip')
   await page.getByLabel('Request ID', { exact: true }).fill('req-local-safe')

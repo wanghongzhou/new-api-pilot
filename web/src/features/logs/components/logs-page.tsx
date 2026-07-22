@@ -13,6 +13,7 @@ import { toast } from 'sonner'
 
 import { DataFreshness } from '@/components/data/data-freshness'
 import { DataStatusBadge } from '@/components/data/data-status'
+import { FilterPanel } from '@/components/data/filter-panel'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Badge } from '@/components/ui/badge'
@@ -27,7 +28,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { NativeSelect as Select } from '@/components/ui/native-select'
+import { SelectControl as Select } from '@/components/ui/select-control'
 import { createStatisticsExport } from '@/features/statistics/api'
 import { ExportTaskSheet } from '@/features/statistics/components/export-task-sheet'
 import type {
@@ -47,6 +48,7 @@ import { BEIJING_TIMEZONE, dayjs, fromUnixSeconds } from '@/lib/dayjs'
 import { listLogs, listSiteLogs } from '../api'
 import { buildLogExportRequest } from '../export-request'
 import { logKeys } from '../query-keys'
+import { buildLogSearch } from '../search'
 import type {
   LogDataStatus,
   LogItem,
@@ -158,19 +160,12 @@ function LogFilters({
     (key: keyof LogSearch) => (event: ChangeEvent<HTMLInputElement>) =>
       onChange({ [key]: event.target.value, page: 1 })
   return (
-    <section
-      aria-labelledby='log-filters-title'
-      className='border-border bg-card grid gap-4 rounded-lg border p-4'
+    <FilterPanel
+      description={t('logs.filters.description')}
+      onReset={() => onChange(buildLogSearch({ pageSize: search.pageSize }))}
+      title={t('logs.filters.title')}
     >
-      <div>
-        <h2 className='font-medium' id='log-filters-title'>
-          {t('logs.filters.title')}
-        </h2>
-        <p className='text-muted-foreground mt-1 text-sm'>
-          {t('logs.filters.description')}
-        </p>
-      </div>
-      <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
+      <div className='grid min-w-0 flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-4'>
         <label className='grid gap-1 text-sm'>
           <span>{t('logs.filters.start')}</span>
           <Input
@@ -280,7 +275,7 @@ function LogFilters({
           />
         </label>
       </div>
-    </section>
+    </FilterPanel>
   )
 }
 

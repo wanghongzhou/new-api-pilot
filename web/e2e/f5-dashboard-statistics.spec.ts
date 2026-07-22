@@ -824,9 +824,9 @@ test('nine statistics scopes preserve URL filters, partial and null contracts', 
   await expect(page.getByTestId('statistics-chart-exact-values')).toContainText(
     '-'
   )
-  const scopeNavigation = page.getByRole('navigation', { name: '统计作用域' })
-  await expect(scopeNavigation.getByRole('link')).toHaveCount(9)
-  await scopeNavigation.getByRole('link', { name: '模型' }).click()
+  const scopeNavigation = page.getByRole('tablist', { name: '统计作用域' })
+  await expect(scopeNavigation.getByRole('tab')).toHaveCount(9)
+  await scopeNavigation.getByRole('tab', { name: '模型' }).click()
   await expect(page.getByRole('heading', { name: '模型统计' })).toBeVisible()
 
   const filter = page.getByRole('region', { name: '统计对象筛选' })

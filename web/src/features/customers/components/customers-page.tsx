@@ -1,9 +1,4 @@
-import {
-  Add01Icon,
-  GridViewIcon,
-  TableIcon,
-  ViewIcon,
-} from '@hugeicons/core-free-icons'
+import { Add01Icon, ViewIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   keepPreviousData,
@@ -12,18 +7,18 @@ import {
 } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import type { ColumnDef, SortingState } from '@tanstack/react-table'
-import { useEffect, useMemo, useState, type CompositionEvent } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { DataFreshness } from '@/components/data/data-freshness'
 import { DataStatusBadge } from '@/components/data/data-status'
+import { DataViewModeToggle } from '@/components/data/data-view-mode-toggle'
 import { MetricValue } from '@/components/data/metric-value'
 import { RunFeedbackSheet } from '@/components/data/run-feedback-sheet'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
 import { DataTablePagination } from '@/components/ui/data-table-pagination'
-import { Input } from '@/components/ui/input'
 import { accountKeys } from '@/features/accounts/query-keys'
 import type { CollectionRunItem } from '@/features/sites/types'
 import { useAuthStore } from '@/stores/auth-store'
@@ -57,23 +52,11 @@ export function CustomersPage({
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const isAdmin = useAuthStore((state) => state.user?.role === 'admin')
-  const [draftFilter, setDraftFilter] = useState(search.filter)
-  const [composing, setComposing] = useState(false)
   const [dialogState, setDialogState] = useState<CustomerDialogState>(null)
   const [recovery, setRecovery] = useState<{
     customer: CustomerListItem
     run: CollectionRunItem
   } | null>(null)
-
-  useEffect(() => setDraftFilter(search.filter), [search.filter])
-  useEffect(() => {
-    if (composing || draftFilter === search.filter) return
-    const timer = window.setTimeout(
-      () => onSearchChange({ filter: draftFilter, page: 1 }),
-      500
-    )
-    return () => window.clearTimeout(timer)
-  }, [composing, draftFilter, onSearchChange, search.filter])
 
   const params = useMemo<CustomerListParams>(
     () => ({
@@ -238,48 +221,18 @@ export function CustomersPage({
       description={t('customers.description')}
       title={t('customers.title')}
     >
-      <div className='grid min-w-0 gap-4'>
-        <div className='grid gap-2'>
-          <div className='flex flex-wrap items-center gap-2'>
-            <Input
-              aria-label={t('customers.search')}
-              className='min-w-0 flex-1 sm:max-w-sm'
-              onChange={(event) => setDraftFilter(event.target.value)}
-              onCompositionEnd={(event: CompositionEvent<HTMLInputElement>) => {
-                setComposing(false)
-                setDraftFilter(event.currentTarget.value)
-              }}
-              onCompositionStart={() => setComposing(true)}
-              placeholder={t('customers.searchPlaceholder')}
-              value={draftFilter}
-            />
-            <div
-              className='border-border flex w-fit rounded-md border p-0.5'
-              role='group'
-            >
-              <Button
-                aria-label={t('customers.cardView')}
-                aria-pressed={search.view === 'card'}
-                onClick={() => onSearchChange({ view: 'card' })}
-                size='icon'
-                variant={search.view === 'card' ? 'secondary' : 'ghost'}
-              >
-                <HugeiconsIcon icon={GridViewIcon} strokeWidth={2} />
-              </Button>
-              <Button
-                aria-label={t('customers.tableView')}
-                aria-pressed={search.view === 'table'}
-                onClick={() => onSearchChange({ view: 'table' })}
-                size='icon'
-                variant={search.view === 'table' ? 'secondary' : 'ghost'}
-              >
-                <HugeiconsIcon icon={TableIcon} strokeWidth={2} />
-              </Button>
-            </div>
-          </div>
-          <CustomerFilters
-            onApply={(status) => onSearchChange({ page: 1, status })}
-            value={search.status}
+      <div className='grid min-w-0 gap-5'>
+        <CustomerFilters
+          onApply={(filters) => onSearchChange({ ...filters, page: 1 })}
+          value={{ filter: search.filter, status: search.status }}
+        />
+        <div className='flex justify-end'>
+          <DataViewModeToggle
+            ariaLabel={t('customers.viewMode')}
+            cardLabel={t('customers.cardView')}
+            onChange={(view) => onSearchChange({ view })}
+            tableLabel={t('customers.tableView')}
+            value={search.view}
           />
         </div>
         {search.view === 'card' && customers.length > 0 ? (

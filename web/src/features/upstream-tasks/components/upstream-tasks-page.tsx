@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { DataStatusBadge } from '@/components/data/data-status'
+import { FilterPanel } from '@/components/data/filter-panel'
 import { MetricValue } from '@/components/data/metric-value'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
@@ -39,7 +40,11 @@ import {
 } from '../api'
 import { buildUpstreamTaskExportRequest } from '../export-request'
 import { upstreamTaskKeys } from '../query-keys'
-import { upstreamTaskStatuses, type UpstreamTaskSearch } from '../search'
+import {
+  buildUpstreamTaskSearch,
+  upstreamTaskStatuses,
+  type UpstreamTaskSearch,
+} from '../search'
 import type {
   UpstreamTaskBreakdown,
   UpstreamTaskItem,
@@ -165,19 +170,14 @@ function Filters({
     </label>
   )
   return (
-    <section
-      aria-labelledby='upstream-task-filters-title'
-      className='border-border bg-card grid gap-4 rounded-lg border p-4'
+    <FilterPanel
+      description={t('upstreamTasks.filters.description')}
+      onReset={() =>
+        onChange(buildUpstreamTaskSearch({ pageSize: search.pageSize }))
+      }
+      title={t('upstreamTasks.filters.title')}
     >
-      <div>
-        <h2 className='font-medium' id='upstream-task-filters-title'>
-          {t('upstreamTasks.filters.title')}
-        </h2>
-        <p className='text-muted-foreground mt-1 text-sm'>
-          {t('upstreamTasks.filters.description')}
-        </p>
-      </div>
-      <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
+      <div className='grid min-w-0 flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-4'>
         {global && (
           <label className='grid gap-1 text-sm'>
             <span>{t('upstreamTasks.filters.siteIds')}</span>
@@ -304,7 +304,7 @@ function Filters({
           })}
         </div>
       </fieldset>
-    </section>
+    </FilterPanel>
   )
 }
 

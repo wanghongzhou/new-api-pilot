@@ -25,7 +25,7 @@ import {
 } from '@/components/ui/drawer'
 import { FormField } from '@/components/ui/form-field'
 import { Input } from '@/components/ui/input'
-import { NativeSelect as Select } from '@/components/ui/native-select'
+import { SelectControl as Select } from '@/components/ui/select-control'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
 import { listCustomers } from '@/features/customers/api'
@@ -408,7 +408,15 @@ export function AccountOnboardingDrawer({
               >
                 <Select
                   id='account-onboarding-customer'
-                  {...register('customerId')}
+                  name='customerId'
+                  onChange={(event) =>
+                    setValue('customerId', event.target.value, {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    })
+                  }
+                  portalled={false}
+                  value={customerId}
                 >
                   <option value=''>
                     {t('account.onboarding.chooseCustomer')}
@@ -445,14 +453,19 @@ export function AccountOnboardingDrawer({
               >
                 <Select
                   id='account-onboarding-site'
-                  {...register('siteId', {
-                    onChange: () => {
-                      setSelectedUser(null)
-                      setReviewedUser(null)
-                      setValue('remoteUserId', '')
-                      setReviewError(null)
-                    },
-                  })}
+                  name='siteId'
+                  onChange={(event) => {
+                    setValue('siteId', event.target.value, {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    })
+                    setSelectedUser(null)
+                    setReviewedUser(null)
+                    setValue('remoteUserId', '')
+                    setReviewError(null)
+                  }}
+                  portalled={false}
+                  value={siteId}
                 >
                   <option value=''>{t('account.onboarding.chooseSite')}</option>
                   {eligibleSites.map((site) => (

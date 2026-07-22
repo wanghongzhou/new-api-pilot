@@ -1,6 +1,8 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page, type Route } from '@playwright/test'
 
+import { clickOpenSelectOption } from './helpers/select-control'
+
 const authStorageKey = 'pilot-auth-user'
 const uidStorageKey = 'uid'
 
@@ -1230,9 +1232,8 @@ test('loads all current instances once and uses correct resource aggregations', 
   await expect.poll(() => resourceCalls).toBe(1)
   await expect(page.locator('canvas').first()).toBeVisible()
 
-  await page
-    .getByRole('combobox', { name: '实例', exact: true })
-    .selectOption('worker-1')
+  await page.getByRole('combobox', { name: '实例', exact: true }).click()
+  await clickOpenSelectOption(page, 'worker-1')
   await expect.poll(() => resourceCalls).toBe(2)
   expect(instanceCalls).toBe(1)
   await page.getByRole('button', { name: '内存', exact: true }).click()

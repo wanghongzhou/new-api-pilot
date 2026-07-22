@@ -8,12 +8,14 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { DataStatusBadge } from '@/components/data/data-status'
+import { FilterPanel } from '@/components/data/filter-panel'
 import { MetricValue } from '@/components/data/metric-value'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
 import { Input } from '@/components/ui/input'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { createStatisticsExport } from '@/features/statistics/api'
 import { ExportTaskSheet } from '@/features/statistics/components/export-task-sheet'
 import type {
@@ -32,7 +34,7 @@ import { fromUnixSeconds } from '@/lib/dayjs'
 import { getRankings, getSiteRankings } from '../api'
 import { buildRankingExportRequest } from '../export-request'
 import { rankingKeys } from '../query-keys'
-import type { RankingSearch } from '../search'
+import { buildRankingSearch, type RankingSearch } from '../search'
 import type { RankingItem, RankingPeriod } from '../types'
 
 function time(value: number | null) {
@@ -229,26 +231,28 @@ export function RankingsPage({
         >
           {t('rankings.localBoundary')}
         </section>
-        <div
-          className='flex flex-wrap gap-2'
-          role='tablist'
-          aria-label={t('rankings.tabs.label')}
+        <Tabs
+          onValueChange={(tab) =>
+            onSearchChange({ tab: tab as RankingSearch['tab'] })
+          }
+          value={search.tab}
         >
-          {(['models', 'vendors'] as const).map((tab) => (
-            <Button
-              aria-selected={search.tab === tab}
-              key={tab}
-              onClick={() => onSearchChange({ tab })}
-              role='tab'
-              variant={search.tab === tab ? 'secondary' : 'outline'}
-            >
-              {tab === 'models'
-                ? t('rankings.tabs.models')
-                : t('rankings.tabs.vendors')}
-            </Button>
-          ))}
-        </div>
-        <section className='border-border grid gap-3 rounded-lg border p-4'>
+          <TabsList aria-label={t('rankings.tabs.label')}>
+            <TabsTrigger value='models'>
+              {t('rankings.tabs.models')}
+            </TabsTrigger>
+            <TabsTrigger value='vendors'>
+              {t('rankings.tabs.vendors')}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <FilterPanel
+          description={t('rankings.localBoundary')}
+          onReset={() =>
+            onSearchChange(buildRankingSearch({ tab: search.tab }))
+          }
+          title={t('rankings.tabs.label')}
+        >
           <div className='flex flex-wrap gap-2'>
             {periods.map((period) => (
               <Button
@@ -279,7 +283,7 @@ export function RankingsPage({
               />
             </label>
           )}
-        </section>
+        </FilterPanel>
         {data && (
           <>
             <div className='flex flex-wrap items-center gap-2' role='status'>
@@ -337,26 +341,28 @@ export function RankingsPage({
               <h3 className='font-semibold'>{t('rankings.history')}</h3>
               <div
                 aria-label={t('rankings.history')}
-                className='overflow-x-auto'
+                className='border-border overflow-x-auto rounded-lg border'
                 tabIndex={0}
               >
                 <table className='w-full min-w-xl text-sm'>
-                  <thead>
+                  <thead className='bg-[var(--table-header)] text-left'>
                     <tr>
-                      <th>{t('rankings.bucket')}</th>
-                      <th>{t('rankings.dimension')}</th>
-                      <th>{t('rankings.tokens')}</th>
+                      <th className='px-3 py-2'>{t('rankings.bucket')}</th>
+                      <th className='px-3 py-2'>{t('rankings.dimension')}</th>
+                      <th className='px-3 py-2'>{t('rankings.tokens')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {data.history.map((point) => (
                       <tr
-                        className='border-t'
+                        className='border-t transition-colors hover:bg-[var(--table-header-hover)]'
                         key={`${point.bucket_start}:${point.dimension_id}`}
                       >
-                        <td>{time(point.bucket_start)}</td>
-                        <td>{point.dimension_id}</td>
-                        <td>{point.token_used}</td>
+                        <td className='px-3 py-2.5'>
+                          {time(point.bucket_start)}
+                        </td>
+                        <td className='px-3 py-2.5'>{point.dimension_id}</td>
+                        <td className='px-3 py-2.5'>{point.token_used}</td>
                       </tr>
                     ))}
                   </tbody>

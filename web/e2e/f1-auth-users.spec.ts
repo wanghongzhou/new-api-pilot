@@ -1,6 +1,8 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page, type Route } from '@playwright/test'
 
+import { clickOpenSelectOption } from './helpers/select-control'
+
 const authStorageKey = 'pilot-auth-user'
 const uidStorageKey = 'uid'
 
@@ -335,7 +337,8 @@ test('supports administrator user creation and protects the last administrator',
     .fill('运营人员')
   await createDialog
     .getByRole('combobox', { name: '角色', exact: true })
-    .selectOption('viewer')
+    .click()
+  await clickOpenSelectOption(page, 'viewer')
   await createDialog
     .getByRole('textbox', { name: '临时密码', exact: true })
     .fill('Operator123!')
@@ -418,9 +421,8 @@ test('edits, resets, disables, and re-enables a platform user', async ({
   await editDialog
     .getByRole('textbox', { name: '显示名称', exact: true })
     .fill('运营查看者')
-  await editDialog
-    .getByRole('combobox', { name: '角色', exact: true })
-    .selectOption('admin')
+  await editDialog.getByRole('combobox', { name: '角色', exact: true }).click()
+  await clickOpenSelectOption(page, 'admin')
   await editDialog
     .getByRole('button', { name: '保存更改', exact: true })
     .click()
@@ -645,16 +647,20 @@ test('restores user filters through browser history and uses the mobile filter s
   await page
     .getByLabel('按角色筛选', { exact: true })
     .filter({ visible: true })
-    .selectOption('viewer')
+    .click()
+  await clickOpenSelectOption(page, 'viewer')
+  await page
+    .getByRole('button', { name: '应用', exact: true })
+    .filter({ visible: true })
+    .click()
   await expect(page).toHaveURL(/role=viewer/)
   await page
     .getByLabel('搜索平台用户', { exact: true })
     .filter({ visible: true })
     .fill('ops')
-  const applyButton = page.getByRole('button', {
-    name: mobileFilters ? '应用筛选' : '搜索',
-    exact: true,
-  })
+  const applyButton = page
+    .getByRole('button', { name: '应用', exact: true })
+    .filter({ visible: true })
   await applyButton.click()
   await expect(page).toHaveURL(/filter=ops/)
   if (mobileFilters) {
@@ -674,7 +680,7 @@ test('restores user filters through browser history and uses the mobile filter s
   await expect(page).toHaveURL(/role=viewer/)
 })
 
-test('uses cards without horizontal clipping at intermediate widths', async ({
+test('uses the new-api table breakpoint without page-level clipping', async ({
   page,
 }) => {
   await seedAuth(page, admin)
@@ -682,20 +688,29 @@ test('uses cards without horizontal clipping at intermediate widths', async ({
   await mockUserList(page)
 
   await page.goto('/settings/users')
-  for (const width of [640, 768, 1024]) {
+  await page.setViewportSize({ height: 900, width: 640 })
+  await expect(
+    page.locator('#main-content article').filter({ visible: true }).first()
+  ).toBeVisible()
+  await expect(
+    page.locator('#main-content table').filter({ visible: true })
+  ).toHaveCount(0)
+
+  for (const width of [768, 1024]) {
     await page.setViewportSize({ height: 900, width })
     await expect(
-      page.locator('#main-content article').filter({ visible: true }).first()
+      page.locator('#main-content table').filter({ visible: true }).first()
     ).toBeVisible()
     await expect(
-      page.locator('#main-content table').filter({ visible: true })
+      page.locator('#main-content article').filter({ visible: true })
     ).toHaveCount(0)
-    expect(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth > window.innerWidth
-      )
-    ).toBe(false)
   }
+
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth
+    )
+  ).toBe(false)
 })
 
 test('keeps the 375px workspace within the viewport and exposes mobile navigation', async ({
