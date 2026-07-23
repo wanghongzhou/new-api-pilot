@@ -9,13 +9,16 @@ import type {
   SettingsSecretState,
 } from './types'
 
-export type SettingsSectionKey =
-  | 'collection'
-  | 'concurrency'
-  | 'export'
-  | 'notification'
-  | 'rate'
-  | 'upstream'
+export const settingsSectionKeys = [
+  'collection',
+  'concurrency',
+  'export',
+  'upstream',
+  'rate',
+  'notification',
+] as const
+
+export type SettingsSectionKey = (typeof settingsSectionKeys)[number]
 
 export type SettingControlKind =
   | 'bigint'
@@ -42,21 +45,27 @@ export const settingFieldDefinitions: readonly SettingFieldDefinition[] = [
     section: 'collection',
     labelKey: 'settings.field.probeInterval',
     descriptionKey: 'settings.field.probeIntervalDescription',
-    kind: 'readonly',
+    kind: 'integer',
+    formName: 'probeIntervalMinutes',
+    step: '1',
   },
   {
     key: 'collector.realtime_interval_seconds',
     section: 'collection',
     labelKey: 'settings.field.realtimeInterval',
     descriptionKey: 'settings.field.realtimeIntervalDescription',
-    kind: 'readonly',
+    kind: 'integer',
+    formName: 'realtimeIntervalMinutes',
+    step: '1',
   },
   {
     key: 'collector.resource_interval_seconds',
     section: 'collection',
     labelKey: 'settings.field.resourceInterval',
     descriptionKey: 'settings.field.resourceIntervalDescription',
-    kind: 'readonly',
+    kind: 'integer',
+    formName: 'resourceIntervalMinutes',
+    step: '1',
   },
   {
     key: 'collector.usage_delay_minutes',
@@ -127,8 +136,8 @@ export const settingFieldDefinitions: readonly SettingFieldDefinition[] = [
     labelKey: 'settings.field.fastTaskHistoryRetention',
     descriptionKey: 'settings.field.fastTaskHistoryRetentionDescription',
     kind: 'integer',
-    formName: 'fastTaskHistoryRetentionSeconds',
-    step: '1',
+    formName: 'fastTaskHistoryRetentionHours',
+    step: 'any',
   },
   {
     key: 'fast_task.history_count',
@@ -305,7 +314,7 @@ export const settingFieldDefinitions: readonly SettingFieldDefinition[] = [
     labelKey: 'settings.field.maxFileBytes',
     descriptionKey: 'settings.field.maxFileBytesDescription',
     kind: 'bigint',
-    formName: 'maxFileBytes',
+    formName: 'maxFileMegabytes',
     step: '1',
   },
   {
@@ -314,7 +323,7 @@ export const settingFieldDefinitions: readonly SettingFieldDefinition[] = [
     labelKey: 'settings.field.minFreeDiskBytes',
     descriptionKey: 'settings.field.minFreeDiskBytesDescription',
     kind: 'bigint',
-    formName: 'minFreeDiskBytes',
+    formName: 'minFreeDiskMegabytes',
     step: '1',
   },
   {
@@ -415,6 +424,9 @@ const editableDefinitions = settingFieldDefinitions.filter(
 )
 
 export const emptySettingsFormValues: SettingsFormValues = {
+  probeIntervalMinutes: '',
+  realtimeIntervalMinutes: '',
+  resourceIntervalMinutes: '',
   usageDelayMinutes: '',
   minuteRetentionDays: '',
   logRetentionDays: '',
@@ -428,7 +440,7 @@ export const emptySettingsFormValues: SettingsFormValues = {
   usageConcurrency: '',
   backfillConcurrency: '',
   manualBackfillMaxDays: '',
-  fastTaskHistoryRetentionSeconds: '',
+  fastTaskHistoryRetentionHours: '',
   fastTaskHistoryCount: '',
   upstreamAllowedHostSuffixes: '',
   upstreamAllowedCidrs: '',
@@ -442,8 +454,8 @@ export const emptySettingsFormValues: SettingsFormValues = {
   fileTtlHours: '',
   maxActivePerUser: '',
   maxActiveGlobal: '',
-  maxFileBytes: '',
-  minFreeDiskBytes: '',
+  maxFileMegabytes: '',
+  minFreeDiskMegabytes: '',
   fallbackQuotaPerUnit: '',
   fallbackUsdExchangeRate: '',
   dingTalkEnabled: false,
@@ -463,6 +475,19 @@ export function settingItemsByKey(
   return result
 }
 
+export function isCollectorIntervalKey(
+  key: SettingFieldDefinition['key']
+): key is
+  | 'collector.probe_interval_seconds'
+  | 'collector.realtime_interval_seconds'
+  | 'collector.resource_interval_seconds' {
+  return (
+    key === 'collector.probe_interval_seconds' ||
+    key === 'collector.realtime_interval_seconds' ||
+    key === 'collector.resource_interval_seconds'
+  )
+}
+
 function editableValue(item: SettingItem | undefined): string | boolean {
   if (item?.value_type === 'bool') return item.value === true
   if (typeof item?.value === 'number') return String(item.value)
@@ -478,6 +503,30 @@ export function settingsToFormValues(
   for (const definition of editableDefinitions) {
     if (definition.kind === 'secret') continue
     let value = editableValue(items.get(definition.key))
+    if (
+      isCollectorIntervalKey(definition.key) &&
+      typeof value === 'string' &&
+      /^\d+$/.test(value)
+    ) {
+      value = String(Number(value) / 60)
+    }
+    if (
+      definition.key === 'fast_task.history_retention_seconds' &&
+      typeof value === 'string' &&
+      /^\d+$/.test(value)
+    ) {
+      value = String(Number((Number(value) / 3600).toFixed(4)))
+    }
+    if (
+      (definition.key === 'export.max_file_bytes' ||
+        definition.key === 'export.min_free_disk_bytes') &&
+      typeof value === 'string' &&
+      /^\d+$/.test(value)
+    ) {
+      const bytes = BigInt(value)
+      const bytesPerMegabyte = 1_048_576n
+      value = String((bytes + bytesPerMegabyte - 1n) / bytesPerMegabyte)
+    }
     if (definition.kind === 'multiline' && typeof value === 'string') {
       value = value.split(',').filter(Boolean).join('\n')
     }
@@ -530,7 +579,16 @@ export function buildSettingPatchItems(
     if (current === previous) continue
     let value: boolean | number | string = String(current)
     if (definition.kind === 'boolean') value = Boolean(current)
-    else if (definition.kind === 'integer') value = Number(current)
+    else if (isCollectorIntervalKey(definition.key)) {
+      value = Number(current) * 60
+    } else if (definition.key === 'fast_task.history_retention_seconds') {
+      value = Math.round(Number(current) * 3600)
+    } else if (
+      definition.key === 'export.max_file_bytes' ||
+      definition.key === 'export.min_free_disk_bytes'
+    ) {
+      value = (BigInt(String(current)) * 1_048_576n).toString()
+    } else if (definition.kind === 'integer') value = Number(current)
     else if (definition.kind === 'multiline') {
       value = String(current)
         .split(/[,\r\n]+/)

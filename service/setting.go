@@ -61,9 +61,9 @@ type settingDefinition struct {
 }
 
 var settingDefinitions = []settingDefinition{
-	{Key: "collector.probe_interval_seconds", Group: "collector", ValueType: "int", ReadOnly: true, Minimum: 60, Maximum: 60},
-	{Key: "collector.realtime_interval_seconds", Group: "collector", ValueType: "int", ReadOnly: true, Minimum: 60, Maximum: 60},
-	{Key: "collector.resource_interval_seconds", Group: "collector", ValueType: "int", ReadOnly: true, Minimum: 60, Maximum: 60},
+	{Key: "collector.probe_interval_seconds", Group: "collector", ValueType: "int", Minimum: 60, Maximum: 3600},
+	{Key: "collector.realtime_interval_seconds", Group: "collector", ValueType: "int", Minimum: 60, Maximum: 3600},
+	{Key: "collector.resource_interval_seconds", Group: "collector", ValueType: "int", Minimum: 60, Maximum: 3600},
 	{Key: "collector.usage_delay_minutes", Group: "collector", ValueType: "int", Minimum: 1, Maximum: 59},
 	{Key: "collector.minute_retention_days", Group: "collector", ValueType: "int", Minimum: 1, Maximum: 3650},
 	{Key: "logs.retention_days", Group: "collector", ValueType: "int", Minimum: 1, Maximum: 3650},
@@ -301,6 +301,10 @@ func (service *SettingService) normalizePatches(
 				fieldErrors[valueField] = fmt.Sprintf("must be between %d and %d", definition.Minimum, definition.Maximum)
 				continue
 			}
+			if isCollectorIntervalSetting(definition.Key) && parsed%60 != 0 {
+				fieldErrors[valueField] = "must be a whole number of minutes"
+				continue
+			}
 			patch.Action, patch.Value = settingPatchSet, value
 		case "bool":
 			if string(item.Value) != "true" && string(item.Value) != "false" {
@@ -358,6 +362,15 @@ func (service *SettingService) normalizePatches(
 		return nil, fieldErrors
 	}
 	return patches, nil
+}
+
+func isCollectorIntervalSetting(key string) bool {
+	switch key {
+	case "collector.probe_interval_seconds", "collector.realtime_interval_seconds", "collector.resource_interval_seconds":
+		return true
+	default:
+		return false
+	}
 }
 
 func (service *SettingService) validateFinalValues(values map[string]string) map[string]string {

@@ -102,7 +102,7 @@ func validateCollectorSettings(settings CollectorSettings) error {
 		"realtime_interval_seconds": settings.RealtimeIntervalSeconds,
 		"resource_interval_seconds": settings.ResourceIntervalSeconds,
 	} {
-		if value < 1 || value > 3600 {
+		if value < 60 || value > 3600 || value%60 != 0 {
 			return fmt.Errorf("collector setting %s is outside the supported range", name)
 		}
 	}

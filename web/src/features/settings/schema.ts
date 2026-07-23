@@ -13,13 +13,22 @@ const positiveInteger = (minimum: number, maximum: number) =>
       )
     }, 'settings.validation.range')
 
-const positiveInt64String = z
+const fastTaskRetentionHours = z
   .string()
-  .regex(/^[1-9]\d*$/, { message: 'settings.validation.bigint' })
+  .regex(/^(?:0|[1-9]\d*)(?:\.\d{1,4})?$/, {
+    message: 'settings.validation.retentionHours',
+  })
+  .refine((value) => {
+    const parsed = Number(value)
+    return parsed >= 1 / 60 && parsed <= 8760
+  }, 'settings.validation.retentionHours')
+
+const positiveMegabyteString = z
+  .string()
+  .regex(/^[1-9]\d*$/, { message: 'settings.validation.megabytes' })
   .refine(
-    (value) =>
-      /^[1-9]\d*$/.test(value) && BigInt(value) <= 9_223_372_036_854_775_807n,
-    { message: 'settings.validation.bigint' }
+    (value) => /^[1-9]\d*$/.test(value) && BigInt(value) <= 8_796_093_022_207n,
+    { message: 'settings.validation.megabytes' }
   )
 
 export function isOptionalPositiveFixedDecimal(value: string): boolean {
@@ -73,6 +82,9 @@ function addSecretAvailabilityIssue(
 export function createSettingsFormSchema(secretState: SettingsSecretState) {
   return z
     .object({
+      probeIntervalMinutes: positiveInteger(1, 60),
+      realtimeIntervalMinutes: positiveInteger(1, 60),
+      resourceIntervalMinutes: positiveInteger(1, 60),
       usageDelayMinutes: positiveInteger(1, 59),
       minuteRetentionDays: positiveInteger(1, 3650),
       logRetentionDays: positiveInteger(1, 3650),
@@ -86,7 +98,7 @@ export function createSettingsFormSchema(secretState: SettingsSecretState) {
       usageConcurrency: positiveInteger(1, 100),
       backfillConcurrency: positiveInteger(1, 100),
       manualBackfillMaxDays: positiveInteger(1, 3660),
-      fastTaskHistoryRetentionSeconds: positiveInteger(60, 31_536_000),
+      fastTaskHistoryRetentionHours: fastTaskRetentionHours,
       fastTaskHistoryCount: positiveInteger(1, 1000),
       upstreamAllowedHostSuffixes: runtimeList,
       upstreamAllowedCidrs: runtimeList,
@@ -100,8 +112,8 @@ export function createSettingsFormSchema(secretState: SettingsSecretState) {
       fileTtlHours: positiveInteger(1, 168),
       maxActivePerUser: positiveInteger(1, 100),
       maxActiveGlobal: positiveInteger(1, 100),
-      maxFileBytes: positiveInt64String,
-      minFreeDiskBytes: positiveInt64String,
+      maxFileMegabytes: positiveMegabyteString,
+      minFreeDiskMegabytes: positiveMegabyteString,
       fallbackQuotaPerUnit: optionalPositiveDecimal,
       fallbackUsdExchangeRate: optionalPositiveDecimal,
       dingTalkEnabled: z.boolean(),

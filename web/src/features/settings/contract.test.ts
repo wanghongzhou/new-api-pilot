@@ -7,7 +7,9 @@ import {
   buildSettingPatchItems,
   getMinuteRetentionDays,
   settingFieldDefinitions,
+  settingsSectionKeys,
   settingsSections,
+  settingsToFormValues,
 } from './contract'
 import {
   platformSettingKeys,
@@ -16,6 +18,9 @@ import {
 } from './types'
 
 const validValues: SettingsFormValues = {
+  probeIntervalMinutes: '1',
+  realtimeIntervalMinutes: '1',
+  resourceIntervalMinutes: '1',
   usageDelayMinutes: '5',
   minuteRetentionDays: '90',
   logRetentionDays: '90',
@@ -29,7 +34,7 @@ const validValues: SettingsFormValues = {
   usageConcurrency: '5',
   backfillConcurrency: '2',
   manualBackfillMaxDays: '366',
-  fastTaskHistoryRetentionSeconds: '86400',
+  fastTaskHistoryRetentionHours: '24',
   fastTaskHistoryCount: '100',
   upstreamAllowedHostSuffixes: '',
   upstreamAllowedCidrs: '',
@@ -43,8 +48,8 @@ const validValues: SettingsFormValues = {
   fileTtlHours: '24',
   maxActivePerUser: '3',
   maxActiveGlobal: '10',
-  maxFileBytes: '2147483648',
-  minFreeDiskBytes: '5368709120',
+  maxFileMegabytes: '2048',
+  minFreeDiskMegabytes: '5120',
   fallbackQuotaPerUnit: '500000',
   fallbackUsdExchangeRate: '6.8',
   dingTalkEnabled: false,
@@ -116,6 +121,21 @@ describe('settings frontend contract', () => {
     }
   })
 
+  test('keeps the settings navigation aligned with the six API groups', () => {
+    expect(settingsSections.map((section) => section.key)).toEqual([
+      ...settingsSectionKeys,
+    ])
+  })
+
+  test('gives every editable setting one unique form field', () => {
+    const editable = settingFieldDefinitions.filter(
+      (definition) => definition.kind !== 'readonly'
+    )
+    const formNames = editable.map((definition) => definition.formName)
+    expect(formNames.every(Boolean)).toBeTrue()
+    expect(new Set(formNames).size).toBe(editable.length)
+  })
+
   test('builds an atomic changed-items patch with documented representations', () => {
     const changed: SettingsFormValues = {
       ...validValues,
@@ -123,13 +143,17 @@ describe('settings frontend contract', () => {
       dingTalkSecret: 'replacement-secret',
       dingTalkSecretAction: 'replace',
       fallbackUsdExchangeRate: '7.3000',
-      maxFileBytes: '9007199254740993',
+      fastTaskHistoryRetentionHours: '48',
+      maxFileMegabytes: '8796093022207',
+      probeIntervalMinutes: '2',
       usageDelayMinutes: '4',
     }
     const items = buildSettingPatchItems(changed, validValues)
     expect(items).toEqual([
+      { key: 'collector.probe_interval_seconds', value: 120 },
       { key: 'collector.usage_delay_minutes', value: 4 },
-      { key: 'export.max_file_bytes', value: '9007199254740993' },
+      { key: 'fast_task.history_retention_seconds', value: 172800 },
+      { key: 'export.max_file_bytes', value: '9223372036853727232' },
       { key: 'rate.fallback_usd_exchange_rate', value: '7.3000' },
       { key: 'notification.dingtalk.enabled', value: true },
       {
@@ -139,6 +163,68 @@ describe('settings frontend contract', () => {
     ])
     expect(JSON.stringify(items)).not.toContain('updated_at')
     expect(JSON.stringify(items)).not.toContain('version')
+  })
+
+  test('converts backend seconds and bytes into operator-facing units', () => {
+    const item = (
+      key: 'export.max_file_bytes' | 'export.min_free_disk_bytes',
+      value: string
+    ) => ({
+      configured: true,
+      constraints: {},
+      decrypt_error: false,
+      key,
+      masked_value: '',
+      read_only: false,
+      secret: false,
+      updated_at: 1,
+      value,
+      value_type: 'int' as const,
+    })
+    const values = settingsToFormValues([
+      {
+        items: [
+          {
+            configured: true,
+            constraints: { maximum: 3600, minimum: 60 },
+            decrypt_error: false,
+            key: 'collector.probe_interval_seconds',
+            masked_value: '',
+            read_only: false,
+            secret: false,
+            updated_at: 1,
+            value: 120,
+            value_type: 'int',
+          },
+          {
+            configured: true,
+            constraints: {},
+            decrypt_error: false,
+            key: 'fast_task.history_retention_seconds',
+            masked_value: '',
+            read_only: false,
+            secret: false,
+            updated_at: 1,
+            value: 86400,
+            value_type: 'int',
+          },
+        ],
+        key: 'collector',
+        label_key: 'settings.groups.collector',
+      },
+      {
+        items: [
+          item('export.max_file_bytes', '2147483648'),
+          item('export.min_free_disk_bytes', '5368709120'),
+        ],
+        key: 'export',
+        label_key: 'settings.groups.export',
+      },
+    ])
+    expect(values.probeIntervalMinutes).toBe('2')
+    expect(values.fastTaskHistoryRetentionHours).toBe('24')
+    expect(values.maxFileMegabytes).toBe('2048')
+    expect(values.minFreeDiskMegabytes).toBe('5120')
   })
 
   test('maps indexed and final-state server errors to the edited controls', () => {

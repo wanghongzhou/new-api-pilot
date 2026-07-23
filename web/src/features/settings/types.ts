@@ -90,6 +90,9 @@ export interface NotificationTestResult {
 export type SecretAction = 'clear' | 'keep' | 'replace'
 
 export interface SettingsFormValues {
+  probeIntervalMinutes: string
+  realtimeIntervalMinutes: string
+  resourceIntervalMinutes: string
   usageDelayMinutes: string
   minuteRetentionDays: string
   logRetentionDays: string
@@ -103,7 +106,7 @@ export interface SettingsFormValues {
   usageConcurrency: string
   backfillConcurrency: string
   manualBackfillMaxDays: string
-  fastTaskHistoryRetentionSeconds: string
+  fastTaskHistoryRetentionHours: string
   fastTaskHistoryCount: string
   upstreamAllowedHostSuffixes: string
   upstreamAllowedCidrs: string
@@ -117,8 +120,8 @@ export interface SettingsFormValues {
   fileTtlHours: string
   maxActivePerUser: string
   maxActiveGlobal: string
-  maxFileBytes: string
-  minFreeDiskBytes: string
+  maxFileMegabytes: string
+  minFreeDiskMegabytes: string
   fallbackQuotaPerUnit: string
   fallbackUsdExchangeRate: string
   dingTalkEnabled: boolean

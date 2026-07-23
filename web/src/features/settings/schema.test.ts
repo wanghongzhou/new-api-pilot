@@ -9,6 +9,9 @@ const availableSecrets: SettingsSecretState = {
 }
 
 const validValues: SettingsFormValues = {
+  probeIntervalMinutes: '1',
+  realtimeIntervalMinutes: '1',
+  resourceIntervalMinutes: '1',
   usageDelayMinutes: '5',
   minuteRetentionDays: '90',
   logRetentionDays: '90',
@@ -22,7 +25,7 @@ const validValues: SettingsFormValues = {
   usageConcurrency: '5',
   backfillConcurrency: '2',
   manualBackfillMaxDays: '366',
-  fastTaskHistoryRetentionSeconds: '86400',
+  fastTaskHistoryRetentionHours: '24',
   fastTaskHistoryCount: '100',
   upstreamAllowedHostSuffixes: '',
   upstreamAllowedCidrs: '',
@@ -36,8 +39,8 @@ const validValues: SettingsFormValues = {
   fileTtlHours: '24',
   maxActivePerUser: '3',
   maxActiveGlobal: '10',
-  maxFileBytes: '2147483648',
-  minFreeDiskBytes: '5368709120',
+  maxFileMegabytes: '2048',
+  minFreeDiskMegabytes: '5120',
   fallbackQuotaPerUnit: '500000',
   fallbackUsdExchangeRate: '6.8',
   dingTalkEnabled: false,
@@ -55,10 +58,14 @@ describe('settings form schema', () => {
   })
 
   test.each([
+    ['collector interval zero', { probeIntervalMinutes: '0' }],
+    ['collector interval above one hour', { resourceIntervalMinutes: '61' }],
     ['ordinary exponent', { usageDelayMinutes: '5e0' }],
     ['ordinary leading zero', { usageDelayMinutes: '05' }],
-    ['bigint exponent', { maxFileBytes: '2e10' }],
-    ['bigint overflow', { maxFileBytes: '9223372036854775808' }],
+    ['megabyte exponent', { maxFileMegabytes: '2e10' }],
+    ['megabyte overflow', { maxFileMegabytes: '8796093022208' }],
+    ['retention below one minute', { fastTaskHistoryRetentionHours: '0.01' }],
+    ['retention precision', { fastTaskHistoryRetentionHours: '1.12345' }],
     ['decimal exponent', { fallbackUsdExchangeRate: '7.3e0' }],
     ['decimal sign', { fallbackUsdExchangeRate: '+7.3' }],
     ['decimal zero', { fallbackUsdExchangeRate: '0.000' }],

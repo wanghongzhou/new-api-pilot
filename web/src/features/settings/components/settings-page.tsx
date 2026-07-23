@@ -29,6 +29,7 @@ import { FormField } from '@/components/ui/form-field'
 import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/ui/password-input'
 import { Spinner } from '@/components/ui/spinner'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
@@ -42,12 +43,14 @@ import {
   buildSettingFieldMap,
   buildSettingPatchItems,
   emptySettingsFormValues,
+  isCollectorIntervalKey,
   settingFieldDefinitions,
   settingItemsByKey,
   settingsSecretState,
   settingsSections,
   settingsToFormValues,
   type SettingFieldDefinition,
+  type SettingsSectionKey,
 } from '../contract'
 import { settingsKeys } from '../query-keys'
 import { createSettingsFormSchema } from '../schema'
@@ -77,6 +80,27 @@ function constraint(
   return typeof value === 'number' || typeof value === 'string'
     ? value
     : undefined
+}
+
+function displayConstraint(
+  definition: SettingFieldDefinition,
+  item: SettingItem | undefined,
+  key: 'maximum' | 'minimum'
+): number | string | undefined {
+  if (isCollectorIntervalKey(definition.key)) {
+    const value = constraint(item, key)
+    return typeof value === 'number' ? value / 60 : value
+  }
+  if (
+    definition.key === 'export.max_file_bytes' ||
+    definition.key === 'export.min_free_disk_bytes'
+  ) {
+    return key === 'maximum' ? '8796093022207' : 1
+  }
+  if (definition.key === 'fast_task.history_retention_seconds') {
+    return key === 'maximum' ? 8760 : 0.0167
+  }
+  return constraint(item, key)
 }
 
 function displaySettingValue(
@@ -197,10 +221,14 @@ function EditableSetting({
       aria-invalid={Boolean(error)}
       id={`setting-${definition.formName}`}
       inputMode={inputMode}
-      max={constraint(item, 'maximum')}
-      min={constraint(item, 'minimum')}
+      max={displayConstraint(definition, item, 'maximum')}
+      min={displayConstraint(definition, item, 'minimum')}
       step={definition.step}
-      type={definition.kind === 'integer' ? 'number' : 'text'}
+      type={
+        definition.kind === 'integer' || definition.kind === 'bigint'
+          ? 'number'
+          : 'text'
+      }
       {...form.register(definition.formName)}
     />
   )
@@ -403,16 +431,16 @@ function SettingRow({
   }
 
   return (
-    <div className='grid gap-3 py-4 md:grid-cols-[minmax(0,1fr)_minmax(18rem,32rem)] md:items-start md:gap-8'>
+    <div className='grid gap-3 py-4 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,32rem)] xl:items-start xl:gap-8'>
       <div className='min-w-0'>
         <h3 className='text-sm font-medium'>
           {t(dynamicI18nKey('settings', definition.labelKey))}
         </h3>
-        <p className='text-muted-foreground mt-1 max-w-2xl text-xs'>
+        <p className='text-muted-foreground mt-1 max-w-2xl text-sm'>
           {t(dynamicI18nKey('settings', definition.descriptionKey))}
         </p>
       </div>
-      <div className='min-w-0'>{control}</div>
+      <div className='w-full max-w-lg min-w-0'>{control}</div>
     </div>
   )
 }
@@ -482,7 +510,15 @@ function notificationResultVariant(
   return 'destructive'
 }
 
-export function SettingsPage() {
+type SettingsPageProps = {
+  activeSection: SettingsSectionKey
+  onSectionChange: (section: SettingsSectionKey) => void
+}
+
+export function SettingsPage({
+  activeSection,
+  onSectionChange,
+}: SettingsPageProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const currentUser = useAuthStore((state) => state.user)
@@ -635,78 +671,105 @@ export function SettingsPage() {
         </section>
       )}
       {settingsQuery.data && (
-        <form className='grid gap-8' id='settings-form' onSubmit={save}>
-          {settingsSections.map((section) => (
-            <section
-              aria-labelledby={`settings-section-${section.key}`}
-              className='min-w-0'
-              key={section.key}
-            >
-              <div className='mb-2'>
-                <h2
-                  className='text-lg font-semibold'
-                  id={`settings-section-${section.key}`}
-                >
-                  {t(dynamicI18nKey('settings', section.titleKey))}
-                </h2>
-                <p className='text-muted-foreground mt-1 text-sm'>
-                  {t(dynamicI18nKey('settings', section.descriptionKey))}
-                </p>
-              </div>
-              <div className='border-border divide-border divide-y border-y'>
-                {settingFieldDefinitions
-                  .filter((definition) => definition.section === section.key)
-                  .map((definition) => (
-                    <SettingRow
-                      definition={definition}
-                      form={form}
-                      isAdmin={isAdmin}
-                      item={items.get(definition.key)}
-                      key={definition.key}
-                    />
-                  ))}
-              </div>
-              {section.key === 'notification' && isAdmin && (
-                <div className='mt-4 flex flex-wrap items-center gap-3'>
-                  <NotificationTest
-                    dirty={form.formState.isDirty}
-                    enabled={savedDingTalkEnabled}
-                    onResult={setNotificationResult}
-                    secretReady={
-                      secretState.secret.configured &&
-                      !secretState.secret.decryptError
-                    }
-                    webhookReady={
-                      secretState.webhook.configured &&
-                      !secretState.webhook.decryptError
-                    }
-                  />
-                  {notificationResult && (
-                    <div
-                      className='flex min-w-0 items-center gap-2'
-                      role='status'
-                    >
-                      <Badge
-                        variant={notificationResultVariant(notificationResult)}
-                      >
-                        {t(
-                          dynamicI18nKey(
-                            'settings',
-                            notificationResult.status === 'success'
-                              ? 'settings.notification.testSuccess'
-                              : 'settings.notification.testFailed'
-                          )
-                        )}
-                      </Badge>
-                      <span className='text-sm break-words'>
-                        {translateMessageRef(notificationResult.message)}
-                      </span>
-                    </div>
-                  )}
+        <form
+          className='grid w-full max-w-full min-w-0 gap-8 overflow-x-clip'
+          id='settings-form'
+          onSubmit={save}
+        >
+          <Tabs
+            className="bg-background before:bg-background sticky -top-1 z-10 -mt-2 w-full max-w-full min-w-0 pb-2 before:pointer-events-none before:absolute before:inset-x-0 before:-top-4 before:h-4 before:content-[''] sm:-top-1.5 sm:-mt-2.5 sm:before:-top-5 sm:before:h-5"
+            onValueChange={(section) =>
+              onSectionChange(section as SettingsSectionKey)
+            }
+            value={activeSection}
+          >
+            <div className='w-full min-w-0 overflow-x-auto overscroll-x-contain pb-1'>
+              <TabsList aria-label={t('settings.sections.label')}>
+                {settingsSections.map((section) => (
+                  <TabsTrigger key={section.key} value={section.key}>
+                    {t(dynamicI18nKey('settings', section.titleKey))}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
+          </Tabs>
+          {settingsSections
+            .filter((section) => section.key === activeSection)
+            .map((section) => (
+              <section
+                aria-labelledby={`settings-section-${section.key}`}
+                className='min-w-0'
+                id={`settings-panel-${section.key}`}
+                key={section.key}
+                role='tabpanel'
+              >
+                <div className='mb-2'>
+                  <h2
+                    className='text-lg font-semibold'
+                    id={`settings-section-${section.key}`}
+                  >
+                    {t(dynamicI18nKey('settings', section.titleKey))}
+                  </h2>
+                  <p className='text-muted-foreground mt-1 text-sm'>
+                    {t(dynamicI18nKey('settings', section.descriptionKey))}
+                  </p>
                 </div>
-              )}
-            </section>
-          ))}
+                <div className='border-border divide-border divide-y border-y'>
+                  {settingFieldDefinitions
+                    .filter((definition) => definition.section === section.key)
+                    .map((definition) => (
+                      <SettingRow
+                        definition={definition}
+                        form={form}
+                        isAdmin={isAdmin}
+                        item={items.get(definition.key)}
+                        key={definition.key}
+                      />
+                    ))}
+                </div>
+                {section.key === 'notification' && isAdmin && (
+                  <div className='mt-4 flex flex-wrap items-center justify-end gap-3'>
+                    <NotificationTest
+                      dirty={form.formState.isDirty}
+                      enabled={savedDingTalkEnabled}
+                      onResult={setNotificationResult}
+                      secretReady={
+                        secretState.secret.configured &&
+                        !secretState.secret.decryptError
+                      }
+                      webhookReady={
+                        secretState.webhook.configured &&
+                        !secretState.webhook.decryptError
+                      }
+                    />
+                    {notificationResult && (
+                      <div
+                        className='flex min-w-0 items-center gap-2'
+                        role='status'
+                      >
+                        <Badge
+                          variant={notificationResultVariant(
+                            notificationResult
+                          )}
+                        >
+                          {t(
+                            dynamicI18nKey(
+                              'settings',
+                              notificationResult.status === 'success'
+                                ? 'settings.notification.testSuccess'
+                                : 'settings.notification.testFailed'
+                            )
+                          )}
+                        </Badge>
+                        <span className='text-sm break-words'>
+                          {translateMessageRef(notificationResult.message)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </section>
+            ))}
           {form.formState.errors.root?.message && (
             <p className='text-destructive text-sm' role='alert'>
               {form.formState.errors.root.message}

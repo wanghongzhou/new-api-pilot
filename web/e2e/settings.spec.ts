@@ -98,9 +98,9 @@ async function mockSelf(page: Page, user: TestUser) {
 }
 
 const integerConstraints: Record<string, [number | string, number | string]> = {
-  'collector.probe_interval_seconds': [60, 60],
-  'collector.realtime_interval_seconds': [60, 60],
-  'collector.resource_interval_seconds': [60, 60],
+  'collector.probe_interval_seconds': [60, 3600],
+  'collector.realtime_interval_seconds': [60, 3600],
+  'collector.resource_interval_seconds': [60, 3600],
   'collector.usage_delay_minutes': [1, 59],
   'collector.minute_retention_days': [1, 3650],
   'logs.retention_days': [1, 3650],
@@ -161,11 +161,7 @@ function settingItem(
     decrypt_error: false,
     key,
     masked_value: secret ? '********' : '',
-    read_only:
-      key === 'system.public_origin' ||
-      key === 'collector.probe_interval_seconds' ||
-      key === 'collector.realtime_interval_seconds' ||
-      key === 'collector.resource_interval_seconds',
+    read_only: key === 'system.public_origin',
     secret,
     updated_at: key === 'system.public_origin' ? null : 1_752_400_800,
     value: secret ? null : value,
@@ -371,22 +367,97 @@ test('renders the complete settings surface for admin without overflow or axe vi
   await expect(
     page.getByRole('heading', { level: 1, name: '系统设置' })
   ).toBeVisible()
+  const categoryTabs = page.getByRole('tablist', { name: '系统设置分类' })
+  await expect(categoryTabs.getByRole('tab')).toHaveCount(6)
+  const scrollSettingsContent = (scrollTop: number) =>
+    categoryTabs.evaluate((element, nextScrollTop) => {
+      let ancestor = element.parentElement
+      let scrollContainer: HTMLElement | null = null
+      let scrollRange = 0
+      while (ancestor) {
+        const overflowY = window.getComputedStyle(ancestor).overflowY
+        const nextScrollRange = ancestor.scrollHeight - ancestor.clientHeight
+        if (/auto|scroll/.test(overflowY) && nextScrollRange > scrollRange) {
+          scrollContainer = ancestor
+          scrollRange = nextScrollRange
+        }
+        ancestor = ancestor.parentElement
+      }
+      if (!scrollContainer) return -1
+      scrollContainer.scrollTop = nextScrollTop
+      return scrollContainer.scrollTop
+    }, scrollTop)
+  expect(await scrollSettingsContent(300)).toBeGreaterThan(0)
+  const stickyTabsY = Math.round((await categoryTabs.boundingBox())?.y ?? -1)
+  expect(await scrollSettingsContent(700)).toBeGreaterThan(300)
+  await expect
+    .poll(async () => Math.round((await categoryTabs.boundingBox())?.y ?? -1))
+    .toBe(stickyTabsY)
+  await scrollSettingsContent(0)
   await expect(page.getByRole('heading', { name: '采集策略' })).toBeVisible()
+  for (const label of [
+    '站点状态检查周期（分钟）',
+    '实时统计周期（分钟）',
+    '资源采集周期（分钟）',
+  ]) {
+    await expect(page.getByLabel(label)).toHaveValue('1')
+    await expect(page.getByLabel(label)).toHaveAttribute('type', 'number')
+    await expect(page.getByLabel(label)).toHaveAttribute('min', '1')
+    await expect(page.getByLabel(label)).toHaveAttribute('max', '60')
+  }
+  const fastTaskRetention = page.getByLabel('快速任务历史有效期（小时）')
+  await expect(fastTaskRetention).toHaveValue('24')
+  await expect(fastTaskRetention).toHaveAttribute('type', 'number')
+  await expect(
+    page.getByText(
+      '每个站点、每种快速任务最多保留的最近记录数；每次写入都会立即截断超出上限的旧记录。'
+    )
+  ).toBeVisible()
+  await expect(page.getByRole('heading', { name: '任务并发' })).toHaveCount(0)
+  await categoryTabs.getByRole('tab', { name: '任务并发' }).click()
+  await expect(page).toHaveURL(/section=concurrency/)
   await expect(page.getByRole('heading', { name: '任务并发' })).toBeVisible()
+  await categoryTabs.getByRole('tab', { name: '导出策略' }).click()
   await expect(page.getByRole('heading', { name: '导出策略' })).toBeVisible()
+  await expect(page.getByLabel('导出文件大小上限（MB）')).toHaveAttribute(
+    'type',
+    'number'
+  )
+  await expect(page.getByLabel('最低磁盘余量（MB）')).toHaveAttribute(
+    'type',
+    'number'
+  )
+  await categoryTabs.getByRole('tab', { name: '上游访问策略' }).click()
+  await expect(
+    page.getByRole('heading', { name: '上游访问策略' })
+  ).toBeVisible()
+  await categoryTabs.getByRole('tab', { name: '费率兜底' }).click()
   await expect(page.getByRole('heading', { name: '费率兜底' })).toBeVisible()
-  await expect(page.getByRole('heading', { name: '平台与通知' })).toBeVisible()
+  await expect(page.getByLabel('兜底美元汇率')).toHaveAttribute('type', 'text')
+  await expect(page.getByLabel('兜底美元汇率')).toHaveAttribute(
+    'inputmode',
+    'decimal'
+  )
+  await categoryTabs.getByRole('tab', { name: '平台与通知' }).click()
+  const notificationHeading = page.getByRole('heading', {
+    name: '平台与通知',
+  })
+  await expect(notificationHeading).toBeVisible()
+  await expect(
+    page.getByText(
+      '用于校验浏览器写操作是否来自本平台，并生成钉钉告警中的详情链接；来自运行环境配置，只读。'
+    )
+  ).toBeVisible()
+  await expect
+    .poll(async () => (await notificationHeading.boundingBox())?.x ?? -1)
+    .toBeGreaterThanOrEqual(0)
   await expect(page.getByText('H+15 发布资格')).toHaveCount(0)
-  await expect(page.getByLabel('小时用量采集延迟（分钟）')).toBeEditable()
   await assertNoHorizontalOverflow(page)
   const accessibility = await new AxeBuilder({ page }).analyze()
   expect(accessibility.violations).toEqual([])
   await page.screenshot({
     path: testInfo.outputPath('settings-admin-top.png'),
   })
-  await page
-    .getByRole('heading', { name: '平台与通知' })
-    .scrollIntoViewIfNeeded()
   await page.screenshot({
     path: testInfo.outputPath('settings-admin-notification.png'),
   })
@@ -412,6 +483,38 @@ test('keeps Viewer settings read-only while retaining both settings navigation e
     await expect(page.getByRole('link', { name: '系统设置' })).toBeVisible()
     await expect(page.getByRole('link', { name: '平台用户' })).toBeVisible()
   }
+  await assertNoHorizontalOverflow(page)
+})
+
+test('stacks setting descriptions above controls at medium viewport widths', async ({
+  page,
+}) => {
+  await page.setViewportSize({ height: 800, width: 1024 })
+  await seedAuth(page, admin)
+  await mockSelf(page, admin)
+  await mockSettings(page, admin)
+  await page.goto('/settings/system?section=export')
+
+  const description = page.getByText(
+    '单个导出文件允许写入的最大容量；1 MB = 1024 × 1024 字节，超过该值的导出不会完成。'
+  )
+  const input = page.getByLabel('导出文件大小上限（MB）')
+  await expect(description).toBeVisible()
+  await expect(input).toBeVisible()
+
+  const descriptionBox = await description.boundingBox()
+  const inputBox = await input.boundingBox()
+  expect(descriptionBox).not.toBeNull()
+  expect(inputBox).not.toBeNull()
+  if (!descriptionBox || !inputBox) {
+    throw new Error(
+      'Expected the setting description and input to have layout boxes'
+    )
+  }
+  expect(inputBox.y).toBeGreaterThanOrEqual(
+    descriptionBox.y + descriptionBox.height
+  )
+  expect(inputBox.width).toBeLessThanOrEqual(512)
   await assertNoHorizontalOverflow(page)
 })
 
@@ -469,31 +572,42 @@ test('submits only changed settings and renders success, retry, and failed notif
   })
 
   await page.goto('/settings')
+  await page.getByLabel('站点状态检查周期（分钟）').fill('2')
   await page.getByLabel('小时用量采集延迟（分钟）').fill('4')
-  await page.getByLabel('导出文件大小上限（字节）').fill('9007199254740993')
+  await page.getByLabel('快速任务历史有效期（小时）').fill('48')
+  await page.getByRole('tab', { name: '导出策略' }).click()
+  await expect(page.getByLabel('导出文件大小上限（MB）')).toHaveValue('2048')
+  await expect(page.getByLabel('最低磁盘余量（MB）')).toHaveValue('5120')
+  await page.getByLabel('导出文件大小上限（MB）').fill('4096')
+  await page.getByRole('tab', { name: '费率兜底' }).click()
   await page.getByLabel('兜底美元汇率').fill('7.3000')
   await page.getByRole('button', { name: '保存', exact: true }).click()
   await expect.poll(() => settings.putBodies.length).toBe(1)
   expect(settings.putBodies[0]).toEqual({
     items: [
+      { key: 'collector.probe_interval_seconds', value: 120 },
       { key: 'collector.usage_delay_minutes', value: 4 },
-      { key: 'export.max_file_bytes', value: '9007199254740993' },
+      { key: 'fast_task.history_retention_seconds', value: 172800 },
+      { key: 'export.max_file_bytes', value: '4294967296' },
       { key: 'rate.fallback_usd_exchange_rate', value: '7.3000' },
     ],
   })
-  await expect(page.getByText('系统设置已保存')).toBeVisible()
+  const savedToast = page.getByText('系统设置已保存')
+  await expect(savedToast).toBeVisible()
+  await expect(savedToast).toBeHidden({ timeout: 10_000 })
 
+  await page.getByRole('tab', { name: '平台与通知' }).click()
   const testButton = page.getByRole('button', { name: '测试发送' })
   const notificationResult = page.locator('#settings-form')
-  await testButton.click()
+  await testButton.press('Enter')
   await expect(
     notificationResult.getByText('钉钉测试消息发送成功')
   ).toBeVisible()
-  await testButton.click()
+  await testButton.press('Enter')
   await expect(
     notificationResult.getByText('通知发送失败，已安排自动重试')
   ).toBeVisible()
-  await testButton.click()
+  await testButton.press('Enter')
   await expect(notificationResult.getByText('钉钉拒绝了本次通知')).toBeVisible()
   expect(testCalls).toBe(3)
 })
@@ -526,6 +640,7 @@ test('requires explicit decrypt-error clear confirmation and supports later repl
   await mockSelf(page, admin)
   const settings = await mockSettings(page, admin, { decryptSecret: true })
   await page.goto('/settings')
+  await page.getByRole('tab', { name: '平台与通知' }).click()
 
   const secretHeading = page.getByRole('heading', { name: '钉钉签名密钥' })
   const secretRow = secretHeading.locator('xpath=../..')

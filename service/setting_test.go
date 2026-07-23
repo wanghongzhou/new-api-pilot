@@ -15,6 +15,7 @@ import (
 func TestSettingServiceNormalizesTypedPatchesAndSecretActions(t *testing.T) {
 	settings := newPureSettingService(t)
 	request := dto.SettingPatchRequest{Items: []dto.SettingPatchItem{
+		{Key: "collector.probe_interval_seconds", Value: json.RawMessage(`120`)},
 		{Key: "collector.usage_delay_minutes", Value: json.RawMessage(`7`)},
 		{Key: "export.max_file_bytes", Value: json.RawMessage(`"8589934592"`)},
 		{Key: "rate.fallback_usd_exchange_rate", Value: json.RawMessage(`"7.3000"`)},
@@ -29,7 +30,9 @@ func TestSettingServiceNormalizesTypedPatchesAndSecretActions(t *testing.T) {
 	for _, patch := range patches {
 		byKey[patch.Definition.Key] = patch
 	}
-	if byKey["collector.usage_delay_minutes"].Value != "7" ||
+	if byKey["collector.probe_interval_seconds"].Value != "120" ||
+		byKey["collector.probe_interval_seconds"].Definition.ReadOnly ||
+		byKey["collector.usage_delay_minutes"].Value != "7" ||
 		byKey["export.max_file_bytes"].Value != "8589934592" ||
 		byKey["rate.fallback_usd_exchange_rate"].Value != "7.3" ||
 		byKey[settingDingTalkSecret].Action != settingPatchKeep {
@@ -37,17 +40,17 @@ func TestSettingServiceNormalizesTypedPatchesAndSecretActions(t *testing.T) {
 	}
 }
 
-func TestSettingServiceRejectsReadOnlyUnsafeAndWrongJSONRepresentations(t *testing.T) {
+func TestSettingServiceRejectsInvalidIntervalUnsafeAndWrongJSONRepresentations(t *testing.T) {
 	settings := newPureSettingService(t)
 	request := dto.SettingPatchRequest{Items: []dto.SettingPatchItem{
-		{Key: "collector.probe_interval_seconds", Value: json.RawMessage(`60`)},
+		{Key: "collector.probe_interval_seconds", Value: json.RawMessage(`90`)},
 		{Key: "collector.usage_delay_minutes", Value: json.RawMessage(`60`)},
 		{Key: "export.max_file_bytes", Value: json.RawMessage(`8589934592`)},
 		{Key: settingDingTalkWebhook, Value: json.RawMessage(`"http://oapi.dingtalk.com/robot/send?access_token=private"`)},
 		{Key: settingPublicOrigin, Value: json.RawMessage(`"https://other.example"`)},
 	}}
 	_, fields := settings.normalizePatches(request)
-	for _, key := range []string{"items[0].key", "items[1].value", "items[2].value", "items[3].value", "items[4].key"} {
+	for _, key := range []string{"items[0].value", "items[1].value", "items[2].value", "items[3].value", "items[4].key"} {
 		if fields[key] == "" {
 			t.Fatalf("normalizePatches() fields = %#v, missing %s", fields, key)
 		}
@@ -165,6 +168,10 @@ func TestSettingGroupsNeverExposeSensitiveValuesAndReportDecryptFailure(t *testi
 	publicOrigin := findSettingItem(t, groups, settingPublicOrigin)
 	if !publicOrigin.ReadOnly || publicOrigin.Value != "https://pilot.example" || publicOrigin.UpdatedAt != nil {
 		t.Fatalf("public origin item = %#v", publicOrigin)
+	}
+	probeInterval := findSettingItem(t, groups, "collector.probe_interval_seconds")
+	if probeInterval.ReadOnly || probeInterval.Constraints["minimum"] != int64(60) || probeInterval.Constraints["maximum"] != int64(3600) {
+		t.Fatalf("probe interval item = %#v", probeInterval)
 	}
 }
 

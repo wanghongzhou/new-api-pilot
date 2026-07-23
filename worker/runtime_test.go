@@ -725,15 +725,15 @@ func TestCollectorSettingsHotReloadCadenceAndConcurrency(t *testing.T) {
 		"collector.realtime_interval_seconds",
 		"collector.resource_interval_seconds",
 	} {
-		writeWorkerSetting(t, database, key, "30")
+		writeWorkerSetting(t, database, key, "60")
 	}
 	if err := scheduler.RunOnce(context.Background()); err != nil {
-		t.Fatalf("reload 30 second cadence: %v", err)
+		t.Fatalf("reload 60 second cadence: %v", err)
 	}
 	assertWorkerRunCount(t, database, site.ID, 8)
-	clock.Advance(30 * time.Second)
+	clock.Advance(time.Minute)
 	if err := scheduler.RunOnce(context.Background()); err != nil {
-		t.Fatalf("run reloaded 30 second cadence: %v", err)
+		t.Fatalf("run reloaded 60 second cadence: %v", err)
 	}
 	waitForSiteJobCalls(t, runner, 3)
 	assertWorkerRunCount(t, database, site.ID, 8)
