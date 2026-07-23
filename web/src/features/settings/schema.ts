@@ -39,6 +39,8 @@ const optionalPositiveDecimal = z
 
 const secretAction = z.enum(['clear', 'keep', 'replace'])
 
+const runtimeList = z.string().max(8192)
+
 function validHttpsWebhook(value: string): boolean {
   if (value.length < 1 || value.length > 4096) return false
   try {
@@ -84,6 +86,17 @@ export function createSettingsFormSchema(secretState: SettingsSecretState) {
       usageConcurrency: positiveInteger(1, 100),
       backfillConcurrency: positiveInteger(1, 100),
       manualBackfillMaxDays: positiveInteger(1, 3660),
+      fastTaskHistoryRetentionSeconds: positiveInteger(60, 31_536_000),
+      fastTaskHistoryCount: positiveInteger(1, 1000),
+      upstreamAllowedHostSuffixes: runtimeList,
+      upstreamAllowedCidrs: runtimeList,
+      upstreamConnectTimeoutSeconds: positiveInteger(1, 60),
+      upstreamResponseHeaderTimeoutSeconds: positiveInteger(1, 300),
+      upstreamRequestTimeoutSeconds: positiveInteger(1, 600),
+      upstreamExportTimeoutSeconds: positiveInteger(1, 3600),
+      upstreamRateLimitRequests: positiveInteger(1, 10_000),
+      upstreamRateLimitWindowSeconds: positiveInteger(1, 3600),
+      upstreamMaxInflightPerOrigin: positiveInteger(1, 100),
       fileTtlHours: positiveInteger(1, 168),
       maxActivePerUser: positiveInteger(1, 100),
       maxActiveGlobal: positiveInteger(1, 100),
@@ -103,6 +116,42 @@ export function createSettingsFormSchema(secretState: SettingsSecretState) {
           code: 'custom',
           message: 'settings.validation.perUserLimit',
           path: ['maxActivePerUser'],
+        })
+      }
+
+      const requestTimeout = Number(values.upstreamRequestTimeoutSeconds)
+      if (Number(values.upstreamConnectTimeoutSeconds) > requestTimeout) {
+        context.addIssue({
+          code: 'custom',
+          message: 'settings.validation.timeoutRelationship',
+          path: ['upstreamConnectTimeoutSeconds'],
+        })
+      }
+      if (
+        Number(values.upstreamResponseHeaderTimeoutSeconds) > requestTimeout
+      ) {
+        context.addIssue({
+          code: 'custom',
+          message: 'settings.validation.timeoutRelationship',
+          path: ['upstreamResponseHeaderTimeoutSeconds'],
+        })
+      }
+      if (requestTimeout > Number(values.upstreamExportTimeoutSeconds)) {
+        context.addIssue({
+          code: 'custom',
+          message: 'settings.validation.timeoutRelationship',
+          path: ['upstreamRequestTimeoutSeconds'],
+        })
+      }
+      if (
+        (Number(values.upstreamRateLimitWindowSeconds) * 1000) /
+          Number(values.upstreamRateLimitRequests) <
+        10
+      ) {
+        context.addIssue({
+          code: 'custom',
+          message: 'settings.validation.rateInterval',
+          path: ['upstreamRateLimitRequests'],
         })
       }
 

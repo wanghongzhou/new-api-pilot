@@ -5,17 +5,23 @@ import { Controller, useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import {
+  sideDrawerContentClassName,
+  sideDrawerFooterClassName,
+  sideDrawerFormClassName,
+  sideDrawerHeaderClassName,
+} from '@/components/drawer-layout'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from '@/components/ui/drawer'
 import { FormField } from '@/components/ui/form-field'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
@@ -124,61 +130,67 @@ export function AlertRuleFormDialog({
     }
   })
   return (
-    <Dialog onOpenChange={(open) => !open && onClose()} open>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>
+    <Drawer direction='right' onOpenChange={(open) => !open && onClose()} open>
+      <DrawerContent className={sideDrawerContentClassName('sm:max-w-xl')}>
+        <DrawerHeader className={sideDrawerHeaderClassName()}>
+          <DrawerTitle>
             {createOverride
               ? t('alerts.rules.createOverride')
               : t('alerts.rules.edit')}
-          </DialogTitle>
-          <DialogDescription>
+          </DrawerTitle>
+          <DrawerDescription>
             {createOverride
               ? t('alerts.rules.createOverrideDescription')
               : t('alerts.rules.editDescription')}
-          </DialogDescription>
-        </DialogHeader>
-        <dl className='border-border divide-border grid divide-y border-y text-sm'>
-          <div className='grid gap-1 py-2 sm:grid-cols-[9rem_1fr]'>
-            <dt className='text-muted-foreground'>{t('alerts.table.rule')}</dt>
-            <dd>
-              <p>{alertRuleName(t, rule.rule_key)}</p>
-              <p className='text-muted-foreground mt-1 text-xs'>
-                {alertRuleDescription(t, rule.rule_key)}
-              </p>
-            </dd>
-          </div>
-          <div className='grid gap-1 py-2 sm:grid-cols-[9rem_1fr]'>
-            <dt className='text-muted-foreground'>{t('alerts.rules.level')}</dt>
-            <dd>{alertLevelText(t, rule.level)}</dd>
-          </div>
-          <div className='grid gap-1 py-2 sm:grid-cols-[9rem_1fr]'>
-            <dt className='text-muted-foreground'>
-              {t('alerts.rules.metric')}
-            </dt>
-            <dd className='font-mono text-xs break-all'>{rule.metric}</dd>
-          </div>
-          <div className='grid gap-1 py-2 sm:grid-cols-[9rem_1fr]'>
-            <dt className='text-muted-foreground'>
-              {t('alerts.rules.compareOperator')}
-            </dt>
-            <dd className='font-mono'>{rule.compare_operator}</dd>
-          </div>
-          <div className='grid gap-1 py-2 sm:grid-cols-[9rem_1fr]'>
-            <dt className='text-muted-foreground'>{t('alerts.rules.scope')}</dt>
-            <dd>
-              {createOverride
-                ? t('alerts.rules.scope.site')
-                : ruleScopeText(t, rule.scope_type)}
-            </dd>
-          </div>
-        </dl>
+          </DrawerDescription>
+        </DrawerHeader>
         <form
-          className='grid gap-4'
+          className={sideDrawerFormClassName('gap-4')}
           id='alert-rule-form'
           noValidate
           onSubmit={submit}
         >
+          <dl className='border-border divide-border grid divide-y border-y text-sm'>
+            <div className='grid gap-1 py-2 sm:grid-cols-[9rem_1fr]'>
+              <dt className='text-muted-foreground'>
+                {t('alerts.table.rule')}
+              </dt>
+              <dd>
+                <p>{alertRuleName(t, rule.rule_key)}</p>
+                <p className='text-muted-foreground mt-1 text-xs'>
+                  {alertRuleDescription(t, rule.rule_key)}
+                </p>
+              </dd>
+            </div>
+            <div className='grid gap-1 py-2 sm:grid-cols-[9rem_1fr]'>
+              <dt className='text-muted-foreground'>
+                {t('alerts.rules.level')}
+              </dt>
+              <dd>{alertLevelText(t, rule.level)}</dd>
+            </div>
+            <div className='grid gap-1 py-2 sm:grid-cols-[9rem_1fr]'>
+              <dt className='text-muted-foreground'>
+                {t('alerts.rules.metric')}
+              </dt>
+              <dd className='font-mono text-xs break-all'>{rule.metric}</dd>
+            </div>
+            <div className='grid gap-1 py-2 sm:grid-cols-[9rem_1fr]'>
+              <dt className='text-muted-foreground'>
+                {t('alerts.rules.compareOperator')}
+              </dt>
+              <dd className='font-mono'>{rule.compare_operator}</dd>
+            </div>
+            <div className='grid gap-1 py-2 sm:grid-cols-[9rem_1fr]'>
+              <dt className='text-muted-foreground'>
+                {t('alerts.rules.scope')}
+              </dt>
+              <dd>
+                {createOverride
+                  ? t('alerts.rules.scope.site')
+                  : ruleScopeText(t, rule.scope_type)}
+              </dd>
+            </div>
+          </dl>
           <FormField
             error={formError(errors.enabled, t)}
             htmlFor='alert-rule-enabled'
@@ -275,7 +287,7 @@ export function AlertRuleFormDialog({
             </p>
           )}
         </form>
-        <DialogFooter>
+        <DrawerFooter className={sideDrawerFooterClassName()}>
           <Button onClick={onClose} type='button' variant='outline'>
             {t('common.cancel')}
           </Button>
@@ -289,9 +301,9 @@ export function AlertRuleFormDialog({
               ? t('alerts.rules.createOverride')
               : t('common.save')}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </DrawerFooter>
+      </DrawerContent>
+    </Drawer>
   )
 }
 

@@ -1,7 +1,5 @@
 import type { FieldPath } from 'react-hook-form'
 
-import type { AnyMessageRef } from '@/lib/message-ref'
-
 import type {
   PlatformSettingKey,
   SettingGroup,
@@ -17,12 +15,14 @@ export type SettingsSectionKey =
   | 'export'
   | 'notification'
   | 'rate'
+  | 'upstream'
 
 export type SettingControlKind =
   | 'bigint'
   | 'boolean'
   | 'decimal'
   | 'integer'
+  | 'multiline'
   | 'readonly'
   | 'secret'
 
@@ -119,6 +119,103 @@ export const settingFieldDefinitions: readonly SettingFieldDefinition[] = [
     descriptionKey: 'settings.field.manualBackfillDaysDescription',
     kind: 'integer',
     formName: 'manualBackfillMaxDays',
+    step: '1',
+  },
+  {
+    key: 'fast_task.history_retention_seconds',
+    section: 'collection',
+    labelKey: 'settings.field.fastTaskHistoryRetention',
+    descriptionKey: 'settings.field.fastTaskHistoryRetentionDescription',
+    kind: 'integer',
+    formName: 'fastTaskHistoryRetentionSeconds',
+    step: '1',
+  },
+  {
+    key: 'fast_task.history_count',
+    section: 'collection',
+    labelKey: 'settings.field.fastTaskHistoryCount',
+    descriptionKey: 'settings.field.fastTaskHistoryCountDescription',
+    kind: 'integer',
+    formName: 'fastTaskHistoryCount',
+    step: '1',
+  },
+  {
+    key: 'upstream.allowed_host_suffixes',
+    section: 'upstream',
+    labelKey: 'settings.field.upstreamAllowedHostSuffixes',
+    descriptionKey: 'settings.field.upstreamAllowedHostSuffixesDescription',
+    kind: 'multiline',
+    formName: 'upstreamAllowedHostSuffixes',
+  },
+  {
+    key: 'upstream.allowed_cidrs',
+    section: 'upstream',
+    labelKey: 'settings.field.upstreamAllowedCidrs',
+    descriptionKey: 'settings.field.upstreamAllowedCidrsDescription',
+    kind: 'multiline',
+    formName: 'upstreamAllowedCidrs',
+  },
+  {
+    key: 'upstream.connect_timeout_seconds',
+    section: 'upstream',
+    labelKey: 'settings.field.upstreamConnectTimeout',
+    descriptionKey: 'settings.field.upstreamConnectTimeoutDescription',
+    kind: 'integer',
+    formName: 'upstreamConnectTimeoutSeconds',
+    step: '1',
+  },
+  {
+    key: 'upstream.response_header_timeout_seconds',
+    section: 'upstream',
+    labelKey: 'settings.field.upstreamHeaderTimeout',
+    descriptionKey: 'settings.field.upstreamHeaderTimeoutDescription',
+    kind: 'integer',
+    formName: 'upstreamResponseHeaderTimeoutSeconds',
+    step: '1',
+  },
+  {
+    key: 'upstream.request_timeout_seconds',
+    section: 'upstream',
+    labelKey: 'settings.field.upstreamRequestTimeout',
+    descriptionKey: 'settings.field.upstreamRequestTimeoutDescription',
+    kind: 'integer',
+    formName: 'upstreamRequestTimeoutSeconds',
+    step: '1',
+  },
+  {
+    key: 'upstream.export_timeout_seconds',
+    section: 'upstream',
+    labelKey: 'settings.field.upstreamExportTimeout',
+    descriptionKey: 'settings.field.upstreamExportTimeoutDescription',
+    kind: 'integer',
+    formName: 'upstreamExportTimeoutSeconds',
+    step: '1',
+  },
+  {
+    key: 'upstream.rate_limit_requests',
+    section: 'upstream',
+    labelKey: 'settings.field.upstreamRateLimitRequests',
+    descriptionKey: 'settings.field.upstreamRateLimitRequestsDescription',
+    kind: 'integer',
+    formName: 'upstreamRateLimitRequests',
+    step: '1',
+  },
+  {
+    key: 'upstream.rate_limit_window_seconds',
+    section: 'upstream',
+    labelKey: 'settings.field.upstreamRateLimitWindow',
+    descriptionKey: 'settings.field.upstreamRateLimitWindowDescription',
+    kind: 'integer',
+    formName: 'upstreamRateLimitWindowSeconds',
+    step: '1',
+  },
+  {
+    key: 'upstream.max_inflight_per_origin',
+    section: 'upstream',
+    labelKey: 'settings.field.upstreamMaxInflight',
+    descriptionKey: 'settings.field.upstreamMaxInflightDescription',
+    kind: 'integer',
+    formName: 'upstreamMaxInflightPerOrigin',
     step: '1',
   },
   {
@@ -292,6 +389,11 @@ export const settingsSections: ReadonlyArray<{
     descriptionKey: 'settings.section.exportDescription',
   },
   {
+    key: 'upstream',
+    titleKey: 'settings.section.upstream',
+    descriptionKey: 'settings.section.upstreamDescription',
+  },
+  {
     key: 'rate',
     titleKey: 'settings.section.rate',
     descriptionKey: 'settings.section.rateDescription',
@@ -326,6 +428,17 @@ export const emptySettingsFormValues: SettingsFormValues = {
   usageConcurrency: '',
   backfillConcurrency: '',
   manualBackfillMaxDays: '',
+  fastTaskHistoryRetentionSeconds: '',
+  fastTaskHistoryCount: '',
+  upstreamAllowedHostSuffixes: '',
+  upstreamAllowedCidrs: '',
+  upstreamConnectTimeoutSeconds: '',
+  upstreamResponseHeaderTimeoutSeconds: '',
+  upstreamRequestTimeoutSeconds: '',
+  upstreamExportTimeoutSeconds: '',
+  upstreamRateLimitRequests: '',
+  upstreamRateLimitWindowSeconds: '',
+  upstreamMaxInflightPerOrigin: '',
   fileTtlHours: '',
   maxActivePerUser: '',
   maxActiveGlobal: '',
@@ -364,7 +477,10 @@ export function settingsToFormValues(
   const values = { ...emptySettingsFormValues }
   for (const definition of editableDefinitions) {
     if (definition.kind === 'secret') continue
-    const value = editableValue(items.get(definition.key))
+    let value = editableValue(items.get(definition.key))
+    if (definition.kind === 'multiline' && typeof value === 'string') {
+      value = value.split(',').filter(Boolean).join('\n')
+    }
     ;(values as Record<string, string | boolean>)[definition.formName] = value
   }
   return values
@@ -415,6 +531,13 @@ export function buildSettingPatchItems(
     let value: boolean | number | string = String(current)
     if (definition.kind === 'boolean') value = Boolean(current)
     else if (definition.kind === 'integer') value = Number(current)
+    else if (definition.kind === 'multiline') {
+      value = String(current)
+        .split(/[,\r\n]+/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .join(',')
+    }
     result.push({
       key: definition.key,
       value,
@@ -461,29 +584,4 @@ export function getMinuteRetentionDays(
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
     ? value
     : null
-}
-
-export function buildSettingSLOMessageRefs(
-  groups: readonly SettingGroup[] | undefined,
-  values: SettingsFormValues
-): AnyMessageRef[] {
-  const codes = groups?.[0]?.h15_slo_reason_codes ?? []
-  const unique = new Set(codes)
-  const result: AnyMessageRef[] = []
-  for (const code of unique) {
-    if (code === 'SLO_USAGE_DELAY_TOO_HIGH') {
-      result.push({
-        code,
-        params: { threshold: 5, value: Number(values.usageDelayMinutes) },
-        technical_detail: '',
-      })
-    } else if (code === 'SLO_USAGE_CONCURRENCY_TOO_LOW') {
-      result.push({
-        code,
-        params: { threshold: 5, value: Number(values.usageConcurrency) },
-        technical_detail: '',
-      })
-    }
-  }
-  return result
 }

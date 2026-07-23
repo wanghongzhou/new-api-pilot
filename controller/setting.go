@@ -56,9 +56,6 @@ func writeSettingServiceError(c *gin.Context, err error) {
 	switch {
 	case errors.As(err, &validation):
 		common.AbortError(c, http.StatusBadRequest, constant.CodeValidationError, "Invalid setting patch", validation.Fields)
-	case errors.Is(err, service.ErrSettingSLOForbidden):
-		common.AbortError(c, http.StatusUnprocessableEntity, constant.CodeSLOConfigForbidden,
-			"Setting patch would violate the production H+15 SLO", nil)
 	default:
 		common.AbortInternalError(c)
 	}

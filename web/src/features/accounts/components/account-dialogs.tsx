@@ -5,16 +5,22 @@ import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import {
+  sideDrawerContentClassName,
+  sideDrawerFooterClassName,
+  sideDrawerFormClassName,
+  sideDrawerHeaderClassName,
+} from '@/components/drawer-layout'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from '@/components/ui/drawer'
 import { FormField } from '@/components/ui/form-field'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
@@ -108,7 +114,7 @@ function EditAccountDialog({
   } else {
     content = (
       <form
-        className='grid gap-4'
+        className={sideDrawerFormClassName('gap-4')}
         id='account-edit-form'
         noValidate
         onSubmit={submit}
@@ -139,14 +145,14 @@ function EditAccountDialog({
     )
   }
   return (
-    <Dialog onOpenChange={(open) => !open && onClose()} open>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{t('account.edit.title')}</DialogTitle>
-          <DialogDescription>{t('account.edit.description')}</DialogDescription>
-        </DialogHeader>
+    <Drawer direction='right' onOpenChange={(open) => !open && onClose()} open>
+      <DrawerContent className={sideDrawerContentClassName('sm:max-w-xl')}>
+        <DrawerHeader className={sideDrawerHeaderClassName()}>
+          <DrawerTitle>{t('account.edit.title')}</DrawerTitle>
+          <DrawerDescription>{t('account.edit.description')}</DrawerDescription>
+        </DrawerHeader>
         {content}
-        <DialogFooter>
+        <DrawerFooter className={sideDrawerFooterClassName()}>
           <Button onClick={onClose} variant='outline'>
             {t('common.cancel')}
           </Button>
@@ -158,9 +164,9 @@ function EditAccountDialog({
             {pending && <Spinner />}
             {t('common.save')}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </DrawerFooter>
+      </DrawerContent>
+    </Drawer>
   )
 }
 

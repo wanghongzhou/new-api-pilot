@@ -18,6 +18,17 @@ export const platformSettingKeys = [
   'collector.usage_concurrency',
   'collector.backfill_concurrency',
   'collector.manual_backfill_max_days',
+  'fast_task.history_retention_seconds',
+  'fast_task.history_count',
+  'upstream.allowed_host_suffixes',
+  'upstream.allowed_cidrs',
+  'upstream.connect_timeout_seconds',
+  'upstream.response_header_timeout_seconds',
+  'upstream.request_timeout_seconds',
+  'upstream.export_timeout_seconds',
+  'upstream.rate_limit_requests',
+  'upstream.rate_limit_window_seconds',
+  'upstream.max_inflight_per_origin',
   'export.file_ttl_hours',
   'export.max_active_per_user',
   'export.max_active_global',
@@ -38,11 +49,8 @@ export type SettingGroupKey =
   | 'notification'
   | 'rate'
   | 'system'
+  | 'upstream'
 export type SettingValueType = 'bool' | 'decimal' | 'int' | 'string'
-export type SettingSLOReasonCode =
-  | 'SLO_USAGE_CONCURRENCY_TOO_LOW'
-  | 'SLO_USAGE_DELAY_TOO_HIGH'
-
 export interface SettingItem {
   key: SettingKey
   value_type: SettingValueType
@@ -60,8 +68,6 @@ export interface SettingGroup {
   key: SettingGroupKey
   label_key: string
   items: SettingItem[]
-  h15_slo_eligible: boolean
-  h15_slo_reason_codes: SettingSLOReasonCode[]
 }
 
 export interface SettingPatchItem {
@@ -97,6 +103,17 @@ export interface SettingsFormValues {
   usageConcurrency: string
   backfillConcurrency: string
   manualBackfillMaxDays: string
+  fastTaskHistoryRetentionSeconds: string
+  fastTaskHistoryCount: string
+  upstreamAllowedHostSuffixes: string
+  upstreamAllowedCidrs: string
+  upstreamConnectTimeoutSeconds: string
+  upstreamResponseHeaderTimeoutSeconds: string
+  upstreamRequestTimeoutSeconds: string
+  upstreamExportTimeoutSeconds: string
+  upstreamRateLimitRequests: string
+  upstreamRateLimitWindowSeconds: string
+  upstreamMaxInflightPerOrigin: string
   fileTtlHours: string
   maxActivePerUser: string
   maxActiveGlobal: string

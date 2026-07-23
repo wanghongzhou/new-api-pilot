@@ -713,12 +713,13 @@ JOIN collection_window AS w
   ON w.site_id = f.site_id AND w.hour_ts = f.hour_ts AND w.status = 'complete'
 JOIN site AS s ON s.id = f.site_id`
 		where = `f.hour_ts >= ? AND f.hour_ts < ?
+  AND f.remote_user_id > 0
   AND s.statistics_start_at IS NOT NULL AND s.statistics_start_at < f.hour_ts + 3600
   AND (s.statistics_end_at IS NULL OR s.statistics_end_at > f.hour_ts)`
 		args = []any{request.StartTimestamp, request.EndTimestamp}
 	} else {
 		from = "usage_fact_daily AS f JOIN site AS s ON s.id = f.site_id"
-		where = "f.date_key >= ? AND f.date_key < ?"
+		where = "f.date_key >= ? AND f.date_key < ? AND f.remote_user_id > 0"
 		args = []any{request.StartDateKey, request.EndDateKey}
 	}
 	switch request.Granularity {

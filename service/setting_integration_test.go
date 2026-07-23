@@ -11,7 +11,6 @@ import (
 	"gorm.io/gorm"
 
 	"new-api-pilot/common"
-	"new-api-pilot/config"
 	"new-api-pilot/dto"
 	"new-api-pilot/model"
 	testsupport "new-api-pilot/tests/support"
@@ -20,7 +19,7 @@ import (
 func TestSettingServiceEncryptsSecretsAndAppliesAtomicPatchContracts(t *testing.T) {
 	tx := openSiteTestTransaction(t)
 	clock := testsupport.NewFakeClock(time.Unix(1_752_400_800, 0))
-	settings, cipher := newIntegrationSettingService(t, tx, clock, config.EnvironmentTest)
+	settings, cipher := newIntegrationSettingService(t, tx, clock)
 	before := readSettingRows(t, tx)
 	webhookPlaintext := "https://oapi.dingtalk.com/robot/send?access_token=private-token"
 	secretPlaintext := "private-signing-secret"
@@ -97,21 +96,12 @@ func TestSettingServiceEncryptsSecretsAndAppliesAtomicPatchContracts(t *testing.
 	}
 }
 
-func TestSettingServiceProductionSLOAndCapacityFailuresRollbackEveryItem(t *testing.T) {
+func TestSettingServiceCapacityFailuresRollbackEveryItem(t *testing.T) {
 	tx := openSiteTestTransaction(t)
 	clock := testsupport.NewFakeClock(time.Unix(1_752_400_800, 0))
-	settings, _ := newIntegrationSettingService(t, tx, clock, config.EnvironmentProduction)
+	settings, _ := newIntegrationSettingService(t, tx, clock)
 	before := readSettingRows(t, tx)
 	_, err := settings.Update(context.Background(), dto.SettingPatchRequest{Items: []dto.SettingPatchItem{
-		{Key: "collector.usage_delay_minutes", Value: json.RawMessage(`6`)},
-		{Key: "export.file_ttl_hours", Value: json.RawMessage(`48`)},
-	}})
-	if !errors.Is(err, ErrSettingSLOForbidden) {
-		t.Fatalf("production SLO error = %v", err)
-	}
-	assertSettingRowsEqual(t, before, readSettingRows(t, tx))
-
-	_, err = settings.Update(context.Background(), dto.SettingPatchRequest{Items: []dto.SettingPatchItem{
 		{Key: "export.max_active_per_user", Value: json.RawMessage(`20`)},
 		{Key: "export.max_active_global", Value: json.RawMessage(`10`)},
 		{Key: "export.file_ttl_hours", Value: json.RawMessage(`72`)},
@@ -129,7 +119,6 @@ func TestSettingServiceInvalidScalarMixedBatchChangesNoValueOrTimestamp(t *testi
 		t,
 		tx,
 		testsupport.NewFakeClock(time.Unix(1_752_400_800, 0)),
-		config.EnvironmentTest,
 	)
 	tests := []struct {
 		name string
@@ -160,7 +149,7 @@ func TestSettingServiceInvalidScalarMixedBatchChangesNoValueOrTimestamp(t *testi
 func TestSettingServiceGETSurvivesSecretDecryptFailureWithoutLeakingStorage(t *testing.T) {
 	tx := openSiteTestTransaction(t)
 	clock := testsupport.NewFakeClock(time.Unix(1_752_400_800, 0))
-	settings, _ := newIntegrationSettingService(t, tx, clock, config.EnvironmentTest)
+	settings, _ := newIntegrationSettingService(t, tx, clock)
 	const broken = "v1:broken:private-ciphertext"
 	if err := tx.Model(&model.PlatformSetting{}).Where("setting_key = ?", settingDingTalkWebhook).
 		Update("setting_value", broken).Error; err != nil {
@@ -187,7 +176,6 @@ func newIntegrationSettingService(
 	t *testing.T,
 	tx *gorm.DB,
 	clock common.Clock,
-	appEnv string,
 ) (*SettingService, *common.Cipher) {
 	t.Helper()
 	cipher, err := common.NewCipher([]byte("abcdefghijklmnopqrstuvwxyz123456"))
@@ -196,7 +184,7 @@ func newIntegrationSettingService(
 	}
 	settings, err := NewSettingService(SettingServiceOptions{
 		Repository: model.NewSettingRepository(tx), Cipher: cipher, Clock: clock,
-		AppEnv: appEnv, PublicOrigin: "https://pilot.example",
+		PublicOrigin: "https://pilot.example",
 	})
 	if err != nil {
 		t.Fatalf("create integration setting service: %v", err)

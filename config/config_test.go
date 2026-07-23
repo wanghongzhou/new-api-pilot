@@ -18,11 +18,19 @@ func TestLoadFromValidDevelopment(t *testing.T) {
 	if loaded.Port != "3000" || loaded.EncryptionKeyID == "" {
 		t.Fatalf("unexpected config: %#v", loaded)
 	}
-	if len(loaded.UpstreamAllowedCIDRs) != 1 || len(loaded.MetricsAllowedCIDRs) != 1 {
+	if len(loaded.MetricsAllowedCIDRs) != 1 {
 		t.Fatalf("CIDRs were not parsed: %#v", loaded)
 	}
 	if len(loaded.DingTalkAllowedHosts) != 1 || loaded.DingTalkAllowedHosts[0] != "oapi.dingtalk.com" {
 		t.Fatalf("unexpected DingTalk allowlist: %v", loaded.DingTalkAllowedHosts)
+	}
+}
+
+func TestLoadFromRequiresAppEnvironment(t *testing.T) {
+	values := validEnvironment()
+	delete(values, "APP_ENV")
+	if _, err := LoadFrom(mapLookup(values)); err == nil || !strings.Contains(err.Error(), "APP_ENV is required") {
+		t.Fatalf("missing APP_ENV error = %v", err)
 	}
 }
 
@@ -44,12 +52,6 @@ func TestLoadFromRejectsUnsafeProduction(t *testing.T) {
 	}
 
 	values["PUBLIC_ORIGIN"] = "https://pilot.example.com"
-	_, err = LoadFrom(mapLookup(values))
-	if err == nil || !strings.Contains(err.Error(), "TRUSTED_PROXIES") {
-		t.Fatalf("expected trusted proxy error, got %v", err)
-	}
-
-	values["TRUSTED_PROXIES"] = "10.0.0.0/8"
 	_, err = LoadFrom(mapLookup(values))
 	if err == nil || !strings.Contains(err.Error(), "METRICS_ALLOWED_CIDRS") {
 		t.Fatalf("expected metrics allowlist error, got %v", err)
@@ -122,35 +124,13 @@ func TestLoadFromRejectsInvalidDatabaseContract(t *testing.T) {
 	}
 }
 
-func TestLoadFromRejectsMissingUpstreamBoundary(t *testing.T) {
+func TestLoadFromIgnoresLegacyTimezoneAndUpstreamEnvironment(t *testing.T) {
 	values := validEnvironment()
+	values["TZ"] = "UTC"
 	values["UPSTREAM_ALLOWED_CIDRS"] = ""
-	values["UPSTREAM_ALLOWED_HOST_SUFFIXES"] = ""
-	_, err := LoadFrom(mapLookup(values))
-	if err == nil || !strings.Contains(err.Error(), "cannot both be empty") {
-		t.Fatalf("expected upstream boundary error, got %v", err)
-	}
-}
-
-func TestLoadFromRequiresFixedUpstreamTimeouts(t *testing.T) {
-	for _, name := range []string{
-		"UPSTREAM_CONNECT_TIMEOUT_SECONDS",
-		"UPSTREAM_RESPONSE_HEADER_TIMEOUT_SECONDS",
-		"UPSTREAM_REQUEST_TIMEOUT_SECONDS",
-		"UPSTREAM_EXPORT_TIMEOUT_SECONDS",
-	} {
-		t.Run(name, func(t *testing.T) {
-			values := validEnvironment()
-			delete(values, name)
-			if _, err := LoadFrom(mapLookup(values)); err == nil || !strings.Contains(err.Error(), name+" is required") {
-				t.Fatalf("missing timeout error = %v", err)
-			}
-			values = validEnvironment()
-			values[name] = "999"
-			if _, err := LoadFrom(mapLookup(values)); err == nil || !strings.Contains(err.Error(), "must be exactly") {
-				t.Fatalf("unsafe timeout error = %v", err)
-			}
-		})
+	values["UPSTREAM_REQUEST_TIMEOUT_SECONDS"] = "invalid"
+	if _, err := LoadFrom(mapLookup(values)); err != nil {
+		t.Fatalf("legacy runtime environment must not affect startup config: %v", err)
 	}
 }
 
@@ -233,7 +213,6 @@ func validEnvironment() map[string]string {
 	return map[string]string{
 		"APP_ENV":                           EnvironmentDevelopment,
 		"PORT":                              "3000",
-		"TZ":                                "Asia/Shanghai",
 		"DATABASE_DSN":                      "pilot:pilot@tcp(localhost:3306)/pilot?charset=utf8mb4&parseTime=true&loc=Asia%2FShanghai",
 		"SESSION_SECRET":                    base64.StdEncoding.EncodeToString([]byte("01234567890123456789012345678901")),
 		"ENCRYPTION_KEY":                    base64.StdEncoding.EncodeToString([]byte("abcdefghijklmnopqrstuvwxyz123456")),
@@ -242,12 +221,7 @@ func validEnvironment() map[string]string {
 		"EXPORT_DIR":                        "./data/test-exports",
 		"REDIS_DSN":                         "redis://localhost:6379/0",
 		"PUBLIC_ORIGIN":                     "http://localhost:3000",
-		"UPSTREAM_ALLOWED_CIDRS":            "10.0.0.0/8",
-		"UPSTREAM_CONNECT_TIMEOUT_SECONDS":  "5",
-		"UPSTREAM_RESPONSE_HEADER_TIMEOUT_SECONDS": "15",
-		"UPSTREAM_REQUEST_TIMEOUT_SECONDS":         "30",
-		"UPSTREAM_EXPORT_TIMEOUT_SECONDS":          "120",
-		"METRICS_ALLOWED_CIDRS":                    "127.0.0.0/8",
+		"METRICS_ALLOWED_CIDRS":             "127.0.0.0/8",
 	}
 }
 

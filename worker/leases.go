@@ -2,6 +2,8 @@ package worker
 
 import (
 	"errors"
+	"hash/fnv"
+	"strconv"
 	"time"
 
 	"new-api-pilot/constant"
@@ -14,6 +16,23 @@ type TaskExecutionError struct {
 	Retryable     bool
 	RetryAfter    time.Duration
 	HasRetryAfter bool
+}
+
+func retryDelayWithJitter(base time.Duration, taskType string, runID, siteID, hourTS int64, attempt int) time.Duration {
+	if base <= 0 {
+		return base
+	}
+	maximum := base / 5
+	if maximum <= 0 {
+		return base
+	}
+	hash := fnv.New64a()
+	_, _ = hash.Write([]byte(taskType))
+	for _, value := range []int64{runID, siteID, hourTS, int64(attempt)} {
+		_, _ = hash.Write([]byte{'|'})
+		_, _ = hash.Write([]byte(strconv.FormatInt(value, 10)))
+	}
+	return base + time.Duration(hash.Sum64()%uint64(maximum+1))
 }
 
 func (err *TaskExecutionError) Error() string {

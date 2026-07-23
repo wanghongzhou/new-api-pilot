@@ -1,38 +1,87 @@
 # New API Pilot
 
-## Container Validation And Local Refresh
+New API Pilot 是独立部署的多站点运营管理平台，用于统一管理多个 new-api
+站点的授权、客户、账户、数据采集、统计、导出、告警和运维状态。
 
-- Run backend tests through `make test-api-docker`; the command uses a Docker
-  Go image and the isolated `new_api_pilot_test` database.
-- After every change, rebuild and restart the local API with
-  `docker compose up -d --build api`, then verify that the `api` service is
-  healthy.
+相邻的 `new-api` 仓库只作为上游接口、工程工具和视觉规范的参考；本项目拥有
+独立的 Go Module、数据库、前端和发布流程。
 
-New API Pilot 是独立部署的多站点运营管理平台。它集中管理多个 new-api
-站点的授权、客户和账户、数据采集、统计、导出、告警与运维状态。相邻的
-`new-api` 仓库仅用于参考上游接口和工程约定；本项目拥有独立的 Go Module、
-数据库、前端构建和发布流程。
+> 项目是否具备发布资格，以
+> [`docs/acceptance/manifest.yaml`](./docs/acceptance/manifest.yaml) 为准。
+> 仓库中存在实现或测试，不等于所有受控验收已经完成。
 
-项目代码已经包含主要业务域，但尚未通过全部发布验收。当前完成度和发布
-结论必须以 [`docs/acceptance/manifest.yaml`](./docs/acceptance/manifest.yaml)
-为准；其中仍标记为 `planned:` 的测试或证据，以及依赖受控环境或外部确认的
-验收项，都会阻断最终发布。
+## 快速开始
 
-## 已实现范围
+本地开发只要求安装 Docker Desktop。开发栈同时运行 MySQL、Redis、Go API 和
+Bun/Rsbuild 前端，不需要宿主机 Go 或 Bun。
 
-- 平台登录、Session、平台用户和角色权限；
-- 站点接入、预检、授权、生命周期、能力检查和实例资源状态；
-- 客户、托管账户、远端用户同步和恢复流程；
-- 小时采集、历史回填、完整性窗口、任务调度和失败恢复；
-- 全局、站点、客户、账户、模型和通道统计，以及 Dashboard；
-- CSV/XLSX 导出任务、文件下载和容量保护；
-- 告警规则、告警事件、钉钉投递和系统设置；
-- migration、健康/就绪检查、Prometheus 指标、备份和恢复校验工具。
+```powershell
+docker compose -f docker-compose.dev.yml up -d --build api web
+```
 
-前端产品语言固定为简体中文 `zh-CN`，不提供语言检测、语言切换或其他
-locale。所有用户可见文案仍通过 i18next 管理并接受静态检查。
+启动完成后访问：
 
-## 技术栈与结构
+- 前端：<http://localhost:5173>
+- API 健康检查：<http://localhost:3000/healthz>
+- MySQL：`localhost:3307`
+
+开发环境初始管理员为 `admin`，首次密码来自
+`docker-compose.dev.yml` 的 `PLATFORM_BOOTSTRAP_ADMIN_PASSWORD`，首次登录后必须
+修改。开发配置不读取 `.env.example`。
+
+查看状态和日志：
+
+```powershell
+docker compose -f docker-compose.dev.yml ps
+docker compose -f docker-compose.dev.yml logs -f api web mysql redis
+```
+
+停止开发栈但保留数据：
+
+```powershell
+docker compose -f docker-compose.dev.yml down
+```
+
+## 开发栈
+
+| 服务 | 容器 | 作用 | 更新方式 |
+|---|---|---|---|
+| `web` | `new-api-pilot-dev-web` | Bun/Rsbuild 前端，端口 5173 | 源码 bind mount，HMR 自动更新 |
+| `api` | `new-api-pilot-dev-api` | Go 后端 API，端口 3000 | 修改后重建开发镜像 |
+| `mysql` | `new-api-pilot-dev-mysql` | MySQL 8.4，端口 3307 | 使用持久化开发卷 |
+| `redis` | `new-api-pilot-dev-redis` | Redis 7 | 使用持久化开发卷 |
+
+开发 Compose 使用独立项目名和稳定数据卷，不会与生产 Compose 互相重建。前端
+将 `/api` 代理到容器网络内的 `api:3000`。
+
+前端源码修改不需要重建 API：
+
+```powershell
+docker compose -f docker-compose.dev.yml up -d web
+```
+
+后端、依赖、Dockerfile、Compose 或运行配置修改后执行：
+
+```powershell
+docker compose -f docker-compose.dev.yml up -d --build api web
+```
+
+## AI Agent 开发约定
+
+本项目日常以 AI Agent 开发为主。强制工作流定义在
+[`AGENTS.md`](./AGENTS.md)，其核心要求是：
+
+1. 先判断是功能/契约变更还是保持契约的缺陷修复；
+2. 功能或外部契约变更必须先更新权威详细设计；
+3. 文档、实现、测试、配置和暴露入口必须形成完整纵向切片；
+4. 根据影响范围执行后端、前端和文档验证；
+5. 完成后只刷新 `docker-compose.dev.yml` 开发栈；
+6. API 和 Web 均健康，且 <http://localhost:5173> 可访问后才能交付。
+
+README 用于项目介绍和可复制操作；`AGENTS.md` 是 AI Agent 的权威执行规则；
+`docs/` 是产品、架构、API 和运维契约的权威来源。三者不得互相替代。
+
+## 技术栈
 
 - 后端：Go 1.25、Gin、GORM、MySQL 8；
 - 前端：React 19、TypeScript、Rsbuild、TanStack Router/Query；
@@ -49,118 +98,68 @@ router -> controller -> service -> model
 
 ```text
 common/       通用基础设施、响应、加密、Session 和指标
-config/       环境配置与校验
+config/       启动配置与校验
 controller/   HTTP 请求解析和响应映射
 dto/          API 请求与响应契约
-model/        GORM 模型、仓储和 migration
+model/        GORM 模型、仓储、migration 和 seed
 router/       Gin 路由与中间件组合
 service/      业务规则和编排
 worker/       调度器与后台任务
 web/          React 前端、单元测试和 Playwright E2E
-docs/         权威需求、详细设计和验收清单
+docs/         权威详细设计、运维基线和验收清单
 ```
 
-## 本地启动
+## 配置与镜像
 
-环境要求：Docker Desktop、Bun 1.3.13。后端验证统一在 Docker 测试镜像内执行，不要求或接受宿主机 Go 结果作为发布证据。
+- `docker-compose.dev.yml`：本地开发栈，不读取正式秘密；
+- `Dockerfile.dev`：只构建 Go 后端，前端由 `web` 服务提供；
+- `docker-compose.yml`：正式部署编排；
+- `Dockerfile`：构建包含前端静态资源的正式镜像；
+- `.env.example`：正式部署配置模板，不会自动成为实际配置；
+- `.env`：服务器实际部署配置，不应提交 Git。
 
-```powershell
-Copy-Item .env.example .env
-docker compose up -d --build
-```
-
-Dockerfile 默认使用 Docker Hub/上游官方镜像，不绑定单一镜像站。受限网络可在
-`.env` 中覆盖 `BUN_IMAGE`、`GO_IMAGE`、`RUNTIME_IMAGE`、`MYSQL_IMAGE`、
-`REDIS_IMAGE`、`GO_MODULE_PROXY`、`GO_SUM_DATABASE` 和 `ALPINE_MIRROR`，无需修改
-受版本控制的构建文件。例如使用国内镜像时可配置：
+默认依赖源：
 
 ```dotenv
 BUN_IMAGE=docker.m.daocloud.io/oven/bun:1.3.13-alpine
 GO_IMAGE=docker.m.daocloud.io/library/golang:1.25-alpine
 RUNTIME_IMAGE=docker.m.daocloud.io/library/alpine:3.22
 MYSQL_IMAGE=docker.m.daocloud.io/library/mysql:8.4
+REDIS_IMAGE=docker.m.daocloud.io/library/redis:7-alpine
 GO_MODULE_PROXY=https://goproxy.cn,https://mirrors.aliyun.com/goproxy/,direct
 GO_SUM_DATABASE=sum.golang.google.cn
 ALPINE_MIRROR=https://mirrors.aliyun.com/alpine
 ```
 
-完全离线时仅导入基础镜像并不足以重新构建，因为 Go Module、Bun 包和 Alpine
-软件包也需要缓存。推荐在联网环境构建并用 `docker save new-api-pilot-dev:local`
-导出应用镜像，目标主机 `docker load` 后执行
-`docker compose up -d --no-build api`。需要离线重新构建时，必须同时转移精确基础
-镜像与已预热的 BuildKit 缓存；Dockerfile 会复用 Go Module/build cache。无论哪种
-方式都应保持 `.env` tag 一致，不应通过临时编辑 Dockerfile 切换来源。
-
-默认地址：
-
-- 应用/API：<http://localhost:3000>
-- MySQL：`localhost:3307`
-
-容器启动会执行数据库初始化。需要单独执行 migration 门禁时使用：
-
-```powershell
-docker compose run --rm --entrypoint /usr/local/bin/new-api-pilot api migrate
-```
-
-前端热更新开发服务器运行在 <http://localhost:5173>，并将 `/api` 代理到后端：
-
-```powershell
-Set-Location web
-bun install --frozen-lockfile
-bun run dev
-```
-
-使用 GNU Make 时，对应入口为 `make dev-api`、`make dev-web`、`make logs` 和
-`make down`。
-
 ## 质量检查
 
-前端检查和测试：
+前端：
 
 ```powershell
 Set-Location web
 bun run check
 bun run test:unit
-bun run test:e2e
 ```
 
-后端、文档和监控规则：
-
-```powershell
-make test-api-docker
-make docs-check
-docker run --rm --entrypoint /bin/promtool -v "${PWD}:/workspace:ro" prom/prometheus:v3.5.0 check rules /workspace/deploy/prometheus/recording-rules.yaml /workspace/deploy/prometheus/alert-rules.yaml
-```
-
-GNU Make 提供相同的聚合入口：
+后端、文档和发布门禁统一通过 Docker 执行：
 
 ```bash
-make check-web
 make test-api-docker
-make test-support
-make check-prometheus
-make contract-generate
 make docs-check
+make acceptance
 ```
 
-完整发布门禁需要 Docker Compose 中独立的 `new_api_pilot_test` 集成测试数据库和 Redis；不得使用开发数据库或宿主机 Go：
+如果当前系统没有 GNU Make，AI Agent 必须执行 Makefile 中等价的 Docker 命令，
+不能改用宿主机 Go，也不能把开发数据库作为测试数据库。集成测试只能使用隔离的
+`new_api_pilot_test_*` 数据库。
 
-```bash
-make acceptance TEST_DATABASE_DSN='user:password@tcp(127.0.0.1:3306)/pilot_test?charset=utf8mb4&parseTime=True&loc=Asia%2FShanghai'
-```
+## 权威文档与验收
 
-`make acceptance` 会先运行 final 文档检查；任何 `planned:` 路径、缺失或过期
-证据、required 用例跳过、受控演练失败都会使命令失败。容量、生产站点清单、
-部署回滚和 PITR 等项目还需要对应的资源、外部确认或隔离演练，仓库内存在
-实现或模板不等于这些验收已经通过。
+- 产品、架构、API 和运维约束：[`docs/`](./docs/)
+- AI Agent 执行规则：[`AGENTS.md`](./AGENTS.md)
+- 验收清单：[`docs/acceptance/manifest.yaml`](./docs/acceptance/manifest.yaml)
+- 受控演练：[`docs/acceptance/runbooks/`](./docs/acceptance/runbooks/)
+- 验收证据：`artifacts/acceptance/Axx/<run-id>/`
 
-## 需求与证据
-
-- 权威需求和约束位于 [`docs`](./docs/)；
-- 验收编号、fixture、责任角色、测试路径和证据路径以
-  [`docs/acceptance/manifest.yaml`](./docs/acceptance/manifest.yaml) 为准；
-- 受控演练说明位于 [`docs/acceptance/runbooks`](./docs/acceptance/runbooks/)；
-- 每次验收证据写入独立的 `artifacts/acceptance/Axx/<run-id>/` 目录。
-
-不要根据单个测试通过或已有证据目录宣称整个项目完成；只有 A01-A88 的
-required 门禁全部关闭后，才可以更新发布结论。
+不得根据单个测试通过或已有证据目录宣称项目已经发布完成；只有 required 门禁和
+受控验收全部满足后，才能更新发布结论。

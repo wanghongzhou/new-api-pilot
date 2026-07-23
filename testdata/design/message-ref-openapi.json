@@ -56,8 +56,6 @@
             "NOTIFICATION_NOT_CONFIGURED": "#/components/schemas/MessageRef_NOTIFICATION_NOT_CONFIGURED",
             "NOTIFICATION_TEST_SUCCEEDED": "#/components/schemas/MessageRef_NOTIFICATION_TEST_SUCCEEDED",
             "SITE_CONFIG_CHANGED": "#/components/schemas/MessageRef_SITE_CONFIG_CHANGED",
-            "SLO_USAGE_CONCURRENCY_TOO_LOW": "#/components/schemas/MessageRef_SLO_USAGE_CONCURRENCY_TOO_LOW",
-            "SLO_USAGE_DELAY_TOO_HIGH": "#/components/schemas/MessageRef_SLO_USAGE_DELAY_TOO_HIGH",
             "UPSTREAM_RESPONSE_INVALID": "#/components/schemas/MessageRef_UPSTREAM_RESPONSE_INVALID",
             "UPSTREAM_RESPONSE_TOO_LARGE": "#/components/schemas/MessageRef_UPSTREAM_RESPONSE_TOO_LARGE",
             "WORKER_LEASE_LOST": "#/components/schemas/MessageRef_WORKER_LEASE_LOST"
@@ -222,12 +220,6 @@
             "$ref": "#/components/schemas/MessageRef_SITE_CONFIG_CHANGED"
           },
           {
-            "$ref": "#/components/schemas/MessageRef_SLO_USAGE_CONCURRENCY_TOO_LOW"
-          },
-          {
-            "$ref": "#/components/schemas/MessageRef_SLO_USAGE_DELAY_TOO_HIGH"
-          },
-          {
             "$ref": "#/components/schemas/MessageRef_UPSTREAM_RESPONSE_INVALID"
           },
           {
@@ -261,7 +253,6 @@
           "SITE_CONFIG_CHANGED",
           "SITE_EXPORT_DISABLED",
           "SITE_INCOMPATIBLE",
-          "SLO_CONFIG_FORBIDDEN",
           "TASK_OVERLAP",
           "TOKEN_ROTATION_RESULT_UNKNOWN",
           "UPSTREAM_ADDRESS_FORBIDDEN",
@@ -327,8 +318,6 @@
           "NOTIFICATION_NOT_CONFIGURED",
           "NOTIFICATION_TEST_SUCCEEDED",
           "SITE_CONFIG_CHANGED",
-          "SLO_USAGE_CONCURRENCY_TOO_LOW",
-          "SLO_USAGE_DELAY_TOO_HIGH",
           "UPSTREAM_RESPONSE_INVALID",
           "UPSTREAM_RESPONSE_TOO_LARGE",
           "WORKER_LEASE_LOST"
@@ -2273,72 +2262,6 @@
               "actual_config_version",
               "expected_config_version",
               "site_id"
-            ],
-            "type": "object"
-          },
-          "technical_detail": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "params",
-          "technical_detail"
-        ],
-        "type": "object"
-      },
-      "MessageRef_SLO_USAGE_CONCURRENCY_TOO_LOW": {
-        "additionalProperties": false,
-        "properties": {
-          "code": {
-            "const": "SLO_USAGE_CONCURRENCY_TOO_LOW"
-          },
-          "params": {
-            "additionalProperties": false,
-            "properties": {
-              "threshold": {
-                "type": "number"
-              },
-              "value": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "threshold",
-              "value"
-            ],
-            "type": "object"
-          },
-          "technical_detail": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "params",
-          "technical_detail"
-        ],
-        "type": "object"
-      },
-      "MessageRef_SLO_USAGE_DELAY_TOO_HIGH": {
-        "additionalProperties": false,
-        "properties": {
-          "code": {
-            "const": "SLO_USAGE_DELAY_TOO_HIGH"
-          },
-          "params": {
-            "additionalProperties": false,
-            "properties": {
-              "threshold": {
-                "type": "number"
-              },
-              "value": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "threshold",
-              "value"
             ],
             "type": "object"
           },

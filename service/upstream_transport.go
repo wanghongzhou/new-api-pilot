@@ -138,9 +138,6 @@ func normalizeUpstreamPort(scheme, raw string) (string, error) {
 }
 
 func newUpstreamNetworkPolicy(hostSuffixes []string, allowedCIDRs []netip.Prefix, resolver upstreamResolver) (*upstreamNetworkPolicy, error) {
-	if len(hostSuffixes) == 0 && len(allowedCIDRs) == 0 {
-		return nil, errors.New("upstream host suffixes and CIDRs cannot both be empty")
-	}
 	normalizedSuffixes := make([]string, 0, len(hostSuffixes))
 	seenSuffixes := make(map[string]struct{}, len(hostSuffixes))
 	for _, raw := range hostSuffixes {
@@ -183,7 +180,7 @@ func (policy *upstreamNetworkPolicy) validateHost(host string) error {
 		return nil
 	}
 	if _, err := netip.ParseAddr(host); err == nil {
-		return fmt.Errorf("%w: IP literals cannot satisfy a host suffix policy", ErrUpstreamAddressForbidden)
+		return nil
 	}
 	for _, suffix := range policy.hostSuffixes {
 		if host == suffix || strings.HasSuffix(host, "."+suffix) {
@@ -202,7 +199,9 @@ func (policy *upstreamNetworkPolicy) resolveAndValidate(ctx context.Context, hos
 		return nil, err
 	}
 	addresses := make([]netip.Addr, 0)
+	literalHost := false
 	if literal, parseErr := netip.ParseAddr(normalizedHost); parseErr == nil {
+		literalHost = true
 		addresses = append(addresses, literal)
 	} else {
 		resolved, resolveErr := policy.resolver.LookupNetIP(ctx, "ip", normalizedHost)
@@ -217,7 +216,7 @@ func (policy *upstreamNetworkPolicy) resolveAndValidate(ctx context.Context, hos
 	result := make([]netip.Addr, 0, len(addresses))
 	seen := make(map[netip.Addr]struct{}, len(addresses))
 	for _, address := range addresses {
-		if err := policy.validateAddress(address); err != nil {
+		if err := policy.validateResolvedAddress(address, literalHost); err != nil {
 			return nil, err
 		}
 		if _, exists := seen[address]; !exists {
@@ -229,6 +228,10 @@ func (policy *upstreamNetworkPolicy) resolveAndValidate(ctx context.Context, hos
 }
 
 func (policy *upstreamNetworkPolicy) validateAddress(address netip.Addr) error {
+	return policy.validateResolvedAddress(address, len(policy.allowedCIDRs) > 0)
+}
+
+func (policy *upstreamNetworkPolicy) validateResolvedAddress(address netip.Addr, literalHost bool) error {
 	if !address.IsValid() || address.Is4In6() {
 		return fmt.Errorf("%w: invalid or IPv4-mapped address", ErrUpstreamAddressForbidden)
 	}
@@ -244,7 +247,7 @@ func (policy *upstreamNetworkPolicy) validateAddress(address netip.Addr) error {
 			break
 		}
 	}
-	if len(policy.allowedCIDRs) > 0 && !allowed {
+	if literalHost && !allowed {
 		return fmt.Errorf("%w: address does not match the configured CIDRs", ErrUpstreamAddressForbidden)
 	}
 	if address.IsPrivate() && !allowed {

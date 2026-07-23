@@ -341,7 +341,16 @@ func verifyCollectionWindows(ctx context.Context, queryer queryContext) (map[str
 		`SELECT COUNT(*) FROM collection_window
 WHERE hour_ts <= 0 OR MOD(hour_ts, 3600) <> 0
    OR status NOT IN ('pending','complete','missing','unavailable')
-   OR fetched_rows < 0`,
+   OR attribution_status NOT IN ('attributed','legacy_unattributed')
+   OR fetched_rows < 0
+   OR (status = 'complete' AND attribution_status = 'legacy_unattributed' AND NOT EXISTS (
+        SELECT 1 FROM usage_fact_hourly f
+        WHERE f.site_id = collection_window.site_id AND f.hour_ts = collection_window.hour_ts
+          AND f.remote_user_id = 0 AND f.use_group = '__legacy_unattributed__'))
+   OR (status = 'complete' AND attribution_status = 'attributed' AND EXISTS (
+        SELECT 1 FROM usage_fact_hourly f
+        WHERE f.site_id = collection_window.site_id AND f.hour_ts = collection_window.hour_ts
+          AND f.remote_user_id = 0))`,
 		`SELECT COUNT(*) FROM collection_run_window w
 JOIN collection_run r ON r.id = w.run_id
 WHERE w.site_id <> r.site_id OR w.hour_ts <= 0 OR MOD(w.hour_ts, 3600) <> 0

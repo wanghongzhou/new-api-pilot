@@ -30,9 +30,7 @@ func TestMySQLExportClaimLeaseMigrationRecoversEveryCommitGap(t *testing.T) {
 	if err := NewMigrationRunner(database.SQL).Run(ctx); err != nil {
 		t.Fatalf("prepare production migrations: %v", err)
 	}
-	priorChecksums := readMigrationChecksums(t, ctx, database.SQL, []string{
-		"0001_initial_schema", "0002_collection_run_scope", "0003_alert_reliability",
-	})
+	priorChecksums := readMigrationChecksums(t, ctx, database.SQL, []string{"0001_initial_schema"})
 
 	faults := []struct {
 		name         string
@@ -96,9 +94,7 @@ func TestMySQLExportClaimLeaseMigrationRecoversEveryCommitGap(t *testing.T) {
 			assertRecoveredExportClaimMigration(t, ctx, database.SQL, version, table)
 		})
 	}
-	afterChecksums := readMigrationChecksums(t, ctx, database.SQL, []string{
-		"0001_initial_schema", "0002_collection_run_scope", "0003_alert_reliability",
-	})
+	afterChecksums := readMigrationChecksums(t, ctx, database.SQL, []string{"0001_initial_schema"})
 	if !reflect.DeepEqual(afterChecksums, priorChecksums) {
 		t.Fatalf("prior migration checksums changed: before=%v after=%v", priorChecksums, afterChecksums)
 	}

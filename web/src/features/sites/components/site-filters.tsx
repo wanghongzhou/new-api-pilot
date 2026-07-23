@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { FacetedFilter } from '@/components/data/faceted-filter'
 import { FilterPanel } from '@/components/data/filter-panel'
 import { Input } from '@/components/ui/input'
-import { SelectControl as Select } from '@/components/ui/select-control'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 
 import {
@@ -17,13 +17,10 @@ import type { SiteSearch } from '../types'
 
 type FilterKey = 'management' | 'online' | 'auth' | 'statistics' | 'health'
 
-const primaryGroups = [
+const filterGroups = [
+  ['management', siteManagementStatuses],
   ['online', siteOnlineStatuses],
   ['auth', siteAuthStatuses],
-] as const
-
-const advancedGroups = [
-  ['management', siteManagementStatuses],
   ['statistics', siteStatisticsStatuses],
   ['health', siteHealthStatuses],
 ] as const
@@ -31,62 +28,76 @@ const advancedGroups = [
 type FilterState = Pick<SiteSearch, FilterKey | 'filter'>
 
 export function SiteFilters({
+  actions,
   onApply,
   value,
 }: {
+  actions?: ReactNode
   onApply: (filters: FilterState) => void
   value: FilterState
 }) {
   const { t } = useTranslation()
   const [draft, setDraft] = useState<FilterState>(value)
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
     setDraft(value)
   }, [value])
-  const count = useMemo(
-    () =>
-      [...primaryGroups, ...advancedGroups].reduce(
-        (sum, [key]) => sum + draft[key].length,
-        0
-      ),
-    [draft]
+  useEffect(
+    () => () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    },
+    []
   )
+  const hasActiveFilters =
+    draft.filter.trim() !== '' ||
+    filterGroups.some(([group]) => draft[group].length > 0)
+
+  const applyImmediately = (next: FilterState) => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    setDraft(next)
+    onApply({ ...next, filter: next.filter.trim() })
+  }
+
+  const updateKeyword = (filter: string) => {
+    const next = { ...draft, filter }
+    setDraft(next)
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    searchTimerRef.current = setTimeout(
+      () => onApply({ ...next, filter: filter.trim() }),
+      400
+    )
+  }
 
   const renderGroups = (
     groups: readonly (readonly [FilterKey, readonly string[]])[]
   ) =>
-    groups.map(([group, statuses]) => (
-      <label className='grid w-full gap-1 text-sm sm:w-52' key={group}>
-        <span>{t(dynamicI18nKey('site', `site.filters.${group}`))}</span>
-        <Select
-          onChange={(event) =>
-            setDraft((current) => ({
-              ...current,
-              [group]: event.target.value ? [event.target.value] : [],
-            }))
+    groups.map(([group, statuses]) => {
+      const statusLabel = t(dynamicI18nKey('site', `site.filters.${group}`))
+      return (
+        <FacetedFilter
+          clearLabel={t('common.clearFilters')}
+          key={group}
+          onChange={(nextValue) =>
+            applyImmediately({
+              ...draft,
+              [group]: nextValue ? [nextValue] : [],
+            })
           }
+          options={statuses.map((status) => ({
+            label: t(dynamicI18nKey('site', `site.${group}.${status}`)),
+            value: status,
+          }))}
+          title={t('site.filters.statusTitle', { status: statusLabel })}
           value={(draft[group] as string[])[0] ?? ''}
-        >
-          <option value=''>{t('common.all')}</option>
-          {statuses.map((status) => (
-            <option key={status} value={status}>
-              {t(dynamicI18nKey('site', `site.${group}.${status}`))}
-            </option>
-          ))}
-        </Select>
-      </label>
-    ))
+        />
+      )
+    })
 
   return (
     <FilterPanel
-      advanced={
-        <div className='flex flex-wrap items-end gap-2'>
-          {renderGroups(advancedGroups)}
-        </div>
-      }
+      actions={actions}
       description={t('site.filters.description')}
-      expandOnLargeScreen
-      hasAdvancedActive={count > 0}
-      onApply={() => onApply({ ...draft, filter: draft.filter.trim() })}
+      hasActiveFilters={hasActiveFilters}
       onReset={() => {
         const reset: FilterState = {
           auth: [],
@@ -96,8 +107,7 @@ export function SiteFilters({
           online: [],
           statistics: [],
         }
-        setDraft(reset)
-        onApply(reset)
+        applyImmediately(reset)
       }}
       title={t('site.filters.title')}
     >
@@ -105,17 +115,12 @@ export function SiteFilters({
         <label className='grid w-full gap-1 text-sm sm:w-64'>
           <span>{t('sites.search')}</span>
           <Input
-            onChange={(event) =>
-              setDraft((current) => ({
-                ...current,
-                filter: event.target.value,
-              }))
-            }
+            onChange={(event) => updateKeyword(event.target.value)}
             placeholder={t('sites.searchPlaceholder')}
             value={draft.filter}
           />
         </label>
-        {renderGroups(primaryGroups)}
+        {renderGroups(filterGroups)}
       </div>
     </FilterPanel>
   )

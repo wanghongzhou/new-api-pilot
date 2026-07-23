@@ -4,6 +4,12 @@ import { Controller, useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import {
+  sideDrawerContentClassName,
+  sideDrawerFooterClassName,
+  sideDrawerFormClassName,
+  sideDrawerHeaderClassName,
+} from '@/components/drawer-layout'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import {
@@ -15,6 +21,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from '@/components/ui/drawer'
 import { FormField } from '@/components/ui/form-field'
 import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/ui/password-input'
@@ -122,15 +136,19 @@ export function CreateUserDialog({
   })
 
   return (
-    <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{t('Create platform user')}</DialogTitle>
-          <DialogDescription>
+    <Drawer direction='right' onOpenChange={onOpenChange} open={open}>
+      <DrawerContent className={sideDrawerContentClassName('sm:max-w-xl')}>
+        <DrawerHeader className={sideDrawerHeaderClassName()}>
+          <DrawerTitle>{t('Create platform user')}</DrawerTitle>
+          <DrawerDescription>
             {t('New users must change their password after signing in')}
-          </DialogDescription>
-        </DialogHeader>
-        <form className='grid gap-4' id='create-user-form' onSubmit={submit}>
+          </DrawerDescription>
+        </DrawerHeader>
+        <form
+          className={sideDrawerFormClassName('gap-4')}
+          id='create-user-form'
+          onSubmit={submit}
+        >
           <FormField
             error={translatedError(errors.username?.message, t)}
             htmlFor='create-username'
@@ -163,9 +181,11 @@ export function CreateUserDialog({
               name='role'
               render={({ field }) => (
                 <Select
+                  alignItemWithTrigger={false}
                   id='create-role'
                   name={field.name}
                   onChange={(event) => field.onChange(event.target.value)}
+                  portalled={false}
                   value={field.value}
                 >
                   <option value='viewer'>{t('Viewer')}</option>
@@ -209,15 +229,21 @@ export function CreateUserDialog({
             </p>
           )}
         </form>
-        <DialogFooter>
-          <DialogCancelButton />
+        <DrawerFooter className={sideDrawerFooterClassName()}>
+          <Button
+            onClick={() => onOpenChange(false)}
+            type='button'
+            variant='outline'
+          >
+            {t('common.cancel')}
+          </Button>
           <Button disabled={submitting} form='create-user-form' type='submit'>
             {submitting && <Spinner />}
             {t('Create user')}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </DrawerFooter>
+      </DrawerContent>
+    </Drawer>
   )
 }
 
@@ -295,15 +321,19 @@ export function EditUserDialog({
   })
 
   return (
-    <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{t('Edit platform user')}</DialogTitle>
-          <DialogDescription>
+    <Drawer direction='right' onOpenChange={onOpenChange} open={open}>
+      <DrawerContent className={sideDrawerContentClassName('sm:max-w-xl')}>
+        <DrawerHeader className={sideDrawerHeaderClassName()}>
+          <DrawerTitle>{t('Edit platform user')}</DrawerTitle>
+          <DrawerDescription>
             {t('Role changes invalidate the user session')}
-          </DialogDescription>
-        </DialogHeader>
-        <form className='grid gap-4' id='edit-user-form' onSubmit={submit}>
+          </DrawerDescription>
+        </DrawerHeader>
+        <form
+          className={sideDrawerFormClassName('gap-4')}
+          id='edit-user-form'
+          onSubmit={submit}
+        >
           <FormField
             error={translatedError(errors.username?.message, t)}
             htmlFor='edit-username'
@@ -344,9 +374,11 @@ export function EditUserDialog({
               name='role'
               render={({ field }) => (
                 <Select
+                  alignItemWithTrigger={false}
                   id='edit-role'
                   name={field.name}
                   onChange={(event) => field.onChange(event.target.value)}
+                  portalled={false}
                   value={field.value}
                 >
                   <option
@@ -366,15 +398,21 @@ export function EditUserDialog({
             </p>
           )}
         </form>
-        <DialogFooter>
-          <DialogCancelButton />
+        <DrawerFooter className={sideDrawerFooterClassName()}>
+          <Button
+            onClick={() => onOpenChange(false)}
+            type='button'
+            variant='outline'
+          >
+            {t('common.cancel')}
+          </Button>
           <Button disabled={submitting} form='edit-user-form' type='submit'>
             {submitting && <Spinner />}
             {t('Save changes')}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </DrawerFooter>
+      </DrawerContent>
+    </Drawer>
   )
 }
 

@@ -27,7 +27,6 @@ import (
 	"gorm.io/gorm"
 
 	"new-api-pilot/common"
-	"new-api-pilot/config"
 	"new-api-pilot/constant"
 	"new-api-pilot/dto"
 	"new-api-pilot/model"
@@ -420,7 +419,7 @@ func TestA44DingTalkWebhookBoundaryAcceptance(t *testing.T) {
 	cipher := newA85Cipher(t)
 	settingService, err := service.NewSettingService(service.SettingServiceOptions{
 		Repository: model.NewSettingRepository(database.GORM), Cipher: cipher, Clock: clock,
-		AppEnv: config.EnvironmentTest, DingTalkHosts: []string{"allowed.alert.test", "redirect.alert.test"},
+		DingTalkHosts: []string{"allowed.alert.test", "redirect.alert.test"},
 	})
 	if err != nil {
 		t.Fatalf("create A44 setting service: %v", err)

@@ -82,10 +82,20 @@ func bootstrapApplication(
 		return nil, service.BootstrapResult{}, err
 	}
 	metrics := common.NewMetrics()
-	redisStore, err := common.NewRedisStore(options.Config.RedisDSN, options.Config.RedisDB, options.Config.RedisTimeout, options.Config.FastTaskRetention, options.Config.FastTaskHistoryCount)
+	settingRepository := model.NewSettingRepository(options.Database.GORM)
+	runtimeSettings, err := service.LoadRuntimeSettingsStore(ctx, settingRepository, options.Clock)
+	if err != nil {
+		return nil, service.BootstrapResult{}, fmt.Errorf("load runtime settings: %w", err)
+	}
+	runtimeSnapshot := runtimeSettings.Snapshot()
+	redisStore, err := common.NewRedisStore(
+		options.Config.RedisDSN, options.Config.RedisDB, options.Config.RedisTimeout,
+		runtimeSnapshot.FastTaskRetention, runtimeSnapshot.FastTaskCount,
+	)
 	if err != nil {
 		return nil, service.BootstrapResult{}, fmt.Errorf("initialize redis: %w", err)
 	}
+	redisStore.SetFastTaskHistorySettingsProvider(runtimeSettings)
 
 	userRepository := model.NewPlatformUserRepository(options.Database.GORM)
 	userService := service.NewPlatformUserService(userRepository, options.Clock)
@@ -106,12 +116,12 @@ func bootstrapApplication(
 		return nil, service.BootstrapResult{}, fmt.Errorf("initialize auth service: %w", err)
 	}
 	settingService, err := service.NewSettingService(service.SettingServiceOptions{
-		Repository:    model.NewSettingRepository(options.Database.GORM),
+		Repository:    settingRepository,
 		Cipher:        options.Cipher,
 		Clock:         options.Clock,
-		AppEnv:        options.Config.AppEnv,
 		PublicOrigin:  options.Config.PublicOrigin,
 		DingTalkHosts: options.Config.DingTalkAllowedHosts,
+		Runtime:       runtimeSettings,
 	})
 	if err != nil {
 		return nil, service.BootstrapResult{}, fmt.Errorf("initialize setting service: %w", err)
@@ -141,14 +151,7 @@ func bootstrapApplication(
 		return nil, service.BootstrapResult{}, fmt.Errorf("initialize dingtalk service: %w", err)
 	}
 	clientFactory := service.NewConfiguredSiteClientFactory(service.SiteClientFactoryOptions{
-		AllowedHostSuffixes: options.Config.UpstreamAllowedHostSuffixes,
-		AllowedCIDRs:        options.Config.UpstreamAllowedCIDRs,
-		CAFile:              options.Config.UpstreamCAFile,
-		ConnectTimeout:      options.Config.UpstreamConnectTimeout,
-		HeaderTimeout:       options.Config.UpstreamHeaderTimeout,
-		RequestTimeout:      options.Config.UpstreamRequestTimeout,
-		ExportTimeout:       options.Config.UpstreamExportTimeout,
-		Metrics:             metrics,
+		Runtime: runtimeSettings, CAFile: options.Config.UpstreamCAFile, Metrics: metrics,
 	})
 	maintenanceWake := worker.NewDataMaintenanceWake()
 	siteRepository := model.NewSiteRepository(options.Database.GORM)

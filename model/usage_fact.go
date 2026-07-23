@@ -17,10 +17,15 @@ import (
 )
 
 const (
-	CollectionWindowStatusPending     = "pending"
-	CollectionWindowStatusComplete    = "complete"
-	CollectionWindowStatusMissing     = "missing"
-	CollectionWindowStatusUnavailable = "unavailable"
+	CollectionWindowStatusPending             = "pending"
+	CollectionWindowStatusComplete            = "complete"
+	CollectionWindowStatusMissing             = "missing"
+	CollectionWindowStatusUnavailable         = "unavailable"
+	UsageAttributionAttributed                = "attributed"
+	UsageAttributionLegacyUnattributed        = "legacy_unattributed"
+	UsageLegacyUnattributedRemoteUserID int64 = 0
+	UsageLegacyUnattributedUsername           = "历史未归属"
+	UsageLegacyUnattributedGroup              = "__legacy_unattributed__"
 )
 
 type UsageFactHourly struct {
@@ -44,18 +49,19 @@ type UsageFactHourly struct {
 func (UsageFactHourly) TableName() string { return "usage_fact_hourly" }
 
 type CollectionWindow struct {
-	ID               int64   `gorm:"column:id;primaryKey;autoIncrement"`
-	SiteID           int64   `gorm:"column:site_id"`
-	HourTS           int64   `gorm:"column:hour_ts"`
-	Status           string  `gorm:"column:status"`
-	FetchedRows      int64   `gorm:"column:fetched_rows"`
-	SourceHash       string  `gorm:"column:source_hash"`
-	LastFactRunID    *int64  `gorm:"column:last_fact_run_id"`
-	VerifiedAt       *int64  `gorm:"column:verified_at"`
-	LastErrorCode    string  `gorm:"column:last_error_code"`
-	LastErrorParams  []byte  `gorm:"column:last_error_params;type:json"`
-	LastErrorMessage *string `gorm:"column:last_error_message"`
-	UpdatedAt        int64   `gorm:"column:updated_at"`
+	ID                int64   `gorm:"column:id;primaryKey;autoIncrement"`
+	SiteID            int64   `gorm:"column:site_id"`
+	HourTS            int64   `gorm:"column:hour_ts"`
+	Status            string  `gorm:"column:status"`
+	AttributionStatus string  `gorm:"column:attribution_status;default:attributed"`
+	FetchedRows       int64   `gorm:"column:fetched_rows"`
+	SourceHash        string  `gorm:"column:source_hash"`
+	LastFactRunID     *int64  `gorm:"column:last_fact_run_id"`
+	VerifiedAt        *int64  `gorm:"column:verified_at"`
+	LastErrorCode     string  `gorm:"column:last_error_code"`
+	LastErrorParams   []byte  `gorm:"column:last_error_params;type:json"`
+	LastErrorMessage  *string `gorm:"column:last_error_message"`
+	UpdatedAt         int64   `gorm:"column:updated_at"`
 }
 
 func (CollectionWindow) TableName() string { return "collection_window" }
@@ -81,13 +87,14 @@ type UsageWindowMutationScope struct {
 }
 
 type UsageWindowMutationResult struct {
-	CollectionStatus string
-	SourceHash       string
-	SourceRequestID  string
-	FetchedRows      int64
-	WrittenRows      int64
-	VerifiedOnly     bool
-	ReasonCode       string
+	CollectionStatus  string
+	SourceHash        string
+	SourceRequestID   string
+	FetchedRows       int64
+	WrittenRows       int64
+	VerifiedOnly      bool
+	ReasonCode        string
+	AttributionStatus string
 }
 
 // UsageFactMutation is an intermediate fact-only plan. It can only be applied
@@ -121,6 +128,7 @@ type CompleteUsageWindowRequest struct {
 	Now                   int64
 	FetchedRows           int64
 	Validation            bool
+	AttributionStatus     string
 	Facts                 []UsageFactInput
 }
 
@@ -141,14 +149,17 @@ type FailedUsageWindowRequest struct {
 
 func NewCompleteUsageWindowMutation(request CompleteUsageWindowRequest) (UsageFactMutation, UsageWindowMutationResult, error) {
 	facts, sourceHash, err := canonicalUsageFacts(request.SiteID, request.HourTS, request.Now, request.Facts)
+	attributionStatus := usageAttributionStatus(facts)
 	if err != nil || !validUsageMutationRequest(request.RunID, request.WindowID, request.SiteID, request.ExpectedConfigVersion,
-		request.HourTS, request.AttemptCount, request.RequestID, request.Now, request.FetchedRows) {
+		request.HourTS, request.AttemptCount, request.RequestID, request.Now, request.FetchedRows) ||
+		(request.AttributionStatus != "" && request.AttributionStatus != attributionStatus) {
 		return UsageFactMutation{}, UsageWindowMutationResult{}, ErrCollectionRunContract
 	}
 	planned := UsageWindowMutationResult{
 		CollectionStatus: CollectionWindowStatusComplete,
 		SourceHash:       sourceHash, SourceRequestID: request.RequestID,
 		FetchedRows: request.FetchedRows, WrittenRows: int64(len(facts)),
+		AttributionStatus: attributionStatus,
 	}
 	mutation := UsageFactMutation{applyFn: func(ctx context.Context, tx *gorm.DB, scope UsageWindowMutationScope) (UsageWindowMutationResult, error) {
 		lockedScope, err := lockUsageMutationScope(ctx, tx, scope, request.RunID, request.WindowID, request.SiteID,
@@ -161,7 +172,8 @@ func NewCompleteUsageWindowMutation(request CompleteUsageWindowRequest) (UsageFa
 			return UsageWindowMutationResult{}, err
 		}
 		result := planned
-		if request.Validation && exists && window.Status == CollectionWindowStatusComplete && window.SourceHash == sourceHash {
+		if request.Validation && exists && window.Status == CollectionWindowStatusComplete &&
+			window.SourceHash == sourceHash && window.AttributionStatus == attributionStatus {
 			if err := tx.WithContext(ctx).Model(&CollectionWindow{}).Where("id = ?", window.ID).
 				Updates(map[string]any{"verified_at": request.Now, "last_error_code": "", "last_error_params": nil,
 					"last_error_message": nil, "updated_at": request.Now}).Error; err != nil {
@@ -183,14 +195,16 @@ func NewCompleteUsageWindowMutation(request CompleteUsageWindowRequest) (UsageFa
 			lastRunID := request.RunID
 			values := CollectionWindow{
 				SiteID: request.SiteID, HourTS: request.HourTS, Status: CollectionWindowStatusComplete,
-				FetchedRows: request.FetchedRows, SourceHash: sourceHash, LastFactRunID: &lastRunID,
+				AttributionStatus: attributionStatus,
+				FetchedRows:       request.FetchedRows, SourceHash: sourceHash, LastFactRunID: &lastRunID,
 				VerifiedAt: &verifiedAt, UpdatedAt: request.Now,
 			}
 			if err := tx.WithContext(ctx).Clauses(clause.OnConflict{
 				Columns: []clause.Column{{Name: "site_id"}, {Name: "hour_ts"}},
 				DoUpdates: clause.Assignments(map[string]any{
-					"status": CollectionWindowStatusComplete, "fetched_rows": request.FetchedRows,
-					"source_hash": sourceHash, "last_fact_run_id": request.RunID, "verified_at": request.Now,
+					"status": CollectionWindowStatusComplete, "attribution_status": attributionStatus,
+					"fetched_rows": request.FetchedRows,
+					"source_hash":  sourceHash, "last_fact_run_id": request.RunID, "verified_at": request.Now,
 					"last_error_code": "", "last_error_params": nil, "last_error_message": nil, "updated_at": request.Now,
 				}),
 			}).Create(&values).Error; err != nil {
@@ -273,9 +287,17 @@ func canonicalUsageFacts(siteID, hourTS, collectedAt int64, input []UsageFactInp
 	}
 	byKey := make(map[key]UsageFactHourly, len(input))
 	for _, value := range input {
-		if value.RemoteUserID <= 0 || value.ChannelID < 0 || value.TokenID < 0 || value.RequestCount < 0 || value.Quota < 0 || value.TokenUsed < 0 ||
+		if value.RemoteUserID < 0 || value.ChannelID < 0 || value.TokenID < 0 || value.RequestCount < 0 || value.Quota < 0 || value.TokenUsed < 0 ||
 			!validUsageString(value.UsernameSnapshot, 255) || !validUsageString(value.ModelName, 255) ||
 			!validUsageString(value.UseGroup, 128) || !validUsageString(value.TokenName, 255) || !validUsageString(value.NodeName, 128) {
+			return nil, "", ErrCollectionRunContract
+		}
+		legacyUnattributed := value.RemoteUserID == UsageLegacyUnattributedRemoteUserID &&
+			value.UsernameSnapshot == UsageLegacyUnattributedUsername && value.ChannelID == 0 &&
+			value.UseGroup == UsageLegacyUnattributedGroup && value.TokenID == 0 &&
+			value.TokenName == "" && value.NodeName == ""
+		if value.RemoteUserID == UsageLegacyUnattributedRemoteUserID && !legacyUnattributed ||
+			value.RemoteUserID > 0 && value.UseGroup == UsageLegacyUnattributedGroup {
 			return nil, "", ErrCollectionRunContract
 		}
 		factKey := key{remoteUserID: value.RemoteUserID, modelName: value.ModelName, channelID: value.ChannelID,
@@ -341,6 +363,15 @@ func canonicalUsageFacts(siteID, hourTS, collectedAt int64, input []UsageFactInp
 		writeUsageHashString(hash.Write, buffer, fact.NodeName)
 	}
 	return facts, hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func usageAttributionStatus(facts []UsageFactHourly) string {
+	for _, fact := range facts {
+		if fact.RemoteUserID == UsageLegacyUnattributedRemoteUserID {
+			return UsageAttributionLegacyUnattributed
+		}
+	}
+	return UsageAttributionAttributed
 }
 
 func writeUsageHashString(write func([]byte) (int, error), buffer []byte, value string) {

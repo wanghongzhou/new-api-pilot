@@ -174,7 +174,7 @@ func TestA25MigrationAcceptance(t *testing.T) {
 	mariaProbe := probeA25UnsupportedServer(t, ctx, mariaDBDSN, true)
 
 	repository, err := model.LoadMigrationVersions(migrations.Files)
-	if err != nil || len(repository) < 6 {
+	if err != nil || len(repository) != 1 {
 		t.Fatalf("load A25 repository migrations count=%d err=%v", len(repository), err)
 	}
 	now := time.Unix(fixture.Clock.NowUnix, 0)
@@ -193,7 +193,7 @@ func TestA25MigrationAcceptance(t *testing.T) {
 	emptySchemaAfter := hashA25Schema(t, ctx, empty.SQL)
 
 	upgrade := createA25ScenarioDatabase(t, ctx, admin.SQL, currentDSN, "pilot_a25_upgrade")
-	runA25Migrations(t, ctx, upgrade.SQL, migrationPrefixFS(t, repository, 1), now)
+	runA25Migrations(t, ctx, upgrade.SQL, migrations.Files, now)
 	historicalRows, historicalSHA := seedA25HistoricalRows(t, ctx, upgrade.SQL, fixture.Clock.NowUnix)
 	runA25Migrations(t, ctx, upgrade.SQL, migrations.Files, now.Add(time.Minute))
 	assertA25CurrentMigrationState(t, ctx, upgrade.SQL, repository)
@@ -238,16 +238,13 @@ id BIGINT NOT NULL PRIMARY KEY, marker VARCHAR(32) NOT NULL
 	dmlProgress := countA25Rows(t, ctx, dmlFailure.SQL, "schema_migration_progress")
 
 	dirtyReplay := createA25ScenarioDatabase(t, ctx, admin.SQL, currentDSN, "pilot_a25_dirty_replay")
-	runA25Migrations(t, ctx, dirtyReplay.SQL, migrationPrefixFS(t, repository, 3), now)
-	insertA25DirtyCheckpoint(t, ctx, dirtyReplay.SQL, repository[3], 0, fixture.Clock.NowUnix)
+	prepareA25InitialDirtyCheckpoint(t, ctx, dirtyReplay.SQL, repository[0], 2, false, fixture.Clock.NowUnix)
 	runA25Migrations(t, ctx, dirtyReplay.SQL, migrations.Files, now.Add(time.Minute))
 	assertA25CurrentMigrationState(t, ctx, dirtyReplay.SQL, repository)
 	dirtyReplaySchema := hashA25Schema(t, ctx, dirtyReplay.SQL)
 
 	dirtyCommitted := createA25ScenarioDatabase(t, ctx, admin.SQL, currentDSN, "pilot_a25_dirty_committed")
-	runA25Migrations(t, ctx, dirtyCommitted.SQL, migrationPrefixFS(t, repository, 3), now)
-	applyA25MigrationStatement(t, ctx, dirtyCommitted.SQL, repository[3].Version, 0)
-	insertA25DirtyCheckpoint(t, ctx, dirtyCommitted.SQL, repository[3], 0, fixture.Clock.NowUnix)
+	prepareA25InitialDirtyCheckpoint(t, ctx, dirtyCommitted.SQL, repository[0], 2, true, fixture.Clock.NowUnix)
 	runA25Migrations(t, ctx, dirtyCommitted.SQL, migrations.Files, now.Add(time.Minute))
 	assertA25CurrentMigrationState(t, ctx, dirtyCommitted.SQL, repository)
 	dirtyCommittedSchema := hashA25Schema(t, ctx, dirtyCommitted.SQL)
@@ -398,20 +395,6 @@ func runA25MigrationsExpect(
 	return true
 }
 
-func migrationPrefixFS(t *testing.T, repository []model.MigrationVersion, count int) fs.FS {
-	t.Helper()
-	result := fstest.MapFS{}
-	for _, migration := range repository[:count] {
-		path := migration.Version + ".sql"
-		payload, err := fs.ReadFile(migrations.Files, path)
-		if err != nil {
-			t.Fatalf("read A25 migration %s: %v", path, err)
-		}
-		result[path] = &fstest.MapFile{Data: payload, Mode: 0o444}
-	}
-	return result
-}
-
 func tamperedA25SourceFS(t *testing.T, repository []model.MigrationVersion, version string) fs.FS {
 	t.Helper()
 	result := fstest.MapFS{}
@@ -462,8 +445,8 @@ VALUES ('a25-admin', 'hash', 'A25 Admin', 'admin', 1, 0, 1, ?, ?)`, now, now)
 VALUES (1, 1, 9007199254740993, ?, 'a25-user', 123456789, 456, 7, 'active', ?, ?)`, now-3600, now, now)
 	execA25(t, ctx, database, `INSERT INTO collection_run
 (site_id, site_config_version, task_type, target_type, target_id, trigger_type, start_timestamp, end_timestamp,
- status, next_attempt_at, windows_initialized_at, created_request_id, last_request_id, created_at, updated_at)
-VALUES (1, 1, 'usage_backfill', 'site', 1, 'manual', ?, ?, 'success', ?, ?, 'a25-create', 'a25-last', ?, ?)`,
+ scope, status, next_attempt_at, windows_initialized_at, created_request_id, last_request_id, created_at, updated_at)
+VALUES (1, 1, 'usage_backfill', 'site', 1, 'manual', ?, ?, JSON_OBJECT('only_missing', TRUE), 'success', ?, ?, 'a25-create', 'a25-last', ?, ?)`,
 		now-7200, now-3600, now, now, now, now)
 	return hashA25HistoricalRows(t, ctx, database)
 }
@@ -567,6 +550,24 @@ func equalA25AppliedTimes(left, right map[string]int64) bool {
 	return true
 }
 
+func prepareA25InitialDirtyCheckpoint(
+	t *testing.T,
+	ctx context.Context,
+	database *sql.DB,
+	migration model.MigrationVersion,
+	index int,
+	ddlCommitted bool,
+	now int64,
+) {
+	t.Helper()
+	applyA25MigrationStatement(t, ctx, database, migrations.Files, migration.Version, 0)
+	applyA25MigrationStatement(t, ctx, database, migrations.Files, migration.Version, 1)
+	if ddlCommitted {
+		applyA25MigrationStatement(t, ctx, database, migrations.Files, migration.Version, index)
+	}
+	insertA25DirtyCheckpoint(t, ctx, database, migration, index, now)
+}
+
 func insertA25DirtyCheckpoint(
 	t *testing.T,
 	ctx context.Context,
@@ -581,9 +582,16 @@ func insertA25DirtyCheckpoint(
 		migration.Version, migration.Checksum, index, now)
 }
 
-func applyA25MigrationStatement(t *testing.T, ctx context.Context, database *sql.DB, version string, index int) {
+func applyA25MigrationStatement(
+	t *testing.T,
+	ctx context.Context,
+	database *sql.DB,
+	source fs.FS,
+	version string,
+	index int,
+) {
 	t.Helper()
-	payload, err := fs.ReadFile(migrations.Files, version+".sql")
+	payload, err := fs.ReadFile(source, version+".sql")
 	if err != nil {
 		t.Fatalf("read A25 DDL migration: %v", err)
 	}

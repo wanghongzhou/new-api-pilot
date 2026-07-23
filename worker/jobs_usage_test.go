@@ -185,8 +185,13 @@ func TestUsageWorkerRejectsStaleConfigAfterCollectionWithoutPollution(t *testing
 	assertUsageWorkerCount(t, database.GORM, &model.UsageFactHourly{}, "site_id = ? AND hour_ts = ?", []any{fixture.site.ID, hour}, 0)
 	assertUsageWorkerCount(t, database.GORM, &model.CollectionWindow{}, "site_id = ? AND hour_ts = ?", []any{fixture.site.ID, hour}, 0)
 	var window model.CollectionRunWindow
-	if err := database.GORM.First(&window, claim.Windows[0].ID).Error; err != nil || window.Status != model.CollectionTaskStatusRunning {
+	if err := database.GORM.First(&window, claim.Windows[0].ID).Error; err != nil ||
+		window.Status != model.CollectionTaskStatusPending || window.NextRetryAt == nil {
 		t.Fatalf("stale run window = %#v, %v", window, err)
+	}
+	var run model.CollectionRun
+	if err := database.GORM.First(&run, claim.Run.ID).Error; err != nil || run.Status != model.CollectionTaskStatusPending || run.HeartbeatAt != nil {
+		t.Fatalf("stale run parent = %#v, %v", run, err)
 	}
 }
 

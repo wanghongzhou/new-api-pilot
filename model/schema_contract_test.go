@@ -1,15 +1,11 @@
 package model
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"reflect"
 	"testing"
-
-	"new-api-pilot/migrations"
 )
 
-func TestAuthoritativeSchemaContractsLoadAllMigrations(t *testing.T) {
+func TestAuthoritativeSchemaContractsLoadFlattenedInitialSchema(t *testing.T) {
 	contracts, err := AuthoritativeSchemaContracts()
 	if err != nil {
 		t.Fatalf("AuthoritativeSchemaContracts() error = %v", err)
@@ -158,29 +154,5 @@ func TestSystemTaskMonitoringSchemaContractExcludesRawPrivateFields(t *testing.T
 	}
 	if !reflect.DeepEqual(contracts["site_system_task_collection_state"].Indexes["PRIMARY"].Columns, []string{"site_id", "resource_kind"}) {
 		t.Fatalf("system task state identity=%#v", contracts["site_system_task_collection_state"].Indexes["PRIMARY"])
-	}
-}
-
-func TestEncryptionReencryptMigrationChecksumIsFrozen(t *testing.T) {
-	const currentChecksum = "d1723ccc1f824022f345f2935f8a75973a2f81824f8e0b2fc02db734f90e6d87"
-	payload, err := migrations.Files.ReadFile("0005_encryption_reencrypt.sql")
-	if err != nil {
-		t.Fatalf("read 0005 migration: %v", err)
-	}
-	digest := sha256.Sum256(payload)
-	if actual := hex.EncodeToString(digest[:]); actual != currentChecksum {
-		t.Fatalf("0005 checksum = %s, want immutable published checksum %s; add a new migration instead of editing 0005", actual, currentChecksum)
-	}
-}
-
-func TestUsageFactCapacityIndexMigrationChecksumIsFrozen(t *testing.T) {
-	const currentChecksum = "f602607664a1d38789b6add38ce8ffa6688c0620a1e86e35585d55125a1b430a"
-	payload, err := migrations.Files.ReadFile("0006_usage_fact_capacity_indexes.sql")
-	if err != nil {
-		t.Fatalf("read 0006 migration: %v", err)
-	}
-	digest := sha256.Sum256(payload)
-	if actual := hex.EncodeToString(digest[:]); actual != currentChecksum {
-		t.Fatalf("0006 checksum = %s, want immutable published checksum %s; add a new migration instead of editing 0006", actual, currentChecksum)
 	}
 }

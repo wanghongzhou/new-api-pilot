@@ -42,13 +42,7 @@ var a51RequiredPreflightVariables = []string{
 	"SESSION_COOKIE_SECURE",
 	"EXPORT_DIR",
 	"PUBLIC_ORIGIN",
-	"UPSTREAM_ALLOWED_CIDRS",
-	"UPSTREAM_CONNECT_TIMEOUT_SECONDS",
-	"UPSTREAM_RESPONSE_HEADER_TIMEOUT_SECONDS",
-	"UPSTREAM_REQUEST_TIMEOUT_SECONDS",
-	"UPSTREAM_EXPORT_TIMEOUT_SECONDS",
 	"METRICS_ALLOWED_CIDRS",
-	"TZ",
 	"OLD_ENCRYPTION_KEY",
 	"NEW_ENCRYPTION_KEY",
 }
@@ -219,7 +213,7 @@ func validateA51Preflight(lookup config.LookupFunc) error {
 	if err != nil {
 		return errors.New("DATABASE_DSN could not be parsed after validation")
 	}
-	if application.AppEnv != config.EnvironmentTest || application.Port != "3000" || application.TZ != "Asia/Shanghai" ||
+	if application.AppEnv != config.EnvironmentTest || application.Port != "3000" ||
 		application.SessionCookieSecure || application.PublicOrigin != "http://a51.invalid" {
 		return errors.New("application runtime identity does not match the A51 isolated contract")
 	}
@@ -234,12 +228,6 @@ func validateA51Preflight(lookup config.LookupFunc) error {
 	}
 	if !bytes.Equal(application.EncryptionKey, maintenance.OldKey) {
 		return errors.New("ENCRYPTION_KEY must match OLD_ENCRYPTION_KEY for A51 migration")
-	}
-	if len(application.UpstreamAllowedHostSuffixes) != 0 || len(application.UpstreamAllowedCIDRs) != 1 ||
-		application.UpstreamAllowedCIDRs[0].String() != "172.16.0.0/12" ||
-		application.UpstreamConnectTimeout != 5*time.Second || application.UpstreamHeaderTimeout != 15*time.Second ||
-		application.UpstreamRequestTimeout != 30*time.Second || application.UpstreamExportTimeout != 120*time.Second {
-		return errors.New("upstream boundary does not match the A51 bounded contract")
 	}
 	if len(application.MetricsAllowedCIDRs) != 1 || application.MetricsAllowedCIDRs[0].String() != "127.0.0.0/8" ||
 		len(application.DingTalkAllowedHosts) != 1 || application.DingTalkAllowedHosts[0] != "oapi.dingtalk.com" {

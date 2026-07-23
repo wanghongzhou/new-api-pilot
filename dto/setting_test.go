@@ -28,38 +28,3 @@ func TestSettingPatchRequestAllowsExplicitClearAndEmptySecretKeep(t *testing.T) 
 		t.Fatalf("SettingPatchRequest.Validate() errors = %#v", fieldErrors)
 	}
 }
-
-func TestSettingSLOReasonCodesJSONAndValidation(t *testing.T) {
-	codes := []SettingSLOReasonCode{
-		SettingSLOReasonUsageDelayTooHigh,
-		SettingSLOReasonUsageConcurrencyTooLow,
-	}
-	if err := ValidateSettingSLOReasonCodes(codes); err != nil {
-		t.Fatalf("valid reason codes: %v", err)
-	}
-	encoded, err := json.Marshal(SettingGroup{H15SLOReasonCodes: codes})
-	if err != nil {
-		t.Fatalf("marshal setting group: %v", err)
-	}
-	var decoded struct {
-		Codes []SettingSLOReasonCode `json:"h15_slo_reason_codes"`
-	}
-	if err := json.Unmarshal(encoded, &decoded); err != nil {
-		t.Fatalf("unmarshal setting group: %v", err)
-	}
-	if len(decoded.Codes) != 2 || decoded.Codes[0] != SettingSLOReasonUsageDelayTooHigh ||
-		decoded.Codes[1] != SettingSLOReasonUsageConcurrencyTooLow {
-		t.Fatalf("reason code JSON = %s, decoded %#v", encoded, decoded.Codes)
-	}
-
-	for name, invalid := range map[string][]SettingSLOReasonCode{
-		"unsupported": {"SLO_UNKNOWN"},
-		"duplicate":   {SettingSLOReasonUsageDelayTooHigh, SettingSLOReasonUsageDelayTooHigh},
-	} {
-		t.Run(name, func(t *testing.T) {
-			if err := ValidateSettingSLOReasonCodes(invalid); err == nil {
-				t.Fatalf("ValidateSettingSLOReasonCodes(%#v) succeeded", invalid)
-			}
-		})
-	}
-}

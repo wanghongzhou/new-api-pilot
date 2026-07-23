@@ -43,8 +43,8 @@ func TestInitialMigrationContainsAllDesignedTables(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse migration: %v", err)
 	}
-	if len(statements) != 39 {
-		t.Fatalf("migration statement count = %d, want 39", len(statements))
+	if len(statements) != len(expectedTables) {
+		t.Fatalf("migration statement count = %d, want %d", len(statements), len(expectedTables))
 	}
 	for _, table := range expectedTables {
 		if !strings.Contains(string(contents), "CREATE TABLE IF NOT EXISTS "+table+" ") {
@@ -64,7 +64,8 @@ func TestInitialMigrationContainsAllDesignedTables(t *testing.T) {
 		if len(contract.Columns) == 0 || len(contract.Indexes) == 0 {
 			t.Errorf("migration contract for %s has no columns or indexes: %#v", table, contract)
 		}
-		if contract.Engine != "InnoDB" || contract.Charset != "utf8mb4" || contract.Collation != "utf8mb4_unicode_ci" {
+		validCollation := contract.Collation == "utf8mb4_unicode_ci" || contract.Collation == "utf8mb4_bin"
+		if contract.Engine != "InnoDB" || contract.Charset != "utf8mb4" || !validCollation {
 			t.Errorf("migration contract for %s engine/charset/collation = %s/%s/%s", table, contract.Engine, contract.Charset, contract.Collation)
 		}
 	}
@@ -418,142 +419,6 @@ func cleanupAlertReliabilityMigrationFixture(
 	}
 }
 
-func TestMySQLEncryptionReencryptMigrationRecoversEveryCommitGap(t *testing.T) {
-	dsn := os.Getenv("TEST_DATABASE_DSN")
-	if dsn == "" {
-		t.Skip("TEST_DATABASE_DSN is not configured")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-	database, err := Open(ctx, Options{DSN: dsn, MaxIdle: 2, MaxOpen: 8, MaxLifetime: time.Minute})
-	if err != nil {
-		t.Fatalf("Open() error = %v", err)
-	}
-	defer func() { _ = database.Close() }()
-	lockConnection := acquireMySQLIntegrationLock(t, ctx, database.SQL)
-	defer func() {
-		_, _ = lockConnection.ExecContext(context.Background(), "SELECT RELEASE_LOCK(?)", mysqlIntegrationLockName)
-		_ = lockConnection.Close()
-	}()
-	if err := NewMigrationRunner(database.SQL).Run(ctx); err != nil {
-		t.Fatalf("prepare production migrations: %v", err)
-	}
-
-	payload, err := migrations.Files.ReadFile("0005_encryption_reencrypt.sql")
-	if err != nil {
-		t.Fatalf("read encryption re-encryption migration: %v", err)
-	}
-	faults := []struct {
-		name         string
-		afterIndex   int
-		beforeRecord bool
-	}{
-		{name: "after_job_create", afterIndex: 0},
-		{name: "after_item_create", afterIndex: 1},
-		{name: "before_final_record", afterIndex: -1, beforeRecord: true},
-	}
-	for caseIndex, fault := range faults {
-		t.Run(fault.name, func(t *testing.T) {
-			version := fmt.Sprintf("992%d_encryption_reencrypt_%s", caseIndex, fault.name)
-			jobTable := fmt.Sprintf("encryption_reencrypt_job_fixture_%d", caseIndex)
-			itemTable := fmt.Sprintf("encryption_reencrypt_item_fixture_%d", caseIndex)
-			cleanupEncryptionReencryptMigrationFixture(t, ctx, database.SQL, version, jobTable, itemTable)
-			t.Cleanup(func() {
-				cleanupEncryptionReencryptMigrationFixture(
-					t, context.Background(), database.SQL, version, jobTable, itemTable,
-				)
-			})
-			migration := strings.ReplaceAll(string(payload), encryptionReencryptMigrationTableOrder[0], jobTable)
-			migration = strings.ReplaceAll(migration, encryptionReencryptMigrationTableOrder[1], itemTable)
-			migrationFS := migrationTestFSWithAdditional(t, version+".sql", migration)
-			verifier := func(ctx context.Context, connection *sql.Conn, _ string, index int) (bool, error) {
-				return verifyEncryptionReencryptSchema(ctx, connection, jobTable, itemTable, index)
-			}
-			runner := &MigrationRunner{
-				DB: database.SQL, FS: migrationFS, Now: func() time.Time { return time.Unix(1_752_400_800, 0) },
-				verifyDDLPostcondition: verifier,
-			}
-			runner.afterStatement = func(event MigrationStatementEvent) error {
-				if event.Index != fault.afterIndex {
-					return nil
-				}
-				return killMySQLConnection(ctx, database.SQL, event.ConnectionID)
-			}
-			if fault.beforeRecord {
-				runner.beforeRecord = func(event MigrationRecordEvent) error {
-					return killMySQLConnection(ctx, database.SQL, event.ConnectionID)
-				}
-			}
-			if err := runner.Run(ctx); err == nil {
-				t.Fatal("fault-injected encryption re-encryption migration unexpectedly succeeded")
-			}
-
-			recovery := &MigrationRunner{
-				DB: database.SQL, FS: migrationFS, Now: runner.Now, verifyDDLPostcondition: verifier,
-			}
-			if err := recovery.Run(ctx); err != nil {
-				t.Fatalf("recover encryption re-encryption migration after %s: %v", fault.name, err)
-			}
-			if err := recovery.Run(ctx); err != nil {
-				t.Fatalf("idempotent encryption re-encryption migration after %s: %v", fault.name, err)
-			}
-			assertRecoveredEncryptionReencryptMigration(
-				t, ctx, database.SQL, version, jobTable, itemTable,
-			)
-		})
-	}
-}
-
-func assertRecoveredEncryptionReencryptMigration(
-	t *testing.T,
-	ctx context.Context,
-	db *sql.DB,
-	version string,
-	jobTable string,
-	itemTable string,
-) {
-	t.Helper()
-	connection, err := db.Conn(ctx)
-	if err != nil {
-		t.Fatalf("reserve encryption re-encryption verification connection: %v", err)
-	}
-	defer func() { _ = connection.Close() }()
-	for stage := range encryptionReencryptMigrationTableOrder {
-		applied, err := verifyEncryptionReencryptSchema(ctx, connection, jobTable, itemTable, stage)
-		if err != nil || !applied {
-			t.Fatalf("encryption re-encryption schema stage %d = %t, %v", stage, applied, err)
-		}
-	}
-	var applied, progress int
-	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migration WHERE version = ?", version).Scan(&applied); err != nil {
-		t.Fatalf("count applied encryption re-encryption migration: %v", err)
-	}
-	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migration_progress WHERE version = ?", version).Scan(&progress); err != nil {
-		t.Fatalf("count encryption re-encryption migration progress: %v", err)
-	}
-	if applied != 1 || progress != 0 {
-		t.Fatalf("encryption re-encryption migration records applied=%d progress=%d", applied, progress)
-	}
-}
-
-func cleanupEncryptionReencryptMigrationFixture(
-	t *testing.T,
-	ctx context.Context,
-	db *sql.DB,
-	version string,
-	jobTable string,
-	itemTable string,
-) {
-	t.Helper()
-	_, _ = db.ExecContext(ctx, "DELETE FROM schema_migration_progress WHERE version = ?", version)
-	_, _ = db.ExecContext(ctx, "DELETE FROM schema_migration WHERE version = ?", version)
-	for _, table := range []string{itemTable, jobTable} {
-		if _, err := db.ExecContext(ctx, "DROP TABLE IF EXISTS "+table); err != nil && ctx.Err() == nil {
-			t.Errorf("drop encryption re-encryption migration fixture %s: %v", table, err)
-		}
-	}
-}
-
 func TestMySQLMigrationRejectsProgressChecksumMismatch(t *testing.T) {
 	dsn := os.Getenv("TEST_DATABASE_DSN")
 	if dsn == "" {
@@ -661,19 +526,14 @@ func TestMySQLMigrationSourceGate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load repository migrations: %v", err)
 	}
-	if len(repository) < 3 {
-		t.Fatalf("repository migration count = %d, want at least 3", len(repository))
+	if len(repository) != 1 {
+		t.Fatalf("repository migration count = %d, want 1", len(repository))
 	}
 
-	t.Run("normal prefix and full current", func(t *testing.T) {
+	t.Run("current and idempotent rerun", func(t *testing.T) {
 		database := openIsolatedMigrationSourceDatabase(t)
-		prefixRunner := NewMigrationRunner(database.SQL)
-		prefixRunner.FS = migrationRepositoryPrefixFS(t, len(repository)-1)
-		if err := prefixRunner.Run(context.Background()); err != nil {
-			t.Fatalf("apply repository prefix: %v", err)
-		}
 		if err := NewMigrationRunner(database.SQL).Run(context.Background()); err != nil {
-			t.Fatalf("complete repository prefix: %v", err)
+			t.Fatalf("apply current repository: %v", err)
 		}
 		if err := NewMigrationRunner(database.SQL).Run(context.Background()); err != nil {
 			t.Fatalf("rerun full current repository: %v", err)
@@ -721,15 +581,6 @@ VALUES ('9998_unknown_progress', ?, 0, 'ready', 1)`, strings.Repeat("b", 64))
 			want: ErrMigrationSourceInvalid,
 		},
 		{
-			name: "missing middle version",
-			mutate: func(t *testing.T, db *sql.DB, repository []MigrationVersion) {
-				execMigrationSourceMutation(t, db, `INSERT INTO schema_migration
-  (version, checksum, applied_at) VALUES (?, ?, 1)`,
-					repository[2].Version, repository[2].Checksum)
-			},
-			want: ErrMigrationSourceInvalid,
-		},
-		{
 			name: "non canonical checksum",
 			mutate: func(t *testing.T, db *sql.DB, repository []MigrationVersion) {
 				execMigrationSourceMutation(t, db,
@@ -756,9 +607,6 @@ VALUES ('9998_unknown_progress', ?, 0, 'ready', 1)`, strings.Repeat("b", 64))
 			after := readMigrationSourceGuard(t, database.SQL)
 			if before != after {
 				t.Fatalf("rejected migration changed database: before=%#v after=%#v", before, after)
-			}
-			if after.ScopeColumns != 0 || after.SeedSettings != 0 {
-				t.Fatalf("rejected migration executed pending DDL or seeds: %#v", after)
 			}
 		})
 	}
@@ -992,124 +840,9 @@ func cleanupMigrationFixture(t *testing.T, ctx context.Context, db *sql.DB, vers
 	}
 }
 
-func applyCollectionRunScopeContract(contracts map[string]tableContract) {
-	contract := contracts["collection_run"]
-	scope := columnContract{Name: "scope", ColumnType: "json", IsNullable: "NO"}
-	columns := make([]columnContract, 0, len(contract.Columns)+1)
-	for _, column := range contract.Columns {
-		columns = append(columns, column)
-		if column.Name == "end_timestamp" {
-			columns = append(columns, scope)
-		}
-	}
-	contract.Columns = columns
-	contracts["collection_run"] = contract
-}
-
-func applyAlertReliabilityContract(contracts map[string]tableContract) {
-	delivery := contracts["alert_delivery"]
-	columns := make([]columnContract, 0, len(delivery.Columns)+3)
-	for _, column := range delivery.Columns {
-		columns = append(columns, column)
-		if column.Name == "attempt_count" {
-			columns = append(columns,
-				columnContract{
-					Name: "claim_token", ColumnType: "varchar(64)", IsNullable: "YES",
-					CharacterSet: sql.NullString{String: "ascii", Valid: true},
-					Collation:    sql.NullString{String: "ascii_bin", Valid: true},
-				},
-				columnContract{Name: "lease_expires_at", ColumnType: "bigint", IsNullable: "YES"},
-				columnContract{Name: "payload_snapshot", ColumnType: "json", IsNullable: "NO"},
-			)
-		}
-	}
-	delivery.Columns = columns
-	delivery.Indexes["idx_alert_delivery_claim"] = indexContract{
-		Columns: []string{"status", "lease_expires_at", "next_retry_at", "id"},
-	}
-	contracts["alert_delivery"] = delivery
-	contracts["alert_evaluation_cursor"] = tableContract{
-		Columns: []columnContract{
-			{
-				Name: "active_key", ColumnType: "varchar(384)", IsNullable: "NO",
-				CharacterSet: sql.NullString{String: "utf8mb4", Valid: true},
-				Collation:    sql.NullString{String: "utf8mb4_bin", Valid: true},
-			},
-			{Name: "last_sample_at", ColumnType: "bigint", IsNullable: "NO"},
-			{
-				Name: "last_sample_key", ColumnType: "varchar(255)", IsNullable: "NO",
-				CharacterSet: sql.NullString{String: "utf8mb4", Valid: true},
-				Collation:    sql.NullString{String: "utf8mb4_bin", Valid: true},
-			},
-			{Name: "created_at", ColumnType: "bigint", IsNullable: "NO"},
-			{Name: "updated_at", ColumnType: "bigint", IsNullable: "NO"},
-		},
-		Indexes:     map[string]indexContract{"PRIMARY": {Unique: true, Columns: []string{"active_key"}}},
-		ForeignKeys: map[string]foreignKeyContract{},
-		Engine:      "InnoDB", Charset: "utf8mb4", Collation: "utf8mb4_unicode_ci",
-	}
-}
-
-func applyExportClaimLeaseContract(contracts map[string]tableContract) {
-	exportJob := contracts["export_job"]
-	columns := make([]columnContract, 0, len(exportJob.Columns)+2)
-	for _, column := range exportJob.Columns {
-		columns = append(columns, column)
-		if column.Name == "heartbeat_at" {
-			columns = append(columns,
-				columnContract{
-					Name: "claim_token", ColumnType: "varchar(64)", IsNullable: "YES",
-					CharacterSet: sql.NullString{String: "ascii", Valid: true},
-					Collation:    sql.NullString{String: "ascii_bin", Valid: true},
-				},
-				columnContract{Name: "lease_expires_at", ColumnType: "bigint", IsNullable: "YES"},
-			)
-		}
-	}
-	exportJob.Columns = columns
-	exportJob.Indexes["idx_export_job_claim"] = indexContract{
-		Columns: []string{"status", "lease_expires_at", "next_attempt_at", "id"},
-	}
-	contracts["export_job"] = exportJob
-}
-
-func applyEncryptionReencryptContract(t *testing.T, contracts map[string]tableContract) {
-	t.Helper()
-	payload, err := migrations.Files.ReadFile("0005_encryption_reencrypt.sql")
-	if err != nil {
-		t.Fatalf("read encryption re-encryption migration contract: %v", err)
-	}
-	statements, err := SplitSQLStatements(string(payload))
-	if err != nil {
-		t.Fatalf("parse encryption re-encryption migration contract: %v", err)
-	}
-	additional := parseInitialTableContracts(t, statements)
-	for name, contract := range additional {
-		if _, exists := contracts[name]; exists {
-			t.Fatalf("encryption re-encryption migration duplicates table contract %s", name)
-		}
-		contracts[name] = contract
-	}
-}
-
-func applyMigrationProgressContract(contracts map[string]tableContract) {
-	contracts["schema_migration_progress"] = tableContract{
-		Columns: []columnContract{
-			{Name: "version", ColumnType: "varchar(64)", IsNullable: "NO", CharacterSet: sql.NullString{String: "utf8mb4", Valid: true}, Collation: sql.NullString{String: "utf8mb4_unicode_ci", Valid: true}},
-			{Name: "checksum", ColumnType: "char(64)", IsNullable: "NO", CharacterSet: sql.NullString{String: "utf8mb4", Valid: true}, Collation: sql.NullString{String: "utf8mb4_unicode_ci", Valid: true}},
-			{Name: "statement_index", ColumnType: "int", IsNullable: "NO", Default: sql.NullString{String: "0", Valid: true}},
-			{Name: "state", ColumnType: "varchar(16)", IsNullable: "NO", Default: sql.NullString{String: "ready", Valid: true}, CharacterSet: sql.NullString{String: "utf8mb4", Valid: true}, Collation: sql.NullString{String: "utf8mb4_unicode_ci", Valid: true}},
-			{Name: "updated_at", ColumnType: "bigint", IsNullable: "NO"},
-		},
-		Indexes:     map[string]indexContract{"PRIMARY": {Unique: true, Columns: []string{"version"}}},
-		ForeignKeys: map[string]foreignKeyContract{},
-		Engine:      "InnoDB", Charset: "utf8mb4", Collation: "utf8mb4_unicode_ci",
-	}
-}
-
 func assertChecksumMismatchIsRejected(t *testing.T, ctx context.Context, db *sql.DB, runner *MigrationRunner) {
 	t.Helper()
-	for _, version := range []string{"0001_initial_schema", "0005_encryption_reencrypt", "0006_usage_fact_capacity_indexes"} {
+	for _, version := range []string{"0001_initial_schema"} {
 		var checksum string
 		if err := db.QueryRowContext(ctx, "SELECT checksum FROM schema_migration WHERE version = ?", version).Scan(&checksum); err != nil {
 			t.Fatalf("read migration %s checksum: %v", version, err)
@@ -1463,8 +1196,8 @@ ORDER BY k.constraint_name, k.ordinal_position`, table)
 
 func assertExactDefaultSeeds(t *testing.T, ctx context.Context, db *sql.DB) {
 	t.Helper()
-	if len(defaultSettings) != 26 {
-		t.Fatalf("default setting definition count = %d, want 26", len(defaultSettings))
+	if len(defaultSettings) != 37 {
+		t.Fatalf("default setting definition count = %d, want 37", len(defaultSettings))
 	}
 	if len(defaultAlertRules) != 25 {
 		t.Fatalf("default alert rule definition count = %d, want 25", len(defaultAlertRules))
@@ -1512,7 +1245,7 @@ WHERE rule_key = ? AND name = ? AND enabled = 1 AND level = ? AND metric = ?
 }
 
 var expectedTables = []string{
-	"schema_migration", "platform_user", "site", "site_channel", "site_monitoring_pause",
+	"schema_migration", "schema_migration_progress", "platform_user", "site", "site_channel", "site_monitoring_pause",
 	"site_capability", "customer", "account", "collection_cursor", "collection_run",
 	"collection_window", "collection_run_window", "aggregation_bucket_lock", "usage_fact_hourly",
 	"usage_fact_daily", "account_stat_hourly", "account_stat_daily", "customer_stat_hourly",
@@ -1521,5 +1254,14 @@ var expectedTables = []string{
 	"channel_stat_daily", "site_instance", "site_instance_status_minutely",
 	"site_instance_status_hourly", "site_instance_status_daily", "site_status_minutely",
 	"site_status_hourly", "site_status_daily", "alert_rule", "alert_event", "alert_delivery",
-	"export_job", "platform_setting",
+	"export_job", "platform_setting", "alert_evaluation_cursor", "encryption_reencrypt_job",
+	"encryption_reencrypt_item", "upstream_log_fact", "upstream_log_collection_state",
+	"site_user_inventory", "site_user_inventory_hourly", "site_channel_inventory",
+	"site_channel_inventory_hourly", "site_performance_metric_bucket", "site_performance_collection_state",
+	"site_topup_order", "site_topup_collection_state", "site_redemption", "site_redemption_collection_state",
+	"site_upstream_task", "site_upstream_task_collection_state", "site_model_meta",
+	"site_model_meta_collection_state", "site_channel_model_mapping", "site_subscription_plan",
+	"site_subscription_plan_collection_state", "site_group_catalog", "site_pricing_catalog",
+	"pricing_group_collection_state", "site_system_task", "site_system_task_collection_state",
+	"data_maintenance_state", "site_instance_lifecycle",
 }

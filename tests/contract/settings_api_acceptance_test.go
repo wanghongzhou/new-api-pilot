@@ -15,7 +15,6 @@ import (
 	"gorm.io/gorm"
 
 	"new-api-pilot/common"
-	"new-api-pilot/config"
 	"new-api-pilot/constant"
 	"new-api-pilot/controller"
 	"new-api-pilot/dto"
@@ -42,13 +41,16 @@ func TestA46SettingsAPIContract(t *testing.T) {
 	if err := testsupport.ResetPlatformSettings(ctx, tx, a46Now); err != nil {
 		t.Fatalf("reset A46 settings: %v", err)
 	}
-	admin := newA46Engine(t, tx, constant.RoleAdmin, config.EnvironmentTest)
-	viewer := newA46Engine(t, tx, constant.RoleViewer, config.EnvironmentTest)
+	admin := newA46Engine(t, tx, constant.RoleAdmin)
+	viewer := newA46Engine(t, tx, constant.RoleViewer)
 
 	read := a46Request(viewer, http.MethodGet, "/api/settings", "")
 	readEnvelope := decodeA46Envelope(t, read)
 	if read.Code != http.StatusOK || !readEnvelope.Success {
 		t.Fatalf("A46 settings GET = %d %#v body=%s", read.Code, readEnvelope, read.Body.String())
+	}
+	if strings.Contains(read.Body.String(), "h15_slo") {
+		t.Fatalf("A46 GET still exposes H+15 eligibility: %s", read.Body.String())
 	}
 	for _, forbidden := range []string{"setting_value", "v1:", "private-a46"} {
 		if strings.Contains(read.Body.String(), forbidden) {
@@ -120,15 +122,11 @@ func TestA46SettingsAPIContract(t *testing.T) {
 		}
 	}
 
-	production := newA46Engine(t, tx, constant.RoleAdmin, config.EnvironmentProduction)
-	beforeProduction := readA46SettingRows(t, tx)
-	sloForbidden := a46Request(production, http.MethodPut, "/api/settings",
+	withoutSLOGate := a46Request(admin, http.MethodPut, "/api/settings",
 		`{"items":[{"key":"collector.usage_delay_minutes","value":20}]}`)
-	if envelope := decodeA46Envelope(t, sloForbidden); sloForbidden.Code != http.StatusUnprocessableEntity ||
-		envelope.Code != constant.CodeSLOConfigForbidden {
-		t.Fatalf("A46 production SLO rejection = %d %#v", sloForbidden.Code, envelope)
+	if envelope := decodeA46Envelope(t, withoutSLOGate); withoutSLOGate.Code != http.StatusOK || !envelope.Success {
+		t.Fatalf("A46 H+15-free update = %d %#v", withoutSLOGate.Code, envelope)
 	}
-	assertA46SettingRowsEqual(t, beforeProduction, readA46SettingRows(t, tx))
 }
 
 func openA46AcceptanceTransaction(t *testing.T) *gorm.DB {
@@ -162,7 +160,7 @@ func openA46AcceptanceTransaction(t *testing.T) *gorm.DB {
 	return tx
 }
 
-func newA46Engine(t *testing.T, database *gorm.DB, role, environment string) http.Handler {
+func newA46Engine(t *testing.T, database *gorm.DB, role string) http.Handler {
 	t.Helper()
 	cipher, err := common.NewCipher([]byte("abcdefghijklmnopqrstuvwxyz123456"))
 	if err != nil {
@@ -170,7 +168,7 @@ func newA46Engine(t *testing.T, database *gorm.DB, role, environment string) htt
 	}
 	settings, err := service.NewSettingService(service.SettingServiceOptions{
 		Repository: model.NewSettingRepository(database), Cipher: cipher,
-		Clock: testsupport.NewFakeClock(time.Unix(a46Now, 0)), AppEnv: environment,
+		Clock:        testsupport.NewFakeClock(time.Unix(a46Now, 0)),
 		PublicOrigin: "https://pilot.a46.example", DingTalkHosts: []string{"robot.a46.example"},
 	})
 	if err != nil {

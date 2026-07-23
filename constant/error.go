@@ -21,7 +21,6 @@ const (
 	CodeUpstreamError            = "UPSTREAM_ERROR"
 	CodeUpstreamAddressForbidden = "UPSTREAM_ADDRESS_FORBIDDEN"
 	CodeUpstreamUserNotFound     = "UPSTREAM_USER_NOT_FOUND"
-	CodeSLOConfigForbidden       = "SLO_CONFIG_FORBIDDEN"
 	CodeExportLimitReached       = "EXPORT_LIMIT_REACHED"
 	CodeExportExpired            = "EXPORT_EXPIRED"
 	CodeExportFileMissing        = "EXPORT_FILE_MISSING"

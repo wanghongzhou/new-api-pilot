@@ -168,7 +168,7 @@ func TestRuntimeStartupMaterializesBeforeRecoveringRunningTasks(t *testing.T) {
 	}
 }
 
-func TestRuntimeQuiesceDrainsAndDeadlinePreservesRunningClaim(t *testing.T) {
+func TestRuntimeQuiesceDrainsAndDeadlineReleasesRunningClaim(t *testing.T) {
 	t.Run("graceful_drain", func(t *testing.T) {
 		database := openWorkerTestDatabase(t)
 		now := time.Unix(1_752_400_800, 0)
@@ -225,7 +225,7 @@ func TestRuntimeQuiesceDrainsAndDeadlinePreservesRunningClaim(t *testing.T) {
 		}
 	})
 
-	t.Run("deadline_preserves_running", func(t *testing.T) {
+	t.Run("deadline_releases_pending", func(t *testing.T) {
 		database := openWorkerTestDatabase(t)
 		now := time.Unix(1_752_400_800, 0)
 		clock := testsupport.NewFakeClock(now)
@@ -291,13 +291,13 @@ func TestRuntimeQuiesceDrainsAndDeadlinePreservesRunningClaim(t *testing.T) {
 		}
 		var preserved model.CollectionRun
 		if err := database.GORM.First(&preserved, run.ID).Error; err != nil ||
-			preserved.Status != model.CollectionTaskStatusRunning || preserved.RetryCount != 0 {
-			t.Fatalf("deadline-preserved run = %#v, %v", preserved, err)
+			preserved.Status != model.CollectionTaskStatusPending || preserved.HeartbeatAt != nil || preserved.RetryCount != 0 {
+			t.Fatalf("deadline-released run = %#v, %v", preserved, err)
 		}
 		var preservedWindow model.CollectionRunWindow
 		if err := database.GORM.Where("run_id = ?", run.ID).Take(&preservedWindow).Error; err != nil ||
-			preservedWindow.Status != model.CollectionTaskStatusRunning || preservedWindow.AttemptCount != 1 {
-			t.Fatalf("deadline-preserved window = %#v, %v", preservedWindow, err)
+			preservedWindow.Status != model.CollectionTaskStatusPending || preservedWindow.NextRetryAt == nil || preservedWindow.AttemptCount != 1 {
+			t.Fatalf("deadline-released window = %#v, %v", preservedWindow, err)
 		}
 	})
 }
@@ -500,6 +500,21 @@ func TestWorkerClaimTokensAndRetryMatrix(t *testing.T) {
 	}
 }
 
+func TestRetryDelayWithJitterIsStableAndDispersed(t *testing.T) {
+	base := time.Minute
+	first := retryDelayWithJitter(base, constant.TaskTypeUsageBackfill, 10, 20, 1_752_397_200, 2)
+	if first != retryDelayWithJitter(base, constant.TaskTypeUsageBackfill, 10, 20, 1_752_397_200, 2) {
+		t.Fatal("retry jitter is not deterministic")
+	}
+	if first < base || first > base+base/5 {
+		t.Fatalf("retry jitter = %s, want within [%s,%s]", first, base, base+base/5)
+	}
+	second := retryDelayWithJitter(base, constant.TaskTypeUsageBackfill, 10, 20, 1_752_400_800, 2)
+	if second == first {
+		t.Fatalf("different windows received identical retry delay %s", first)
+	}
+}
+
 func TestInitialBackfillClaimExecutesWindowsConcurrently(t *testing.T) {
 	database := openWorkerTestDatabase(t)
 	now := time.Unix(1_752_400_800, 0)
@@ -650,12 +665,13 @@ func TestSharedCollectionQueuesUseTheConfiguredCapacityPool(t *testing.T) {
 	}
 }
 
-func TestInitialBackfillUsesDedicatedConcurrency(t *testing.T) {
-	if initialBackfillConcurrency <= 3 {
-		t.Fatalf("initial backfill concurrency = %d, want greater than ordinary backfill", initialBackfillConcurrency)
-	}
-	if queueConcurrency(QueueBackfill, model.CollectorSettings{BackfillConcurrency: 2}) != 2 {
+func TestInitialBackfillUsesConfiguredBackfillConcurrency(t *testing.T) {
+	settings := model.CollectorSettings{BackfillConcurrency: 2}
+	if queueConcurrency(QueueBackfill, settings) != 2 {
 		t.Fatal("ordinary backfill concurrency changed unexpectedly")
+	}
+	if queueConcurrency(QueueInitialBackfill, settings) != 0 {
+		t.Fatal("initial backfill must use the explicit shared-dispatch setting path")
 	}
 }
 

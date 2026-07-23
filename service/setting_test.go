@@ -7,14 +7,13 @@ import (
 	"time"
 
 	"new-api-pilot/common"
-	"new-api-pilot/config"
 	"new-api-pilot/dto"
 	"new-api-pilot/model"
 	testsupport "new-api-pilot/tests/support"
 )
 
 func TestSettingServiceNormalizesTypedPatchesAndSecretActions(t *testing.T) {
-	settings := newPureSettingService(t, config.EnvironmentTest)
+	settings := newPureSettingService(t)
 	request := dto.SettingPatchRequest{Items: []dto.SettingPatchItem{
 		{Key: "collector.usage_delay_minutes", Value: json.RawMessage(`7`)},
 		{Key: "export.max_file_bytes", Value: json.RawMessage(`"8589934592"`)},
@@ -39,7 +38,7 @@ func TestSettingServiceNormalizesTypedPatchesAndSecretActions(t *testing.T) {
 }
 
 func TestSettingServiceRejectsReadOnlyUnsafeAndWrongJSONRepresentations(t *testing.T) {
-	settings := newPureSettingService(t, config.EnvironmentTest)
+	settings := newPureSettingService(t)
 	request := dto.SettingPatchRequest{Items: []dto.SettingPatchItem{
 		{Key: "collector.probe_interval_seconds", Value: json.RawMessage(`60`)},
 		{Key: "collector.usage_delay_minutes", Value: json.RawMessage(`60`)},
@@ -56,7 +55,7 @@ func TestSettingServiceRejectsReadOnlyUnsafeAndWrongJSONRepresentations(t *testi
 }
 
 func TestSettingServiceStrictScalarRepresentations(t *testing.T) {
-	settings := newPureSettingService(t, config.EnvironmentTest)
+	settings := newPureSettingService(t)
 	tests := []struct {
 		name string
 		key  string
@@ -128,7 +127,7 @@ func TestNormalizeSettingIntegerEnforcesRepresentationAndSafeBoundary(t *testing
 }
 
 func TestSettingGroupsNeverExposeSensitiveValuesAndReportDecryptFailure(t *testing.T) {
-	settings := newPureSettingService(t, config.EnvironmentTest)
+	settings := newPureSettingService(t)
 	rows := settingTestRows(t)
 	webhook := rows[settingDingTalkWebhook]
 	webhook.Value = "broken-ciphertext"
@@ -170,7 +169,7 @@ func TestSettingGroupsNeverExposeSensitiveValuesAndReportDecryptFailure(t *testi
 }
 
 func TestSettingFinalValidationRequiresCompleteDingTalkAndCapacityOrdering(t *testing.T) {
-	settings := newPureSettingService(t, config.EnvironmentTest)
+	settings := newPureSettingService(t)
 	rows := settingTestRows(t)
 	values := settingValues(rows)
 	values["export.max_active_per_user"] = "20"
@@ -202,17 +201,6 @@ func TestSettingFinalValidationRequiresCompleteDingTalkAndCapacityOrdering(t *te
 	}
 }
 
-func TestSettingH15StatusUsesStableReasonCodes(t *testing.T) {
-	values := map[string]string{
-		"collector.usage_delay_minutes": "6", "collector.usage_concurrency": "4",
-	}
-	eligible, reasons := settingH15Status(values)
-	if eligible || len(reasons) != 2 || reasons[0] != dto.SettingSLOReasonUsageDelayTooHigh ||
-		reasons[1] != dto.SettingSLOReasonUsageConcurrencyTooLow {
-		t.Fatalf("settingH15Status() = %v, %#v", eligible, reasons)
-	}
-}
-
 func TestValidateSettingRowsRejectsOutOfRangePersistedValues(t *testing.T) {
 	rows := settingTestRows(t)
 	row := rows["collector.usage_delay_minutes"]
@@ -223,7 +211,7 @@ func TestValidateSettingRowsRejectsOutOfRangePersistedValues(t *testing.T) {
 	}
 }
 
-func newPureSettingService(t *testing.T, appEnv string) *SettingService {
+func newPureSettingService(t *testing.T) *SettingService {
 	t.Helper()
 	cipher, err := common.NewCipher([]byte("abcdefghijklmnopqrstuvwxyz123456"))
 	if err != nil {
@@ -231,7 +219,7 @@ func newPureSettingService(t *testing.T, appEnv string) *SettingService {
 	}
 	settings, err := NewSettingService(SettingServiceOptions{
 		Repository: model.NewSettingRepository(nil), Cipher: cipher,
-		Clock: testsupport.NewFakeClock(time.Unix(1_752_400_800, 0)), AppEnv: appEnv,
+		Clock:        testsupport.NewFakeClock(time.Unix(1_752_400_800, 0)),
 		PublicOrigin: "https://pilot.example",
 	})
 	if err != nil {
@@ -245,15 +233,16 @@ func settingTestRows(t *testing.T) map[string]model.PlatformSetting {
 	defaults := map[string]string{
 		"collector.probe_interval_seconds": "60", "collector.realtime_interval_seconds": "60",
 		"collector.resource_interval_seconds": "60", "collector.usage_delay_minutes": "5",
-		"collector.minute_retention_days": "90", "collector.probe_concurrency": "20",
+		"collector.minute_retention_days": "90", "logs.retention_days": "90",
+		"collector.probe_concurrency":         "20",
 		"system_task_terminal_retention_days": "90",
 		"collector.realtime_concurrency":      "10", "collector.resource_concurrency": "10",
 		"collector.metadata_concurrency": "5", "collector.usage_concurrency": "5",
 		"collector.backfill_concurrency": "2", "collector.manual_backfill_max_days": "366",
 		"export.file_ttl_hours": "24", "export.max_active_per_user": "3",
 		"export.max_active_global": "10", "export.max_file_bytes": "2147483648",
-		"export.min_free_disk_bytes": "5368709120", "rate.fallback_quota_per_unit": "",
-		"rate.fallback_usd_exchange_rate": "", settingDingTalkEnabled: "false",
+		"export.min_free_disk_bytes": "5368709120", "rate.fallback_quota_per_unit": "500000",
+		"rate.fallback_usd_exchange_rate": "6.8", settingDingTalkEnabled: "false",
 		settingDingTalkWebhook: "", settingDingTalkSecret: "",
 	}
 	result := make(map[string]model.PlatformSetting, len(settingDefinitions))

@@ -208,11 +208,10 @@ function Get-AppEnvironmentArguments {
         [Parameter(Mandatory = $true)][string]$ViewerPassword,
         [switch]$IncludeCapacityGuards
     )
-    $arguments = @(
-        '--env', 'APP_ENV=test',
-        '--env', 'PORT=3000',
-        '--env', 'TZ=Asia/Shanghai',
-        '--env', "DATABASE_DSN=$DatabaseDSN",
+	$arguments = @(
+		'--env', 'APP_ENV=test',
+		'--env', 'PORT=3000',
+		'--env', "DATABASE_DSN=$DatabaseDSN",
         '--env', 'SQL_MAX_IDLE_CONNS=20',
         '--env', 'SQL_MAX_OPEN_CONNS=100',
         '--env', 'SQL_MAX_LIFETIME_SECONDS=60',
@@ -221,15 +220,9 @@ function Get-AppEnvironmentArguments {
         '--env', "PLATFORM_BOOTSTRAP_ADMIN_PASSWORD=$ViewerPassword",
         '--env', 'SESSION_COOKIE_SECURE=false',
         '--env', 'EXPORT_DIR=/data/exports',
-        '--env', 'PUBLIC_ORIGIN=http://app-a49:3000',
-        '--env', 'TRUSTED_PROXIES=',
-        '--env', 'UPSTREAM_ALLOWED_HOST_SUFFIXES=',
-        '--env', 'UPSTREAM_ALLOWED_CIDRS=10.0.0.0/8',
-        '--env', 'UPSTREAM_CA_FILE=',
-        '--env', 'UPSTREAM_CONNECT_TIMEOUT_SECONDS=5',
-        '--env', 'UPSTREAM_RESPONSE_HEADER_TIMEOUT_SECONDS=15',
-        '--env', 'UPSTREAM_REQUEST_TIMEOUT_SECONDS=30',
-        '--env', 'UPSTREAM_EXPORT_TIMEOUT_SECONDS=120',
+		'--env', 'PUBLIC_ORIGIN=http://app-a49:3000',
+		'--env', 'TRUSTED_PROXIES=',
+		'--env', 'UPSTREAM_CA_FILE=',
         '--env', 'DINGTALK_ALLOWED_HOSTS=',
         '--env', 'METRICS_ALLOWED_CIDRS=127.0.0.0/8,172.16.0.0/12'
     )

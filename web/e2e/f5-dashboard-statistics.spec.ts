@@ -842,7 +842,7 @@ test('nine statistics scopes preserve URL filters, partial and null contracts', 
       name: '华东超长名称生产站点用于验证移动端不会横向溢出 / 跨区域超长中文模型名称',
     })
     .click()
-  await filter.getByRole('button', { name: '应用' }).click()
+  await filter.getByRole('button', { name: '搜索' }).click()
   await expect
     .poll(() =>
       JSON.parse(new URL(page.url()).searchParams.get('siteIds') ?? '[]')
@@ -1000,7 +1000,7 @@ test('group token and node pages preserve identity filters, states, export and m
     ).toBeVisible()
     const filter = page.getByRole('region', { name: '统计对象筛选' })
     await expect(filter.getByText(item.filterLabel)).toBeVisible()
-    await filter.getByRole('button', { name: '应用', exact: true }).click()
+    await filter.getByRole('button', { name: '搜索', exact: true }).click()
     await expect
       .poll(() => requests.at(-1)?.pathname)
       .toBe(`/api/statistics/${item.route}`)

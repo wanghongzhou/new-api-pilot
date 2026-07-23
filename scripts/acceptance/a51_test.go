@@ -41,12 +41,6 @@ func TestValidateA51PreflightRequiresEveryAcceptanceVariable(t *testing.T) {
 		})
 	}
 
-	unsafeTimeout := validA51PreflightEnvironment()
-	unsafeTimeout["UPSTREAM_CONNECT_TIMEOUT_SECONDS"] = "999"
-	if err := validateA51Preflight(a51MapLookup(unsafeTimeout)); err == nil ||
-		!strings.Contains(err.Error(), "UPSTREAM_CONNECT_TIMEOUT_SECONDS") {
-		t.Fatalf("unsafe connect timeout error=%v", err)
-	}
 }
 
 func TestA51RunnerPreflightsBeforeAnyDockerResource(t *testing.T) {
@@ -67,10 +61,6 @@ func TestA51RunnerPreflightsBeforeAnyDockerResource(t *testing.T) {
 		t.Fatalf("A51 preflight/resource order is invalid: preflight=%d resource=%d docker=%d", preflight, resourceRegistration, firstDocker)
 	}
 	for _, required := range []string{
-		"UPSTREAM_CONNECT_TIMEOUT_SECONDS=5",
-		"UPSTREAM_RESPONSE_HEADER_TIMEOUT_SECONDS=15",
-		"UPSTREAM_REQUEST_TIMEOUT_SECONDS=30",
-		"UPSTREAM_EXPORT_TIMEOUT_SECONDS=120",
 		"a51-preflight.log",
 		"'not_created'",
 		"created_and_removed",
@@ -333,30 +323,23 @@ func validA51PreflightEnvironment() map[string]string {
 	}
 	oldKey := encode(strings.Repeat("o", 32))
 	return map[string]string{
-		"APP_ENV":                                  "test",
-		"PORT":                                     "3000",
-		"DATABASE_DSN":                             "root:@tcp(mysql-a51:3306)/pilot_a51?charset=utf8mb4&parseTime=True&loc=Asia%2FShanghai",
-		"SQL_MAX_IDLE_CONNS":                       "2",
-		"SQL_MAX_OPEN_CONNS":                       "4",
-		"SQL_MAX_LIFETIME_SECONDS":                 "60",
-		"SESSION_SECRET":                           encode(strings.Repeat("s", 32)),
-		"ENCRYPTION_KEY":                           oldKey,
-		"SESSION_COOKIE_SECURE":                    "false",
-		"EXPORT_DIR":                               "/tmp/a51-exports",
-		"PUBLIC_ORIGIN":                            "http://a51.invalid",
-		"TRUSTED_PROXIES":                          "",
-		"UPSTREAM_ALLOWED_HOST_SUFFIXES":           "",
-		"UPSTREAM_ALLOWED_CIDRS":                   "172.16.0.0/12",
-		"UPSTREAM_CA_FILE":                         "",
-		"UPSTREAM_CONNECT_TIMEOUT_SECONDS":         "5",
-		"UPSTREAM_RESPONSE_HEADER_TIMEOUT_SECONDS": "15",
-		"UPSTREAM_REQUEST_TIMEOUT_SECONDS":         "30",
-		"UPSTREAM_EXPORT_TIMEOUT_SECONDS":          "120",
-		"METRICS_ALLOWED_CIDRS":                    "127.0.0.0/8",
-		"DINGTALK_ALLOWED_HOSTS":                   "",
-		"TZ":                                       "Asia/Shanghai",
-		"OLD_ENCRYPTION_KEY":                       oldKey,
-		"NEW_ENCRYPTION_KEY":                       encode(strings.Repeat("n", 32)),
+		"APP_ENV":                  "test",
+		"PORT":                     "3000",
+		"DATABASE_DSN":             "root:@tcp(mysql-a51:3306)/pilot_a51?charset=utf8mb4&parseTime=True&loc=Asia%2FShanghai",
+		"SQL_MAX_IDLE_CONNS":       "2",
+		"SQL_MAX_OPEN_CONNS":       "4",
+		"SQL_MAX_LIFETIME_SECONDS": "60",
+		"SESSION_SECRET":           encode(strings.Repeat("s", 32)),
+		"ENCRYPTION_KEY":           oldKey,
+		"SESSION_COOKIE_SECURE":    "false",
+		"EXPORT_DIR":               "/tmp/a51-exports",
+		"PUBLIC_ORIGIN":            "http://a51.invalid",
+		"TRUSTED_PROXIES":          "",
+		"UPSTREAM_CA_FILE":         "",
+		"METRICS_ALLOWED_CIDRS":    "127.0.0.0/8",
+		"DINGTALK_ALLOWED_HOSTS":   "",
+		"OLD_ENCRYPTION_KEY":       oldKey,
+		"NEW_ENCRYPTION_KEY":       encode(strings.Repeat("n", 32)),
 	}
 }
 

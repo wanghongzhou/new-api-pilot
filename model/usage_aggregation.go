@@ -636,7 +636,7 @@ func loadUsageAggregateMetrics(
   CAST(COALESCE(SUM(f.request_count), 0) AS CHAR) AS request_count,
   CAST(COALESCE(SUM(f.quota), 0) AS CHAR) AS quota,
   CAST(COALESCE(SUM(f.token_used), 0) AS CHAR) AS token_used,
-  COUNT(DISTINCT f.site_id, f.remote_user_id) AS active_users,
+  COUNT(DISTINCT CASE WHEN f.remote_user_id > 0 THEN CONCAT(f.site_id, ':', f.remote_user_id) END) AS active_users,
   COALESCE(SUM(CASE WHEN f.request_count < 0 OR f.quota < 0 OR f.token_used < 0 THEN 1 ELSE 0 END), 0) AS invalid_rows
 FROM usage_fact_hourly AS f
 JOIN collection_window AS w
@@ -874,7 +874,7 @@ GROUP BY c.id, a.site_id`,
   (site_id, hour_ts, request_count, quota, token_used, active_users,
    data_status, last_calculated_at, created_at, updated_at)
 SELECT f.site_id, f.hour_ts, SUM(f.request_count), SUM(f.quota), SUM(f.token_used),
-       COUNT(DISTINCT f.remote_user_id), 'complete', ?, ?, ?
+       COUNT(DISTINCT CASE WHEN f.remote_user_id > 0 THEN f.remote_user_id END), 'complete', ?, ?, ?
 FROM usage_fact_hourly AS f
 JOIN collection_window AS w
   ON w.site_id = f.site_id AND w.hour_ts = f.hour_ts AND w.status = 'complete'
@@ -887,7 +887,7 @@ GROUP BY f.site_id, f.hour_ts`,
   (site_id, model_name, hour_ts, request_count, quota, token_used, active_users,
    data_status, last_calculated_at, created_at, updated_at)
 SELECT f.site_id, f.model_name, f.hour_ts, SUM(f.request_count), SUM(f.quota), SUM(f.token_used),
-       COUNT(DISTINCT f.remote_user_id), 'complete', ?, ?, ?
+       COUNT(DISTINCT CASE WHEN f.remote_user_id > 0 THEN f.remote_user_id END), 'complete', ?, ?, ?
 FROM usage_fact_hourly AS f
 JOIN collection_window AS w
   ON w.site_id = f.site_id AND w.hour_ts = f.hour_ts AND w.status = 'complete'
@@ -900,7 +900,7 @@ GROUP BY f.site_id, f.model_name, f.hour_ts`,
   (site_id, channel_id, hour_ts, request_count, quota, token_used, active_users,
    data_status, last_calculated_at, created_at, updated_at)
 SELECT f.site_id, f.channel_id, f.hour_ts, SUM(f.request_count), SUM(f.quota), SUM(f.token_used),
-       COUNT(DISTINCT f.remote_user_id), 'complete', ?, ?, ?
+       COUNT(DISTINCT CASE WHEN f.remote_user_id > 0 THEN f.remote_user_id END), 'complete', ?, ?, ?
 FROM usage_fact_hourly AS f
 JOIN collection_window AS w
   ON w.site_id = f.site_id AND w.hour_ts = f.hour_ts AND w.status = 'complete'
@@ -1135,7 +1135,7 @@ GROUP BY c.id, a.site_id`,
   (site_id, date_key, request_count, quota, token_used, active_users, data_status,
    is_final, last_calculated_at, created_at, updated_at)
 SELECT f.site_id, ?, SUM(f.request_count), SUM(f.quota), SUM(f.token_used),
-       COUNT(DISTINCT f.remote_user_id), ?, ?, ?, ?, ?
+       COUNT(DISTINCT CASE WHEN f.remote_user_id > 0 THEN f.remote_user_id END), ?, ?, ?, ?, ?
 FROM usage_fact_hourly AS f
 JOIN collection_window AS w
   ON w.site_id = f.site_id AND w.hour_ts = f.hour_ts AND w.status = 'complete'
@@ -1148,7 +1148,7 @@ GROUP BY f.site_id`,
   (site_id, model_name, date_key, request_count, quota, token_used, active_users,
    data_status, is_final, last_calculated_at, created_at, updated_at)
 SELECT f.site_id, f.model_name, ?, SUM(f.request_count), SUM(f.quota), SUM(f.token_used),
-       COUNT(DISTINCT f.remote_user_id), ?, ?, ?, ?, ?
+       COUNT(DISTINCT CASE WHEN f.remote_user_id > 0 THEN f.remote_user_id END), ?, ?, ?, ?, ?
 FROM usage_fact_hourly AS f
 JOIN collection_window AS w
   ON w.site_id = f.site_id AND w.hour_ts = f.hour_ts AND w.status = 'complete'
@@ -1161,7 +1161,7 @@ GROUP BY f.site_id, f.model_name`,
   (site_id, channel_id, date_key, request_count, quota, token_used, active_users,
    data_status, is_final, last_calculated_at, created_at, updated_at)
 SELECT f.site_id, f.channel_id, ?, SUM(f.request_count), SUM(f.quota), SUM(f.token_used),
-       COUNT(DISTINCT f.remote_user_id), ?, ?, ?, ?, ?
+       COUNT(DISTINCT CASE WHEN f.remote_user_id > 0 THEN f.remote_user_id END), ?, ?, ?, ?, ?
 FROM usage_fact_hourly AS f
 JOIN collection_window AS w
   ON w.site_id = f.site_id AND w.hour_ts = f.hour_ts AND w.status = 'complete'

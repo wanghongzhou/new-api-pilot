@@ -32,7 +32,6 @@ type LookupFunc func(string) (string, bool)
 type Config struct {
 	AppEnv string
 	Port   string
-	TZ     string
 
 	DatabaseDSN          string
 	SQLMaxIdleConns      int
@@ -47,20 +46,12 @@ type Config struct {
 	RedisDSN             string
 	RedisDB              int
 	RedisTimeout         time.Duration
-	FastTaskRetention    time.Duration
-	FastTaskHistoryCount int
 
-	PublicOrigin                string
-	TrustedProxies              []string
-	UpstreamAllowedHostSuffixes []string
-	UpstreamAllowedCIDRs        []netip.Prefix
-	UpstreamCAFile              string
-	UpstreamConnectTimeout      time.Duration
-	UpstreamHeaderTimeout       time.Duration
-	UpstreamRequestTimeout      time.Duration
-	UpstreamExportTimeout       time.Duration
-	DingTalkAllowedHosts        []string
-	MetricsAllowedCIDRs         []netip.Prefix
+	PublicOrigin         string
+	TrustedProxies       []string
+	UpstreamCAFile       string
+	DingTalkAllowedHosts []string
+	MetricsAllowedCIDRs  []netip.Prefix
 }
 
 func Load() (Config, error) {
@@ -69,7 +60,10 @@ func Load() (Config, error) {
 }
 
 func LoadFrom(lookup LookupFunc) (Config, error) {
-	appEnv := valueOrDefault(lookup, "APP_ENV", EnvironmentDevelopment)
+	appEnv := value(lookup, "APP_ENV")
+	if appEnv == "" {
+		return Config{}, fmt.Errorf("APP_ENV is required")
+	}
 	if appEnv != EnvironmentDevelopment && appEnv != EnvironmentTest && appEnv != EnvironmentProduction {
 		return Config{}, fmt.Errorf("APP_ENV must be development, test, or production")
 	}
@@ -123,12 +117,8 @@ func LoadFrom(lookup LookupFunc) (Config, error) {
 		return Config{}, fmt.Errorf("SESSION_COOKIE_SECURE must be true in production")
 	}
 
-	tz := valueOrDefault(lookup, "TZ", "Asia/Shanghai")
-	if tz != "Asia/Shanghai" {
-		return Config{}, fmt.Errorf("TZ must be Asia/Shanghai")
-	}
-	if _, err := time.LoadLocation(tz); err != nil {
-		return Config{}, fmt.Errorf("load TZ: %w", err)
+	if _, err := time.LoadLocation("Asia/Shanghai"); err != nil {
+		return Config{}, fmt.Errorf("load fixed Asia/Shanghai timezone: %w", err)
 	}
 
 	publicOrigin, err := validateOrigin(value(lookup, "PUBLIC_ORIGIN"), appEnv == EnvironmentProduction)
@@ -136,36 +126,6 @@ func LoadFrom(lookup LookupFunc) (Config, error) {
 		return Config{}, err
 	}
 	trustedProxies, err := parseNetworks(value(lookup, "TRUSTED_PROXIES"), "TRUSTED_PROXIES", false)
-	if err != nil {
-		return Config{}, err
-	}
-	if appEnv == EnvironmentProduction && len(trustedProxies) == 0 {
-		return Config{}, fmt.Errorf("TRUSTED_PROXIES is required in production")
-	}
-	hostSuffixes, err := parseHostSuffixes(value(lookup, "UPSTREAM_ALLOWED_HOST_SUFFIXES"))
-	if err != nil {
-		return Config{}, err
-	}
-	upstreamCIDRs, err := parsePrefixes(value(lookup, "UPSTREAM_ALLOWED_CIDRS"), "UPSTREAM_ALLOWED_CIDRS")
-	if err != nil {
-		return Config{}, err
-	}
-	if len(hostSuffixes) == 0 && len(upstreamCIDRs) == 0 {
-		return Config{}, fmt.Errorf("UPSTREAM_ALLOWED_HOST_SUFFIXES and UPSTREAM_ALLOWED_CIDRS cannot both be empty")
-	}
-	upstreamConnectTimeout, err := fixedDurationSeconds(lookup, "UPSTREAM_CONNECT_TIMEOUT_SECONDS", 5)
-	if err != nil {
-		return Config{}, err
-	}
-	upstreamHeaderTimeout, err := fixedDurationSeconds(lookup, "UPSTREAM_RESPONSE_HEADER_TIMEOUT_SECONDS", 15)
-	if err != nil {
-		return Config{}, err
-	}
-	upstreamRequestTimeout, err := fixedDurationSeconds(lookup, "UPSTREAM_REQUEST_TIMEOUT_SECONDS", 30)
-	if err != nil {
-		return Config{}, err
-	}
-	upstreamExportTimeout, err := fixedDurationSeconds(lookup, "UPSTREAM_EXPORT_TIMEOUT_SECONDS", 120)
 	if err != nil {
 		return Config{}, err
 	}
@@ -182,10 +142,7 @@ func LoadFrom(lookup LookupFunc) (Config, error) {
 		return Config{}, err
 	}
 
-	exportDir := value(lookup, "EXPORT_DIR")
-	if exportDir == "" {
-		return Config{}, fmt.Errorf("EXPORT_DIR is required")
-	}
+	exportDir := valueOrDefault(lookup, "EXPORT_DIR", "/data/exports")
 	if appEnv == EnvironmentProduction && !filepath.IsAbs(exportDir) {
 		return Config{}, fmt.Errorf("EXPORT_DIR must be an absolute path in production")
 	}
@@ -208,19 +165,9 @@ func LoadFrom(lookup LookupFunc) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	retentionSeconds, err := positiveInt(lookup, "FAST_TASK_HISTORY_RETENTION_SECONDS", 86400)
-	if err != nil {
-		return Config{}, err
-	}
-	historyCount, err := positiveInt(lookup, "FAST_TASK_HISTORY_COUNT", 100)
-	if err != nil {
-		return Config{}, err
-	}
-
 	return Config{
 		AppEnv:               appEnv,
 		Port:                 port,
-		TZ:                   tz,
 		DatabaseDSN:          dsn,
 		SQLMaxIdleConns:      maxIdle,
 		SQLMaxOpenConns:      maxOpen,
@@ -232,18 +179,9 @@ func LoadFrom(lookup LookupFunc) (Config, error) {
 		SessionCookieSecure:  cookieSecure,
 		ExportDir:            filepath.Clean(exportDir),
 		RedisDSN:             redisDSN, RedisDB: redisDB, RedisTimeout: time.Duration(redisTimeoutSeconds) * time.Second,
-		FastTaskRetention: time.Duration(retentionSeconds) * time.Second, FastTaskHistoryCount: historyCount,
-		PublicOrigin:                publicOrigin,
-		TrustedProxies:              trustedProxies,
-		UpstreamAllowedHostSuffixes: hostSuffixes,
-		UpstreamAllowedCIDRs:        upstreamCIDRs,
-		UpstreamCAFile:              value(lookup, "UPSTREAM_CA_FILE"),
-		UpstreamConnectTimeout:      upstreamConnectTimeout,
-		UpstreamHeaderTimeout:       upstreamHeaderTimeout,
-		UpstreamRequestTimeout:      upstreamRequestTimeout,
-		UpstreamExportTimeout:       upstreamExportTimeout,
-		DingTalkAllowedHosts:        dingTalkHosts,
-		MetricsAllowedCIDRs:         metricsCIDRs,
+		PublicOrigin: publicOrigin, TrustedProxies: trustedProxies,
+		UpstreamCAFile: value(lookup, "UPSTREAM_CA_FILE"), DingTalkAllowedHosts: dingTalkHosts,
+		MetricsAllowedCIDRs: metricsCIDRs,
 	}, nil
 }
 
@@ -524,23 +462,6 @@ func parsePrefixes(raw, name string) ([]netip.Prefix, error) {
 		}
 	}
 	return result, nil
-}
-
-func parseHostSuffixes(raw string) ([]string, error) {
-	parts := splitList(raw)
-	result := make([]string, 0, len(parts))
-	for _, item := range parts {
-		item = strings.TrimSuffix(strings.ToLower(item), ".")
-		if strings.HasPrefix(item, "*.") {
-			item = strings.TrimPrefix(item, "*.")
-		}
-		ascii, err := idna.Lookup.ToASCII(item)
-		if err != nil || ascii == "" || net.ParseIP(ascii) != nil || strings.ContainsAny(ascii, "/:@") {
-			return nil, fmt.Errorf("UPSTREAM_ALLOWED_HOST_SUFFIXES contains invalid suffix %q", item)
-		}
-		result = append(result, ascii)
-	}
-	return uniqueStrings(result), nil
 }
 
 func parseDingTalkHosts(raw string) ([]string, error) {

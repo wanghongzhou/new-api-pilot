@@ -29,6 +29,7 @@ export type SelectControlProps = {
   'aria-invalid'?: boolean | 'false' | 'true'
   'aria-label'?: string
   'aria-labelledby'?: string
+  alignItemWithTrigger?: boolean
   children: ReactNode
   className?: string
   defaultValue?: number | string
@@ -118,6 +119,7 @@ export function SelectControl({
   'aria-invalid': ariaInvalid,
   'aria-label': ariaLabel,
   'aria-labelledby': ariaLabelledBy,
+  alignItemWithTrigger,
   children,
   className,
   defaultValue,
@@ -176,6 +178,7 @@ export function SelectControl({
         <SelectValue>{selectedOption?.props.children}</SelectValue>
       </SelectTrigger>
       <SelectContent
+        alignItemWithTrigger={alignItemWithTrigger}
         onClick={(event) => {
           event.preventDefault()
           event.stopPropagation()

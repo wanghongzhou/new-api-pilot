@@ -1067,7 +1067,7 @@ func recalculateInitialBackfillRun(ctx context.Context, tx *gorm.DB, run *Collec
 	}
 	updates := map[string]any{
 		"status": status, "completed_windows": completed, "failed_windows": failed,
-		"unavailable_windows": unavailable, "updated_at": now,
+		"updated_at": now,
 	}
 	if nextAttempt != nil {
 		updates["next_attempt_at"] = *nextAttempt
@@ -1190,6 +1190,92 @@ func (repository *CollectionTaskRepository) ReleaseClaim(
 		RunID: claim.Run.ID, RequestID: claim.RequestID, Now: now,
 		RunStatus: CollectionTaskStatusPending, NextAttemptAt: &next,
 	})
+}
+
+// ReleaseOwnedRunning returns only work still held by the supplied owner token
+// to pending. It is safe after partial window commits and is therefore used by
+// cooperative shutdown and heartbeat/commit failure paths.
+func (repository *CollectionTaskRepository) ReleaseOwnedRunning(
+	ctx context.Context,
+	runID int64,
+	requestID string,
+	now int64,
+) (int64, error) {
+	if repository == nil || repository.db == nil || runID <= 0 || !validCollectionRequestID(requestID) || now <= 0 {
+		return 0, ErrCollectionRunContract
+	}
+	var released int64
+	err := repository.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var run CollectionRun
+		if err := tx.First(&run, runID).Error; err != nil {
+			return err
+		}
+		scope, err := repository.resolveTaskScope(ctx, tx, run)
+		if err != nil {
+			return err
+		}
+		if err := repository.lockTaskScope(ctx, tx, run, scope, false); err != nil {
+			return err
+		}
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&run, runID).Error; err != nil {
+			return err
+		}
+		if run.Status != CollectionTaskStatusRunning || run.LastRequestID != requestID {
+			return nil
+		}
+		if !constant.CollectionTaskWindowed(run.TaskType) {
+			update := tx.Model(&CollectionRun{}).
+				Where("id = ? AND status = 'running' AND last_request_id = ?", runID, requestID).
+				Updates(map[string]any{
+					"status": CollectionTaskStatusPending, "heartbeat_at": nil,
+					"next_attempt_at": now, "updated_at": now,
+				})
+			if update.Error != nil {
+				return update.Error
+			}
+			released = update.RowsAffected
+			return nil
+		}
+
+		update := tx.Model(&CollectionRunWindow{}).
+			Where("run_id = ? AND status = 'running'", runID).
+			Updates(map[string]any{
+				"status": CollectionTaskStatusPending, "next_retry_at": now,
+				"finished_at": nil, "updated_at": now,
+			})
+		if update.Error != nil {
+			return update.Error
+		}
+		released = update.RowsAffected
+		if released == 0 {
+			return nil
+		}
+		if run.Priority == constant.CollectionPriorityInitialBackfill {
+			if err := recalculateInitialBackfillRun(ctx, tx, &run, now); err != nil {
+				return err
+			}
+		} else {
+			var windows []CollectionRunWindow
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("run_id = ?", runID).
+				Order("site_id ASC, hour_ts ASC, id ASC").Find(&windows).Error; err != nil {
+				return err
+			}
+			if err := NewSiteRepository(tx).RecalculateLockedCollectionRun(ctx, &run, windows, now, nil); err != nil {
+				return err
+			}
+		}
+		parent := tx.Model(&CollectionRun{}).
+			Where("id = ? AND status = 'pending' AND last_request_id = ?", runID, requestID).
+			Updates(map[string]any{"heartbeat_at": nil, "updated_at": now})
+		if parent.Error != nil {
+			return parent.Error
+		}
+		if parent.RowsAffected != 1 {
+			return ErrCollectionTaskClaimLost
+		}
+		return repository.recalculateTaskBackfillStatuses(ctx, tx, run, now)
+	})
+	return released, err
 }
 
 func (repository *CollectionTaskRepository) Heartbeat(ctx context.Context, runID int64, requestID string, now int64) error {

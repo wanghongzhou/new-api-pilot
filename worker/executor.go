@@ -190,7 +190,7 @@ func (executor *Executor) dispatchShared(
 	settings model.CollectorSettings,
 ) error {
 	initialPriority := constant.CollectionPriorityInitialBackfill
-	for executor.limiter.tryAcquire(QueueInitialBackfill, initialBackfillConcurrency) {
+	for executor.limiter.tryAcquire(QueueInitialBackfill, settings.BackfillConcurrency) {
 		now := executor.clock.Now().Unix()
 		claim, err := executor.repository.ClaimNext(admissionCtx, model.CollectionTaskClaimOptions{
 			TaskTypes: []string{constant.TaskTypeUsageBackfill}, Priority: &initialPriority,
@@ -280,9 +280,28 @@ func (executor *Executor) registeredSharedTaskTypes(settings model.CollectorSett
 }
 
 func (executor *Executor) executeClaim(ctx context.Context, claim model.CollectionTaskClaim) {
-	heartbeatContext, stopHeartbeat := context.WithCancel(ctx)
-	defer stopHeartbeat()
-	go executor.heartbeatLoop(heartbeatContext, claim)
+	claimContext, cancelClaim := context.WithCancel(ctx)
+	defer func() {
+		cancelClaim()
+		releaseContext, cancelRelease := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancelRelease()
+		released, err := executor.repository.ReleaseOwnedRunning(
+			releaseContext, claim.Run.ID, claim.RequestID, executor.clock.Now().Unix(),
+		)
+		if err != nil {
+			log.Printf("collection claim release failed run_id=%d site_id=%d request_id=%s error_class=%s", claim.Run.ID, collectionClaimSiteID(claim), claim.RequestID, workerErrorClass(err))
+			return
+		}
+		if released > 0 {
+			executor.recordOutcome(claim.Run.TaskType, model.CollectionTaskStatusPending, "released")
+		}
+	}()
+	go func() {
+		if err := executor.heartbeatLoop(claimContext, claim); err != nil {
+			log.Printf("collection heartbeat failed run_id=%d site_id=%d request_id=%s error_class=%s", claim.Run.ID, collectionClaimSiteID(claim), claim.RequestID, workerErrorClass(err))
+			cancelClaim()
+		}
+	}()
 	if ctx.Err() != nil {
 		return
 	}
@@ -295,19 +314,19 @@ func (executor *Executor) executeClaim(ctx context.Context, claim model.Collecti
 		return
 	}
 	if len(claim.Windows) == 0 {
-		executor.executeNonWindow(ctx, claim, handler)
+		executor.executeNonWindow(claimContext, claim, handler)
 		return
 	}
 	if claim.Run.TaskType == constant.TaskTypeUsageBackfill &&
 		claim.Run.Priority == constant.CollectionPriorityInitialBackfill {
-		executor.executeInitialBackfillClaim(ctx, claim, handler)
+		executor.executeInitialBackfillClaim(claimContext, claim, handler)
 		return
 	}
 	startedAt := executor.clock.Now()
 	lastCommitAt := claim.Run.UpdatedAt
 	for index := range claim.Windows {
 		window := claim.Windows[index]
-		if ctx.Err() != nil {
+		if claimContext.Err() != nil {
 			return
 		}
 		if executor.clock.Now().Sub(startedAt) >= executor.sliceLimit {
@@ -330,10 +349,10 @@ func (executor *Executor) executeClaim(ctx context.Context, claim model.Collecti
 			}
 			return
 		}
-		jobOutcome, executionErr := handler.Execute(ctx, JobExecution{
+		jobOutcome, executionErr := handler.Execute(claimContext, JobExecution{
 			Claim: claim, Window: &window, RequestID: claim.RequestID,
 		})
-		if ctx.Err() != nil {
+		if claimContext.Err() != nil {
 			return
 		}
 		windowOutcome := executor.windowOutcome(claim.Run.TaskType, window, jobOutcome.Result, executionErr)
@@ -347,7 +366,7 @@ func (executor *Executor) executeClaim(ctx context.Context, claim model.Collecti
 			Window: windowOutcome, Mutation: jobOutcome.TransactionMutation,
 		})
 		if commitErr != nil {
-			log.Printf("collection window completion failed run_id=%d window_id=%d site_id=%d hour_ts=%d attempt=%d error_type=%T", claim.Run.ID, window.ID, window.SiteID, window.HourTS, window.AttemptCount, commitErr)
+			log.Printf("collection window completion failed run_id=%d window_id=%d site_id=%d hour_ts=%d attempt=%d request_id=%s error_class=%s", claim.Run.ID, window.ID, window.SiteID, window.HourTS, window.AttemptCount, claim.RequestID, workerErrorClass(commitErr))
 			return
 		}
 		executor.recordOutcome(claim.Run.TaskType, windowOutcome.Status, "")
@@ -360,7 +379,12 @@ func (executor *Executor) executeInitialBackfillClaim(
 	claim model.CollectionTaskClaim,
 	handler JobHandler,
 ) {
-	limit := initialBackfillConcurrency
+	settings, err := executor.settings.Load(ctx)
+	if err != nil {
+		log.Printf("initial backfill settings load failed run_id=%d site_id=%d request_id=%s error_class=%s", claim.Run.ID, collectionClaimSiteID(claim), claim.RequestID, workerErrorClass(err))
+		return
+	}
+	limit := settings.BackfillConcurrency
 	if limit > len(claim.Windows) {
 		limit = len(claim.Windows)
 	}
@@ -384,11 +408,9 @@ func (executor *Executor) executeInitialBackfillClaim(
 			if ctx.Err() != nil {
 				return
 			}
-			windowContext, cancel := context.WithTimeout(ctx, initialBackfillWindowTimeout)
-			jobOutcome, executionErr := handler.Execute(windowContext, JobExecution{
+			jobOutcome, executionErr := handler.Execute(ctx, JobExecution{
 				Claim: claim, Window: &window, RequestID: claim.RequestID,
 			})
-			cancel()
 			if ctx.Err() != nil {
 				return
 			}
@@ -402,7 +424,7 @@ func (executor *Executor) executeInitialBackfillClaim(
 				Window: windowOutcome, Mutation: jobOutcome.TransactionMutation,
 			})
 			if commitErr != nil {
-				log.Printf("collection window completion failed run_id=%d window_id=%d site_id=%d hour_ts=%d attempt=%d error_type=%T", claim.Run.ID, window.ID, window.SiteID, window.HourTS, window.AttemptCount, commitErr)
+				log.Printf("collection window completion failed run_id=%d window_id=%d site_id=%d hour_ts=%d attempt=%d request_id=%s error_class=%s", claim.Run.ID, window.ID, window.SiteID, window.HourTS, window.AttemptCount, claim.RequestID, workerErrorClass(commitErr))
 				return
 			}
 			executor.recordOutcome(claim.Run.TaskType, windowOutcome.Status, "")
@@ -521,6 +543,7 @@ func (executor *Executor) executeNonWindow(ctx context.Context, claim model.Coll
 	} else {
 		attempt := claim.Run.RetryCount
 		retryable, delay, code := retryDecision(claim.Run.TaskType, attempt, err, executor.attemptPolicy)
+		delay = retryDelayWithJitter(delay, claim.Run.TaskType, claim.Run.ID, collectionClaimSiteID(claim), 0, attempt)
 		request.ErrorCode = code
 		if retryable {
 			next := executor.clock.Now().Add(delay).Unix()
@@ -532,6 +555,8 @@ func (executor *Executor) executeNonWindow(ctx context.Context, claim model.Coll
 	}
 	if _, commitErr := executor.repository.CommitClaim(context.Background(), request); commitErr == nil {
 		executor.recordOutcome(claim.Run.TaskType, request.RunStatus, "")
+	} else {
+		log.Printf("collection completion failed run_id=%d site_id=%d task_type=%s request_id=%s error_class=%s", claim.Run.ID, collectionClaimSiteID(claim), claim.Run.TaskType, claim.RequestID, workerErrorClass(commitErr))
 	}
 }
 
@@ -591,6 +616,7 @@ func (executor *Executor) windowOutcome(
 		return outcome
 	}
 	retryable, delay, code := retryDecision(taskType, window.AttemptCount, cause, executor.attemptPolicy)
+	delay = retryDelayWithJitter(delay, taskType, window.RunID, window.SiteID, window.HourTS, window.AttemptCount)
 	outcome.ErrorCode = code
 	var executionError *TaskExecutionError
 	if errors.As(cause, &executionError) {
@@ -606,20 +632,48 @@ func (executor *Executor) windowOutcome(
 	return outcome
 }
 
-func (executor *Executor) heartbeatLoop(ctx context.Context, claim model.CollectionTaskClaim) {
+func (executor *Executor) heartbeatLoop(ctx context.Context, claim model.CollectionTaskClaim) error {
 	ticker := executor.clock.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		case <-ticker.C():
 			if err := executor.repository.Heartbeat(
 				ctx, claim.Run.ID, claim.RequestID, executor.clock.Now().Unix(),
 			); err != nil {
-				return
+				if ctx.Err() != nil {
+					return nil
+				}
+				return err
 			}
 		}
+	}
+}
+
+func collectionClaimSiteID(claim model.CollectionTaskClaim) int64 {
+	if claim.Run.SiteID != nil {
+		return *claim.Run.SiteID
+	}
+	if len(claim.Windows) > 0 {
+		return claim.Windows[0].SiteID
+	}
+	return 0
+}
+
+func workerErrorClass(err error) string {
+	switch {
+	case err == nil:
+		return "none"
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		return "context"
+	case errors.Is(err, model.ErrCollectionTaskClaimLost):
+		return "claim_lost"
+	case errors.Is(err, model.ErrCollectionRunContract):
+		return "contract"
+	default:
+		return "repository"
 	}
 }
 

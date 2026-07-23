@@ -29,6 +29,7 @@ import { FormField } from '@/components/ui/form-field'
 import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/ui/password-input'
 import { Spinner } from '@/components/ui/spinner'
+import { Textarea } from '@/components/ui/textarea'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import { fromUnixSeconds } from '@/lib/dayjs'
@@ -40,7 +41,6 @@ import { getSettings, testDingTalkNotification, updateSettings } from '../api'
 import {
   buildSettingFieldMap,
   buildSettingPatchItems,
-  buildSettingSLOMessageRefs,
   emptySettingsFormValues,
   settingFieldDefinitions,
   settingItemsByKey,
@@ -167,6 +167,26 @@ function EditableSetting({
         )}
         <UpdatedAt item={item} />
       </div>
+    )
+  }
+  if (definition.kind === 'multiline') {
+    return (
+      <FormField
+        error={error}
+        htmlFor={`setting-${definition.formName}`}
+        label={
+          <span className='sr-only'>
+            {t(dynamicI18nKey('settings', definition.labelKey))}
+          </span>
+        }
+      >
+        <Textarea
+          aria-invalid={Boolean(error)}
+          className='min-h-28 font-mono text-xs'
+          id={`setting-${definition.formName}`}
+          {...form.register(definition.formName)}
+        />
+      </FormField>
     )
   }
   let inputMode: 'decimal' | 'numeric' | undefined
@@ -397,46 +417,6 @@ function SettingRow({
   )
 }
 
-function SLOStatus({
-  eligible,
-  messages,
-}: {
-  eligible: boolean
-  messages: readonly string[]
-}) {
-  const { t } = useTranslation()
-  return (
-    <section
-      aria-labelledby='settings-slo-title'
-      className='border-border flex flex-wrap items-start justify-between gap-4 border-y py-4'
-    >
-      <div>
-        <h2 className='text-sm font-semibold' id='settings-slo-title'>
-          {t('settings.slo.title')}
-        </h2>
-        <p className='text-muted-foreground mt-1 text-xs'>
-          {t('settings.slo.description')}
-        </p>
-      </div>
-      <div className='grid justify-items-end gap-2 text-right'>
-        <Badge variant={eligible ? 'success' : 'warning'}>
-          {t(
-            dynamicI18nKey(
-              'settings',
-              eligible ? 'settings.slo.eligible' : 'settings.slo.ineligible'
-            )
-          )}
-        </Badge>
-        {messages.map((message) => (
-          <p className='text-warning-foreground max-w-xl text-xs' key={message}>
-            {message}
-          </p>
-        ))}
-      </div>
-    </section>
-  )
-}
-
 function NotificationTest({
   dirty,
   enabled,
@@ -531,8 +511,6 @@ export function SettingsPage() {
   const [notificationResult, setNotificationResult] =
     useState<NotificationTestResult | null>(null)
   const updateMutation = useMutation({ mutationFn: updateSettings })
-  const formValues = form.watch()
-
   useEffect(() => {
     if (!settingsQuery.data || form.formState.isDirty) return
     const values = settingsToFormValues(settingsQuery.data)
@@ -544,14 +522,6 @@ export function SettingsPage() {
     () => settingItemsByKey(settingsQuery.data),
     [settingsQuery.data]
   )
-  const sloMessages = useMemo(
-    () =>
-      buildSettingSLOMessageRefs(settingsQuery.data, formValues).map(
-        (message) => translateMessageRef(message)
-      ),
-    [formValues, settingsQuery.data]
-  )
-  const eligible = settingsQuery.data?.[0]?.h15_slo_eligible ?? true
   const dingTalkEnabledItem = items.get('notification.dingtalk.enabled')
   const savedDingTalkEnabled = dingTalkEnabledItem?.value === true
   const save = form.handleSubmit(async (values) => {
@@ -666,7 +636,6 @@ export function SettingsPage() {
       )}
       {settingsQuery.data && (
         <form className='grid gap-8' id='settings-form' onSubmit={save}>
-          <SLOStatus eligible={eligible} messages={sloMessages} />
           {settingsSections.map((section) => (
             <section
               aria-labelledby={`settings-section-${section.key}`}

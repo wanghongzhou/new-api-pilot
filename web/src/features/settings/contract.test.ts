@@ -1,11 +1,13 @@
 import { describe, expect, test } from 'bun:test'
 
+import { dynamicI18nKey } from '@/i18n/dynamic-keys'
+
 import {
   buildSettingFieldMap,
   buildSettingPatchItems,
-  buildSettingSLOMessageRefs,
   getMinuteRetentionDays,
   settingFieldDefinitions,
+  settingsSections,
 } from './contract'
 import {
   platformSettingKeys,
@@ -16,7 +18,7 @@ import {
 const validValues: SettingsFormValues = {
   usageDelayMinutes: '5',
   minuteRetentionDays: '90',
-  logRetentionDays: '30',
+  logRetentionDays: '90',
   performanceRetentionDays: '90',
   taskRetentionDays: '90',
   systemTaskTerminalRetentionDays: '90',
@@ -27,13 +29,24 @@ const validValues: SettingsFormValues = {
   usageConcurrency: '5',
   backfillConcurrency: '2',
   manualBackfillMaxDays: '366',
+  fastTaskHistoryRetentionSeconds: '86400',
+  fastTaskHistoryCount: '100',
+  upstreamAllowedHostSuffixes: '',
+  upstreamAllowedCidrs: '',
+  upstreamConnectTimeoutSeconds: '5',
+  upstreamResponseHeaderTimeoutSeconds: '15',
+  upstreamRequestTimeoutSeconds: '30',
+  upstreamExportTimeoutSeconds: '120',
+  upstreamRateLimitRequests: '300',
+  upstreamRateLimitWindowSeconds: '180',
+  upstreamMaxInflightPerOrigin: '4',
   fileTtlHours: '24',
   maxActivePerUser: '3',
   maxActiveGlobal: '10',
   maxFileBytes: '2147483648',
   minFreeDiskBytes: '5368709120',
-  fallbackQuotaPerUnit: '',
-  fallbackUsdExchangeRate: '7.3',
+  fallbackQuotaPerUnit: '500000',
+  fallbackUsdExchangeRate: '6.8',
   dingTalkEnabled: false,
   dingTalkWebhook: '',
   dingTalkWebhookAction: 'keep',
@@ -44,11 +57,6 @@ const validValues: SettingsFormValues = {
 function groupsFixture(retentionValue: unknown = 90): SettingGroup[] {
   return [
     {
-      h15_slo_eligible: false,
-      h15_slo_reason_codes: [
-        'SLO_USAGE_DELAY_TOO_HIGH',
-        'SLO_USAGE_CONCURRENCY_TOO_LOW',
-      ],
       items: [
         {
           configured: true,
@@ -70,13 +78,13 @@ function groupsFixture(retentionValue: unknown = 90): SettingGroup[] {
 }
 
 describe('settings frontend contract', () => {
-  test('covers each of the 26 persisted settings exactly once', () => {
-    expect(platformSettingKeys).toHaveLength(26)
-    expect(new Set(platformSettingKeys).size).toBe(26)
+  test('covers each of the 37 persisted settings exactly once', () => {
+    expect(platformSettingKeys).toHaveLength(37)
+    expect(new Set(platformSettingKeys).size).toBe(37)
     const renderedPersistedKeys = settingFieldDefinitions
       .map((definition) => definition.key)
       .filter((key) => key !== 'system.public_origin')
-    expect(new Set(renderedPersistedKeys).size).toBe(26)
+    expect(new Set(renderedPersistedKeys).size).toBe(37)
     expect([...renderedPersistedKeys].sort()).toEqual(
       [...platformSettingKeys].sort()
     )
@@ -87,6 +95,25 @@ describe('settings frontend contract', () => {
       (definition) => definition.descriptionKey
     )
     expect(new Set(descriptions).size).toBe(settingFieldDefinitions.length)
+  })
+
+  test('registers every dynamically rendered setting translation key', () => {
+    for (const definition of settingFieldDefinitions) {
+      expect(dynamicI18nKey('settings', definition.labelKey)).toBe(
+        definition.labelKey
+      )
+      expect(dynamicI18nKey('settings', definition.descriptionKey)).toBe(
+        definition.descriptionKey
+      )
+    }
+    for (const section of settingsSections) {
+      expect(dynamicI18nKey('settings', section.titleKey)).toBe(
+        section.titleKey
+      )
+      expect(dynamicI18nKey('settings', section.descriptionKey)).toBe(
+        section.descriptionKey
+      )
+    }
   })
 
   test('builds an atomic changed-items patch with documented representations', () => {
@@ -124,26 +151,6 @@ describe('settings frontend contract', () => {
       'items[0].key': 'maxActivePerUser',
       'items[0].value': 'maxActivePerUser',
     })
-  })
-
-  test('constructs complete H+15 MessageRefs from machine flags', () => {
-    const refs = buildSettingSLOMessageRefs(groupsFixture(), {
-      ...validValues,
-      usageConcurrency: '3',
-      usageDelayMinutes: '12',
-    })
-    expect(refs).toEqual([
-      {
-        code: 'SLO_USAGE_DELAY_TOO_HIGH',
-        params: { threshold: 5, value: 12 },
-        technical_detail: '',
-      },
-      {
-        code: 'SLO_USAGE_CONCURRENCY_TOO_LOW',
-        params: { threshold: 5, value: 3 },
-        technical_detail: '',
-      },
-    ])
   })
 
   test('returns dynamic minute retention only for a valid Viewer setting', () => {

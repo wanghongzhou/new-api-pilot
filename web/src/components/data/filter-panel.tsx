@@ -101,20 +101,24 @@ function compactFilterFields(children: ReactNode): ReactNode {
 }
 
 export function FilterPanel({
+  actions,
   advanced,
   children,
   description,
   expandOnLargeScreen = false,
   hasAdvancedActive = false,
+  hasActiveFilters,
   onApply,
   onReset,
   title,
 }: {
+  actions?: React.ReactNode
   advanced?: React.ReactNode
   children: React.ReactNode
   description: string
   expandOnLargeScreen?: boolean
   hasAdvancedActive?: boolean
+  hasActiveFilters?: boolean
   onApply?: () => void
   onReset?: () => void
   title: string
@@ -143,7 +147,7 @@ export function FilterPanel({
           {compactFilterFields(children)}
         </div>
         <div className='ms-auto flex shrink-0 items-center gap-1.5 sm:gap-2'>
-          {onReset && (
+          {onReset && (hasActiveFilters ?? true) && (
             <Button
               className={
                 onApply
@@ -162,9 +166,10 @@ export function FilterPanel({
           )}
           {onApply && (
             <Button onClick={onApply} type='button'>
-              {t('common.apply')}
+              {t('common.search')}
             </Button>
           )}
+          {actions}
           {hasAdvanced && !(expandOnLargeScreen && isLargeScreen) && (
             <Button
               aria-expanded={expanded}

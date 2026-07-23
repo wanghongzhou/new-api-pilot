@@ -3,19 +3,9 @@ package dto
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"strconv"
 	"strings"
 	"unicode/utf8"
-
-	"new-api-pilot/constant"
-)
-
-type SettingSLOReasonCode string
-
-const (
-	SettingSLOReasonUsageDelayTooHigh      SettingSLOReasonCode = SettingSLOReasonCode(constant.MessageSLOUsageDelayTooHigh)
-	SettingSLOReasonUsageConcurrencyTooLow SettingSLOReasonCode = SettingSLOReasonCode(constant.MessageSLOUsageConcurrencyTooLow)
 )
 
 type SettingItem struct {
@@ -32,27 +22,9 @@ type SettingItem struct {
 }
 
 type SettingGroup struct {
-	Key               string                 `json:"key"`
-	LabelKey          string                 `json:"label_key"`
-	Items             []SettingItem          `json:"items"`
-	H15SLOEligible    bool                   `json:"h15_slo_eligible"`
-	H15SLOReasonCodes []SettingSLOReasonCode `json:"h15_slo_reason_codes"`
-}
-
-func ValidateSettingSLOReasonCodes(codes []SettingSLOReasonCode) error {
-	seen := make(map[SettingSLOReasonCode]struct{}, len(codes))
-	for index, code := range codes {
-		switch code {
-		case SettingSLOReasonUsageDelayTooHigh, SettingSLOReasonUsageConcurrencyTooLow:
-		default:
-			return fmt.Errorf("h15_slo_reason_codes[%d] contains unsupported value %q", index, code)
-		}
-		if _, duplicate := seen[code]; duplicate {
-			return fmt.Errorf("h15_slo_reason_codes[%d] duplicates value %q", index, code)
-		}
-		seen[code] = struct{}{}
-	}
-	return nil
+	Key      string        `json:"key"`
+	LabelKey string        `json:"label_key"`
+	Items    []SettingItem `json:"items"`
 }
 
 type SettingPatchRequest struct {
@@ -74,8 +46,8 @@ func (request *SettingPatchRequest) Normalize() {
 
 func (request SettingPatchRequest) Validate() map[string]string {
 	fieldErrors := map[string]string{}
-	if len(request.Items) < 1 || len(request.Items) > 22 {
-		fieldErrors["items"] = "must contain between 1 and 22 items"
+	if len(request.Items) < 1 || len(request.Items) > 37 {
+		fieldErrors["items"] = "must contain between 1 and 37 items"
 	}
 	seen := make(map[string]struct{}, len(request.Items))
 	for index, item := range request.Items {

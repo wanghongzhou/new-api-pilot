@@ -1,4 +1,9 @@
-import { Add01Icon, Refresh01Icon } from '@hugeicons/core-free-icons'
+import {
+  Add01Icon,
+  Alert02Icon,
+  Database01Icon,
+  Refresh01Icon,
+} from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   keepPreviousData,
@@ -16,10 +21,19 @@ import { DataViewModeToggle } from '@/components/data/data-view-mode-toggle'
 import { MetricValue } from '@/components/data/metric-value'
 import { QuotaAmount } from '@/components/data/quota-amount'
 import { SiteStatusBadges } from '@/components/data/site-status-badges'
+import { PageFooterPortal } from '@/components/layout/page-footer'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
 import { DataTablePagination } from '@/components/ui/data-table-pagination'
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty'
 import { Spinner } from '@/components/ui/spinner'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
@@ -56,7 +70,6 @@ function CardGridState({
   items,
   loading,
   onAction,
-  onCreate,
   onRetry,
 }: {
   error: boolean
@@ -65,7 +78,6 @@ function CardGridState({
   items: SiteListItem[]
   loading: boolean
   onAction: (action: SiteAction, site: SiteListItem) => void
-  onCreate: () => void
   onRetry: () => void
 }) {
   const { t } = useTranslation()
@@ -73,41 +85,47 @@ function CardGridState({
     return (
       <div
         aria-hidden='true'
-        className='grid gap-4 min-[1800px]:grid-cols-5 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'
-      >
-        {Array.from({ length: 6 }, (_, index) => (
-          <div
-            className='border-border bg-muted/40 h-80 animate-pulse rounded-lg border'
-            key={index}
-          />
-        ))}
-      </div>
+        className='border-border bg-muted/40 h-64 animate-pulse rounded-lg border'
+      />
     )
   }
   if (error && items.length === 0) {
     return (
-      <section className='border-destructive/30 bg-destructive/5 rounded-lg border p-5'>
-        <h2 className='font-medium'>{t('sites.loadError')}</h2>
-        <Button className='mt-3' onClick={onRetry} variant='outline'>
-          {t('common.retry')}
-        </Button>
-      </section>
+      <Empty className='border-border bg-background min-h-64 border'>
+        <EmptyHeader>
+          <EmptyMedia variant='icon'>
+            <HugeiconsIcon
+              className='text-destructive size-6'
+              icon={Alert02Icon}
+              strokeWidth={2}
+            />
+          </EmptyMedia>
+          <EmptyTitle>{t('table.loadError')}</EmptyTitle>
+          <EmptyDescription>{t('table.loadErrorDescription')}</EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent>
+          <Button onClick={onRetry} size='sm' variant='outline'>
+            {t('common.retry')}
+          </Button>
+        </EmptyContent>
+      </Empty>
     )
   }
   if (items.length === 0) {
     return (
-      <section className='border-border bg-card rounded-lg border p-8 text-center'>
-        <h2 className='font-medium'>{t('sites.empty')}</h2>
-        <p className='text-muted-foreground mt-1 text-sm'>
-          {t('sites.emptyDescription')}
-        </p>
-        {isAdmin && (
-          <Button className='mt-4' onClick={onCreate}>
-            <HugeiconsIcon icon={Add01Icon} strokeWidth={2} />
-            {t('sites.create')}
-          </Button>
-        )}
-      </section>
+      <Empty className='border-border bg-background min-h-64 border'>
+        <EmptyHeader>
+          <EmptyMedia variant='icon'>
+            <HugeiconsIcon
+              className='size-6'
+              icon={Database01Icon}
+              strokeWidth={2}
+            />
+          </EmptyMedia>
+          <EmptyTitle>{t('sites.empty')}</EmptyTitle>
+          <EmptyDescription>{t('sites.emptyDescription')}</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     )
   }
   return (
@@ -412,25 +430,26 @@ export function SitesPage({
         ) : undefined
       }
       description={t('sites.description')}
+      fixedContent
       title={t('sites.title')}
     >
-      <div className='grid min-w-0 gap-5'>
+      <div className='flex h-full min-h-0 min-w-0 flex-col gap-5'>
         <SiteFilters
+          actions={
+            <DataViewModeToggle
+              ariaLabel={t('sites.viewMode')}
+              cardLabel={t('sites.cardView')}
+              onChange={saveView}
+              tableLabel={t('sites.tableView')}
+              value={search.view}
+            />
+          }
           onApply={(filters) => onSearchChange({ ...filters, page: 1 })}
           value={search}
         />
-        <div className='flex justify-end'>
-          <DataViewModeToggle
-            ariaLabel={t('sites.viewMode')}
-            cardLabel={t('sites.cardView')}
-            onChange={saveView}
-            tableLabel={t('sites.tableView')}
-            value={search.view}
-          />
-        </div>
 
         {search.view === 'card' ? (
-          <>
+          <div className='min-h-0 flex-1 overflow-y-auto'>
             <CardGridState
               error={sitesQuery.isError}
               fetching={sitesQuery.isFetching}
@@ -438,49 +457,39 @@ export function SitesPage({
               items={items}
               loading={sitesQuery.isPending}
               onAction={setDialogAction}
-              onCreate={() => setOnboardingOpen(true)}
               onRetry={() => void sitesQuery.refetch()}
             />
-            <DataTablePagination
-              onPageChange={(page) => onSearchChange({ page })}
-              onPageSizeChange={(pageSize) =>
-                onSearchChange({ page: 1, pageSize })
-              }
-              page={search.page}
-              pageSize={search.pageSize}
-              total={total}
-            />
-          </>
+          </div>
         ) : (
-          <DataTable
-            ariaLabel={t('sites.tableLabel')}
-            columns={columns}
-            data={items}
-            emptyAction={
-              isAdmin ? (
-                <Button onClick={() => setOnboardingOpen(true)}>
-                  {t('sites.create')}
-                </Button>
-              ) : undefined
-            }
-            emptyDescription={t('sites.emptyDescription')}
-            emptyTitle={t('sites.empty')}
-            error={sitesQuery.isError}
-            fetching={sitesQuery.isFetching}
-            loading={sitesQuery.isPending}
-            onPageChange={(page) => onSearchChange({ page })}
-            onPageSizeChange={(pageSize) =>
-              onSearchChange({ page: 1, pageSize })
-            }
-            onRetry={() => void sitesQuery.refetch()}
-            onSortingChange={updateSorting}
-            page={search.page}
-            pageSize={search.pageSize}
-            sorting={[{ desc: search.order === 'desc', id: search.sort }]}
-            total={total}
-          />
+          <div className='min-h-0 flex-1'>
+            <DataTable
+              ariaLabel={t('sites.tableLabel')}
+              columns={columns}
+              data={items}
+              emptyDescription={t('sites.emptyDescription')}
+              emptyTitle={t('sites.empty')}
+              error={sitesQuery.isError}
+              fetching={sitesQuery.isFetching}
+              fillAvailableHeight
+              loading={sitesQuery.isPending}
+              onRetry={() => void sitesQuery.refetch()}
+              onSortingChange={updateSorting}
+              preserveHeaderWhenEmpty
+              sorting={[{ desc: search.order === 'desc', id: search.sort }]}
+            />
+          </div>
         )}
       </div>
+
+      <PageFooterPortal>
+        <DataTablePagination
+          onPageChange={(page) => onSearchChange({ page })}
+          onPageSizeChange={(pageSize) => onSearchChange({ page: 1, pageSize })}
+          page={search.page}
+          pageSize={search.pageSize}
+          total={total}
+        />
+      </PageFooterPortal>
 
       <SiteOnboardingDrawer
         onComplete={(site, runId) => {

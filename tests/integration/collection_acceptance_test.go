@@ -48,21 +48,26 @@ func TestA08A12A13A28CollectionHourReplacementAndVisibility(t *testing.T) {
 	coreCollectAndCommitUsageWindow(t, repository, collector, first, now+1)
 	coreUsageFactCount(t, database, site.ID, hour, 1)
 
-	// Both upstream APIs must be consulted, and a validation mismatch must
-	// isolate (rather than overwrite) the last complete fact set.
+	// Both upstream APIs must be consulted. A non-negative data-flow residual
+	// is preserved as an explicit legacy-unattributed fact instead of hiding
+	// authoritative usage totals.
 	client.data = []dto.UpstreamDataRow{{
 		ModelName: "Model-A", CreatedAt: hour, RequestCount: 2, Quota: 21, TokenUsed: 200,
 	}}
 	mismatch := coreClaimUsageWindow(t, repository, site, constant.TaskTypeUsageValidation,
 		constant.CollectionTriggerSchedule, constant.CollectionPriorityDailyValidation, hour, hour+3600, now+2, "a08-mismatch")
 	result := coreCollectAndCommitUsageWindow(t, repository, collector, mismatch, now+3)
-	if result.Failure == nil || !errors.Is(result.Failure.Cause, service.ErrUpstreamDataMismatch) ||
+	if result.Failure != nil || result.Planned.AttributionStatus != model.UsageAttributionLegacyUnattributed ||
 		client.flowCalls != 2 || client.dataCalls != 2 {
-		t.Fatalf("A08 mismatch collection result=%#v flow=%d data=%d", result, client.flowCalls, client.dataCalls)
+		t.Fatalf("A08 reconciled collection result=%#v flow=%d data=%d", result, client.flowCalls, client.dataCalls)
 	}
-	coreCollectionWindowStatus(t, database, site.ID, hour, model.CollectionWindowStatusMissing)
-	coreUsageFactCount(t, database, site.ID, hour, 1)
-	coreUsageStatRowCount(t, database, &model.SiteStatHourly{}, site.ID, hour, 0)
+	coreCollectionWindowStatus(t, database, site.ID, hour, model.CollectionWindowStatusComplete)
+	coreUsageFactCount(t, database, site.ID, hour, 2)
+	var reconciled model.SiteStatHourly
+	if err := database.Where("site_id = ? AND hour_ts = ?", site.ID, hour).First(&reconciled).Error; err != nil ||
+		reconciled.RequestCount != 2 || reconciled.Quota != 21 || reconciled.TokenUsed != 200 || reconciled.ActiveUsers != 1 {
+		t.Fatalf("A08 reconciled site totals = %#v, %v", reconciled, err)
+	}
 
 	// A successful empty replacement removes stale facts and exposes a complete
 	// zero; missing data remains unknown rather than becoming a zero.
@@ -89,7 +94,7 @@ func TestA08A12A13A28CollectionHourReplacementAndVisibility(t *testing.T) {
 
 	client.flow = []dto.UpstreamFlowRow{{
 		UserID: 1, Username: "root", ModelName: "Model-A", ChannelID: 1,
-		RequestCount: 1, Quota: 10, TokenUsed: 100,
+		RequestCount: 1, Quota: 12, TokenUsed: 100,
 	}}
 	client.data = []dto.UpstreamDataRow{{
 		ModelName: "Model-A", CreatedAt: hour, RequestCount: 1, Quota: 11, TokenUsed: 100,

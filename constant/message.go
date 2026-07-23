@@ -89,8 +89,6 @@ const (
 	MessageAlertChannelResponseTimeHigh   MessageCode = "ALERT_CHANNEL_RESPONSE_TIME_HIGH"
 	MessageAlertChannelAvailabilityLow    MessageCode = "ALERT_CHANNEL_AVAILABILITY_LOW"
 	MessageAlertScopeInactive             MessageCode = "ALERT_SCOPE_INACTIVE"
-	MessageSLOUsageDelayTooHigh           MessageCode = "SLO_USAGE_DELAY_TOO_HIGH"
-	MessageSLOUsageConcurrencyTooLow      MessageCode = "SLO_USAGE_CONCURRENCY_TOO_LOW"
 	MessageInternalContractError          MessageCode = "INTERNAL_CONTRACT_ERROR"
 )
 
@@ -149,8 +147,6 @@ var MessageRegistry = map[MessageCode]MessageParamSchema{
 	MessageAlertChannelResponseTimeHigh:   required(idParam("site_id"), stringParam("site_name"), stringParam("value"), stringParam("threshold")),
 	MessageAlertChannelAvailabilityLow:    required(idParam("site_id"), stringParam("site_name"), stringParam("value"), stringParam("threshold")),
 	MessageAlertScopeInactive:             required(stringParam("scope_type"), idParam("scope_id"), stringParam("scope_name")),
-	MessageSLOUsageDelayTooHigh:           required(numberParam("value"), numberParam("threshold")),
-	MessageSLOUsageConcurrencyTooLow:      required(numberParam("value"), numberParam("threshold")),
 	MessageInternalContractError:          optional(required(stringParam("component")), stringParam("value")),
 }
 

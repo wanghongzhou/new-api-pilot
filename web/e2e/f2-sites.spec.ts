@@ -217,8 +217,6 @@ const instancesFixture = [
 function minuteRetentionSettingsFixture() {
   return [
     {
-      h15_slo_eligible: true,
-      h15_slo_reason_codes: [],
       items: [
         {
           configured: true,

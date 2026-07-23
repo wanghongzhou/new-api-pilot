@@ -114,6 +114,36 @@ func TestUsageAggregationRebuildsSixLevelsAndRollingDaily(t *testing.T) {
 	assertUsageWindowStatus(t, database, fixture.site.ID, fixture.hours[1], CollectionWindowStatusMissing)
 }
 
+func TestUsageAggregationIncludesLegacyResidualWithoutCountingSyntheticUser(t *testing.T) {
+	database := openLockedSiteRunDatabase(t)
+	location := time.FixedZone("Asia/Shanghai", 8*3600)
+	now := time.Date(2026, 7, 14, 12, 5, 0, 0, location).Unix()
+	hour := now - now%3600 - 3600
+	fixture, accounts := createUsageAggregationFixture(t, database, hour, 1, now, "legacy-unattributed")
+	facts := []UsageFactInput{
+		{RemoteUserID: 1, UsernameSnapshot: "root", ModelName: "Model-A", ChannelID: 1,
+			RequestCount: 2, Quota: 20, TokenUsed: 200},
+		{RemoteUserID: UsageLegacyUnattributedRemoteUserID,
+			UsernameSnapshot: UsageLegacyUnattributedUsername, ModelName: "Model-A",
+			UseGroup: UsageLegacyUnattributedGroup, RequestCount: 3, Quota: 30, TokenUsed: 300},
+	}
+	applyCompleteUsageAggregation(t, database, fixture, 0, now+1, facts)
+	assertUsageAggregationMetric(t, database.GORM, &SiteStatHourly{},
+		"site_id = ? AND hour_ts = ?", []any{fixture.site.ID, hour}, 5, 50, 500, 1)
+	assertUsageAggregationMetric(t, database.GORM, &ModelStatHourly{},
+		"site_id = ? AND model_name = ? AND hour_ts = ?",
+		[]any{fixture.site.ID, "Model-A", hour}, 5, 50, 500, 1)
+	assertUsageAggregationMetric(t, database.GORM, &AccountStatHourly{},
+		"account_id = ? AND hour_ts = ?", []any{accounts[0].ID, hour}, 2, 20, 200, -1)
+	var window CollectionWindow
+	if err := database.GORM.Where("site_id = ? AND hour_ts = ?", fixture.site.ID, hour).First(&window).Error; err != nil {
+		t.Fatalf("read legacy unattributed window: %v", err)
+	}
+	if window.AttributionStatus != UsageAttributionLegacyUnattributed {
+		t.Fatalf("legacy unattributed window quality = %q", window.AttributionStatus)
+	}
+}
+
 func TestUsageAggregationPersistsKnownPartialZeroButKeepsCompleteZeroSparse(t *testing.T) {
 	database := openLockedSiteRunDatabase(t)
 	location := time.FixedZone("Asia/Shanghai", 8*3600)

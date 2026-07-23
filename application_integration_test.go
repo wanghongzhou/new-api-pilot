@@ -146,7 +146,6 @@ func TestBootstrapApplicationExportLifecycleOwnershipAndDownload(t *testing.T) {
 			PublicOrigin:         "https://pilot.test",
 			DingTalkAllowedHosts: []string{"oapi.dingtalk.com"}, ExportDir: exportDir,
 			RedisDSN: "redis://redis:6379/15", RedisDB: 15, RedisTimeout: time.Second,
-			FastTaskRetention: time.Hour, FastTaskHistoryCount: 10,
 		},
 		Database: database, Cipher: cipher, Clock: clock,
 	})

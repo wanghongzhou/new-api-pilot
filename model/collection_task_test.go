@@ -600,3 +600,55 @@ func TestCollectionTaskGracefulReleaseLeavesPending(t *testing.T) {
 		t.Fatalf("released run = %#v, %v", released, err)
 	}
 }
+
+func TestReleaseOwnedRunningHandlesPartialWindowCommit(t *testing.T) {
+	database := openLockedSiteRunDatabase(t)
+	ctx := context.Background()
+	now := int64(1_752_400_800)
+	site := createRunnableSite(t, database, "run-owned-partial-release", now)
+	run := createB3AWindowRun(t, database, site, constant.TaskTypeUsageBackfill,
+		constant.CollectionTriggerManual, constant.CollectionPriorityManualBackfill,
+		now-2*3600, now, "req_owned_partial", now)
+	repository := NewCollectionTaskRepository(database.GORM)
+	if _, err := repository.MaterializeRunWindows(ctx, run.ID, now, 1000); err != nil {
+		t.Fatalf("materialize partial release run: %v", err)
+	}
+	claim, err := repository.ClaimNext(ctx, CollectionTaskClaimOptions{
+		TaskTypes: []string{constant.TaskTypeUsageBackfill}, Now: now,
+		RequestID: "wrk_owned_partial", MaxWindow: 24,
+	})
+	if err != nil || len(claim.Windows) != 2 {
+		t.Fatalf("claim partial release run = windows:%d err:%v", len(claim.Windows), err)
+	}
+	if _, err := repository.CompleteClaimedWindow(ctx, CompleteClaimedWindowRequest{
+		RunID: run.ID, RequestID: claim.RequestID, Now: now + 1,
+		Window: CollectionTaskWindowResult{
+			WindowID: claim.Windows[0].ID, AttemptCount: claim.Windows[0].AttemptCount,
+			Status: CollectionTaskStatusSuccess,
+		},
+	}); err != nil {
+		t.Fatalf("complete first window: %v", err)
+	}
+	released, err := repository.ReleaseOwnedRunning(ctx, run.ID, claim.RequestID, now+2)
+	if err != nil || released != 1 {
+		t.Fatalf("release owned windows = %d, %v", released, err)
+	}
+	loaded, err := NewSiteRepository(database.GORM).FindCollectionRunByID(ctx, run.ID)
+	if err != nil || loaded.Status != CollectionTaskStatusPending || loaded.HeartbeatAt != nil || loaded.CompletedWindows != 1 {
+		t.Fatalf("released parent = %#v, %v", loaded, err)
+	}
+	var windows []CollectionRunWindow
+	if err := database.GORM.Where("run_id = ?", run.ID).Order("hour_ts ASC").Find(&windows).Error; err != nil {
+		t.Fatalf("load released windows: %v", err)
+	}
+	statuses := map[string]int{}
+	for _, window := range windows {
+		statuses[window.Status]++
+		if window.Status == CollectionTaskStatusPending && (window.NextRetryAt == nil || *window.NextRetryAt != now+2) {
+			t.Fatalf("pending released window = %#v", window)
+		}
+	}
+	if statuses[CollectionTaskStatusSuccess] != 1 || statuses[CollectionTaskStatusPending] != 1 {
+		t.Fatalf("released window statuses = %#v", statuses)
+	}
+}

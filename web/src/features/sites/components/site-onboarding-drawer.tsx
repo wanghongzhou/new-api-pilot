@@ -12,6 +12,12 @@ import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import {
+  sideDrawerContentClassName,
+  sideDrawerFooterClassName,
+  sideDrawerFormClassName,
+  sideDrawerHeaderClassName,
+} from '@/components/drawer-layout'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -446,301 +452,307 @@ export function SiteOnboardingDrawer({
 
   return (
     <Drawer direction='right' onOpenChange={onOpenChange} open={open}>
-      <DrawerContent className='data-[vaul-drawer-direction=right]:sm:max-w-3xl'>
-        <DrawerHeader>
+      <DrawerContent
+        className={sideDrawerContentClassName(
+          'data-[vaul-drawer-direction=right]:sm:max-w-3xl'
+        )}
+      >
+        <DrawerHeader className={sideDrawerHeaderClassName()}>
           <DrawerTitle>{t('site.onboarding.title')}</DrawerTitle>
           <DrawerDescription>
             {t('site.onboarding.description')}
           </DrawerDescription>
         </DrawerHeader>
 
-        <ol
-          aria-label={t('site.onboarding.progress')}
-          className='my-6 grid grid-cols-4 gap-2'
-        >
-          {steps.map((item, index) => (
-            <li
-              aria-current={index === step ? 'step' : undefined}
-              className='min-w-0 text-center'
-              key={item}
-            >
-              <span
-                className={
-                  index <= step
-                    ? 'bg-primary text-primary-foreground mx-auto flex size-8 items-center justify-center rounded-full text-sm font-medium'
-                    : 'bg-muted text-muted-foreground mx-auto flex size-8 items-center justify-center rounded-full text-sm'
-                }
-              >
-                {index + 1}
-              </span>
-              <span className='mt-1 block truncate text-xs'>
-                {t(dynamicI18nKey('site', `site.onboarding.${item}`))}
-              </span>
-            </li>
-          ))}
-        </ol>
-
-        {step === 0 && (
-          <form
-            className='grid gap-4'
-            id='site-basics-form'
-            noValidate
-            onSubmit={submitBasics}
+        <div className={sideDrawerFormClassName()}>
+          <ol
+            aria-label={t('site.onboarding.progress')}
+            className='grid grid-cols-4 gap-2'
           >
-            <FormField
-              error={
-                errors.name?.message &&
-                t(dynamicI18nKey('site', errors.name.message))
-              }
-              htmlFor='onboarding-site-name'
-              label={t('site.name')}
-              required
-            >
-              <Input
-                aria-invalid={Boolean(errors.name)}
-                autoFocus
-                disabled={site != null}
-                id='onboarding-site-name'
-                {...register('name')}
-              />
-            </FormField>
-            <FormField
-              description={t('site.baseUrlNormalization')}
-              error={
-                errors.baseUrl?.message &&
-                t(dynamicI18nKey('site', errors.baseUrl.message))
-              }
-              htmlFor='onboarding-site-url'
-              label={t('site.baseUrl')}
-              required
-            >
-              <Input
-                aria-invalid={Boolean(errors.baseUrl)}
-                autoCapitalize='none'
-                disabled={site != null}
-                id='onboarding-site-url'
-                inputMode='url'
-                placeholder={t('site.baseUrlPlaceholder')}
-                {...register('baseUrl')}
-              />
-            </FormField>
-            <FormField
-              error={
-                errors.remark?.message &&
-                t(dynamicI18nKey('site', errors.remark.message))
-              }
-              htmlFor='onboarding-site-remark'
-              label={t('site.remark')}
-            >
-              <Textarea
-                className='min-h-24'
-                disabled={site != null}
-                id='onboarding-site-remark'
-                {...register('remark')}
-              />
-            </FormField>
-            {site && !preflight && (
-              <div className='border-warning/40 bg-warning/10 rounded-md border p-3 text-sm'>
-                {t('site.onboarding.createdPreflightPending')}
-              </div>
-            )}
-            {errors.root?.message && (
-              <p className='text-destructive text-sm' role='alert'>
-                {t(dynamicI18nKey('site', errors.root.message))}
-              </p>
-            )}
-          </form>
-        )}
+            {steps.map((item, index) => (
+              <li
+                aria-current={index === step ? 'step' : undefined}
+                className='min-w-0 text-center'
+                key={item}
+              >
+                <span
+                  className={
+                    index <= step
+                      ? 'bg-primary text-primary-foreground mx-auto flex size-8 items-center justify-center rounded-full text-sm font-medium'
+                      : 'bg-muted text-muted-foreground mx-auto flex size-8 items-center justify-center rounded-full text-sm'
+                  }
+                >
+                  {index + 1}
+                </span>
+                <span className='mt-1 block truncate text-xs'>
+                  {t(dynamicI18nKey('site', `site.onboarding.${item}`))}
+                </span>
+              </li>
+            ))}
+          </ol>
 
-        {step === 1 && site && (
-          <div className='grid gap-4'>
-            {preflight && (
-              <section className='border-border bg-muted/30 rounded-lg border p-4'>
-                <div className='flex items-center gap-2 font-medium'>
-                  <HugeiconsIcon
-                    className={
-                      preflight.contract_status === 'compatible'
-                        ? 'text-success'
-                        : 'text-warning-foreground'
-                    }
-                    icon={
-                      preflight.contract_status === 'compatible'
-                        ? CheckmarkCircle02Icon
-                        : Alert02Icon
-                    }
-                    strokeWidth={2}
-                  />
-                  {t(
-                    dynamicI18nKey(
-                      'site',
-                      `site.preflight.${preflight.contract_status}`
-                    )
-                  )}
+          {step === 0 && (
+            <form
+              className='grid gap-4'
+              id='site-basics-form'
+              noValidate
+              onSubmit={submitBasics}
+            >
+              <FormField
+                error={
+                  errors.name?.message &&
+                  t(dynamicI18nKey('site', errors.name.message))
+                }
+                htmlFor='onboarding-site-name'
+                label={t('site.name')}
+                required
+              >
+                <Input
+                  aria-invalid={Boolean(errors.name)}
+                  autoFocus
+                  disabled={site != null}
+                  id='onboarding-site-name'
+                  {...register('name')}
+                />
+              </FormField>
+              <FormField
+                description={t('site.baseUrlNormalization')}
+                error={
+                  errors.baseUrl?.message &&
+                  t(dynamicI18nKey('site', errors.baseUrl.message))
+                }
+                htmlFor='onboarding-site-url'
+                label={t('site.baseUrl')}
+                required
+              >
+                <Input
+                  aria-invalid={Boolean(errors.baseUrl)}
+                  autoCapitalize='none'
+                  disabled={site != null}
+                  id='onboarding-site-url'
+                  inputMode='url'
+                  placeholder={t('site.baseUrlPlaceholder')}
+                  {...register('baseUrl')}
+                />
+              </FormField>
+              <FormField
+                error={
+                  errors.remark?.message &&
+                  t(dynamicI18nKey('site', errors.remark.message))
+                }
+                htmlFor='onboarding-site-remark'
+                label={t('site.remark')}
+              >
+                <Textarea
+                  className='min-h-24'
+                  disabled={site != null}
+                  id='onboarding-site-remark'
+                  {...register('remark')}
+                />
+              </FormField>
+              {site && !preflight && (
+                <div className='border-warning/40 bg-warning/10 rounded-md border p-3 text-sm'>
+                  {t('site.onboarding.createdPreflightPending')}
                 </div>
-                <dl className='mt-3 grid gap-2 text-sm sm:grid-cols-2'>
+              )}
+              {errors.root?.message && (
+                <p className='text-destructive text-sm' role='alert'>
+                  {t(dynamicI18nKey('site', errors.root.message))}
+                </p>
+              )}
+            </form>
+          )}
+
+          {step === 1 && site && (
+            <div className='grid gap-4'>
+              {preflight && (
+                <section className='border-border bg-muted/30 rounded-lg border p-4'>
+                  <div className='flex items-center gap-2 font-medium'>
+                    <HugeiconsIcon
+                      className={
+                        preflight.contract_status === 'compatible'
+                          ? 'text-success'
+                          : 'text-warning-foreground'
+                      }
+                      icon={
+                        preflight.contract_status === 'compatible'
+                          ? CheckmarkCircle02Icon
+                          : Alert02Icon
+                      }
+                      strokeWidth={2}
+                    />
+                    {t(
+                      dynamicI18nKey(
+                        'site',
+                        `site.preflight.${preflight.contract_status}`
+                      )
+                    )}
+                  </div>
+                  <dl className='mt-3 grid gap-2 text-sm sm:grid-cols-2'>
+                    <div>
+                      <dt className='text-muted-foreground'>
+                        {t('site.normalizedUrl')}
+                      </dt>
+                      <dd className='break-all'>
+                        {preflight.normalized_base_url}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className='text-muted-foreground'>
+                        {t('site.systemName')}
+                      </dt>
+                      <dd>{preflight.candidate_public.system_name}</dd>
+                    </div>
+                    <div>
+                      <dt className='text-muted-foreground'>
+                        {t('site.version')}
+                      </dt>
+                      <dd>{preflight.candidate_public.version}</dd>
+                    </div>
+                  </dl>
+                </section>
+              )}
+              <SiteAuthorizationForm
+                formId='site-onboarding-authorization'
+                onSuccess={(result) => {
+                  setAuthorization(result)
+                  setBackfillRunId(result.backfill_run_id)
+                  setStep(2)
+                }}
+                siteId={site.id}
+                submitLabel={t('site.authorization.verify')}
+              />
+            </div>
+          )}
+
+          {step === 2 && authorization && (
+            <div className='grid gap-4'>
+              <section className='border-success/30 bg-success/5 rounded-lg border p-4'>
+                <h2 className='flex items-center gap-2 font-medium'>
+                  <HugeiconsIcon icon={CheckmarkCircle02Icon} strokeWidth={2} />
+                  {t('site.proof.passed')}
+                </h2>
+                <dl className='mt-3 grid gap-3 text-sm sm:grid-cols-3'>
                   <div>
                     <dt className='text-muted-foreground'>
-                      {t('site.normalizedUrl')}
+                      {t('site.proof.snapshotTotal')}
                     </dt>
-                    <dd className='break-all'>
-                      {preflight.normalized_base_url}
+                    <dd>{authorization.first_user_proof.snapshot_total}</dd>
+                  </div>
+                  <div>
+                    <dt className='text-muted-foreground'>
+                      {t('site.proof.minUserId')}
+                    </dt>
+                    <dd>{authorization.first_user_proof.min_user_id}</dd>
+                  </div>
+                  <div>
+                    <dt className='text-muted-foreground'>
+                      {t('site.proof.earliestCreated')}
+                    </dt>
+                    <dd>
+                      {fromUnixSeconds(
+                        authorization.first_user_proof.earliest_created_at
+                      ).format('YYYY-MM-DD HH:mm:ss')}
+                    </dd>
+                  </div>
+                </dl>
+              </section>
+              <section>
+                <h2 className='font-medium'>{t('site.capabilities.title')}</h2>
+                <ul className='mt-2 grid gap-2'>
+                  {authorization.capabilities.map((capability) => {
+                    const visual = capabilityVisual(capability.status)
+                    return (
+                      <li
+                        className='border-border flex items-start gap-2 rounded-md border p-3 text-sm'
+                        key={capability.key}
+                      >
+                        <HugeiconsIcon
+                          className={visual.className}
+                          icon={visual.icon}
+                          strokeWidth={2}
+                        />
+                        <span>
+                          <strong className='block font-medium'>
+                            {t(
+                              dynamicI18nKey(
+                                'site',
+                                `site.capability.${capability.key}`
+                              ),
+                              {
+                                defaultValue: capability.key,
+                              }
+                            )}
+                          </strong>
+                          {translateMessageRef(capability.message)}
+                        </span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </section>
+              <section className='border-primary/30 bg-primary/5 rounded-lg border p-4'>
+                <h2 className='font-medium'>
+                  {t('site.history.immutableTitle')}
+                </h2>
+                <dl className='mt-3 grid gap-3 text-sm sm:grid-cols-2'>
+                  <div>
+                    <dt className='text-muted-foreground'>
+                      {t('site.rootCreatedAt')}
+                    </dt>
+                    <dd>
+                      {fromUnixSeconds(authorization.root_created_at).format(
+                        'YYYY-MM-DD HH:mm:ss'
+                      )}
                     </dd>
                   </div>
                   <div>
                     <dt className='text-muted-foreground'>
-                      {t('site.systemName')}
+                      {t('site.statisticsStartAt')}
                     </dt>
-                    <dd>{preflight.candidate_public.system_name}</dd>
-                  </div>
-                  <div>
-                    <dt className='text-muted-foreground'>
-                      {t('site.version')}
-                    </dt>
-                    <dd>{preflight.candidate_public.version}</dd>
+                    <dd>
+                      {fromUnixSeconds(
+                        authorization.statistics_start_at
+                      ).format('YYYY-MM-DD HH:00')}
+                    </dd>
                   </div>
                 </dl>
+                <p className='text-muted-foreground mt-3 text-sm'>
+                  {t('site.history.immutableDescription')}
+                </p>
               </section>
-            )}
-            <SiteAuthorizationForm
-              formId='site-onboarding-authorization'
-              onSuccess={(result) => {
-                setAuthorization(result)
-                setBackfillRunId(result.backfill_run_id)
-                setStep(2)
-              }}
-              siteId={site.id}
-              submitLabel={t('site.authorization.verify')}
-            />
-          </div>
-        )}
-
-        {step === 2 && authorization && (
-          <div className='grid gap-4'>
-            <section className='border-success/30 bg-success/5 rounded-lg border p-4'>
-              <h2 className='flex items-center gap-2 font-medium'>
-                <HugeiconsIcon icon={CheckmarkCircle02Icon} strokeWidth={2} />
-                {t('site.proof.passed')}
-              </h2>
-              <dl className='mt-3 grid gap-3 text-sm sm:grid-cols-3'>
-                <div>
-                  <dt className='text-muted-foreground'>
-                    {t('site.proof.snapshotTotal')}
-                  </dt>
-                  <dd>{authorization.first_user_proof.snapshot_total}</dd>
-                </div>
-                <div>
-                  <dt className='text-muted-foreground'>
-                    {t('site.proof.minUserId')}
-                  </dt>
-                  <dd>{authorization.first_user_proof.min_user_id}</dd>
-                </div>
-                <div>
-                  <dt className='text-muted-foreground'>
-                    {t('site.proof.earliestCreated')}
-                  </dt>
-                  <dd>
-                    {fromUnixSeconds(
-                      authorization.first_user_proof.earliest_created_at
-                    ).format('YYYY-MM-DD HH:mm:ss')}
-                  </dd>
-                </div>
-              </dl>
-            </section>
-            <section>
-              <h2 className='font-medium'>{t('site.capabilities.title')}</h2>
-              <ul className='mt-2 grid gap-2'>
-                {authorization.capabilities.map((capability) => {
-                  const visual = capabilityVisual(capability.status)
-                  return (
-                    <li
-                      className='border-border flex items-start gap-2 rounded-md border p-3 text-sm'
-                      key={capability.key}
-                    >
-                      <HugeiconsIcon
-                        className={visual.className}
-                        icon={visual.icon}
-                        strokeWidth={2}
-                      />
-                      <span>
-                        <strong className='block font-medium'>
-                          {t(
-                            dynamicI18nKey(
-                              'site',
-                              `site.capability.${capability.key}`
-                            ),
-                            {
-                              defaultValue: capability.key,
-                            }
-                          )}
-                        </strong>
-                        {translateMessageRef(capability.message)}
-                      </span>
-                    </li>
-                  )
-                })}
-              </ul>
-            </section>
-            <section className='border-primary/30 bg-primary/5 rounded-lg border p-4'>
-              <h2 className='font-medium'>
-                {t('site.history.immutableTitle')}
-              </h2>
-              <dl className='mt-3 grid gap-3 text-sm sm:grid-cols-2'>
-                <div>
-                  <dt className='text-muted-foreground'>
-                    {t('site.rootCreatedAt')}
-                  </dt>
-                  <dd>
-                    {fromUnixSeconds(authorization.root_created_at).format(
-                      'YYYY-MM-DD HH:mm:ss'
-                    )}
-                  </dd>
-                </div>
-                <div>
-                  <dt className='text-muted-foreground'>
-                    {t('site.statisticsStartAt')}
-                  </dt>
-                  <dd>
-                    {fromUnixSeconds(authorization.statistics_start_at).format(
-                      'YYYY-MM-DD HH:00'
-                    )}
-                  </dd>
-                </div>
-              </dl>
-              <p className='text-muted-foreground mt-3 text-sm'>
-                {t('site.history.immutableDescription')}
-              </p>
-            </section>
-            <label className='border-border flex min-h-12 items-start gap-3 rounded-md border p-3 text-sm'>
-              <Checkbox
-                checked={historyConfirmed}
-                className='mt-0.5'
-                onCheckedChange={setHistoryConfirmed}
-              />
-              {t('site.history.confirm')}
-            </label>
-          </div>
-        )}
-
-        {step === 3 && authorization && site && (
-          <div className='grid gap-4'>
-            <div>
-              <h2 className='font-medium'>
-                {t('site.onboarding.backfillTitle')}
-              </h2>
-              <p className='text-muted-foreground mt-1 text-sm'>
-                {t('site.onboarding.backfillDescription')}
-              </p>
+              <label className='border-border flex min-h-12 items-start gap-3 rounded-md border p-3 text-sm'>
+                <Checkbox
+                  checked={historyConfirmed}
+                  className='mt-0.5'
+                  onCheckedChange={setHistoryConfirmed}
+                />
+                {t('site.history.confirm')}
+              </label>
             </div>
-            {backfillStepContent}
-            {backfillErrorKey && (
-              <p className='text-destructive text-sm' role='alert'>
-                {t(dynamicI18nKey('site', backfillErrorKey))}
-              </p>
-            )}
-          </div>
-        )}
+          )}
 
-        <DrawerFooter>
+          {step === 3 && authorization && site && (
+            <div className='grid gap-4'>
+              <div>
+                <h2 className='font-medium'>
+                  {t('site.onboarding.backfillTitle')}
+                </h2>
+                <p className='text-muted-foreground mt-1 text-sm'>
+                  {t('site.onboarding.backfillDescription')}
+                </p>
+              </div>
+              {backfillStepContent}
+              {backfillErrorKey && (
+                <p className='text-destructive text-sm' role='alert'>
+                  {t(dynamicI18nKey('site', backfillErrorKey))}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <DrawerFooter className={sideDrawerFooterClassName()}>
           <Button onClick={close} type='button' variant='outline'>
             {t('common.cancel')}
           </Button>

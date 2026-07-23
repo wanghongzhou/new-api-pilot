@@ -27,8 +27,6 @@ type SettingItemFixture = {
 }
 
 type SettingGroupFixture = {
-  h15_slo_eligible: boolean
-  h15_slo_reason_codes: string[]
   items: SettingItemFixture[]
   key: string
   label_key: string
@@ -116,6 +114,15 @@ const integerConstraints: Record<string, [number | string, number | string]> = {
   'collector.usage_concurrency': [1, 100],
   'collector.backfill_concurrency': [1, 100],
   'collector.manual_backfill_max_days': [1, 3660],
+  'fast_task.history_retention_seconds': [60, 31_536_000],
+  'fast_task.history_count': [1, 1000],
+  'upstream.connect_timeout_seconds': [1, 60],
+  'upstream.response_header_timeout_seconds': [1, 300],
+  'upstream.request_timeout_seconds': [1, 600],
+  'upstream.export_timeout_seconds': [1, 3600],
+  'upstream.rate_limit_requests': [1, 10_000],
+  'upstream.rate_limit_window_seconds': [1, 3600],
+  'upstream.max_inflight_per_origin': [1, 100],
   'export.file_ttl_hours': [1, 168],
   'export.max_active_per_user': [1, 100],
   'export.max_active_global': [1, 100],
@@ -179,7 +186,7 @@ function settingsFixture(
     settingItem('collector.resource_interval_seconds', 60),
     settingItem('collector.usage_delay_minutes', 12),
     settingItem('collector.minute_retention_days', options.retentionDays ?? 37),
-    settingItem('logs.retention_days', 30),
+    settingItem('logs.retention_days', 90),
     settingItem('performance.retention_days', 90),
     settingItem('task.retention_days', 90),
     settingItem('system_task_terminal_retention_days', 90),
@@ -190,24 +197,16 @@ function settingsFixture(
     settingItem('collector.usage_concurrency', 3),
     settingItem('collector.backfill_concurrency', 2),
     settingItem('collector.manual_backfill_max_days', 366),
+    settingItem('fast_task.history_retention_seconds', 86400),
+    settingItem('fast_task.history_count', 100),
   ]
   const groups: SettingGroupFixture[] = [
     {
-      h15_slo_eligible: false,
-      h15_slo_reason_codes: [
-        'SLO_USAGE_DELAY_TOO_HIGH',
-        'SLO_USAGE_CONCURRENCY_TOO_LOW',
-      ],
       items: collector,
       key: 'collector',
       label_key: 'settings.groups.collector',
     },
     {
-      h15_slo_eligible: false,
-      h15_slo_reason_codes: [
-        'SLO_USAGE_DELAY_TOO_HIGH',
-        'SLO_USAGE_CONCURRENCY_TOO_LOW',
-      ],
       items: [
         settingItem('export.file_ttl_hours', 24),
         settingItem('export.max_active_per_user', 3),
@@ -219,24 +218,33 @@ function settingsFixture(
       label_key: 'settings.groups.export',
     },
     {
-      h15_slo_eligible: false,
-      h15_slo_reason_codes: [
-        'SLO_USAGE_DELAY_TOO_HIGH',
-        'SLO_USAGE_CONCURRENCY_TOO_LOW',
+      items: [
+        settingItem('upstream.allowed_host_suffixes', '', {
+          constraints: { maximum_length: 8192, optional: true },
+        }),
+        settingItem('upstream.allowed_cidrs', '', {
+          constraints: { maximum_length: 8192, optional: true },
+        }),
+        settingItem('upstream.connect_timeout_seconds', 5),
+        settingItem('upstream.response_header_timeout_seconds', 15),
+        settingItem('upstream.request_timeout_seconds', 30),
+        settingItem('upstream.export_timeout_seconds', 120),
+        settingItem('upstream.rate_limit_requests', 300),
+        settingItem('upstream.rate_limit_window_seconds', 180),
+        settingItem('upstream.max_inflight_per_origin', 4),
       ],
+      key: 'upstream',
+      label_key: 'settings.groups.upstream',
+    },
+    {
       items: [
         settingItem('rate.fallback_quota_per_unit', '500000'),
-        settingItem('rate.fallback_usd_exchange_rate', '7.3'),
+        settingItem('rate.fallback_usd_exchange_rate', '6.8'),
       ],
       key: 'rate',
       label_key: 'settings.groups.rate',
     },
     {
-      h15_slo_eligible: false,
-      h15_slo_reason_codes: [
-        'SLO_USAGE_DELAY_TOO_HIGH',
-        'SLO_USAGE_CONCURRENCY_TOO_LOW',
-      ],
       items: [
         settingItem('notification.dingtalk.enabled', true),
         settingItem('notification.dingtalk.webhook', null),
@@ -248,11 +256,6 @@ function settingsFixture(
       label_key: 'settings.groups.notification',
     },
     {
-      h15_slo_eligible: false,
-      h15_slo_reason_codes: [
-        'SLO_USAGE_DELAY_TOO_HIGH',
-        'SLO_USAGE_CONCURRENCY_TOO_LOW',
-      ],
       items: [
         settingItem(
           'system.public_origin',
@@ -296,19 +299,6 @@ function applyPatch(
       item.value = patch.value as boolean | number | string
       item.configured = patch.value !== ''
     }
-  }
-  const delay = Number(
-    items.find((item) => item.key === 'collector.usage_delay_minutes')?.value
-  )
-  const concurrency = Number(
-    items.find((item) => item.key === 'collector.usage_concurrency')?.value
-  )
-  const reasons: string[] = []
-  if (delay > 5) reasons.push('SLO_USAGE_DELAY_TOO_HIGH')
-  if (concurrency < 5) reasons.push('SLO_USAGE_CONCURRENCY_TOO_LOW')
-  for (const group of result) {
-    group.h15_slo_eligible = reasons.length === 0
-    group.h15_slo_reason_codes = reasons
   }
   return result
 }
@@ -386,10 +376,7 @@ test('renders the complete settings surface for admin without overflow or axe vi
   await expect(page.getByRole('heading', { name: '导出策略' })).toBeVisible()
   await expect(page.getByRole('heading', { name: '费率兜底' })).toBeVisible()
   await expect(page.getByRole('heading', { name: '平台与通知' })).toBeVisible()
-  await expect(
-    page.getByText('当前用量采集延迟为 12 分钟，超过阈值 5 分钟')
-  ).toBeVisible()
-  await expect(page.getByText('当前用量采集并发为 3，低于阈值 5')).toBeVisible()
+  await expect(page.getByText('H+15 发布资格')).toHaveCount(0)
   await expect(page.getByLabel('小时用量采集延迟（分钟）')).toBeEditable()
   await assertNoHorizontalOverflow(page)
   const accessibility = await new AxeBuilder({ page }).analyze()

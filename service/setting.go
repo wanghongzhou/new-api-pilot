@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"new-api-pilot/common"
-	"new-api-pilot/config"
 	"new-api-pilot/dto"
 	"new-api-pilot/model"
 )
@@ -24,10 +24,7 @@ const (
 	settingMaxSafeInteger  = int64(9_007_199_254_740_991)
 )
 
-var (
-	ErrSettingContract     = errors.New("platform setting contract is invalid")
-	ErrSettingSLOForbidden = errors.New("platform setting would violate the production SLO")
-)
+var ErrSettingContract = errors.New("platform setting contract is invalid")
 
 type SettingValidationError struct{ Fields map[string]string }
 
@@ -37,18 +34,18 @@ type SettingServiceOptions struct {
 	Repository    *model.SettingRepository
 	Cipher        *common.Cipher
 	Clock         common.Clock
-	AppEnv        string
 	PublicOrigin  string
 	DingTalkHosts []string
+	Runtime       *RuntimeSettingsStore
 }
 
 type SettingService struct {
 	settings      *model.SettingRepository
 	cipher        *common.Cipher
 	clock         common.Clock
-	production    bool
 	publicOrigin  string
 	dingTalkHosts map[string]struct{}
+	runtime       *RuntimeSettingsStore
 }
 
 type settingDefinition struct {
@@ -80,6 +77,17 @@ var settingDefinitions = []settingDefinition{
 	{Key: "collector.usage_concurrency", Group: "collector", ValueType: "int", Minimum: 1, Maximum: 100},
 	{Key: "collector.backfill_concurrency", Group: "collector", ValueType: "int", Minimum: 1, Maximum: 100},
 	{Key: "collector.manual_backfill_max_days", Group: "collector", ValueType: "int", Minimum: 1, Maximum: 3660},
+	{Key: "fast_task.history_retention_seconds", Group: "collector", ValueType: "int", Minimum: 60, Maximum: 31536000},
+	{Key: "fast_task.history_count", Group: "collector", ValueType: "int", Minimum: 1, Maximum: 1000},
+	{Key: "upstream.allowed_host_suffixes", Group: "upstream", ValueType: "string", Optional: true, Maximum: 8192},
+	{Key: "upstream.allowed_cidrs", Group: "upstream", ValueType: "string", Optional: true, Maximum: 8192},
+	{Key: "upstream.connect_timeout_seconds", Group: "upstream", ValueType: "int", Minimum: 1, Maximum: 60},
+	{Key: "upstream.response_header_timeout_seconds", Group: "upstream", ValueType: "int", Minimum: 1, Maximum: 300},
+	{Key: "upstream.request_timeout_seconds", Group: "upstream", ValueType: "int", Minimum: 1, Maximum: 600},
+	{Key: "upstream.export_timeout_seconds", Group: "upstream", ValueType: "int", Minimum: 1, Maximum: 3600},
+	{Key: "upstream.rate_limit_requests", Group: "upstream", ValueType: "int", Minimum: 1, Maximum: 10000},
+	{Key: "upstream.rate_limit_window_seconds", Group: "upstream", ValueType: "int", Minimum: 1, Maximum: 3600},
+	{Key: "upstream.max_inflight_per_origin", Group: "upstream", ValueType: "int", Minimum: 1, Maximum: 100},
 	{Key: "export.file_ttl_hours", Group: "export", ValueType: "int", Minimum: 1, Maximum: 168},
 	{Key: "export.max_active_per_user", Group: "export", ValueType: "int", Minimum: 1, Maximum: 100},
 	{Key: "export.max_active_global", Group: "export", ValueType: "int", Minimum: 1, Maximum: 100},
@@ -92,15 +100,11 @@ var settingDefinitions = []settingDefinition{
 	{Key: settingDingTalkSecret, Group: "notification", ValueType: "string", Secret: true, Optional: true, Maximum: 1024},
 }
 
-var settingGroupOrder = []string{"collector", "export", "rate", "notification", "system"}
+var settingGroupOrder = []string{"collector", "export", "rate", "notification", "upstream", "system"}
 
 func NewSettingService(options SettingServiceOptions) (*SettingService, error) {
 	if options.Repository == nil || options.Cipher == nil || options.Clock == nil {
 		return nil, errors.New("setting service dependencies are required")
-	}
-	if options.AppEnv != config.EnvironmentDevelopment && options.AppEnv != config.EnvironmentTest &&
-		options.AppEnv != config.EnvironmentProduction {
-		return nil, errors.New("setting service environment is invalid")
 	}
 	hosts, err := normalizeDingTalkAllowedHosts(options.DingTalkHosts)
 	if err != nil {
@@ -108,8 +112,7 @@ func NewSettingService(options SettingServiceOptions) (*SettingService, error) {
 	}
 	return &SettingService{
 		settings: options.Repository, cipher: options.Cipher, clock: options.Clock,
-		production:   options.AppEnv == config.EnvironmentProduction,
-		publicOrigin: options.PublicOrigin, dingTalkHosts: hosts,
+		publicOrigin: options.PublicOrigin, dingTalkHosts: hosts, runtime: options.Runtime,
 	}, nil
 }
 
@@ -138,6 +141,8 @@ func (service *SettingService) Update(
 		return nil, &SettingValidationError{Fields: fieldErrors}
 	}
 	var groups []dto.SettingGroup
+	var nextRuntime RuntimeSettingsSnapshot
+	var updateRuntime bool
 	err := service.settings.Transaction(ctx, func(repository *model.SettingRepository) error {
 		rows, err := repository.ListForUpdate(ctx, settingKeys())
 		if err != nil {
@@ -167,9 +172,12 @@ func (service *SettingService) Update(
 		if fields := service.validateFinalValues(finalValues); fields != nil {
 			return &SettingValidationError{Fields: fields}
 		}
-		eligible, _ := settingH15Status(finalValues)
-		if service.production && !eligible {
-			return ErrSettingSLOForbidden
+		if service.runtime != nil {
+			nextRuntime, err = service.runtime.Build(finalValues)
+			if err != nil {
+				return fmt.Errorf("build runtime settings: %w", err)
+			}
+			updateRuntime = true
 		}
 		now := service.clock.Now().Unix()
 		for _, definition := range settingDefinitions {
@@ -194,6 +202,9 @@ func (service *SettingService) Update(
 	})
 	if err != nil {
 		return nil, err
+	}
+	if updateRuntime {
+		service.runtime.Store(nextRuntime)
 	}
 	return groups, nil
 }
@@ -312,6 +323,31 @@ func (service *SettingService) normalizePatches(
 				}
 			}
 			patch.Action, patch.Value = settingPatchSet, value
+		case "string":
+			value, ok := settingJSONString(item.Value)
+			if !ok {
+				fieldErrors[valueField] = "must be a string"
+				continue
+			}
+			if int64(len(value)) > definition.Maximum {
+				fieldErrors[valueField] = fmt.Sprintf("must contain at most %d bytes", definition.Maximum)
+				continue
+			}
+			var canonical string
+			var canonicalErr error
+			switch definition.Key {
+			case "upstream.allowed_host_suffixes":
+				canonical, canonicalErr = canonicalUpstreamHostSuffixes(value)
+			case "upstream.allowed_cidrs":
+				canonical, canonicalErr = canonicalUpstreamCIDRs(value)
+			default:
+				canonicalErr = errors.New("unsupported string setting")
+			}
+			if canonicalErr != nil {
+				fieldErrors[valueField] = canonicalErr.Error()
+				continue
+			}
+			patch.Action, patch.Value = settingPatchSet, canonical
 		default:
 			fieldErrors[valueField] = "has an unsupported setting type"
 			continue
@@ -330,6 +366,24 @@ func (service *SettingService) validateFinalValues(values map[string]string) map
 	global, globalOK := settingIntegerValue(values["export.max_active_global"])
 	if perUserOK && globalOK && perUser > global {
 		fieldErrors["export.max_active_per_user"] = "must not exceed export.max_active_global"
+	}
+	connect, connectOK := settingIntegerValue(values["upstream.connect_timeout_seconds"])
+	header, headerOK := settingIntegerValue(values["upstream.response_header_timeout_seconds"])
+	requestTimeout, requestOK := settingIntegerValue(values["upstream.request_timeout_seconds"])
+	exportTimeout, exportOK := settingIntegerValue(values["upstream.export_timeout_seconds"])
+	if connectOK && requestOK && connect > requestTimeout {
+		fieldErrors["upstream.connect_timeout_seconds"] = "must not exceed upstream.request_timeout_seconds"
+	}
+	if headerOK && requestOK && header > requestTimeout {
+		fieldErrors["upstream.response_header_timeout_seconds"] = "must not exceed upstream.request_timeout_seconds"
+	}
+	if requestOK && exportOK && requestTimeout > exportTimeout {
+		fieldErrors["upstream.request_timeout_seconds"] = "must not exceed upstream.export_timeout_seconds"
+	}
+	requests, requestsOK := settingIntegerValue(values["upstream.rate_limit_requests"])
+	window, windowOK := settingIntegerValue(values["upstream.rate_limit_window_seconds"])
+	if requestsOK && windowOK && time.Duration(window)*time.Second/time.Duration(requests) < 10*time.Millisecond {
+		fieldErrors["upstream.rate_limit_requests"] = "requires an average interval of at least 10ms"
 	}
 	enabled := values[settingDingTalkEnabled] == "true"
 	if enabled {
@@ -363,11 +417,6 @@ func (service *SettingService) decryptFinalSetting(values map[string]string, key
 }
 
 func (service *SettingService) settingGroups(rows map[string]model.PlatformSetting) []dto.SettingGroup {
-	values := make(map[string]string, len(rows))
-	for key, row := range rows {
-		values[key] = row.Value
-	}
-	eligible, reasonCodes := settingH15Status(values)
 	items := make(map[string][]dto.SettingItem, len(settingGroupOrder))
 	for _, definition := range settingDefinitions {
 		row := rows[definition.Key]
@@ -381,7 +430,6 @@ func (service *SettingService) settingGroups(rows map[string]model.PlatformSetti
 	for _, key := range settingGroupOrder {
 		groups = append(groups, dto.SettingGroup{
 			Key: key, LabelKey: "settings.groups." + key, Items: items[key],
-			H15SLOEligible: eligible, H15SLOReasonCodes: append([]dto.SettingSLOReasonCode(nil), reasonCodes...),
 		})
 	}
 	return groups
@@ -416,6 +464,8 @@ func (service *SettingService) settingItem(definition settingDefinition, row mod
 		if row.Value != "" {
 			item.Value = row.Value
 		}
+	case "string":
+		item.Value = row.Value
 	}
 	return item
 }
@@ -460,22 +510,24 @@ func validStoredSettingValue(definition settingDefinition, value string) bool {
 		}
 		canonical, valid := canonicalPositiveSettingDecimal(value)
 		return valid && canonical == value
+	case "string":
+		if int64(len(value)) > definition.Maximum {
+			return false
+		}
+		var canonical string
+		var err error
+		switch definition.Key {
+		case "upstream.allowed_host_suffixes":
+			canonical, err = canonicalUpstreamHostSuffixes(value)
+		case "upstream.allowed_cidrs":
+			canonical, err = canonicalUpstreamCIDRs(value)
+		default:
+			return false
+		}
+		return err == nil && canonical == value
 	default:
 		return false
 	}
-}
-
-func settingH15Status(values map[string]string) (bool, []dto.SettingSLOReasonCode) {
-	delay, _ := settingIntegerValue(values["collector.usage_delay_minutes"])
-	concurrency, _ := settingIntegerValue(values["collector.usage_concurrency"])
-	reasons := make([]dto.SettingSLOReasonCode, 0, 2)
-	if delay > 5 {
-		reasons = append(reasons, dto.SettingSLOReasonUsageDelayTooHigh)
-	}
-	if concurrency < 5 {
-		reasons = append(reasons, dto.SettingSLOReasonUsageConcurrencyTooLow)
-	}
-	return len(reasons) == 0, reasons
 }
 
 func settingDefinitionsByKey() map[string]settingDefinition {
@@ -513,6 +565,10 @@ func settingConstraints(definition settingDefinition) map[string]any {
 		result["maximum_integer_digits"] = 20
 		result["maximum_scale"] = 10
 		result["json_representation"] = "decimal_string"
+	}
+	if definition.ValueType == "string" && !definition.Secret {
+		result["maximum_length"] = definition.Maximum
+		result["optional"] = definition.Optional
 	}
 	if definition.Secret {
 		result["maximum_length"] = definition.Maximum

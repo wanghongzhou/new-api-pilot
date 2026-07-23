@@ -335,9 +335,22 @@ test('supports administrator user creation and protects the last administrator',
   await createDialog
     .getByRole('textbox', { name: '显示名称', exact: true })
     .fill('运营人员')
-  await createDialog
-    .getByRole('combobox', { name: '角色', exact: true })
-    .click()
+  const roleSelect = createDialog.getByRole('combobox', {
+    name: '角色',
+    exact: true,
+  })
+  await roleSelect.click()
+  const roleListbox = page.getByRole('listbox').filter({ visible: true })
+  await expect(roleListbox).toBeVisible()
+  await page.waitForTimeout(150)
+  const roleTriggerBox = await roleSelect.boundingBox()
+  const roleListboxBox = await roleListbox.boundingBox()
+  if (!roleTriggerBox || !roleListboxBox) {
+    throw new Error('Role select geometry is unavailable')
+  }
+  expect(roleListboxBox.y).toBeGreaterThanOrEqual(
+    roleTriggerBox.y + roleTriggerBox.height
+  )
   await clickOpenSelectOption(page, 'viewer')
   await createDialog
     .getByRole('textbox', { name: '临时密码', exact: true })
@@ -624,7 +637,7 @@ test('sends the user header on logout and clears it with the session', async ({
   expect(storage).toEqual({ auth: null, uid: null })
 })
 
-test('restores user filters through browser history and uses the mobile filter sheet', async ({
+test('restores auto-applied user filters through browser history', async ({
   page,
 }) => {
   await seedAuth(page, admin)
@@ -645,12 +658,11 @@ test('restores user filters through browser history and uses the mobile filter s
   }
 
   await page
-    .getByLabel('按角色筛选', { exact: true })
-    .filter({ visible: true })
+    .locator('summary')
+    .filter({ hasText: '角色', visible: true })
     .click()
-  await clickOpenSelectOption(page, 'viewer')
   await page
-    .getByRole('button', { name: '应用', exact: true })
+    .getByRole('button', { name: '查看者', exact: true })
     .filter({ visible: true })
     .click()
   await expect(page).toHaveURL(/role=viewer/)
@@ -658,10 +670,6 @@ test('restores user filters through browser history and uses the mobile filter s
     .getByLabel('搜索平台用户', { exact: true })
     .filter({ visible: true })
     .fill('ops')
-  const applyButton = page
-    .getByRole('button', { name: '应用', exact: true })
-    .filter({ visible: true })
-  await applyButton.click()
   await expect(page).toHaveURL(/filter=ops/)
   if (mobileFilters) {
     await expect(
@@ -728,7 +736,7 @@ test('keeps the 375px workspace within the viewport and exposes mobile navigatio
   )
   expect(horizontalOverflow).toBe(false)
   await expect(
-    page.getByLabel('按角色筛选', { exact: true }).filter({ visible: true })
+    page.locator('summary').filter({ hasText: '角色', visible: true })
   ).toBeVisible()
 
   await page.getByRole('button', { name: '打开导航' }).click()

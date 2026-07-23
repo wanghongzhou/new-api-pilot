@@ -241,16 +241,16 @@ var aggregationSpecs = []aggregationSpec{
 	usageFactDailyAggregation(),
 	hourlyAccountAggregation(),
 	hourlyCustomerAggregation(),
-	hourlySimpleAggregation("site", "site_stat_hourly", "site_id, hour_ts", "f.site_id, f.hour_ts", "COUNT(DISTINCT f.remote_user_id)"),
+	hourlySimpleAggregation("site", "site_stat_hourly", "site_id, hour_ts", "f.site_id, f.hour_ts", "COUNT(DISTINCT CASE WHEN f.remote_user_id > 0 THEN f.remote_user_id END)"),
 	hourlyGlobalAggregation(),
-	hourlySimpleAggregation("model", "model_stat_hourly", "site_id, model_name, hour_ts", "f.site_id, f.model_name, f.hour_ts", "COUNT(DISTINCT f.remote_user_id)"),
-	hourlySimpleAggregation("channel", "channel_stat_hourly", "site_id, channel_id, hour_ts", "f.site_id, f.channel_id, f.hour_ts", "COUNT(DISTINCT f.remote_user_id)"),
+	hourlySimpleAggregation("model", "model_stat_hourly", "site_id, model_name, hour_ts", "f.site_id, f.model_name, f.hour_ts", "COUNT(DISTINCT CASE WHEN f.remote_user_id > 0 THEN f.remote_user_id END)"),
+	hourlySimpleAggregation("channel", "channel_stat_hourly", "site_id, channel_id, hour_ts", "f.site_id, f.channel_id, f.hour_ts", "COUNT(DISTINCT CASE WHEN f.remote_user_id > 0 THEN f.remote_user_id END)"),
 	dailyAccountAggregation(),
 	dailyCustomerAggregation(),
 	dailySiteAggregation(),
 	dailyGlobalAggregation(),
-	dailySimpleAggregation("model", "model_stat_daily", "site_id, model_name, date_key", "f.site_id, f.model_name", "COUNT(DISTINCT f.remote_user_id)"),
-	dailySimpleAggregation("channel", "channel_stat_daily", "site_id, channel_id, date_key", "f.site_id, f.channel_id", "COUNT(DISTINCT f.remote_user_id)"),
+	dailySimpleAggregation("model", "model_stat_daily", "site_id, model_name, date_key", "f.site_id, f.model_name", "COUNT(DISTINCT CASE WHEN f.remote_user_id > 0 THEN f.remote_user_id END)"),
+	dailySimpleAggregation("channel", "channel_stat_daily", "site_id, channel_id, date_key", "f.site_id, f.channel_id", "COUNT(DISTINCT CASE WHEN f.remote_user_id > 0 THEN f.remote_user_id END)"),
 }
 
 func usageFactDailyAggregation() aggregationSpec {
@@ -348,7 +348,8 @@ hour_coverage AS (
 ),
 metrics AS (
   SELECT f.hour_ts, SUM(f.request_count) AS request_count, SUM(f.quota) AS quota,
-    SUM(f.token_used) AS token_used, COUNT(DISTINCT f.site_id, f.remote_user_id) AS active_users
+    SUM(f.token_used) AS token_used,
+    COUNT(DISTINCT CASE WHEN f.remote_user_id > 0 THEN CONCAT(f.site_id, ':', f.remote_user_id) END) AS active_users
   FROM usage_fact_hourly AS f
   JOIN collection_window AS w
     ON w.site_id = f.site_id AND w.hour_ts = f.hour_ts AND w.status = 'complete'
@@ -436,7 +437,7 @@ func dailySiteAggregation() aggregationSpec {
 metrics AS (
   SELECT f.site_id, ` + dateKey + ` AS date_key, SUM(f.request_count) AS request_count,
     SUM(f.quota) AS quota, SUM(f.token_used) AS token_used,
-    COUNT(DISTINCT f.remote_user_id) AS active_users
+    COUNT(DISTINCT CASE WHEN f.remote_user_id > 0 THEN f.remote_user_id END) AS active_users
   FROM usage_fact_hourly AS f
   JOIN collection_window AS w
     ON w.site_id = f.site_id AND w.hour_ts = f.hour_ts AND w.status = 'complete'
@@ -463,7 +464,7 @@ func dailyGlobalAggregation() aggregationSpec {
 metrics AS (
   SELECT ` + dateKey + ` AS date_key, SUM(f.request_count) AS request_count,
     SUM(f.quota) AS quota, SUM(f.token_used) AS token_used,
-    COUNT(DISTINCT f.site_id, f.remote_user_id) AS active_users
+    COUNT(DISTINCT CASE WHEN f.remote_user_id > 0 THEN CONCAT(f.site_id, ':', f.remote_user_id) END) AS active_users
   FROM usage_fact_hourly AS f
   JOIN collection_window AS w
     ON w.site_id = f.site_id AND w.hour_ts = f.hour_ts AND w.status = 'complete'

@@ -172,8 +172,6 @@ export type MessageParamsByCode = {
     scope_id: IdString
     scope_name: string
   }
-  SLO_USAGE_DELAY_TOO_HIGH: { value: number; threshold: number }
-  SLO_USAGE_CONCURRENCY_TOO_LOW: { value: number; threshold: number }
   INTERNAL_CONTRACT_ERROR: { component: string; value?: string }
 }
 

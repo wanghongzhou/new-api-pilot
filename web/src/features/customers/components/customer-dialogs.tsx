@@ -4,16 +4,22 @@ import { Controller, useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import {
+  sideDrawerContentClassName,
+  sideDrawerFooterClassName,
+  sideDrawerFormClassName,
+  sideDrawerHeaderClassName,
+} from '@/components/drawer-layout'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from '@/components/ui/drawer'
 import { FormField } from '@/components/ui/form-field'
 import { Input } from '@/components/ui/input'
 import { SelectControl as Select } from '@/components/ui/select-control'
@@ -118,18 +124,18 @@ function CustomerFormDialog({
     }
   })
   return (
-    <Dialog onOpenChange={(open) => !open && onClose()} open>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>
+    <Drawer direction='right' onOpenChange={(open) => !open && onClose()} open>
+      <DrawerContent className={sideDrawerContentClassName('sm:max-w-xl')}>
+        <DrawerHeader className={sideDrawerHeaderClassName()}>
+          <DrawerTitle>
             {t(
               dynamicI18nKey(
                 'customer',
                 customer ? 'customer.edit.title' : 'customer.create.title'
               )
             )}
-          </DialogTitle>
-          <DialogDescription>
+          </DrawerTitle>
+          <DrawerDescription>
             {t(
               dynamicI18nKey(
                 'customer',
@@ -138,10 +144,10 @@ function CustomerFormDialog({
                   : 'customer.create.description'
               )
             )}
-          </DialogDescription>
-        </DialogHeader>
+          </DrawerDescription>
+        </DrawerHeader>
         <form
-          className='grid gap-4'
+          className={sideDrawerFormClassName('gap-4')}
           id='customer-form'
           noValidate
           onSubmit={submit}
@@ -251,7 +257,7 @@ function CustomerFormDialog({
             </p>
           )}
         </form>
-        <DialogFooter>
+        <DrawerFooter className={sideDrawerFooterClassName()}>
           <Button onClick={onClose} type='button' variant='outline'>
             {t('common.cancel')}
           </Button>
@@ -259,9 +265,9 @@ function CustomerFormDialog({
             {pending && <Spinner />}
             {t('common.save')}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </DrawerFooter>
+      </DrawerContent>
+    </Drawer>
   )
 }
 

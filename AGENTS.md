@@ -85,10 +85,58 @@ live under `web/src/routes/`.
 - Use semantic Tailwind tokens instead of fixed component-level colors.
 - Run `bun run check` after TypeScript or TSX changes.
 
-## Container validation and local refresh
+## AI Agent completion workflow
 
-- After completing any change, rebuild and restart the local API with
-  `docker compose up -d --build api`.
-- Confirm the restarted API container is healthy before handoff.
-- Use `make test-api-docker` for backend test validation. It builds the Go test
-  image and executes the test suite through Docker Compose networking.
+Every task must finish as a coherent, locally reviewable change. Apply this
+sequence without waiting for the user to repeat it:
+
+1. Classify the request as a feature/contract change or a contract-preserving
+   bug fix, and inspect the existing dirty worktree without reverting unrelated
+   user changes.
+2. For a feature/contract change, update the authoritative detailed design
+   first. For a bug fix, update the design only when the documented boundary is
+   inaccurate or incomplete.
+3. Implement the complete vertical slice, including backend, frontend, API
+   contracts, configuration, permissions, jobs, translations, fixtures and
+   exposed integration points that are actually affected.
+4. Add or update deterministic tests that prove the changed behavior. Do not
+   weaken existing assertions merely to make a change pass.
+5. Run validation proportionate to the touched areas: `gofmt` and Docker Go
+   tests for backend changes; `bun run check` plus relevant unit tests for
+   frontend changes; docs checks for authoritative documentation changes.
+6. Refresh the isolated local development stack, verify health, and leave the
+   browser-review URL ready before handoff.
+
+Do not call a feature/contract change complete while documentation,
+implementation, tests, generated contracts or the running development stack
+disagree. If a validation failure is caused by unrelated pre-existing work,
+report it explicitly while still running every safe in-scope validation.
+
+## Development stack and local refresh
+
+- `docker-compose.dev.yml` is the only Compose file authorized for automatic
+  local refresh. It has an isolated Compose project, persistent MySQL/Redis and
+  export volumes, a backend-only development image, and a persistent Bun/
+  Rsbuild web service with source bind mounts and HMR.
+- Never start, rebuild or recreate the production `docker-compose.yml` merely
+  to validate a code change. Production Compose is used only when the user
+  explicitly asks for production deployment or production-mode verification.
+- After a backend, Go dependency, Dockerfile, Compose or runtime configuration
+  change, run:
+  `docker compose -f docker-compose.dev.yml up -d --build api web`.
+- For frontend-only TS/TSX/CSS/i18n changes, do not rebuild the API. HMR should
+  apply the change; ensure the stack is running with:
+  `docker compose -f docker-compose.dev.yml up -d web`.
+- Before handoff, require both `new-api-pilot-dev-api` and
+  `new-api-pilot-dev-web` to be healthy. Verify `http://localhost:3000/healthz`
+  and that `http://localhost:5173` returns successfully. For a user-visible
+  change, smoke-test the affected browser route when practical.
+- If refresh or health checks fail, inspect `docker compose -f
+  docker-compose.dev.yml logs --tail=200 api web mysql redis`, fix the in-scope
+  problem, and retry. Do not leave the user with a broken local stack.
+- The stable user-facing development URL is `http://localhost:5173`; port 3000
+  is the backend API and is not the frontend entry point.
+- Use `make test-api-docker` for backend validation. If GNU Make is unavailable,
+  execute the equivalent Docker commands from the Makefile; tests must still
+  use the isolated `new_api_pilot_test_*` databases and never the development
+  database.

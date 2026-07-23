@@ -27,7 +27,7 @@ func TestSettingRoutesEnforceViewerReadAdminWriteWithoutSecretLeakage(t *testing
 	}
 	settings, err := service.NewSettingService(service.SettingServiceOptions{
 		Repository: model.NewSettingRepository(tx), Cipher: cipher,
-		Clock: testsupport.NewFakeClock(time.Unix(1_752_400_800, 0)), AppEnv: config.EnvironmentTest,
+		Clock:        testsupport.NewFakeClock(time.Unix(1_752_400_800, 0)),
 		PublicOrigin: "https://pilot.example",
 	})
 	if err != nil {

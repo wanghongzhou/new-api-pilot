@@ -4,43 +4,36 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        BUN_IMAGE: ${BUN_IMAGE:-oven/bun:1.3.13-alpine}
-        GO_IMAGE: ${GO_IMAGE:-golang:1.25-alpine}
-        RUNTIME_IMAGE: ${RUNTIME_IMAGE:-alpine:3.22}
-        GO_MODULE_PROXY: ${GO_MODULE_PROXY:-https://proxy.golang.org,direct}
-        GO_SUM_DATABASE: ${GO_SUM_DATABASE:-sum.golang.org}
-        ALPINE_MIRROR: ${ALPINE_MIRROR:-}
-    image: new-api-pilot-dev:local
+        BUN_IMAGE: ${BUN_IMAGE:-docker.m.daocloud.io/oven/bun:1.3.13-alpine}
+        GO_IMAGE: ${GO_IMAGE:-docker.m.daocloud.io/library/golang:1.25-alpine}
+        RUNTIME_IMAGE: ${RUNTIME_IMAGE:-docker.m.daocloud.io/library/alpine:3.22}
+        GO_MODULE_PROXY: ${GO_MODULE_PROXY:-https://goproxy.cn,https://mirrors.aliyun.com/goproxy/,direct}
+        GO_SUM_DATABASE: ${GO_SUM_DATABASE:-sum.golang.google.cn}
+        ALPINE_MIRROR: ${ALPINE_MIRROR:-https://mirrors.aliyun.com/alpine}
+    image: ${API_IMAGE:-new-api-pilot:local}
     container_name: new-api-pilot-api
     restart: unless-stopped
     ports:
-      - '3000:3000'
+      - '${API_PORT:-3000}:3000'
     environment:
-      APP_ENV: development
+      APP_ENV: production
       PORT: '3000'
-      DATABASE_DSN: pilot:pilot@tcp(mysql:3306)/new_api_pilot?charset=utf8mb4&parseTime=True&loc=Asia%2FShanghai
-      REDIS_DSN: redis://redis:6379/0
-      REDIS_DB: '0'
-      REDIS_TIMEOUT_SECONDS: '2'
-      FAST_TASK_HISTORY_RETENTION_SECONDS: '86400'
-      FAST_TASK_HISTORY_COUNT: '100'
-      SESSION_SECRET: bmV3LWFwaS1waWxvdC1kZXYtc2Vzc2lvbi1zZWNyZXQtMjAyNg==
-      ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
-      PLATFORM_BOOTSTRAP_ADMIN_PASSWORD: change-me
-      SESSION_COOKIE_SECURE: 'false'
-      EXPORT_DIR: /data/exports
-      PUBLIC_ORIGIN: http://localhost:3000
-      TRUSTED_PROXIES: ''
-      UPSTREAM_ALLOWED_HOST_SUFFIXES: ''
-      UPSTREAM_ALLOWED_CIDRS: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
-      UPSTREAM_CA_FILE: ''
-      UPSTREAM_CONNECT_TIMEOUT_SECONDS: '5'
-      UPSTREAM_RESPONSE_HEADER_TIMEOUT_SECONDS: '15'
-      UPSTREAM_REQUEST_TIMEOUT_SECONDS: '30'
-      UPSTREAM_EXPORT_TIMEOUT_SECONDS: '120'
-      DINGTALK_ALLOWED_HOSTS: ''
-      METRICS_ALLOWED_CIDRS: 127.0.0.0/8,172.16.0.0/12
-      TZ: Asia/Shanghai
+      DATABASE_DSN: ${DATABASE_DSN:?DATABASE_DSN is required}
+      REDIS_DSN: ${REDIS_DSN:?REDIS_DSN is required}
+      REDIS_DB: ${REDIS_DB:-0}
+      REDIS_TIMEOUT_SECONDS: ${REDIS_TIMEOUT_SECONDS:-2}
+      SQL_MAX_IDLE_CONNS: ${SQL_MAX_IDLE_CONNS:-20}
+      SQL_MAX_OPEN_CONNS: ${SQL_MAX_OPEN_CONNS:-100}
+      SQL_MAX_LIFETIME_SECONDS: ${SQL_MAX_LIFETIME_SECONDS:-60}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+      PLATFORM_BOOTSTRAP_ADMIN_PASSWORD: ${PLATFORM_BOOTSTRAP_ADMIN_PASSWORD:-}
+      SESSION_COOKIE_SECURE: 'true'
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?PUBLIC_ORIGIN is required}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      UPSTREAM_CA_FILE: ${UPSTREAM_CA_FILE:-}
+      DINGTALK_ALLOWED_HOSTS: ${DINGTALK_ALLOWED_HOSTS:-}
+      METRICS_ALLOWED_CIDRS: ${METRICS_ALLOWED_CIDRS:?METRICS_ALLOWED_CIDRS is required}
     volumes:
       - pilot_exports:/data/exports
     depends_on:
@@ -52,16 +45,14 @@ services:
       - pilot-network
 
   mysql:
-    image: ${MYSQL_IMAGE:-mysql:8.4}
+    image: ${MYSQL_IMAGE:-docker.m.daocloud.io/library/mysql:8.4}
     container_name: new-api-pilot-mysql
     restart: unless-stopped
-    ports:
-      - '3307:3306'
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: new_api_pilot
-      MYSQL_USER: pilot
-      MYSQL_PASSWORD: pilot
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-new_api_pilot}
+      MYSQL_USER: ${MYSQL_USER:-pilot}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
       TZ: Asia/Shanghai
     command:
       - --character-set-server=utf8mb4
@@ -70,7 +61,7 @@ services:
     volumes:
       - pilot_mysql:/var/lib/mysql
     healthcheck:
-      test: ['CMD-SHELL', 'mysqladmin ping -h 127.0.0.1 -upilot -ppilot --silent']
+      test: ['CMD-SHELL', 'mysqladmin ping -h 127.0.0.1 -u$$MYSQL_USER -p$$MYSQL_PASSWORD --silent']
       interval: 5s
       timeout: 3s
       retries: 20
@@ -79,17 +70,19 @@ services:
       - pilot-network
 
   redis:
-    image: ${REDIS_IMAGE:-redis:7-alpine}
+    image: ${REDIS_IMAGE:-docker.m.daocloud.io/library/redis:7-alpine}
     container_name: new-api-pilot-redis
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
+    command: ['redis-server', '--appendonly', 'yes', '--requirepass', '${REDIS_PASSWORD:?REDIS_PASSWORD is required}']
     volumes:
       - pilot_redis:/data
     healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
+      test: ['CMD-SHELL', 'redis-cli -a "$$REDIS_PASSWORD" ping | grep PONG']
       interval: 5s
       timeout: 3s
       retries: 20
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     networks:
       - pilot-network
 

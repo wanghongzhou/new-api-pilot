@@ -87,6 +87,9 @@ func (service *UsageCollectionService) CollectHour(
 		*site.StatisticsStartAt >= request.Window.HourTS+3600 {
 		return UsageCollectionResult{}, model.ErrSiteRunConfigChanged
 	}
+	if request.Run.TaskType == constant.TaskTypeUsageBackfill || request.Run.TaskType == constant.TaskTypeUsageValidation {
+		ctx = WithUpstreamRequestClass(ctx, UpstreamRequestBulk)
+	}
 
 	flow, flowErr := client.FlowHour(ctx, request.RequestID, request.Window.HourTS)
 	data, dataErr := client.DataHour(ctx, request.RequestID, request.Window.HourTS)
@@ -126,11 +129,8 @@ func (service *UsageCollectionService) CollectHour(
 		}, nil
 	}
 
-	facts, factErr := usageFactsFromFlow(flow)
-	consistencyErr := ValidateFlowDataConsistency(flow, data)
-	if consistencyErr == nil {
-		consistencyErr = validateWholeHourUsageTotals(flow, data)
-	}
+	facts, attributionStatus, consistencyErr := reconcileUsageFacts(flow, data)
+	factErr := error(nil)
 	if factErr != nil || consistencyErr != nil {
 		cause := firstError(factErr, consistencyErr)
 		failureCode := usageFailureCode(cause)
@@ -169,6 +169,7 @@ func (service *UsageCollectionService) CollectHour(
 		ExpectedConfigVersion: request.Run.SiteConfigVersion, HourTS: request.Window.HourTS,
 		AttemptCount: request.Window.AttemptCount, RequestID: request.RequestID, Now: now,
 		FetchedRows: fetchedRows, Validation: request.Run.TaskType == constant.TaskTypeUsageValidation, Facts: facts,
+		AttributionStatus: attributionStatus,
 	})
 	if err != nil {
 		return UsageCollectionResult{}, err
@@ -244,7 +245,8 @@ func usageFactsFromFlow(flow []dto.UpstreamFlowRow) ([]model.UsageFactInput, err
 	for index, row := range flow {
 		if row.UserID <= 0 || row.ChannelID < 0 || row.TokenID < 0 || row.RequestCount < 0 || row.Quota < 0 || row.TokenUsed < 0 ||
 			!validUpstreamString(row.Username, 0, 255) || !validUpstreamString(row.ModelName, 0, 255) ||
-			!validUpstreamString(row.UseGroup, 0, 128) || !validUpstreamString(row.TokenName, 0, 255) ||
+			!validUpstreamString(row.UseGroup, 0, 128) || row.UseGroup == model.UsageLegacyUnattributedGroup ||
+			!validUpstreamString(row.TokenName, 0, 255) ||
 			!validUpstreamString(row.NodeName, 0, 128) {
 			return nil, newUpstreamRequestError(UpstreamErrorResponseInvalid)
 		}
@@ -255,6 +257,86 @@ func usageFactsFromFlow(flow []dto.UpstreamFlowRow) ([]model.UsageFactInput, err
 		}
 	}
 	return facts, nil
+}
+
+func reconcileUsageFacts(
+	flow []dto.UpstreamFlowRow,
+	data []dto.UpstreamDataRow,
+) ([]model.UsageFactInput, string, error) {
+	facts, err := usageFactsFromFlow(flow)
+	if err != nil {
+		return nil, "", err
+	}
+	flowTotals := make(map[string]metricTotals)
+	for _, row := range flow {
+		totals := flowTotals[row.ModelName]
+		if !addMetricTotals(&totals, row.RequestCount, row.Quota, row.TokenUsed) {
+			return nil, "", newUpstreamRequestError(UpstreamErrorResponseInvalid)
+		}
+		flowTotals[row.ModelName] = totals
+	}
+	dataTotals := make(map[string]metricTotals)
+	for _, row := range data {
+		if row.CreatedAt <= 0 || row.RequestCount < 0 || row.Quota < 0 || row.TokenUsed < 0 ||
+			!validUpstreamString(row.ModelName, 0, 255) {
+			return nil, "", newUpstreamRequestError(UpstreamErrorResponseInvalid)
+		}
+		totals := dataTotals[row.ModelName]
+		if !addMetricTotals(&totals, row.RequestCount, row.Quota, row.TokenUsed) {
+			return nil, "", newUpstreamRequestError(UpstreamErrorResponseInvalid)
+		}
+		dataTotals[row.ModelName] = totals
+	}
+	for modelName, totals := range flowTotals {
+		if _, exists := dataTotals[modelName]; !exists && totals != (metricTotals{}) {
+			return facts, "", newUpstreamRequestError(UpstreamErrorDataMismatch)
+		}
+	}
+	attributionStatus := model.UsageAttributionAttributed
+	for modelName, expected := range dataTotals {
+		actual := flowTotals[modelName]
+		if actual.RequestCount > expected.RequestCount || actual.Quota > expected.Quota ||
+			actual.TokenUsed > expected.TokenUsed {
+			return facts, "", newUpstreamRequestError(UpstreamErrorDataMismatch)
+		}
+		residual := metricTotals{
+			RequestCount: expected.RequestCount - actual.RequestCount,
+			Quota:        expected.Quota - actual.Quota,
+			TokenUsed:    expected.TokenUsed - actual.TokenUsed,
+		}
+		if residual == (metricTotals{}) {
+			continue
+		}
+		facts = append(facts, model.UsageFactInput{
+			RemoteUserID:     model.UsageLegacyUnattributedRemoteUserID,
+			UsernameSnapshot: model.UsageLegacyUnattributedUsername,
+			ModelName:        modelName,
+			UseGroup:         model.UsageLegacyUnattributedGroup,
+			RequestCount:     residual.RequestCount,
+			Quota:            residual.Quota,
+			TokenUsed:        residual.TokenUsed,
+		})
+		attributionStatus = model.UsageAttributionLegacyUnattributed
+	}
+	reconciled := make(map[string]metricTotals)
+	for _, fact := range facts {
+		totals := reconciled[fact.ModelName]
+		if !addMetricTotals(&totals, fact.RequestCount, fact.Quota, fact.TokenUsed) {
+			return nil, "", newUpstreamRequestError(UpstreamErrorResponseInvalid)
+		}
+		reconciled[fact.ModelName] = totals
+	}
+	for modelName, expected := range dataTotals {
+		if reconciled[modelName] != expected {
+			return facts, "", newUpstreamRequestError(UpstreamErrorDataMismatch)
+		}
+	}
+	for modelName, actual := range reconciled {
+		if _, exists := dataTotals[modelName]; !exists && actual != (metricTotals{}) {
+			return facts, "", newUpstreamRequestError(UpstreamErrorDataMismatch)
+		}
+	}
+	return facts, attributionStatus, nil
 }
 
 func validateWholeHourUsageTotals(flow []dto.UpstreamFlowRow, data []dto.UpstreamDataRow) error {

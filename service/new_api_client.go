@@ -47,6 +47,7 @@ type NewAPIClientOptions struct {
 	RequestTimeout      time.Duration
 	ExportTimeout       time.Duration
 	Metrics             UpstreamMetricsRecorder
+	Governor            UpstreamGovernor
 }
 
 type newAPIClientDependencies struct {
@@ -69,6 +70,7 @@ type NewAPIClient struct {
 	now              func() time.Time
 	maxResponseBytes int64
 	metrics          UpstreamMetricsRecorder
+	governor         UpstreamGovernor
 }
 
 func NewNewAPIClient(options NewAPIClientOptions) (*NewAPIClient, error) {
@@ -93,11 +95,6 @@ func newNewAPIClient(options NewAPIClientOptions, dependencies newAPIClientDepen
 	headerTimeout := defaultDuration(options.HeaderTimeout, UpstreamResponseHeaderTimeout)
 	requestTimeout := defaultDuration(options.RequestTimeout, UpstreamRequestTimeout)
 	exportTimeout := defaultDuration(options.ExportTimeout, UpstreamExportTimeout)
-	if !dependencies.allowNonDesignTimeouts && (connectTimeout != UpstreamConnectTimeout ||
-		headerTimeout != UpstreamResponseHeaderTimeout || requestTimeout != UpstreamRequestTimeout ||
-		exportTimeout != UpstreamExportTimeout) {
-		return nil, errors.New("upstream timeouts must match the fixed design values")
-	}
 	if connectTimeout <= 0 || headerTimeout <= 0 || requestTimeout <= 0 || exportTimeout <= 0 {
 		return nil, errors.New("upstream timeouts must be positive")
 	}
@@ -144,6 +141,7 @@ func newNewAPIClient(options NewAPIClientOptions, dependencies newAPIClientDepen
 		now:              now,
 		maxResponseBytes: maxResponseBytes,
 		metrics:          options.Metrics,
+		governor:         options.Governor,
 	}, nil
 }
 
@@ -1126,6 +1124,13 @@ func (client *NewAPIClient) do(
 	requestURL.Path = strings.TrimRight(client.baseURL.Path, "/") + endpoint
 	requestURL.RawPath = ""
 	requestURL.RawQuery = query.Encode()
+	if client.governor != nil {
+		release, acquireErr := client.governor.Acquire(ctx, client.baseOrigin, upstreamRequestClassFromContext(ctx))
+		if acquireErr != nil {
+			return 0, annotateUpstreamRequestError(newUpstreamRequestError(UpstreamErrorUnavailable), method, endpoint, "", 0, 0)
+		}
+		defer release()
+	}
 	requestContext, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	request, err := http.NewRequestWithContext(requestContext, method, requestURL.String(), body)
@@ -1183,6 +1188,9 @@ func (client *NewAPIClient) do(
 		return 0, newUpstreamRequestError(UpstreamErrorTokenRotationResultUnknown)
 	}
 	retryAfter, hasRetryAfter := parseRetryAfter(response.Header.Get("Retry-After"), client.now())
+	if response.StatusCode == http.StatusTooManyRequests && client.governor != nil {
+		client.governor.ObserveRateLimit(client.baseOrigin, retryAfter, hasRetryAfter)
+	}
 	if statusErr := classifyUpstreamHTTPStatus(response.StatusCode, retryAfter, hasRetryAfter); statusErr != nil {
 		drainUpstreamResponse(response.Body)
 		return 0, annotateUpstreamRequestError(statusErr, method, endpoint, responseContentType, responseStatus, 0)

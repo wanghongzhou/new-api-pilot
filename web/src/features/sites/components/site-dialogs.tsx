@@ -12,6 +12,12 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
+import {
+  sideDrawerContentClassName,
+  sideDrawerFooterClassName,
+  sideDrawerFormClassName,
+  sideDrawerHeaderClassName,
+} from '@/components/drawer-layout'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -24,6 +30,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from '@/components/ui/drawer'
 import { FormField } from '@/components/ui/form-field'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
@@ -345,18 +359,18 @@ function EditSiteDialog({
     : null
 
   return (
-    <Dialog onOpenChange={(open) => !open && onClose()} open>
-      <DialogContent className='max-w-2xl'>
-        <DialogHeader>
-          <DialogTitle>{t('site.edit.title')}</DialogTitle>
-          <DialogDescription>{t('site.edit.description')}</DialogDescription>
-        </DialogHeader>
+    <Drawer direction='right' onOpenChange={(open) => !open && onClose()} open>
+      <DrawerContent className={sideDrawerContentClassName('sm:max-w-2xl')}>
+        <DrawerHeader className={sideDrawerHeaderClassName()}>
+          <DrawerTitle>{t('site.edit.title')}</DrawerTitle>
+          <DrawerDescription>{t('site.edit.description')}</DrawerDescription>
+        </DrawerHeader>
         <DetailQueryContent
           error={detailQuery.isError}
           pending={detailQuery.isPending}
         >
           <form
-            className='grid gap-4'
+            className={sideDrawerFormClassName('gap-4')}
             id='edit-site-form'
             noValidate
             onSubmit={submit}
@@ -535,7 +549,7 @@ function EditSiteDialog({
             )}
           </form>
         </DetailQueryContent>
-        <DialogFooter>
+        <DrawerFooter className={sideDrawerFooterClassName()}>
           <Button onClick={onClose} type='button' variant='outline'>
             {t('common.cancel')}
           </Button>
@@ -554,9 +568,9 @@ function EditSiteDialog({
               ? t('site.preflight.run')
               : t('common.save')}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </DrawerFooter>
+      </DrawerContent>
+    </Drawer>
   )
 }
 

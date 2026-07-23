@@ -2,7 +2,6 @@ package worker
 
 import (
 	"sync"
-	"time"
 
 	"new-api-pilot/constant"
 	"new-api-pilot/model"
@@ -24,11 +23,6 @@ const (
 	QueueAccountRebuild  QueueKind = "account_rebuild"
 	QueueCustomerRebuild QueueKind = "customer_rebuild"
 	QueueInitialBackfill QueueKind = "initial_backfill"
-)
-
-const (
-	initialBackfillConcurrency   = 10
-	initialBackfillWindowTimeout = 90 * time.Second
 )
 
 var independentQueueOrder = []QueueKind{

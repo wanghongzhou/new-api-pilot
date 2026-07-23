@@ -220,6 +220,61 @@ func TestUsageCollectionRejectsPerModelMismatchWhenWholeHourMatches(t *testing.T
 	}
 }
 
+func TestUsageCollectionReconcilesLegacyUnattributedResidualByModel(t *testing.T) {
+	now := time.Date(2026, 7, 13, 8, 35, 0, 0, time.UTC)
+	hour := now.Unix() - now.Unix()%3600 - 3600
+	flow := []dto.UpstreamFlowRow{{
+		UserID: 1, Username: "root", ModelName: "a", ChannelID: 9, UseGroup: "default",
+		RequestCount: 2, Quota: 20, TokenUsed: 200,
+	}}
+	data := []dto.UpstreamDataRow{
+		{ModelName: "a", CreatedAt: hour, RequestCount: 3, Quota: 25, TokenUsed: 220},
+		{ModelName: "b", CreatedAt: hour, RequestCount: 4, Quota: 40, TokenUsed: 400},
+	}
+	facts, status, err := reconcileUsageFacts(flow, data)
+	if err != nil || status != model.UsageAttributionLegacyUnattributed || len(facts) != 3 {
+		t.Fatalf("reconciled facts = %#v, status=%q, err=%v", facts, status, err)
+	}
+	residuals := map[string]metricTotals{}
+	for _, fact := range facts {
+		if fact.RemoteUserID != model.UsageLegacyUnattributedRemoteUserID {
+			continue
+		}
+		if fact.UsernameSnapshot != model.UsageLegacyUnattributedUsername ||
+			fact.UseGroup != model.UsageLegacyUnattributedGroup || fact.ChannelID != 0 || fact.TokenID != 0 {
+			t.Fatalf("legacy residual dimensions = %#v", fact)
+		}
+		residuals[fact.ModelName] = metricTotals{
+			RequestCount: fact.RequestCount, Quota: fact.Quota, TokenUsed: fact.TokenUsed,
+		}
+	}
+	if residuals["a"] != (metricTotals{RequestCount: 1, Quota: 5, TokenUsed: 20}) ||
+		residuals["b"] != (metricTotals{RequestCount: 4, Quota: 40, TokenUsed: 400}) {
+		t.Fatalf("legacy residual totals = %#v", residuals)
+	}
+
+	client := &usageCollectionTestClient{flow: flow, data: data}
+	collector, run, window := newUsageCollectionTestService(t, now, hour, constant.TaskTypeUsageBackfill, client)
+	result, err := collector.CollectHour(context.Background(), UsageCollectionRequest{
+		Run: run, Window: window, RequestID: run.LastRequestID,
+	})
+	if err != nil || result.Failure != nil || result.Planned.WrittenRows != 3 ||
+		result.Planned.AttributionStatus != model.UsageAttributionLegacyUnattributed {
+		t.Fatalf("collect reconciled residual = %#v, %v", result, err)
+	}
+}
+
+func TestUsageCollectionRejectsFlowAboveAuthoritativeData(t *testing.T) {
+	hour := int64(1_752_948_000)
+	_, _, err := reconcileUsageFacts(
+		[]dto.UpstreamFlowRow{{UserID: 1, ModelName: "a", RequestCount: 2, Quota: 20, TokenUsed: 200}},
+		[]dto.UpstreamDataRow{{ModelName: "a", CreatedAt: hour, RequestCount: 1, Quota: 20, TokenUsed: 200}},
+	)
+	if !errors.Is(err, ErrUpstreamDataMismatch) {
+		t.Fatalf("flow above data error = %v", err)
+	}
+}
+
 func TestUsageCollectionRejectsHourBeforeStatisticsStartWithoutUpstreamCalls(t *testing.T) {
 	now := time.Date(2026, 7, 13, 9, 5, 0, 0, time.UTC)
 	hour := now.Unix() - now.Unix()%3600 - 3600

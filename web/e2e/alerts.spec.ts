@@ -517,7 +517,7 @@ test('supports URL filters, sorting, pagination, detail retry, and all delivery 
     fullPage: true,
     path: testInfo.outputPath('alerts-filters.png'),
   })
-  await filters.getByRole('button', { name: '应用', exact: true }).click()
+  await filters.getByRole('button', { name: '搜索', exact: true }).click()
   await expect
     .poll(() =>
       JSON.parse(new URL(page.url()).searchParams.get('status') ?? '[]')
@@ -604,9 +604,9 @@ test('isolates summary and missing-detail failures, renders empty state, and kee
     .getByRole('group', { name: '状态' })
     .getByRole('checkbox', { name: '已恢复', exact: true })
     .click()
-  await filters.getByRole('button', { name: '应用', exact: true }).click()
+  await filters.getByRole('button', { name: '搜索', exact: true }).click()
   await expect(
-    page.getByRole('heading', { name: '当前没有匹配告警' })
+    page.getByText('当前没有匹配告警', { exact: true })
   ).toBeVisible()
 
   await page.getByRole('tab', { name: '规则', exact: true }).click()

@@ -1,14 +1,14 @@
 WEB_DIR = ./web
-COMPOSE_FILE = docker-compose.yml
+COMPOSE_FILE ?= docker-compose.dev.yml
 DEV_WEB_PORT ?= 5173
 GO_PACKAGES = . ./cmd/... ./common/... ./config/... ./constant/... ./controller/... ./dto/... ./internal/... ./middleware/... ./migrations/... ./model/... ./router/... ./service/... ./tests/... ./webui/... ./worker/...
 GO_TEST_FLAGS = -count=1
-BUN_IMAGE ?= oven/bun:1.3.13-alpine
-GO_IMAGE ?= golang:1.25-alpine
-RUNTIME_IMAGE ?= alpine:3.22
-GO_MODULE_PROXY ?= https://proxy.golang.org,direct
-GO_SUM_DATABASE ?= sum.golang.org
-ALPINE_MIRROR ?=
+BUN_IMAGE ?= docker.m.daocloud.io/oven/bun:1.3.13-alpine
+GO_IMAGE ?= docker.m.daocloud.io/library/golang:1.25-alpine
+RUNTIME_IMAGE ?= docker.m.daocloud.io/library/alpine:3.22
+GO_MODULE_PROXY ?= https://goproxy.cn,https://mirrors.aliyun.com/goproxy/,direct
+GO_SUM_DATABASE ?= sum.golang.google.cn
+ALPINE_MIRROR ?= https://mirrors.aliyun.com/alpine
 DOCKER_BUILD_ARGS = --build-arg BUN_IMAGE=$(BUN_IMAGE) --build-arg GO_IMAGE=$(GO_IMAGE) --build-arg RUNTIME_IMAGE=$(RUNTIME_IMAGE) --build-arg GO_MODULE_PROXY=$(GO_MODULE_PROXY) --build-arg GO_SUM_DATABASE=$(GO_SUM_DATABASE) --build-arg ALPINE_MIRROR=$(ALPINE_MIRROR)
 
 ifneq ($(strip $(TEST_DATABASE_DSN)),)
@@ -17,7 +17,8 @@ endif
 
 .PHONY: dev dev-api dev-api-rebuild dev-web down logs build-web check-web test-api test-api-docker test-support check-prometheus docs-check docs-check-final docs-check-docker docs-check-final-docker contract-generate acceptance
 
-dev: dev-api dev-web
+dev:
+	docker compose -f $(COMPOSE_FILE) up -d --build api web
 
 dev-api:
 	docker compose -f $(COMPOSE_FILE) up -d
@@ -26,14 +27,14 @@ dev-api-rebuild:
 	docker compose -f $(COMPOSE_FILE) up -d --build api
 
 dev-web:
+	docker compose -f $(COMPOSE_FILE) up -d web
 	@echo "Frontend: http://localhost:$(DEV_WEB_PORT)"
-	cd $(WEB_DIR) && bun install && bun run dev -- --host 0.0.0.0 --port $(DEV_WEB_PORT)
 
 down:
 	docker compose -f $(COMPOSE_FILE) down
 
 logs:
-	docker compose -f $(COMPOSE_FILE) logs -f api mysql
+	docker compose -f $(COMPOSE_FILE) logs -f api web mysql
 
 build-web:
 	cd $(WEB_DIR) && bun install --frozen-lockfile && bun run build

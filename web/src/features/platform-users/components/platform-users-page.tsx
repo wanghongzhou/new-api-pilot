@@ -2,7 +2,6 @@ import {
   Add01Icon,
   Edit03Icon,
   Key01Icon,
-  Refresh01Icon,
   UserAdd01Icon,
   UserRemove01Icon,
 } from '@hugeicons/core-free-icons'
@@ -16,11 +15,12 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { PageFooterPortal } from '@/components/layout/page-footer'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
-import { Spinner } from '@/components/ui/spinner'
+import { DataTablePagination } from '@/components/ui/data-table-pagination'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { fromUnixSeconds } from '@/lib/dayjs'
 import { useAuthStore } from '@/stores/auth-store'
@@ -191,33 +191,18 @@ export function PlatformUsersPage({
   return (
     <SectionPageLayout
       actions={
-        <>
-          <Button
-            aria-label={t('common.refresh')}
-            disabled={usersQuery.isFetching}
-            onClick={() => void usersQuery.refetch()}
-            size='icon'
-            title={t('common.refresh')}
-            variant='outline'
-          >
-            {usersQuery.isFetching ? (
-              <Spinner />
-            ) : (
-              <HugeiconsIcon icon={Refresh01Icon} strokeWidth={2} />
-            )}
+        isAdmin ? (
+          <Button onClick={() => setCreateOpen(true)}>
+            <HugeiconsIcon icon={Add01Icon} strokeWidth={2} />
+            {t('Create user')}
           </Button>
-          {isAdmin && (
-            <Button onClick={() => setCreateOpen(true)}>
-              <HugeiconsIcon icon={Add01Icon} strokeWidth={2} />
-              {t('Create user')}
-            </Button>
-          )}
-        </>
+        ) : undefined
       }
       description={t('Manage platform access and roles')}
+      fixedContent
       title={t('Platform users')}
     >
-      <div className='grid min-w-0 gap-5'>
+      <div className='flex h-full min-h-0 min-w-0 flex-col gap-5'>
         <PlatformUserFilters
           onApply={(filters) => onSearchChange({ ...filters, page: 1 })}
           value={{
@@ -227,36 +212,45 @@ export function PlatformUsersPage({
           }}
         />
 
-        <DataTable
-          ariaLabel={t('Platform users')}
-          columns={columns}
-          data={pageData?.items ?? []}
-          emptyDescription={t('Adjust the filters and try again')}
-          emptyTitle={t('No platform users found')}
-          error={usersQuery.isError}
-          fetching={usersQuery.isFetching && !initialLoading}
-          loading={initialLoading}
+        <div className='min-h-0 flex-1'>
+          <DataTable
+            ariaLabel={t('Platform users')}
+            columns={columns}
+            data={pageData?.items ?? []}
+            emptyDescription={t('Adjust the filters and try again')}
+            emptyTitle={t('No platform users found')}
+            error={usersQuery.isError}
+            fetching={usersQuery.isFetching && !initialLoading}
+            fillAvailableHeight
+            loading={initialLoading}
+            onRetry={() => void usersQuery.refetch()}
+            preserveHeaderWhenEmpty
+            renderMobileCard={(user) => (
+              <UserCard
+                currentUserId={currentUser?.id}
+                enabledAdminTotal={enabledAdminTotal}
+                isAdmin={isAdmin}
+                onEdit={setEditUser}
+                onReset={setResetUser}
+                onToggle={(target, action) =>
+                  setToggleState({ action, user: target })
+                }
+                user={user}
+              />
+            )}
+          />
+        </div>
+      </div>
+
+      <PageFooterPortal>
+        <DataTablePagination
           onPageChange={(page) => onSearchChange({ page })}
           onPageSizeChange={(pageSize) => onSearchChange({ page: 1, pageSize })}
-          onRetry={() => void usersQuery.refetch()}
           page={search.page}
           pageSize={pageData?.page_size ?? search.pageSize}
-          renderMobileCard={(user) => (
-            <UserCard
-              currentUserId={currentUser?.id}
-              enabledAdminTotal={enabledAdminTotal}
-              isAdmin={isAdmin}
-              onEdit={setEditUser}
-              onReset={setResetUser}
-              onToggle={(target, action) =>
-                setToggleState({ action, user: target })
-              }
-              user={user}
-            />
-          )}
           total={pageData?.total ?? 0}
         />
-      </div>
+      </PageFooterPortal>
 
       <CreateUserDialog
         onOpenChange={setCreateOpen}

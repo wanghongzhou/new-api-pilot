@@ -2,9 +2,16 @@
 
 set -eu
 
-compose_file=${COMPOSE_FILE:-docker-compose.yml}
+# Git Bash/MSYS rewrites container paths such as /root/.cache/go-build into
+# Windows host paths before invoking docker.exe. Disable that conversion so
+# Docker receives Linux container paths unchanged.
+case "$(uname -s 2>/dev/null || true)" in
+  MINGW*|MSYS*|CYGWIN*) export MSYS_NO_PATHCONV=1 ;;
+esac
+
+compose_file=${COMPOSE_FILE:-docker-compose.dev.yml}
 test_image=${TEST_API_DOCKER_IMAGE:-new-api-pilot-go-test:latest}
-test_network=${TEST_API_DOCKER_NETWORK:-new-api-pilot_pilot-network}
+test_network=${TEST_API_DOCKER_NETWORK:-new-api-pilot-dev_pilot-dev-network}
 test_build_cache=${TEST_API_DOCKER_BUILD_CACHE:-new-api-pilot-go-test-cache}
 test_go_proxy=${TEST_API_DOCKER_GOPROXY:-off}
 test_go_sum_database=${TEST_API_DOCKER_GOSUMDB:-off}

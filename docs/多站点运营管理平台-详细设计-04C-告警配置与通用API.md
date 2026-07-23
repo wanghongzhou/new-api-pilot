@@ -174,7 +174,7 @@ Access Token 加密密钥不在页面配置，由环境变量提供。
 
 配置值校验范围：小时采集延迟 1～59 分钟；队列并发 1～100；手动补采上限 1～3660 天；分钟留存 1～3650 天；导出有效期 1～168 小时、活跃任务上限 1～100、文件和磁盘阈值必须为正数；兜底汇率为空或正数。任何一项非法时整批 PUT 不落库。CPU/内存/磁盘阈值和连续次数只通过 alert-rules API 修改，不写 platform_setting。
 
-H+15 容量承诺的认证配置为 `usage_delay_minutes<=5` 且 `usage_concurrency>=5`，并使用 §50.4 固定容量画像。development/test 允许保存范围内的其他值并返回 `h15_slo_eligible=false`；production 的 PUT 若会使 eligible=false，整批返回 SLO_CONFIG_FORBIDDEN 且不落库，从而保证运行期不能破坏概要 SLO。手动补采 API 的范围上限必须实时读取 `collector.manual_backfill_max_days`，不得在 Controller 写死 366。
+系统设置不提供 H+15 发布资格判定，也不因 `usage_delay_minutes` 或 `usage_concurrency` 的组合阻止保存；两个字段只按各自范围校验。H+15 仍作为采集监控与容量验收目标，由告警和运维流程观测。手动补采 API 的范围上限必须实时读取 `collector.manual_backfill_max_days`，不得在 Controller 写死 366。
 
 配置更新后，新并发值只影响后续领取，不取消运行任务；留存值在下一次清理任务生效；导出上限在任务领取时读取并在该次尝试内固定。
 
