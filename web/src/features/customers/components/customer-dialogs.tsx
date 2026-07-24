@@ -219,9 +219,11 @@ function CustomerFormDialog({
               name='status'
               render={({ field }) => (
                 <Select
+                  alignItemWithTrigger={false}
                   id='customer-status'
                   name={field.name}
                   onChange={(event) => field.onChange(event.target.value)}
+                  portalled={false}
                   value={field.value}
                 >
                   {editableCustomerStatuses.map((status) => (

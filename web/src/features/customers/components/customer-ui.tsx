@@ -15,6 +15,13 @@ import { DataFreshness } from '@/components/data/data-freshness'
 import { DataStatusBadge } from '@/components/data/data-status'
 import { MetricValue } from '@/components/data/metric-value'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { calculateCrossSiteQuotaAmount, formatDecimal } from '@/lib/amount'
 
@@ -106,34 +113,36 @@ export function CustomerActions({
   const actions: CustomerAction[] =
     customer.status === 'disabled' ? ['enable'] : ['edit', 'disable', 'delete']
   return (
-    <details className='relative'>
-      <summary
-        aria-label={t('customer.actions.open')}
-        className='hover:bg-muted focus-visible:ring-ring flex size-10 list-none items-center justify-center rounded-md outline-none focus-visible:ring-2 [&::-webkit-details-marker]:hidden'
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            aria-label={t('customer.actions.open')}
+            size='icon'
+            title={t('customer.actions.open')}
+            variant='ghost'
+          />
+        }
       >
         <HugeiconsIcon icon={MoreVerticalIcon} strokeWidth={2} />
-      </summary>
-      <div className='bg-popover absolute top-11 right-0 z-30 grid min-w-48 rounded-md border p-1 shadow-lg'>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align='end' className='min-w-48'>
         {actions.map((action) => (
-          <button
-            className={
-              action === 'delete' || action === 'disable'
-                ? 'text-destructive hover:bg-destructive/10 flex min-h-10 items-center gap-2 rounded-sm px-3 text-left text-sm'
-                : 'hover:bg-muted flex min-h-10 items-center gap-2 rounded-sm px-3 text-left text-sm'
-            }
+          <DropdownMenuItem
             key={action}
-            onClick={(event) => {
-              event.currentTarget.closest('details')?.removeAttribute('open')
-              onAction(action, customer)
-            }}
-            type='button'
+            onClick={() => onAction(action, customer)}
+            variant={
+              action === 'delete' || action === 'disable'
+                ? 'destructive'
+                : 'default'
+            }
           >
             <HugeiconsIcon icon={customerActionIcons[action]} strokeWidth={2} />
             {t(dynamicI18nKey('customer', `customer.actions.${action}`))}
-          </button>
+          </DropdownMenuItem>
         ))}
-      </div>
-    </details>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
@@ -153,8 +162,8 @@ export function CustomerCard({
     <article
       className={
         customer.status === 'disabled'
-          ? 'border-border bg-muted/25 grid gap-4 rounded-lg border p-4'
-          : 'border-border bg-card grid gap-4 rounded-lg border p-4'
+          ? 'bg-muted/25 text-card-foreground ring-foreground/10 grid gap-4 rounded-xl p-4 ring-1'
+          : 'bg-card text-card-foreground ring-foreground/10 grid gap-4 rounded-xl p-4 ring-1'
       }
     >
       <div className='flex min-w-0 items-start justify-between gap-2'>

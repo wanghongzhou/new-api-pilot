@@ -8,6 +8,7 @@ import type { CustomerListItem } from '@/features/customers/types'
 import type { SiteListItem } from '@/features/sites/types'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { parseIdString } from '@/lib/api-types'
+import { hasFilterChanges } from '@/lib/filter-state'
 
 import {
   accountManagedStatuses,
@@ -48,19 +49,27 @@ export function AccountFilters({
   ) => {
     setDraft((current) => ({ ...current, [key]: item ? [item] : [] }))
   }
+  const reset: Draft = {
+    customerId: undefined,
+    filter: '',
+    managedStatus: [],
+    remoteState: [],
+    remoteStatus: [],
+    siteId: undefined,
+  }
   return (
     <FilterPanel
       description={t('account.filters.description')}
+      hasActiveFilters={hasFilterChanges(draft, reset, [
+        'customerId',
+        'filter',
+        'managedStatus',
+        'remoteState',
+        'remoteStatus',
+        'siteId',
+      ])}
       onApply={() => onApply({ ...draft, filter: draft.filter.trim() })}
       onReset={() => {
-        const reset: Draft = {
-          customerId: undefined,
-          filter: '',
-          managedStatus: [],
-          remoteState: [],
-          remoteStatus: [],
-          siteId: undefined,
-        }
         setDraft(reset)
         onApply(reset)
       }}

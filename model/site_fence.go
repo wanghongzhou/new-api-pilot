@@ -593,6 +593,31 @@ func (repository *SiteRepository) LatestBackfillRun(ctx context.Context, siteID 
 	return run, err
 }
 
+func (repository *SiteRepository) LatestBackfillRuns(ctx context.Context, siteIDs []int64) (map[int64]CollectionRun, error) {
+	result := make(map[int64]CollectionRun, len(siteIDs))
+	if len(siteIDs) == 0 {
+		return result, nil
+	}
+	var runs []CollectionRun
+	err := collectionRunQueryWithUnavailable(repository.db.WithContext(ctx).Model(&CollectionRun{})).
+		Where("collection_run.site_id IN ? AND collection_run.task_type = ?", siteIDs, constant.TaskTypeUsageBackfill).
+		Where(`NOT EXISTS (
+  SELECT 1 FROM collection_run AS newer
+  WHERE newer.site_id = collection_run.site_id AND newer.task_type = collection_run.task_type
+    AND (newer.created_at > collection_run.created_at OR
+      (newer.created_at = collection_run.created_at AND newer.id > collection_run.id))
+)`).Find(&runs).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, run := range runs {
+		if run.SiteID != nil {
+			result[*run.SiteID] = run
+		}
+	}
+	return result, nil
+}
+
 func (repository *SiteRepository) LatestActiveRecoveryRun(ctx context.Context, siteID int64) (CollectionRun, error) {
 	var run CollectionRun
 	err := collectionRunQueryWithUnavailable(repository.db.WithContext(ctx).Model(&CollectionRun{})).

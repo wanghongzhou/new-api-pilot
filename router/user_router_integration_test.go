@@ -319,6 +319,10 @@ func TestPlatformUserAdminLifecycleOverHTTP(t *testing.T) {
 	if filtered.Code != http.StatusOK || !filteredEnvelope.Success || json.Unmarshal(filteredEnvelope.Data, &page) != nil || page.Total != 1 || len(page.Items) != 1 || page.Items[0].ID != createdUser.ID || page.Items[0].MustChangePassword {
 		t.Fatalf("filtered lifecycle user list = %d %#v page=%#v", filtered.Code, filteredEnvelope, page)
 	}
+	statusSorted := performUserAPIRequest(harness.handler, http.MethodGet, "/api/user/?sort_by=status&sort_order=desc", "", adminCookie, adminID)
+	if envelope := decodeUserAPIEnvelope(t, statusSorted); statusSorted.Code != http.StatusOK || !envelope.Success {
+		t.Fatalf("status-sorted user list = %d %#v", statusSorted.Code, envelope)
+	}
 }
 
 func newUserAPIHarness(t *testing.T) userAPIHarness {

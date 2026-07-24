@@ -1,3 +1,4 @@
+import { stripSearchParams } from '@tanstack/react-router'
 import { z } from 'zod'
 
 import {
@@ -68,6 +69,18 @@ export const sitesSearchSchema = z.object({
     .catch(undefined),
   order: z.enum(['asc', 'desc']).optional().catch(undefined),
 })
+
+type SitesSearchParams = z.output<typeof sitesSearchSchema>
+
+export const siteSearchMiddlewares = [
+  stripSearchParams<SitesSearchParams>({
+    auth: [],
+    health: [],
+    management: [],
+    online: [],
+    statistics: [],
+  }),
+]
 
 export const siteDetailSearchSchema = z.object({
   runId: idStringSchema.optional().catch(undefined),

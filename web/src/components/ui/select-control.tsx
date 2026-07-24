@@ -119,7 +119,7 @@ export function SelectControl({
   'aria-invalid': ariaInvalid,
   'aria-label': ariaLabel,
   'aria-labelledby': ariaLabelledBy,
-  alignItemWithTrigger,
+  alignItemWithTrigger = false,
   children,
   className,
   defaultValue,

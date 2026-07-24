@@ -70,7 +70,7 @@ func TestNormalizeUpstreamBaseURL(t *testing.T) {
 }
 
 func TestUpstreamNetworkPolicy(t *testing.T) {
-	policy, err := newUpstreamNetworkPolicy([]string{"example.com"}, nil, nil)
+	policy, err := newUpstreamNetworkPolicy([]string{"example.com"}, nil, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestUpstreamNetworkPolicy(t *testing.T) {
 	if err := policy.validateAddress(private); !errors.Is(err, ErrUpstreamAddressForbidden) {
 		t.Fatalf("private address without CIDR was allowed: %v", err)
 	}
-	privatePolicy, err := newUpstreamNetworkPolicy(nil, []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}, nil)
+	privatePolicy, err := newUpstreamNetworkPolicy(nil, []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,12 +134,31 @@ func TestUpstreamNetworkPolicy(t *testing.T) {
 	}
 	for _, address := range alwaysForbidden {
 		prefix := netip.PrefixFrom(address.Unmap(), address.Unmap().BitLen())
-		explicit, err := newUpstreamNetworkPolicy(nil, []netip.Prefix{prefix}, nil)
+		explicit, err := newUpstreamNetworkPolicy(nil, []netip.Prefix{prefix}, false, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if err := explicit.validateAddress(address); !errors.Is(err, ErrUpstreamAddressForbidden) {
 			t.Errorf("special address %s was allowed by an explicit CIDR: %v", address, err)
+		}
+	}
+}
+
+func TestDevelopmentUpstreamNetworkPolicyAllowsPrivateAddresses(t *testing.T) {
+	policy, err := newUpstreamNetworkPolicy(nil, nil, true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, raw := range []string{"10.1.2.3", "172.16.5.4", "192.168.8.20", "fd12:3456:789a::1"} {
+		address := netip.MustParseAddr(raw)
+		if err := policy.validateAddress(address); err != nil {
+			t.Errorf("development private address %s was rejected: %v", address, err)
+		}
+	}
+	for _, raw := range []string{"127.0.0.1", "169.254.169.254", "224.0.0.1", "::1", "fe80::1"} {
+		address := netip.MustParseAddr(raw)
+		if err := policy.validateAddress(address); !errors.Is(err, ErrUpstreamAddressForbidden) {
+			t.Errorf("development special-use address %s was allowed: %v", address, err)
 		}
 	}
 }

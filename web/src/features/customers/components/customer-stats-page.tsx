@@ -4,6 +4,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 
+import { ErrorState } from '@/components/error-state'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { EntityStatistics } from '@/features/statistics/components/entity-statistics'
@@ -81,9 +82,7 @@ export function CustomerStatsPage({
           {t('customer.stats.backToDetail')}
         </DetailBackLink>
         {!validCustomerId ? (
-          <section className='border-destructive/30 bg-destructive/5 rounded-lg border p-5'>
-            <h2 className='font-medium'>{t('customer.detail.invalidId')}</h2>
-          </section>
+          <ErrorState title={t('customer.detail.invalidId')} />
         ) : (
           <EntityStatistics
             data={data}

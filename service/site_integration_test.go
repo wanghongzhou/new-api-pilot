@@ -21,6 +21,23 @@ import (
 
 const siteIntegrationLock = "new-api-pilot-site-service-integration"
 
+func TestCapabilityCheckProbesLatestCompleteHourOnce(t *testing.T) {
+	clock := testsupport.NewFakeClock(time.Unix(1_752_400_800, 0))
+	client := authorizedTestSiteClient(clock.Now().Unix())
+	sites := &SiteService{clock: clock}
+
+	flow, data, consistency := sites.checkFlowDataCapabilities(context.Background(), client, "req_capability_probe")
+	if flow.status != constant.CapabilityStatusPassed || data.status != constant.CapabilityStatusPassed ||
+		consistency.status != constant.CapabilityStatusSkipped {
+		t.Fatalf("capability checks flow=%#v data=%#v consistency=%#v", flow, data, consistency)
+	}
+	wantHour := floorHour(clock.Now().Unix()) - 3600
+	if len(client.flowHours) != 1 || client.flowHours[0] != wantHour ||
+		len(client.dataHours) != 1 || client.dataHours[0] != wantHour {
+		t.Fatalf("capability probe hours flow=%v data=%v want=[%d]", client.flowHours, client.dataHours, wantHour)
+	}
+}
+
 func TestSiteAuthorizationPersistenceBoundaries(t *testing.T) {
 	tx := openSiteTestTransaction(t)
 	clock := testsupport.NewFakeClock(time.Unix(1_752_400_800, 0))
@@ -1054,6 +1071,8 @@ type testSiteClient struct {
 	snapshotErr      error
 	flowErr          error
 	dataErr          error
+	flowHours        []int64
+	dataHours        []int64
 	loginToken       string
 }
 
@@ -1102,11 +1121,13 @@ func (client *testSiteClient) SnapshotChannels(context.Context, string) (dto.Ups
 	return client.channels, client.channelsErr
 }
 
-func (client *testSiteClient) FlowHour(context.Context, string, int64) ([]dto.UpstreamFlowRow, error) {
+func (client *testSiteClient) FlowHour(_ context.Context, _ string, hour int64) ([]dto.UpstreamFlowRow, error) {
+	client.flowHours = append(client.flowHours, hour)
 	return []dto.UpstreamFlowRow{}, client.flowErr
 }
 
-func (client *testSiteClient) DataHour(context.Context, string, int64) ([]dto.UpstreamDataRow, error) {
+func (client *testSiteClient) DataHour(_ context.Context, _ string, hour int64) ([]dto.UpstreamDataRow, error) {
+	client.dataHours = append(client.dataHours, hour)
 	return []dto.UpstreamDataRow{}, client.dataErr
 }
 

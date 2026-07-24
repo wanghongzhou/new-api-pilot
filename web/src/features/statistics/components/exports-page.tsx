@@ -1,4 +1,4 @@
-import { Refresh01Icon, ViewIcon } from '@hugeicons/core-free-icons'
+import { ViewIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   keepPreviousData,
@@ -17,7 +17,6 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { DataTable } from '@/components/ui/data-table'
 import { SelectControl as Select } from '@/components/ui/select-control'
-import { Spinner } from '@/components/ui/spinner'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import { translateMessageRef } from '@/lib/message-ref'
@@ -124,7 +123,7 @@ function ExportJobCard({
 }) {
   const { t } = useTranslation()
   return (
-    <article className='border-border bg-card grid gap-4 rounded-lg border p-4'>
+    <article className='bg-card text-card-foreground ring-foreground/10 grid gap-4 rounded-xl p-4 ring-1'>
       <div className='flex min-w-0 items-start justify-between gap-2'>
         <div className='min-w-0'>
           <h2 className='font-semibold break-words'>
@@ -347,28 +346,14 @@ export function ExportsPage({
     })
   return (
     <SectionPageLayout
-      actions={
-        <Button
-          aria-label={t('common.refresh')}
-          disabled={exportsQuery.isFetching}
-          onClick={() => void exportsQuery.refetch()}
-          size='icon'
-          title={t('common.refresh')}
-          variant='outline'
-        >
-          {exportsQuery.isFetching ? (
-            <Spinner />
-          ) : (
-            <HugeiconsIcon icon={Refresh01Icon} strokeWidth={2} />
-          )}
-        </Button>
-      }
+      fixedContent
       description={t('exports.description')}
       title={t('exports.title')}
     >
-      <div className='grid min-w-0 gap-5'>
+      <div className='flex h-full min-h-0 min-w-0 flex-col gap-4'>
         <FilterPanel
           description={t('exports.description')}
+          hasActiveFilters={activeFilters}
           onReset={activeFilters ? resetFilters : undefined}
           title={t('exports.filters.title')}
         >
@@ -451,13 +436,6 @@ export function ExportsPage({
           ariaLabel={t('exports.table.label')}
           columns={columns}
           data={items}
-          emptyAction={
-            activeFilters ? (
-              <Button onClick={resetFilters} variant='outline'>
-                {t('exports.filters.reset')}
-              </Button>
-            ) : undefined
-          }
           emptyDescription={t('exports.empty.description')}
           emptyTitle={t('exports.empty.title')}
           error={exportsQuery.isError}

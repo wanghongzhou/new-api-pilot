@@ -412,9 +412,6 @@ func (repository *CollectionTaskRepository) claimCandidate(
 				return ErrCollectionTaskUnavailable
 			}
 			windowOrder := "hour_ts DESC, id DESC"
-			if run.Priority == constant.CollectionPriorityInitialBackfill {
-				windowOrder = "hour_ts ASC, id ASC"
-			}
 			if err := tx.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
 				Where("run_id = ? AND status = 'pending' AND COALESCE(next_retry_at, 0) <= ?", run.ID, options.Now).
 				Order(windowOrder).Limit(options.MaxWindow).Find(&windows).Error; err != nil {
@@ -1654,6 +1651,26 @@ func (repository *CollectionTaskRepository) recalculateTaskBackfillStatuses(
 	run CollectionRun,
 	now int64,
 ) error {
+	if run.TargetType == "site" {
+		if run.TaskType != constant.TaskTypeUsageBackfill || run.SiteID == nil || *run.SiteID != run.TargetID {
+			return nil
+		}
+		statisticsStatus := ""
+		switch run.Status {
+		case CollectionTaskStatusSuccess:
+			statisticsStatus = constant.SiteStatisticsReady
+			if run.UnavailableWindows > 0 {
+				statisticsStatus = constant.SiteStatisticsPartial
+			}
+		case CollectionTaskStatusFailed:
+			statisticsStatus = constant.SiteStatisticsPartial
+		default:
+			return nil
+		}
+		return tx.WithContext(ctx).Model(&Site{}).
+			Where("id = ? AND config_version = ? AND statistics_status = ?", run.TargetID, run.SiteConfigVersion, constant.SiteStatisticsBackfilling).
+			Updates(map[string]any{"statistics_status": statisticsStatus, "updated_at": now}).Error
+	}
 	if run.TargetType != "account" && run.TargetType != "customer" {
 		return nil
 	}

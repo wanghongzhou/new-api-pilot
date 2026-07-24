@@ -1,4 +1,4 @@
-import { ArrowLeft01Icon, Refresh01Icon } from '@hugeicons/core-free-icons'
+import { ArrowLeft01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
@@ -9,8 +9,11 @@ import { useTranslation } from 'react-i18next'
 
 import { DataFreshness } from '@/components/data/data-freshness'
 import { DataStatusBadge } from '@/components/data/data-status'
+import { EmptyState } from '@/components/empty-state'
+import { ErrorState } from '@/components/error-state'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
+import { LoadingState } from '@/components/loading-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
@@ -136,7 +139,7 @@ function SummarySkeleton() {
 function InstanceCard({ instance }: { instance: SiteInstanceItem }) {
   const { t } = useTranslation()
   return (
-    <article className='border-border bg-card grid min-w-0 gap-3 rounded-lg border p-4'>
+    <article className='bg-card text-card-foreground ring-foreground/10 grid min-w-0 gap-3 rounded-xl p-4 ring-1'>
       <div className='flex min-w-0 items-start justify-between gap-3'>
         <div className='min-w-0'>
           <h3 className='truncate font-medium' title={instance.node_name}>
@@ -256,31 +259,13 @@ function ResourceTrend({
   )
 
   if (loading) {
-    return (
-      <div
-        aria-label={t('resource.loading')}
-        className='border-border bg-muted/35 flex h-80 items-center justify-center rounded-lg border'
-        role='status'
-      >
-        <span className='text-muted-foreground text-sm'>
-          {t('resource.loading')}
-        </span>
-      </div>
-    )
+    return <LoadingState className='h-80' message={t('resource.loading')} />
   }
   if (error) {
-    return (
-      <div className='border-destructive/30 bg-destructive/5 rounded-lg border p-5'>
-        <p className='text-destructive text-sm'>{t('resource.loadError')}</p>
-      </div>
-    )
+    return <ErrorState title={t('resource.loadError')} />
   }
   if (data.length === 0) {
-    return (
-      <div className='border-border text-muted-foreground rounded-lg border px-4 py-12 text-center text-sm'>
-        {t('resource.empty')}
-      </div>
-    )
+    return <EmptyState bordered title={t('resource.empty')} />
   }
 
   return (
@@ -508,24 +493,6 @@ export function SiteInstancesPage({
 
   return (
     <SectionPageLayout
-      actions={
-        <Button
-          disabled={
-            instancesQuery.isFetching ||
-            resourceQuery.isFetching ||
-            (search.granularity === 'minute' && settingsQuery.isFetching)
-          }
-          onClick={() => {
-            void instancesQuery.refetch()
-            if (search.granularity === 'minute') void settingsQuery.refetch()
-            if (!rangeError) void resourceQuery.refetch()
-          }}
-          variant='outline'
-        >
-          <HugeiconsIcon icon={Refresh01Icon} strokeWidth={2} />
-          {t('common.refresh')}
-        </Button>
-      }
       description={detail?.base_url ?? t('instance.description')}
       title={detail?.name ?? t('instance.title')}
     >
@@ -537,11 +504,7 @@ export function SiteInstancesPage({
           {t('instance.backToSite')}
         </DetailBackLink>
 
-        {!validSiteId && (
-          <section className='border-destructive/30 bg-destructive/5 rounded-lg border p-5'>
-            <h2 className='font-medium'>{t('instance.invalidSite')}</h2>
-          </section>
-        )}
+        {!validSiteId && <ErrorState title={t('instance.invalidSite')} />}
 
         <section
           aria-labelledby='instance-summary-title'

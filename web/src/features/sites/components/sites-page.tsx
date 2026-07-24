@@ -1,9 +1,4 @@
-import {
-  Add01Icon,
-  Alert02Icon,
-  Database01Icon,
-  Refresh01Icon,
-} from '@hugeicons/core-free-icons'
+import { Add01Icon, Refresh01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   keepPreviousData,
@@ -21,27 +16,23 @@ import { DataViewModeToggle } from '@/components/data/data-view-mode-toggle'
 import { MetricValue } from '@/components/data/metric-value'
 import { QuotaAmount } from '@/components/data/quota-amount'
 import { SiteStatusBadges } from '@/components/data/site-status-badges'
+import { EmptyState } from '@/components/empty-state'
+import { ErrorState } from '@/components/error-state'
 import { PageFooterPortal } from '@/components/layout/page-footer'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
 import { DataTablePagination } from '@/components/ui/data-table-pagination'
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '@/components/ui/empty'
 import { Spinner } from '@/components/ui/spinner'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { listSites, refreshSites } from '../api'
+import { siteListParams } from '../list-contract'
 import { siteKeys } from '../query-keys'
-import type { SiteListItem, SiteListParams, SiteSearch } from '../types'
+import type { SiteListItem, SiteSearch } from '../types'
 import { SiteActions, type SiteAction } from './site-actions'
 import { SiteCard } from './site-card'
 import { SiteDialogs, type SiteDialogState } from './site-dialogs'
@@ -83,63 +74,44 @@ function CardGridState({
   const { t } = useTranslation()
   if (loading && items.length === 0) {
     return (
-      <div
-        aria-hidden='true'
-        className='border-border bg-muted/40 h-64 animate-pulse rounded-lg border'
-      />
+      <div className='grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3'>
+        {Array.from({ length: 3 }, (_, index) => (
+          <div
+            aria-hidden='true'
+            className='bg-muted/40 h-56 animate-pulse rounded-xl border'
+            key={index}
+          />
+        ))}
+      </div>
     )
   }
   if (error && items.length === 0) {
     return (
-      <Empty className='border-border bg-background min-h-64 border'>
-        <EmptyHeader>
-          <EmptyMedia variant='icon'>
-            <HugeiconsIcon
-              className='text-destructive size-6'
-              icon={Alert02Icon}
-              strokeWidth={2}
-            />
-          </EmptyMedia>
-          <EmptyTitle>{t('table.loadError')}</EmptyTitle>
-          <EmptyDescription>{t('table.loadErrorDescription')}</EmptyDescription>
-        </EmptyHeader>
-        <EmptyContent>
-          <Button onClick={onRetry} size='sm' variant='outline'>
-            {t('common.retry')}
-          </Button>
-        </EmptyContent>
-      </Empty>
+      <ErrorState
+        className='border'
+        description={t('table.loadErrorDescription')}
+        onRetry={onRetry}
+        title={t('table.loadError')}
+      />
     )
   }
   if (items.length === 0) {
     return (
-      <Empty className='border-border bg-background min-h-64 border'>
-        <EmptyHeader>
-          <EmptyMedia variant='icon'>
-            <HugeiconsIcon
-              className='size-6'
-              icon={Database01Icon}
-              strokeWidth={2}
-            />
-          </EmptyMedia>
-          <EmptyTitle>{t('sites.empty')}</EmptyTitle>
-          <EmptyDescription>{t('sites.emptyDescription')}</EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <EmptyState
+        bordered
+        description={t('sites.emptyDescription')}
+        title={t('sites.empty')}
+      />
     )
   }
   return (
-    <div className='grid gap-3'>
-      {fetching && (
-        <div
-          aria-live='polite'
-          className='text-muted-foreground flex min-h-5 items-center gap-2 text-xs'
-        >
-          <Spinner />
-          {t('table.refreshing')}
-        </div>
-      )}
-      <div className='grid min-w-0 gap-4 min-[1800px]:grid-cols-5 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'>
+    <div className='grid min-w-0'>
+      <div
+        className={cn(
+          'grid min-w-0 gap-4 transition-opacity duration-150 min-[1800px]:grid-cols-5 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4',
+          fetching && 'pointer-events-none opacity-60'
+        )}
+      >
         {items.map((site) => (
           <SiteCard
             isAdmin={isAdmin}
@@ -166,23 +138,7 @@ export function SitesPage({
   const [dialogState, setDialogState] = useState<SiteDialogState | null>(null)
   const [batchRefreshing, setBatchRefreshing] = useState(false)
 
-  const params = useMemo<SiteListParams>(
-    () => ({
-      auth_status: search.auth.length > 0 ? search.auth : undefined,
-      health_status: search.health.length > 0 ? search.health : undefined,
-      keyword: search.filter || undefined,
-      management_status:
-        search.management.length > 0 ? search.management : undefined,
-      online_status: search.online.length > 0 ? search.online : undefined,
-      p: search.page,
-      page_size: search.pageSize,
-      sort_by: search.sort,
-      sort_order: search.order,
-      statistics_status:
-        search.statistics.length > 0 ? search.statistics : undefined,
-    }),
-    [search]
-  )
+  const params = useMemo(() => siteListParams(search), [search])
   const sitesQuery = useQuery({
     placeholderData: keepPreviousData,
     queryFn: () => listSites(params),
@@ -310,23 +266,15 @@ export function SitesPage({
             <span>
               <MetricValue
                 compact
-                nullLabel='-'
-                value={
-                  row.original.today.data_status === 'complete'
-                    ? row.original.today.avg_rpm
-                    : null
-                }
+                nullLabel='0'
+                value={row.original.today.avg_rpm}
               />
             </span>
             <span>
               <MetricValue
                 compact
-                nullLabel='-'
-                value={
-                  row.original.today.data_status === 'complete'
-                    ? row.original.today.avg_tpm
-                    : null
-                }
+                nullLabel='0'
+                value={row.original.today.avg_tpm}
               />
             </span>
           </div>
@@ -337,7 +285,6 @@ export function SitesPage({
       {
         cell: ({ row }) => {
           const performance = row.original.performance
-          if (performance.data_status !== 'complete') return <span>-</span>
           return (
             <div className='grid gap-1 whitespace-nowrap'>
               <span>

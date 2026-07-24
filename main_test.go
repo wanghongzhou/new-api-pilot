@@ -16,6 +16,22 @@ import (
 	"new-api-pilot/router"
 )
 
+func TestPrivateUpstreamNetworksAreDevelopmentOnly(t *testing.T) {
+	tests := []struct {
+		environment string
+		want        bool
+	}{
+		{environment: config.EnvironmentDevelopment, want: true},
+		{environment: config.EnvironmentTest, want: false},
+		{environment: config.EnvironmentProduction, want: false},
+	}
+	for _, test := range tests {
+		if got := allowPrivateUpstreamNetworks(test.environment); got != test.want {
+			t.Errorf("allowPrivateUpstreamNetworks(%q) = %v, want %v", test.environment, got, test.want)
+		}
+	}
+}
+
 func TestA49CapacityServeOptionsRequireExactAcceptanceGuard(t *testing.T) {
 	fixedNow := "1752400800"
 	tests := []struct {

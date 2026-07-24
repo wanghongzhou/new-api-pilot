@@ -602,7 +602,7 @@ export function ToggleUserDialog({
           <Button
             disabled={submitting}
             onClick={() => void submit()}
-            variant='primary'
+            variant='default'
           >
             {submitting && <Spinner />}
             {t('Enable user')}

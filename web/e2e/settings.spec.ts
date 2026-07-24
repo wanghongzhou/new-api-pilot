@@ -433,7 +433,14 @@ test('renders the complete settings surface for admin without overflow or axe vi
   ).toBeVisible()
   await categoryTabs.getByRole('tab', { name: '费率兜底' }).click()
   await expect(page.getByRole('heading', { name: '费率兜底' })).toBeVisible()
-  await expect(page.getByLabel('兜底美元汇率')).toHaveAttribute('type', 'text')
+  await expect(page.getByLabel('兜底额度单价基数（quota）')).toHaveAttribute(
+    'type',
+    'number'
+  )
+  await expect(page.getByLabel('兜底美元汇率')).toHaveAttribute(
+    'type',
+    'number'
+  )
   await expect(page.getByLabel('兜底美元汇率')).toHaveAttribute(
     'inputmode',
     'decimal'

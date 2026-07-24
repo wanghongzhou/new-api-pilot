@@ -35,16 +35,17 @@ type SiteClientFactory interface {
 }
 
 type SiteClientFactoryOptions struct {
-	Runtime             *RuntimeSettingsStore
-	AllowedHostSuffixes []string
-	AllowedCIDRs        []netip.Prefix
-	CAFile              string
-	ConnectTimeout      time.Duration
-	HeaderTimeout       time.Duration
-	RequestTimeout      time.Duration
-	ExportTimeout       time.Duration
-	Metrics             UpstreamMetricsRecorder
-	Governor            UpstreamGovernor
+	Runtime              *RuntimeSettingsStore
+	AllowedHostSuffixes  []string
+	AllowedCIDRs         []netip.Prefix
+	AllowPrivateNetworks bool
+	CAFile               string
+	ConnectTimeout       time.Duration
+	HeaderTimeout        time.Duration
+	RequestTimeout       time.Duration
+	ExportTimeout        time.Duration
+	Metrics              UpstreamMetricsRecorder
+	Governor             UpstreamGovernor
 }
 
 type ConfiguredSiteClientFactory struct {
@@ -86,5 +87,6 @@ func (factory *ConfiguredSiteClientFactory) newClient(options NewAPIClientOption
 	}
 	options.CAFile = factory.options.CAFile
 	options.Metrics = factory.options.Metrics
+	options.AllowPrivateNetworks = factory.options.AllowPrivateNetworks
 	return NewNewAPIClient(options)
 }

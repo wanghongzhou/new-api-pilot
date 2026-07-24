@@ -7,14 +7,18 @@ import { parseMetricString } from '@/lib/api-types'
 
 import { MetricValue } from './metric-value'
 
-test('renders a supplied null label without coercing it to zero', () => {
+test('supports an explicit zero fallback when the metric contract defines it', () => {
   expect(
-    renderToStaticMarkup(<MetricValue nullLabel='—' value={null} />)
-  ).toContain('>—</span>')
+    renderToStaticMarkup(<MetricValue nullLabel='0' value={null} />)
+  ).toContain('>0</span>')
 })
 
 describe('MetricValue', () => {
-  test('preserves the account active-user 1, 0, and null states', () => {
+  test('renders missing numeric values as zero by default', () => {
+    expect(renderToStaticMarkup(<MetricValue value={null} />)).toContain('0')
+  })
+
+  test('preserves numeric values and normalizes null to zero', () => {
     expect(
       renderToStaticMarkup(<MetricValue value={parseMetricString('1')} />)
     ).toContain('title="1">1</span>')
@@ -22,7 +26,7 @@ describe('MetricValue', () => {
       renderToStaticMarkup(<MetricValue value={parseMetricString('0')} />)
     ).toContain('title="0">0</span>')
     expect(renderToStaticMarkup(<MetricValue value={null} />)).toContain(
-      '>不可用</span>'
+      '>0</span>'
     )
   })
 })

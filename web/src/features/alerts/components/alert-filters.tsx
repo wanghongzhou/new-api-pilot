@@ -9,6 +9,7 @@ import { SelectControl as Select } from '@/components/ui/select-control'
 import type { SiteListItem } from '@/features/sites/types'
 import { isIdString } from '@/lib/api-types'
 import { BEIJING_TIMEZONE, dayjs, fromUnixSeconds } from '@/lib/dayjs'
+import { hasFilterChanges } from '@/lib/filter-state'
 
 import { alertLevels, alertStatuses, alertTargetTypes } from '../constants'
 import type { AlertSearch } from '../types'
@@ -76,6 +77,15 @@ export function AlertFilters({
       }
     })
   }
+  const reset: AlertFilterValue = {
+    end: undefined,
+    level: [],
+    siteId: undefined,
+    start: undefined,
+    status: [],
+    targetType: [],
+  }
+  const resetDraft = draftValue(reset)
   return (
     <FilterPanel
       advanced={
@@ -140,6 +150,14 @@ export function AlertFilters({
       }
       description={t('alerts.filters.description')}
       hasAdvancedActive={Boolean(value.siteId || value.start || value.end)}
+      hasActiveFilters={hasFilterChanges(draft, resetDraft, [
+        'end',
+        'level',
+        'siteId',
+        'start',
+        'status',
+        'targetType',
+      ])}
       onApply={() => {
         const start = timestamp(draft.start)
         const end = timestamp(draft.end)
@@ -157,15 +175,7 @@ export function AlertFilters({
         })
       }}
       onReset={() => {
-        const reset: AlertFilterValue = {
-          end: undefined,
-          level: [],
-          siteId: undefined,
-          start: undefined,
-          status: [],
-          targetType: [],
-        }
-        setDraft(draftValue(reset))
+        setDraft(resetDraft)
         setRangeError(false)
         onApply(reset)
       }}

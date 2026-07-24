@@ -1,7 +1,6 @@
 import {
   Add01Icon,
   Edit03Icon,
-  Refresh01Icon,
   Undo02Icon,
   ViewIcon,
 } from '@hugeicons/core-free-icons'
@@ -122,7 +121,7 @@ function AlertEventCard({
 }) {
   const { t } = useTranslation()
   return (
-    <article className='border-border bg-card grid gap-4 rounded-lg border p-4'>
+    <article className='bg-card text-card-foreground ring-foreground/10 grid gap-4 rounded-xl p-4 ring-1'>
       <div className='flex min-w-0 items-start justify-between gap-2'>
         <div className='min-w-0'>
           <h2 className='font-semibold break-words'>
@@ -233,7 +232,7 @@ function AlertRuleCard({
 }) {
   const { t } = useTranslation()
   return (
-    <article className='border-border bg-card grid gap-4 rounded-lg border p-4'>
+    <article className='bg-card text-card-foreground ring-foreground/10 grid gap-4 rounded-xl p-4 ring-1'>
       <div className='min-w-0'>
         <h2 className='font-semibold break-words'>
           {alertRuleName(t, rule.rule_key)}
@@ -343,24 +342,6 @@ export function AlertsPage({
   const alerts = alertsQuery.data?.items ?? []
   const rules = rulesQuery.data ?? []
   const sites = sitesQuery.data?.items ?? []
-  const activeFilters = Boolean(
-    search.status.length ||
-    search.level.length ||
-    search.targetType.length ||
-    search.siteId ||
-    search.start ||
-    search.end
-  )
-  const resetFilters = () =>
-    onSearchChange({
-      end: undefined,
-      level: [],
-      page: 1,
-      siteId: undefined,
-      start: undefined,
-      status: [],
-      targetType: [],
-    })
   const openAlert = useCallback(
     (alertId: AlertEventItem['id']) => onSearchChange({ alertId }),
     [onSearchChange]
@@ -548,39 +529,13 @@ export function AlertsPage({
     void queryClient.invalidateQueries({ queryKey: alertKeys.all })
     void queryClient.invalidateQueries({ queryKey: dashboardKeys.health() })
   }
-  const refresh = () => {
-    if (search.tab === 'events') {
-      void summaryQuery.refetch()
-      void alertsQuery.refetch()
-    } else if (rulesEnabled) void rulesQuery.refetch()
-  }
-  const refreshing =
-    search.tab === 'events'
-      ? summaryQuery.isFetching || alertsQuery.isFetching
-      : rulesQuery.isFetching
-
   return (
     <SectionPageLayout
-      actions={
-        <Button
-          aria-label={t('common.refresh')}
-          disabled={refreshing || (search.tab === 'rules' && !rulesEnabled)}
-          onClick={refresh}
-          size='icon'
-          title={t('common.refresh')}
-          variant='outline'
-        >
-          {refreshing ? (
-            <Spinner />
-          ) : (
-            <HugeiconsIcon icon={Refresh01Icon} strokeWidth={2} />
-          )}
-        </Button>
-      }
+      fixedContent
       description={t('alerts.description')}
       title={t('alerts.title')}
     >
-      <div className='grid min-w-0 gap-5'>
+      <div className='flex h-full min-h-0 min-w-0 flex-col gap-4'>
         <Tabs
           onValueChange={(tab) =>
             onSearchChange({
@@ -597,7 +552,11 @@ export function AlertsPage({
         </Tabs>
 
         {search.tab === 'events' ? (
-          <div className='grid gap-5' id='alerts-events-panel' role='tabpanel'>
+          <div
+            className='flex min-h-0 flex-1 flex-col gap-4'
+            id='alerts-events-panel'
+            role='tabpanel'
+          >
             <SummaryStrip summary={summaryQuery.data} />
             {summaryQuery.isError && (
               <section
@@ -633,13 +592,6 @@ export function AlertsPage({
               ariaLabel={t('alerts.table.label')}
               columns={eventColumns}
               data={alerts}
-              emptyAction={
-                activeFilters ? (
-                  <Button onClick={resetFilters} variant='outline'>
-                    {t('alerts.filters.reset')}
-                  </Button>
-                ) : undefined
-              }
               emptyDescription={t('alerts.empty.description')}
               emptyTitle={t('alerts.empty.title')}
               error={alertsQuery.isError}
@@ -665,9 +617,16 @@ export function AlertsPage({
             />
           </div>
         ) : (
-          <div className='grid gap-5' id='alerts-rules-panel' role='tabpanel'>
+          <div
+            className='flex min-h-0 flex-1 flex-col gap-4'
+            id='alerts-rules-panel'
+            role='tabpanel'
+          >
             <FilterPanel
               description={t('alerts.rules.scopeControls')}
+              hasActiveFilters={
+                search.scope !== 'global' || search.ruleSiteId != null
+              }
               onReset={() =>
                 onSearchChange({ ruleSiteId: undefined, scope: 'global' })
               }

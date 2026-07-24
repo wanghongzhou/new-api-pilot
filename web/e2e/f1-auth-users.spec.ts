@@ -688,6 +688,67 @@ test('restores auto-applied user filters through browser history', async ({
   await expect(page).toHaveURL(/role=viewer/)
 })
 
+test('sorts platform users by status and account timestamps', async ({
+  isMobile,
+  page,
+}) => {
+  test.skip(isMobile, 'column-header sorting is available in the desktop table')
+  await seedAuth(page, admin)
+  await mockSelf(page, admin)
+  const listSorts: string[] = []
+  await page.route(/\/api\/user\/(?:\?.*)?$/, async (route) => {
+    const url = new URL(route.request().url())
+    const adminCountQuery =
+      url.searchParams.get('role') === 'admin' &&
+      url.searchParams.get('status') === '1' &&
+      url.searchParams.get('page_size') === '1'
+    if (!adminCountQuery) {
+      listSorts.push(
+        `${url.searchParams.get('sort_by')}:${url.searchParams.get('sort_order')}`
+      )
+    }
+    await route.fulfill({
+      json: envelope({
+        items: adminCountQuery ? [userItems[0]] : userItems,
+        page: 1,
+        page_size: adminCountQuery ? 1 : 20,
+        total: adminCountQuery ? 1 : userItems.length,
+      }),
+    })
+  })
+
+  await page.goto('/settings/users')
+  await expect.poll(() => listSorts.at(-1)).toBe('null:null')
+  const table = page.getByRole('table', { name: '平台用户' })
+  const sortableHeaderIcons = await Promise.all(
+    ['状态', '最近登录时间', '创建时间'].map((name) =>
+      table
+        .getByRole('button', { name })
+        .locator('svg')
+        .evaluate((icon) => icon.innerHTML)
+    )
+  )
+  expect(new Set(sortableHeaderIcons).size).toBe(1)
+
+  await table.getByRole('button', { name: '创建时间' }).click()
+  await page.getByRole('menuitem', { name: '升序' }).click()
+  await expect(page).toHaveURL(/sort=created_at/)
+  await expect(page).toHaveURL(/order=asc/)
+  await expect.poll(() => listSorts.at(-1)).toBe('created_at:asc')
+
+  await table.getByRole('button', { name: '最近登录时间' }).click()
+  await page.getByRole('menuitem', { name: '降序' }).click()
+  await expect(page).toHaveURL(/sort=last_login_at/)
+  await expect(page).toHaveURL(/order=desc/)
+  await expect.poll(() => listSorts.at(-1)).toBe('last_login_at:desc')
+
+  await table.getByRole('button', { name: '状态' }).click()
+  await page.getByRole('menuitem', { name: '升序' }).click()
+  await expect(page).toHaveURL(/sort=status/)
+  await expect(page).toHaveURL(/order=asc/)
+  await expect.poll(() => listSorts.at(-1)).toBe('status:asc')
+})
+
 test('uses the new-api table breakpoint without page-level clipping', async ({
   page,
 }) => {

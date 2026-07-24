@@ -8,9 +8,14 @@ import {
 
 export const platformUserSearchSchema = z.object({
   filter: z.string().max(128).optional().catch(undefined),
+  order: z.enum(['asc', 'desc']).optional().catch(undefined),
   page: z.coerce.number().int().min(1).optional().catch(undefined),
   pageSize: z.coerce.number().int().min(1).max(100).optional().catch(undefined),
   role: z.enum(['admin', 'viewer']).optional().catch(undefined),
+  sort: z
+    .enum(['created_at', 'last_login_at', 'status', 'username'])
+    .optional()
+    .catch(undefined),
   status: z
     .union([z.literal(1), z.literal(2)])
     .optional()

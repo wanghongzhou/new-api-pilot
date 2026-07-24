@@ -27,6 +27,8 @@ import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import { isIdString, parseIdString } from '@/lib/api-types'
 import { fromUnixSeconds } from '@/lib/dayjs'
+import { formatNumericDisplayValue } from '@/lib/display-value'
+import { hasFilterChanges } from '@/lib/filter-state'
 
 import {
   getPricingCatalogStatistics,
@@ -119,17 +121,20 @@ function Filters({
         ? search.states.filter((value) => value !== state)
         : [...search.states, state],
     })
+  const reset = buildPricingGroupSearch({
+    pageSize: search.pageSize,
+    tab: search.tab,
+  })
   return (
     <FilterPanel
       description={t('pricingGroups.filters.description')}
-      onReset={() =>
-        onChange(
-          buildPricingGroupSearch({
-            pageSize: search.pageSize,
-            tab: search.tab,
-          })
-        )
-      }
+      hasActiveFilters={hasFilterChanges(search, reset, [
+        'group',
+        'keyword',
+        'siteIds',
+        'states',
+      ])}
+      onReset={() => onChange(reset)}
       title={t('pricingGroups.filters.title')}
     >
       <div className='grid min-w-0 flex-1 gap-3 md:grid-cols-3'>
@@ -402,7 +407,9 @@ export function PricingGroupsPage({
             </div>
             <div>
               <dt className='inline'>{t('pricingGroups.ratio.cache')}：</dt>
-              <dd className='inline'>{row.original.cache_ratio ?? '-'}</dd>
+              <dd className='inline'>
+                {formatNumericDisplayValue(row.original.cache_ratio)}
+              </dd>
             </div>
           </dl>
         ),
@@ -456,7 +463,9 @@ export function PricingGroupsPage({
         id: 'identity',
       },
       {
-        cell: ({ row }) => <code>{row.original.ratio ?? '-'}</code>,
+        cell: ({ row }) => (
+          <code>{formatNumericDisplayValue(row.original.ratio)}</code>
+        ),
         header: t('pricingGroups.groups.ratio'),
         id: 'ratio',
       },
@@ -593,7 +602,7 @@ export function PricingGroupsPage({
             page={search.page}
             pageSize={search.pageSize}
             renderMobileCard={(item) => (
-              <article className='border-border bg-card grid gap-3 rounded-lg border p-4'>
+              <article className='bg-card text-card-foreground ring-foreground/10 grid gap-3 rounded-xl p-4 ring-1'>
                 <div className='flex items-start justify-between gap-2'>
                   <div>
                     <strong>{item.model_name}</strong>
@@ -638,7 +647,7 @@ export function PricingGroupsPage({
             page={search.page}
             pageSize={search.pageSize}
             renderMobileCard={(item) => (
-              <article className='border-border bg-card grid gap-3 rounded-lg border p-4'>
+              <article className='bg-card text-card-foreground ring-foreground/10 grid gap-3 rounded-xl p-4 ring-1'>
                 <div className='flex items-start justify-between gap-2'>
                   <div>
                     <strong>{item.name}</strong>
@@ -649,7 +658,7 @@ export function PricingGroupsPage({
                   <VisibilityBadge visible={item.root_visible} />
                 </div>
                 <p>{item.description || '-'}</p>
-                <code>{item.ratio ?? '-'}</code>
+                <code>{formatNumericDisplayValue(item.ratio)}</code>
                 <div className='flex flex-wrap gap-2'>
                   <StateBadge state={item.remote_state} />
                   <DataStatusBadge status={item.data_status} />

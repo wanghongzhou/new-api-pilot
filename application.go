@@ -44,6 +44,10 @@ type applicationOptions struct {
 
 type applicationRuntimeMode uint8
 
+func allowPrivateUpstreamNetworks(appEnv string) bool {
+	return appEnv == config.EnvironmentDevelopment
+}
+
 const (
 	applicationRuntimeStandard applicationRuntimeMode = iota
 	applicationRuntimeA49ReadOnly
@@ -152,6 +156,7 @@ func bootstrapApplication(
 	}
 	clientFactory := service.NewConfiguredSiteClientFactory(service.SiteClientFactoryOptions{
 		Runtime: runtimeSettings, CAFile: options.Config.UpstreamCAFile, Metrics: metrics,
+		AllowPrivateNetworks: allowPrivateUpstreamNetworks(options.Config.AppEnv),
 	})
 	maintenanceWake := worker.NewDataMaintenanceWake()
 	siteRepository := model.NewSiteRepository(options.Database.GORM)

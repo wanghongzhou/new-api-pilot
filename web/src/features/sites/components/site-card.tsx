@@ -19,6 +19,7 @@ import { buildStatisticsSearch } from '@/features/statistics/search'
 import { fromUnixSeconds } from '@/lib/dayjs'
 import { cn } from '@/lib/utils'
 
+import { siteResourceColor } from '../site-card-metrics'
 import type { SiteListItem } from '../types'
 import { SiteActions, type SiteAction } from './site-actions'
 
@@ -27,21 +28,26 @@ function PercentValue({ value }: { value: number | null }) {
 }
 
 function ResourceChip({
+  color,
   icon,
   label,
   value,
 }: {
+  color?: string
   icon: typeof ServerStack01Icon
   label: string
   value: React.ReactNode
 }) {
   return (
-    <div className='bg-muted/35 grid min-w-0 gap-1 rounded-lg px-3 py-2'>
-      <div className='text-muted-foreground flex min-w-0 items-center gap-1 text-[11px]'>
+    <div className='bg-muted/35 grid min-w-0 place-items-center gap-1 rounded-lg px-3 py-2 text-center'>
+      <div className='text-muted-foreground flex min-w-0 items-center justify-center gap-1 text-[11px]'>
         <HugeiconsIcon icon={icon} size={13} strokeWidth={2} />
         <span className='truncate'>{label}</span>
       </div>
-      <div className='text-foreground text-sm leading-none font-semibold'>
+      <div
+        className='text-foreground text-sm leading-none font-semibold tabular-nums'
+        style={color == null ? undefined : { color }}
+      >
         {value}
       </div>
     </div>
@@ -58,7 +64,7 @@ function MetricCell({
   tone?: 'default' | 'success'
 }) {
   return (
-    <div className='min-w-0'>
+    <div className='min-w-0 text-center'>
       <p className='text-muted-foreground truncate text-xs'>{label}</p>
       <div
         className={cn(
@@ -145,17 +151,17 @@ export function SiteCard({
   site: SiteListItem
 }) {
   const { t } = useTranslation()
-  const usageAvailable = site.today.data_status === 'complete'
   const performanceAvailable = site.performance.data_status === 'complete'
 
   return (
     <article
+      data-slot='site-card'
       className={cn(
-        'border-border bg-card grid min-w-0 gap-0 overflow-visible rounded-xl border shadow-xs',
+        'text-card-foreground flex min-w-0 flex-col gap-3 rounded-lg border bg-(--data-table-card-bg,var(--table-row)) px-3 py-2.5 transition-[background-color,border-color] duration-150',
         site.management_status === 'disabled' && 'saturate-50 opacity-75'
       )}
     >
-      <div className='grid min-w-0 gap-3 p-4 pb-3'>
+      <div className='grid min-w-0 gap-3'>
         <header className='flex min-w-0 items-start justify-between gap-3'>
           <div className='min-w-0'>
             <div className='flex min-w-0 items-center gap-1.5'>
@@ -199,16 +205,19 @@ export function SiteCard({
             }`}
           />
           <ResourceChip
+            color={siteResourceColor(site.resource.cpu_max_percent)}
             icon={CpuIcon}
             label={t('metric.cpu')}
             value={<PercentValue value={site.resource.cpu_max_percent} />}
           />
           <ResourceChip
+            color={siteResourceColor(site.resource.memory_max_percent)}
             icon={RamMemoryIcon}
             label={t('metric.memory')}
             value={<PercentValue value={site.resource.memory_max_percent} />}
           />
           <ResourceChip
+            color={siteResourceColor(site.resource.disk_max_used_percent)}
             icon={Database01Icon}
             label={t('metric.disk')}
             value={<PercentValue value={site.resource.disk_max_used_percent} />}
@@ -216,7 +225,7 @@ export function SiteCard({
         </div>
       </div>
 
-      <section className='border-border grid gap-3 border-t px-4 py-3'>
+      <section className='grid gap-3'>
         <div className='grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-3'>
           <MetricCell label={t('site.todayRequests')}>
             <MetricValue
@@ -227,6 +236,8 @@ export function SiteCard({
           </MetricCell>
           <MetricCell label={t('site.todayQuota')}>
             <QuotaAmount
+              className='justify-center'
+              emphasizeAmount
               inline
               nullLabel='0'
               quota={site.today.quota}
@@ -245,41 +256,29 @@ export function SiteCard({
             />
           </MetricCell>
           <MetricCell label={t('site.averageRpm')}>
-            <MetricValue
-              compact
-              nullLabel='-'
-              value={usageAvailable ? site.today.avg_rpm : null}
-            />
+            <MetricValue compact nullLabel='0' value={site.today.avg_rpm} />
           </MetricCell>
           <MetricCell label={t('site.averageTpm')}>
-            <MetricValue
-              compact
-              nullLabel='-'
-              value={usageAvailable ? site.today.avg_tpm : null}
-            />
+            <MetricValue compact nullLabel='0' value={site.today.avg_tpm} />
           </MetricCell>
         </div>
       </section>
 
-      <section className='border-border grid gap-3 border-t px-4 py-3'>
+      <section className='grid gap-3'>
         <div className='grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-3'>
-          <MetricCell label={t('site.performance.avgLatency')}>
-            {performanceAvailable
-              ? t('site.performance.latencyValue', {
-                  value: site.performance.avg_latency_ms.toFixed(0),
-                })
-              : '-'}
-          </MetricCell>
-          <MetricCell label={t('site.performance.avgTps')}>
-            {performanceAvailable ? site.performance.avg_tps.toFixed(1) : '-'}
-          </MetricCell>
           <MetricCell
             label={t('site.performance.successRate')}
             tone={performanceAvailable ? 'success' : 'default'}
           >
-            {performanceAvailable
-              ? `${(site.performance.success_rate * 100).toFixed(2)}%`
-              : '-'}
+            {`${(site.performance.success_rate * 100).toFixed(2)}%`}
+          </MetricCell>
+          <MetricCell label={t('site.performance.avgLatency')}>
+            {t('site.performance.latencyValue', {
+              value: site.performance.avg_latency_ms.toFixed(0),
+            })}
+          </MetricCell>
+          <MetricCell label={t('site.performance.avgTps')}>
+            {site.performance.avg_tps.toFixed(1)}
           </MetricCell>
         </div>
         <CompletenessProgress
@@ -288,7 +287,7 @@ export function SiteCard({
         />
       </section>
 
-      <footer className='border-border flex items-center justify-between gap-3 border-t px-4 py-2.5'>
+      <footer className='flex items-center justify-between gap-3 pt-0.5'>
         <UpdatedAtLine
           expired={site.realtime.expired}
           timestamp={site.realtime.updated_at}

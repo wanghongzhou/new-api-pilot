@@ -1,6 +1,5 @@
-import { useTranslation } from 'react-i18next'
-
 import type { DecimalString, MetricString } from '@/lib/api-types'
+import { formatNumericDisplayValue } from '@/lib/display-value'
 
 export function MetricValue({
   value,
@@ -11,9 +10,8 @@ export function MetricValue({
   nullLabel?: string
   value: DecimalString | MetricString | null
 }) {
-  const { t } = useTranslation()
   if (value == null) {
-    return <span>{nullLabel ?? t('data.unavailableValue')}</span>
+    return <span>{nullLabel ?? formatNumericDisplayValue(value)}</span>
   }
 
   let display: string = value

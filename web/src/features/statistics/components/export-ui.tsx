@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next'
 
 import { Badge } from '@/components/ui/badge'
 import { fromUnixSeconds } from '@/lib/dayjs'
+import { formatDisplayValue } from '@/lib/display-value'
 
 import type {
   StatisticsExportFormat,
@@ -122,8 +123,7 @@ export function ExportStatusBadge({
 }
 
 export function ExportTimestamp({ value }: { value: number | null }) {
-  const { t } = useTranslation()
-  if (value == null) return <span>{t('common.none')}</span>
+  if (value == null) return <span>{formatDisplayValue(value)}</span>
   const formatted = fromUnixSeconds(value).format('YYYY-MM-DD HH:mm:ss')
   return <time dateTime={String(value)}>{formatted}</time>
 }

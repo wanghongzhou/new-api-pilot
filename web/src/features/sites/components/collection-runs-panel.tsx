@@ -124,7 +124,7 @@ function RunCard({
 }) {
   const { t } = useTranslation()
   return (
-    <article className='border-border bg-card rounded-lg border p-4'>
+    <article className='bg-card text-card-foreground ring-foreground/10 rounded-xl p-4 ring-1'>
       <div className='flex items-start justify-between gap-3'>
         <div>
           <h3 className='font-medium'>
@@ -183,7 +183,7 @@ function RunCard({
 function WindowCard({ window }: { window: CollectionRunWindowItem }) {
   const { t } = useTranslation()
   return (
-    <article className='border-border bg-card rounded-lg border p-4'>
+    <article className='bg-card text-card-foreground ring-foreground/10 rounded-xl p-4 ring-1'>
       <div className='flex items-start justify-between gap-3'>
         <h3 className='font-medium'>
           {fromUnixSeconds(window.hour_ts).format('YYYY-MM-DD HH:00')}
@@ -465,6 +465,7 @@ function RunWindowsSheet({
           onPageChange={(windowPage) => onSearchChange({ windowPage })}
           onRetry={() => void windowsQuery.refetch()}
           page={search.windowPage}
+          paginationInFooter={false}
           pageSize={windowsQuery.data?.page_size ?? 20}
           renderMobileCard={(window) => <WindowCard window={window} />}
           total={windowsQuery.data?.total ?? 0}
@@ -681,6 +682,7 @@ export function CollectionRunsPanel({
         onRetry={() => void runsQuery.refetch()}
         page={search.runPage}
         pageSize={runsQuery.data?.page_size ?? 20}
+        paginationInFooter={false}
         renderMobileCard={(run) => (
           <RunCard
             onOpen={() => onSearchChange({ runId: run.id, windowPage: 1 })}

@@ -47,27 +47,6 @@ For commercial licensing, please contact support@quantumnous.com
   }
 }
 
-@media (pointer: coarse) {
-  button,
-  [role='button'],
-  [role='tab'] {
-    min-width: 2.5rem;
-    min-height: 2.5rem;
-  }
-
-  input:not([type='hidden']):not([aria-hidden='true']):not(
-    [type='checkbox']
-  ):not([type='radio']),
-  select,
-  textarea {
-    min-height: 2.5rem;
-  }
-
-  .statistics-scope-link {
-    min-height: 2.5rem;
-  }
-}
-
 @layer base {
   * {
     @apply border-border outline-ring/50;

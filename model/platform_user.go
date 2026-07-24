@@ -118,7 +118,7 @@ func (repository *PlatformUserRepository) List(ctx context.Context, filter Platf
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
-	sortColumns := map[string]string{"created_at": "created_at", "username": "username", "last_login_at": "last_login_at"}
+	sortColumns := map[string]string{"created_at": "created_at", "username": "username", "last_login_at": "last_login_at", "status": "status"}
 	column, exists := sortColumns[filter.SortBy]
 	if !exists {
 		return nil, 0, fmt.Errorf("unsupported platform user sort %q", filter.SortBy)

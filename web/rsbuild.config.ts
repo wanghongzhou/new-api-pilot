@@ -58,6 +58,9 @@ export default defineConfig(({ envMode }) => {
       template: './index.html',
     },
     server: {
+      headers: {
+        'Cache-Control': 'no-store',
+      },
       host: '0.0.0.0',
       strictPort: false,
       proxy: {

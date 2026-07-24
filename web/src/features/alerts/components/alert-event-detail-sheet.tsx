@@ -36,7 +36,7 @@ function DetailLink({ detail }: { detail: AlertEventDetail }) {
   if (detail.target_type === 'account' && isIdString(detail.target_key)) {
     return (
       <Link
-        className='text-primary-strong text-sm font-medium hover:underline'
+        className='text-primary text-sm font-medium hover:underline'
         params={{ accountId: detail.target_key }}
         to='/accounts/$accountId'
       >
@@ -47,7 +47,7 @@ function DetailLink({ detail }: { detail: AlertEventDetail }) {
   if (detail.site_id) {
     return (
       <Link
-        className='text-primary-strong text-sm font-medium hover:underline'
+        className='text-primary text-sm font-medium hover:underline'
         params={{ siteId: detail.site_id }}
         to='/sites/$siteId'
       >

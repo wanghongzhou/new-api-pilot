@@ -20,7 +20,7 @@ export interface PlatformUserListParams {
   keyword?: string
   role?: PlatformRole
   status?: PlatformUserStatus
-  sort_by?: 'created_at' | 'username' | 'last_login_at'
+  sort_by?: 'created_at' | 'username' | 'last_login_at' | 'status'
   sort_order?: 'asc' | 'desc'
 }
 
@@ -45,8 +45,10 @@ export interface ResetPasswordRequest {
 
 export interface PlatformUserSearch {
   filter: string
+  order?: 'asc' | 'desc'
   page: number
   pageSize: number
   role?: PlatformRole
+  sort?: 'created_at' | 'last_login_at' | 'status' | 'username'
   status?: PlatformUserStatus
 }

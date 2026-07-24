@@ -2175,6 +2175,7 @@ export const DYNAMIC_I18N_REGISTRIES = {
     'The last enabled administrator cannot be downgraded',
     'UPSTREAM_ADDRESS_FORBIDDEN',
     'UPSTREAM_ERROR',
+    'UPSTREAM_LOGIN_REJECTED',
     'UPSTREAM_RESPONSE_INVALID',
     'UPSTREAM_RESPONSE_TOO_LARGE',
     'UPSTREAM_UNAVAILABLE',

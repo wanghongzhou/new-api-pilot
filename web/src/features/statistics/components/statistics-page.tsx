@@ -13,15 +13,17 @@ import { CompletenessAlert } from '@/components/data/completeness-alert'
 import { DataFreshness } from '@/components/data/data-freshness'
 import { DataStatusBadge } from '@/components/data/data-status'
 import { MetricValue } from '@/components/data/metric-value'
+import { ErrorState } from '@/components/error-state'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
+import { LoadingState } from '@/components/loading-state'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
 import { Spinner } from '@/components/ui/spinner'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import { formatBeijingTimestamp } from '@/lib/dayjs'
+import { formatDisplayValue } from '@/lib/display-value'
 
 import { createStatisticsExport, getStatistics } from '../api'
 import { buildStatisticsExportRequest } from '../export-request'
@@ -191,14 +193,16 @@ function ScopeDetails({
     return value.site_name ? (
       <span>{value.site_name}</span>
     ) : (
-      <span className='text-muted-foreground'>{t('common.none')}</span>
+      <span className='text-muted-foreground'>
+        {formatDisplayValue(value.site_name)}
+      </span>
     )
   }
   if (scope === 'channel') {
     const value = item as ChannelStatisticsBreakdown
     return (
       <div className='grid gap-1 text-xs'>
-        <span>{value.site_name ?? t('common.none')}</span>
+        <span>{formatDisplayValue(value.site_name)}</span>
         <code>{value.remote_channel_id}</code>
         {value.remote_missing && (
           <Badge variant='warning'>
@@ -212,7 +216,7 @@ function ScopeDetails({
     const value = item as GroupStatisticsBreakdown
     return (
       <div className='grid gap-1 text-xs'>
-        <span>{value.site_name ?? t('common.none')}</span>
+        <span>{formatDisplayValue(value.site_name)}</span>
         <code className='break-all'>
           {value.use_group || t('statistics.group.unknown')}
         </code>
@@ -223,7 +227,7 @@ function ScopeDetails({
     const value = item as TokenStatisticsBreakdown
     return (
       <div className='grid gap-1 text-xs'>
-        <span>{value.site_name ?? t('common.none')}</span>
+        <span>{formatDisplayValue(value.site_name)}</span>
         <span>
           {value.token_name ||
             (value.token_id === '0'
@@ -239,7 +243,7 @@ function ScopeDetails({
   const value = item as NodeStatisticsBreakdown
   return (
     <div className='grid gap-1 text-xs'>
-      <span>{value.site_name ?? t('common.none')}</span>
+      <span>{formatDisplayValue(value.site_name)}</span>
       <code className='break-all'>
         {value.node_name || t('statistics.node.unknown')}
       </code>
@@ -287,7 +291,7 @@ function BreakdownMobileCard({
 }) {
   const { t } = useTranslation()
   return (
-    <article className='border-border bg-card grid min-w-0 gap-4 rounded-lg border p-4'>
+    <article className='bg-card text-card-foreground ring-foreground/10 grid min-w-0 gap-4 rounded-xl p-4 ring-1'>
       <header className='flex min-w-0 flex-wrap items-start justify-between gap-2'>
         <div className='min-w-0'>
           <h3 className='font-medium break-words'>
@@ -507,21 +511,6 @@ function BreakdownTable({
   )
 }
 
-function ErrorState({ onRetry }: { onRetry: () => void }) {
-  const { t } = useTranslation()
-  return (
-    <section className='border-destructive/30 bg-destructive/5 rounded-lg border p-5'>
-      <h2 className='font-medium'>{t('statistics.loadError')}</h2>
-      <p className='text-muted-foreground mt-1 text-sm'>
-        {t('statistics.loadErrorDescription')}
-      </p>
-      <Button className='mt-3' onClick={onRetry} variant='outline'>
-        {t('common.retry')}
-      </Button>
-    </section>
-  )
-}
-
 export function StatisticsPage({
   onSearchChange,
   scope,
@@ -611,17 +600,18 @@ export function StatisticsPage({
 
   let body: ReactNode
   if (statisticsQuery.isPending && !data) {
-    body = (
-      <div
-        aria-hidden='true'
-        className='bg-muted h-72 animate-pulse rounded-lg'
-      />
-    )
+    body = <LoadingState message={t('common.loading')} />
   } else if (
     (statisticsQuery.isError || (!contractValid && !rangeTransition)) &&
     !data
   ) {
-    body = <ErrorState onRetry={() => void statisticsQuery.refetch()} />
+    body = (
+      <ErrorState
+        description={t('statistics.loadErrorDescription')}
+        onRetry={() => void statisticsQuery.refetch()}
+        title={t('statistics.loadError')}
+      />
+    )
   } else if (!data) {
     body = null
   } else {

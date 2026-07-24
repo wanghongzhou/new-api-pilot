@@ -12,6 +12,13 @@ import {
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 
 import type { SiteListItem } from '../types'
@@ -67,37 +74,34 @@ export function SiteActions({
 }) {
   const { t } = useTranslation()
   return (
-    <details className='relative'>
-      <summary
-        aria-label={t('site.actions.open')}
-        className='hover:bg-muted focus-visible:ring-ring flex size-10 list-none items-center justify-center rounded-md outline-none focus-visible:ring-2 [&::-webkit-details-marker]:hidden'
-        title={t('site.actions.open')}
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            aria-label={t('site.actions.open')}
+            size='icon'
+            title={t('site.actions.open')}
+            variant='ghost'
+          />
+        }
       >
         <HugeiconsIcon icon={MoreVerticalIcon} strokeWidth={2} />
-      </summary>
-      <div className='bg-popover text-popover-foreground absolute top-11 right-0 z-30 grid min-w-52 rounded-md border p-1 shadow-lg'>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align='end' className='min-w-52'>
         {actionsForSite(site).map((action) => {
           const Icon = actionIcons[action]
           return (
-            <button
-              className={
-                action === 'delete'
-                  ? 'text-destructive hover:bg-destructive/10 flex min-h-10 items-center gap-2 rounded-sm px-3 text-left text-sm'
-                  : 'hover:bg-muted flex min-h-10 items-center gap-2 rounded-sm px-3 text-left text-sm'
-              }
+            <DropdownMenuItem
               key={action}
-              onClick={(event) => {
-                event.currentTarget.closest('details')?.removeAttribute('open')
-                onAction(action, site)
-              }}
-              type='button'
+              onClick={() => onAction(action, site)}
+              variant={action === 'delete' ? 'destructive' : 'default'}
             >
               <HugeiconsIcon icon={Icon} strokeWidth={2} />
               {t(dynamicI18nKey('site', `site.actions.${action}`))}
-            </button>
+            </DropdownMenuItem>
           )
         })}
-      </div>
-    </details>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

@@ -49,9 +49,10 @@ function toSearchParams<T extends object>(values: T): URLSearchParams {
 }
 
 export function listSites(params: SiteListParams): Promise<SitePage> {
+  const searchParams = toSearchParams(params)
   return requestApiData<SitePage>({
     method: 'get',
-    params: toSearchParams(params),
+    params: searchParams.size > 0 ? searchParams : undefined,
     url: '/api/sites',
   })
 }

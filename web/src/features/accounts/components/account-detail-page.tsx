@@ -2,7 +2,6 @@ import {
   Alert02Icon,
   ArrowLeft01Icon,
   Chart01Icon,
-  Refresh01Icon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -17,17 +16,18 @@ import { DataStatusBadge } from '@/components/data/data-status'
 import { MetricValue } from '@/components/data/metric-value'
 import { QuotaAmount } from '@/components/data/quota-amount'
 import { RunFeedbackSheet } from '@/components/data/run-feedback-sheet'
+import { ErrorState } from '@/components/error-state'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
+import { LoadingState } from '@/components/loading-state'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Spinner } from '@/components/ui/spinner'
 import { customerKeys } from '@/features/customers/query-keys'
 import type { CollectionRunItem } from '@/features/sites/types'
 import { buildStatisticsSearch } from '@/features/statistics/search'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { isIdString, parseIdString } from '@/lib/api-types'
 import { fromUnixSeconds } from '@/lib/dayjs'
+import { formatDisplayValue } from '@/lib/display-value'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { getAccount } from '../api'
@@ -41,9 +41,8 @@ import {
 } from './account-ui'
 
 function Timestamp({ value }: { value: number | null }) {
-  const { t } = useTranslation()
   return value == null
-    ? t('common.none')
+    ? formatDisplayValue(value)
     : fromUnixSeconds(value).format('YYYY-MM-DD HH:mm:ss')
 }
 
@@ -97,37 +96,21 @@ export function AccountDetailPage({
   let content: ReactNode
   if (!validAccountId || (detailQuery.isError && !account)) {
     content = (
-      <section className='border-destructive/30 bg-destructive/5 rounded-lg border p-5'>
-        <h2 className='font-medium'>{t('account.detail.loadError')}</h2>
-        <p className='text-muted-foreground mt-1 text-sm'>
-          {t(
-            dynamicI18nKey(
-              'account',
-              validAccountId
-                ? 'account.detail.loadErrorDescription'
-                : 'account.detail.invalidId'
-            )
-          )}
-        </p>
-        {validAccountId && (
-          <Button
-            className='mt-3'
-            onClick={() => void detailQuery.refetch()}
-            variant='outline'
-          >
-            <HugeiconsIcon icon={Refresh01Icon} strokeWidth={2} />
-            {t('common.retry')}
-          </Button>
+      <ErrorState
+        description={t(
+          dynamicI18nKey(
+            'account',
+            validAccountId
+              ? 'account.detail.loadErrorDescription'
+              : 'account.detail.invalidId'
+          )
         )}
-      </section>
+        onRetry={validAccountId ? () => void detailQuery.refetch() : undefined}
+        title={t('account.detail.loadError')}
+      />
     )
   } else if (detailQuery.isPending || !account) {
-    content = (
-      <div className='flex min-h-64 items-center justify-center' role='status'>
-        <Spinner />
-        <span className='sr-only'>{t('account.detail.loading')}</span>
-      </div>
-    )
+    content = <LoadingState message={t('account.detail.loading')} />
   } else {
     content = (
       <>
@@ -229,7 +212,7 @@ export function AccountDetailPage({
                 {t('account.remark')}
               </dt>
               <dd className='mt-1 text-sm font-medium break-words'>
-                {account.remark || t('common.none')}
+                {formatDisplayValue(account.remark)}
               </dd>
             </div>
             <div>
@@ -270,7 +253,7 @@ export function AccountDetailPage({
                 {t('account.displayName')}
               </dt>
               <dd className='mt-1 text-sm font-medium'>
-                {account.display_name || t('common.none')}
+                {formatDisplayValue(account.display_name)}
               </dd>
             </div>
             <div>
@@ -278,7 +261,7 @@ export function AccountDetailPage({
                 {t('account.remoteGroup')}
               </dt>
               <dd className='mt-1 text-sm font-medium'>
-                {account.remote_group || t('common.none')}
+                {formatDisplayValue(account.remote_group)}
               </dd>
             </div>
             <div>

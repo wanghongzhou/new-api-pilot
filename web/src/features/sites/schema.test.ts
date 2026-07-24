@@ -4,6 +4,7 @@ import {
   normalizeBaseUrl,
   siteDetailSearchSchema,
   siteFormSchema,
+  siteSearchMiddlewares,
   sitesSearchSchema,
 } from './schema'
 
@@ -31,6 +32,28 @@ describe('site schemas', () => {
     expect(
       sitesSearchSchema.parse({ management: 'active', online: ['offline'] })
     ).toMatchObject({ management: ['active'], online: ['offline'] })
+  })
+
+  test('strips empty site filters from the browser URL search state', () => {
+    const search = sitesSearchSchema.parse({})
+    const normalized = siteSearchMiddlewares[0]({
+      next: (nextSearch) => nextSearch,
+      search,
+    })
+
+    expect(normalized as Record<string, unknown>).toEqual({})
+  })
+
+  test('keeps active site filters in the browser URL search state', () => {
+    const search = sitesSearchSchema.parse({ management: 'active' })
+    const normalized = siteSearchMiddlewares[0]({
+      next: (nextSearch) => nextSearch,
+      search,
+    })
+
+    expect(normalized as Record<string, unknown>).toEqual({
+      management: ['active'],
+    })
   })
 
   test('normalizes numeric run deep links to bigint-safe strings', () => {

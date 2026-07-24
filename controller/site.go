@@ -635,6 +635,8 @@ func writeSiteServiceError(c *gin.Context, err error) {
 		common.AbortError(c, http.StatusConflict, constant.CodeConflict, "Site state does not allow this operation", nil)
 	case errors.Is(err, service.ErrSiteExportDisabled):
 		common.AbortError(c, http.StatusUnprocessableEntity, constant.CodeSiteExportDisabled, "Site data export is disabled", nil)
+	case errors.Is(err, service.ErrUpstreamLoginRejected):
+		common.AbortError(c, http.StatusUnprocessableEntity, constant.CodeUpstreamLoginRejected, "Upstream login was rejected", nil)
 	case errors.Is(err, service.ErrSiteCapabilitiesPending), errors.Is(err, service.ErrSiteIncompatible),
 		errors.Is(err, service.ErrUpstreamAuthExpired), errors.Is(err, service.ErrUpstreamPermissionDenied),
 		errors.Is(err, service.ErrUpstreamCredentialOriginMismatch), errors.Is(err, service.ErrUpstreamResponseInvalid),

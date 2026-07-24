@@ -30,6 +30,7 @@ import {
   parseIdString,
 } from '@/lib/api-types'
 import { fromUnixSeconds } from '@/lib/dayjs'
+import { hasFilterChanges } from '@/lib/filter-state'
 
 import { getRankings, getSiteRankings } from '../api'
 import { buildRankingExportRequest } from '../export-request'
@@ -197,6 +198,7 @@ export function RankingsPage({
     [t, vendors]
   )
   const periods: RankingPeriod[] = ['today', 'week', 'month', 'year']
+  const reset = buildRankingSearch({ tab: search.tab })
   return (
     <SectionPageLayout
       actions={(['xlsx', 'csv'] as const).map((format) => (
@@ -248,9 +250,11 @@ export function RankingsPage({
         </Tabs>
         <FilterPanel
           description={t('rankings.localBoundary')}
-          onReset={() =>
-            onSearchChange(buildRankingSearch({ tab: search.tab }))
-          }
+          hasActiveFilters={hasFilterChanges(search, reset, [
+            'period',
+            'siteIds',
+          ])}
+          onReset={() => onSearchChange(reset)}
           title={t('rankings.tabs.label')}
         >
           <div className='flex flex-wrap gap-2'>

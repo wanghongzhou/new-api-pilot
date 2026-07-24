@@ -1,17 +1,26 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { useEffect } from 'react'
 
 import { SitesPage } from '@/features/sites/components/sites-page'
-import { sitesSearchSchema } from '@/features/sites/schema'
+import {
+  siteSearchMiddlewares,
+  sitesSearchSchema,
+} from '@/features/sites/schema'
 import type { SiteSearch } from '@/features/sites/types'
 
 export const Route = createFileRoute('/_authenticated/sites/')({
   component: SitesRoute,
+  search: { middlewares: siteSearchMiddlewares },
   validateSearch: sitesSearchSchema,
 })
 
 function SitesRoute() {
   const rawSearch = Route.useSearch()
   const navigate = Route.useNavigate()
+  useEffect(() => {
+    if (!window.location.search) return
+    void navigate({ replace: true, search: (current) => current })
+  }, [navigate])
   const storedView = window.localStorage.getItem('sites:view-mode')
   const preferredView: SiteSearch['view'] =
     storedView === 'table' || storedView === 'card' ? storedView : 'card'

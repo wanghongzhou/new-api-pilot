@@ -5,6 +5,7 @@ import { FilterPanel } from '@/components/data/filter-panel'
 import { Input } from '@/components/ui/input'
 import { SelectControl as Select } from '@/components/ui/select-control'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
+import { hasFilterChanges } from '@/lib/filter-state'
 
 import { customerStatuses } from '../constants'
 import type { CustomerSearch, CustomerStatus } from '../types'
@@ -21,12 +22,13 @@ export function CustomerFilters({
   useEffect(() => {
     setDraft(value)
   }, [value])
+  const reset = { filter: '', status: [] as CustomerStatus[] }
   return (
     <FilterPanel
       description={t('customer.filters.description')}
+      hasActiveFilters={hasFilterChanges(draft, reset, ['filter', 'status'])}
       onApply={() => onApply({ ...draft, filter: draft.filter.trim() })}
       onReset={() => {
-        const reset = { filter: '', status: [] as CustomerStatus[] }
         setDraft(reset)
         onApply(reset)
       }}

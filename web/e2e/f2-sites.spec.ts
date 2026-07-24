@@ -628,6 +628,54 @@ async function reachOnboardingBackfillStep(page: Page) {
   return drawer
 }
 
+test('uses the single-border new-api data-table card boundary', async ({
+  page,
+}) => {
+  await seedAuth(page, admin)
+  await mockSelf(page, admin)
+  await page.route(/\/api\/sites(?:\?.*)?$/, async (route) => {
+    assertAuthenticatedRequest(route, admin)
+    await route.fulfill({
+      json: envelope({
+        items: [siteFixture()],
+        page: 1,
+        page_size: 20,
+        total: 1,
+      }),
+    })
+  })
+
+  await page.goto('/sites?view=card')
+  const card = page.locator('[data-slot="site-card"]')
+  await expect(card).toHaveCount(1)
+  const boundary = await card.evaluate((element) => {
+    const style = getComputedStyle(element)
+    const internalTopBorders = [...element.querySelectorAll('section, footer')]
+      .map((child) => getComputedStyle(child).borderTopWidth)
+      .filter((width) => width !== '0px')
+    return {
+      borderWidth: style.borderWidth,
+      borderRadius: style.borderRadius,
+      boxShadow: style.boxShadow,
+      internalTopBorders,
+      overflow: style.overflow,
+      paddingBottom: style.paddingBottom,
+      paddingLeft: style.paddingLeft,
+      paddingRight: style.paddingRight,
+      paddingTop: style.paddingTop,
+    }
+  })
+  expect(boundary.overflow).toBe('visible')
+  expect(boundary.borderRadius).not.toBe('0px')
+  expect(boundary.borderWidth).toBe('1px')
+  expect(boundary.boxShadow).toBe('none')
+  expect(boundary.internalTopBorders).toEqual([])
+  expect(boundary.paddingTop).toBe('10px')
+  expect(boundary.paddingBottom).toBe('10px')
+  expect(boundary.paddingLeft).toBe('12px')
+  expect(boundary.paddingRight).toBe('12px')
+})
+
 test('completes four-step onboarding without persisting site secrets', async ({
   page,
 }) => {
@@ -942,7 +990,7 @@ test('shows export capability failures without rotating credentials', async ({
   await page.goto('/sites/1')
   for (const [, message] of failures) {
     await page.getByLabel('打开站点操作').click()
-    await page.getByRole('button', { name: '重新检查能力' }).click()
+    await page.getByRole('button', { name: '检查能力' }).click()
     const dialog = page.getByRole('dialog', { name: '重新检查站点能力' })
     await dialog.getByRole('button', { name: '开始重新检查' }).click()
     await expect(dialog.getByText(message)).toBeVisible()
@@ -966,9 +1014,7 @@ test('keeps viewer detail read-only, accessible, and within responsive viewports
   await expect(
     page.getByRole('button', { name: '使用已保存凭据重新检查能力' })
   ).toHaveCount(0)
-  await expect(page.getByRole('button', { name: '重新检查能力' })).toHaveCount(
-    0
-  )
+  await expect(page.getByRole('button', { name: '检查能力' })).toHaveCount(0)
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth > window.innerWidth

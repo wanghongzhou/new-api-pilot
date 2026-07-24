@@ -60,13 +60,60 @@ func TestSiteListAndDetailUseLatestResourceSummaryAndDefaultMissingMetricsToZero
 		t.Fatalf("list resource summary = %#v", item.Resource)
 	}
 
+	siteID := site.ID
+	if err := tx.Create(&model.CollectionRun{
+		SiteID: &siteID, SiteConfigVersion: site.ConfigVersion, TaskType: constant.TaskTypeUsageBackfill,
+		TargetType: "site", TargetID: site.ID, TriggerType: constant.CollectionTriggerManual,
+		Scope: []byte(`{}`), Status: "running", TotalWindows: 4, CompletedWindows: 1,
+		NextAttemptAt: now, CreatedRequestID: "req_partial_backfill", LastRequestID: "req_partial_backfill",
+		ErrorParams: []byte(`{}`), CreatedAt: now, UpdatedAt: now,
+	}).Error; err != nil {
+		t.Fatalf("create partial backfill: %v", err)
+	}
+	page, err = sites.List(context.Background(), query)
+	if err != nil {
+		t.Fatalf("list sites with partial backfill: %v", err)
+	}
+	if page.Items[0].CompletenessRate != 0.25 || page.Items[0].StatisticsStatus != site.StatisticsStatus {
+		t.Fatalf("list completeness/status = %v/%s", page.Items[0].CompletenessRate, page.Items[0].StatisticsStatus)
+	}
+
 	detail, err := sites.Get(context.Background(), site.ID)
 	if err != nil {
 		t.Fatalf("get site detail: %v", err)
 	}
 	if detail.Resource.CPUMaxPercent == nil || *detail.Resource.CPUMaxPercent != cpu ||
-		detail.Resource.DataStatus != "complete" {
+		detail.Resource.DataStatus != "complete" || detail.CompletenessRate != 0.25 {
 		t.Fatalf("detail resource summary = %#v", detail.Resource)
+	}
+}
+
+func TestStatisticsStatusAfterBackfillRepairsTerminalBackfillingState(t *testing.T) {
+	base := model.CollectionRun{TaskType: constant.TaskTypeUsageBackfill, TargetType: "site"}
+	tests := []struct {
+		name    string
+		current string
+		run     model.CollectionRun
+		want    string
+	}{
+		{name: "complete", current: constant.SiteStatisticsBackfilling, run: base, want: constant.SiteStatisticsReady},
+		{name: "unavailable", current: constant.SiteStatisticsBackfilling, run: base, want: constant.SiteStatisticsPartial},
+		{name: "failed", current: constant.SiteStatisticsBackfilling, run: base, want: constant.SiteStatisticsPartial},
+		{name: "running", current: constant.SiteStatisticsBackfilling, run: base, want: constant.SiteStatisticsBackfilling},
+		{name: "preserve newer state", current: constant.SiteStatisticsError, run: base, want: constant.SiteStatisticsError},
+	}
+	tests[0].run.Status = model.CollectionTaskStatusSuccess
+	tests[1].run.Status = model.CollectionTaskStatusSuccess
+	tests[1].run.UnavailableWindows = 1
+	tests[2].run.Status = model.CollectionTaskStatusFailed
+	tests[3].run.Status = model.CollectionTaskStatusRunning
+	tests[4].run.Status = model.CollectionTaskStatusSuccess
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := statisticsStatusAfterBackfill(test.current, test.run); got != test.want {
+				t.Fatalf("statistics status = %q, want %q", got, test.want)
+			}
+		})
 	}
 }
 

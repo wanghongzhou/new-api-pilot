@@ -192,6 +192,40 @@ func TestPlatformUserListTreatsLikeMetacharactersLiterally(t *testing.T) {
 	}
 }
 
+func TestPlatformUserListSortsByStatus(t *testing.T) {
+	_, repository, users := newPlatformUserIntegrationHarness(t)
+	ctx := context.Background()
+	if _, err := users.EnsureBootstrapAdmin(ctx, "bootstrap-pass"); err != nil {
+		t.Fatalf("bootstrap admin: %v", err)
+	}
+	viewer, err := users.Create(ctx, dto.CreatePlatformUserRequest{
+		Username: "status-viewer", DisplayName: "Status Viewer", Role: constant.RoleViewer, Password: "viewer-pass",
+	})
+	if err != nil {
+		t.Fatalf("create status viewer: %v", err)
+	}
+	admin, err := repository.FindByUsername(ctx, "admin")
+	if err != nil {
+		t.Fatalf("find bootstrap admin: %v", err)
+	}
+	if err := users.SetStatus(ctx, admin.ID, viewer.ID, false); err != nil {
+		t.Fatalf("disable status viewer: %v", err)
+	}
+
+	ascending, err := users.List(ctx, dto.PlatformUserListQuery{
+		Page: 1, PageSize: 20, SortBy: "status", SortOrder: "asc",
+	})
+	if err != nil || len(ascending.Items) != 2 || ascending.Items[0].Status != constant.UserStatusEnabled || ascending.Items[1].Status != constant.UserStatusDisabled {
+		t.Fatalf("ascending status page = %#v, %v", ascending, err)
+	}
+	descending, err := users.List(ctx, dto.PlatformUserListQuery{
+		Page: 1, PageSize: 20, SortBy: "status", SortOrder: "desc",
+	})
+	if err != nil || len(descending.Items) != 2 || descending.Items[0].Status != constant.UserStatusDisabled || descending.Items[1].Status != constant.UserStatusEnabled {
+		t.Fatalf("descending status page = %#v, %v", descending, err)
+	}
+}
+
 func newPlatformUserIntegrationHarness(t *testing.T) (*model.Database, *model.PlatformUserRepository, *service.PlatformUserService) {
 	t.Helper()
 	database := openLockedIntegrationDatabase(t)

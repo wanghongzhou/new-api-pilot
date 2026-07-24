@@ -3,16 +3,21 @@ import { useTranslation } from 'react-i18next'
 
 import { calculateQuotaAmount, formatDecimal } from '@/lib/amount'
 import type { MetricString, RateInfo } from '@/lib/api-types'
+import { cn } from '@/lib/utils'
 
 import { MetricValue } from './metric-value'
 
 export function QuotaAmount({
+  className,
+  emphasizeAmount = false,
   inline = false,
   showQuota = true,
   quota,
   rate,
   nullLabel,
 }: {
+  className?: string
+  emphasizeAmount?: boolean
   inline?: boolean
   nullLabel?: string
   quota: MetricString | null
@@ -23,11 +28,12 @@ export function QuotaAmount({
   const amount = useMemo(() => calculateQuotaAmount(quota, rate), [quota, rate])
   return (
     <div
-      className={
+      className={cn(
         inline
           ? 'flex min-w-0 flex-wrap items-baseline gap-x-1 gap-y-0.5'
-          : 'grid gap-0.5'
-      }
+          : 'grid gap-0.5',
+        className
+      )}
     >
       {showQuota && (
         <span>
@@ -38,13 +44,30 @@ export function QuotaAmount({
         </span>
       )}
       {amount.status === 'available' && (
-        <span className='text-muted-foreground text-xs'>
+        <span
+          className={cn(
+            'text-muted-foreground text-xs',
+            emphasizeAmount && 'text-foreground text-base font-semibold'
+          )}
+        >
           {t('amount.summary', {
             cny: formatDecimal(amount.amountCny),
             usd: formatDecimal(amount.amountUsd),
           })}
         </span>
       )}
+      {amount.status === 'quota_unavailable' &&
+        !showQuota &&
+        nullLabel != null && (
+          <span
+            className={cn(
+              'text-muted-foreground text-xs',
+              emphasizeAmount && 'text-foreground text-base font-semibold'
+            )}
+          >
+            {nullLabel}
+          </span>
+        )}
       {amount.status !== 'available' &&
         (quota != null || nullLabel == null) && (
           <span className='text-muted-foreground text-xs'>

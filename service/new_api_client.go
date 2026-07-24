@@ -35,19 +35,20 @@ const (
 )
 
 type NewAPIClientOptions struct {
-	BaseURL             string
-	CredentialOrigin    string
-	AccessToken         string
-	RootUserID          int64
-	AllowedHostSuffixes []string
-	AllowedCIDRs        []netip.Prefix
-	CAFile              string
-	ConnectTimeout      time.Duration
-	HeaderTimeout       time.Duration
-	RequestTimeout      time.Duration
-	ExportTimeout       time.Duration
-	Metrics             UpstreamMetricsRecorder
-	Governor            UpstreamGovernor
+	BaseURL              string
+	CredentialOrigin     string
+	AccessToken          string
+	RootUserID           int64
+	AllowedHostSuffixes  []string
+	AllowedCIDRs         []netip.Prefix
+	AllowPrivateNetworks bool
+	CAFile               string
+	ConnectTimeout       time.Duration
+	HeaderTimeout        time.Duration
+	RequestTimeout       time.Duration
+	ExportTimeout        time.Duration
+	Metrics              UpstreamMetricsRecorder
+	Governor             UpstreamGovernor
 }
 
 type newAPIClientDependencies struct {
@@ -107,6 +108,7 @@ func newNewAPIClient(options NewAPIClientOptions, dependencies newAPIClientDepen
 		normalizedBaseURL,
 		options.AllowedHostSuffixes,
 		options.AllowedCIDRs,
+		options.AllowPrivateNetworks,
 		options.CAFile,
 		connectTimeout,
 		headerTimeout,
@@ -1010,6 +1012,10 @@ func (client *NewAPIClient) LoginAndGenerateAccessToken(ctx context.Context, req
 	}
 	var loginWire upstreamIdentityWire
 	if _, err := client.do(ctx, sessionClient, http.MethodPost, "/api/user/login", nil, requestID, upstreamAuthPublic, client.requestTimeout, bytes.NewReader(body), "application/json", &loginWire, false); err != nil {
+		var requestError *UpstreamRequestError
+		if errors.As(err, &requestError) && requestError.Kind == UpstreamErrorEnvelopeInvalid && requestError.Detail == "success_false" {
+			return dto.UpstreamIdentity{}, "", ErrUpstreamLoginRejected
+		}
 		return dto.UpstreamIdentity{}, "", err
 	}
 	identity, err := validateUpstreamIdentity(loginWire)

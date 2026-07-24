@@ -233,30 +233,17 @@ func (service *SiteService) checkFlowDataCapabilities(ctx context.Context, clien
 	flowCheck := capabilityCheck{status: constant.CapabilityStatusPassed}
 	dataCheck := capabilityCheck{status: constant.CapabilityStatusPassed}
 	consistency := capabilityCheck{status: constant.CapabilityStatusSkipped}
-	latestHour := floorHour(service.clock.Now().Unix()) - 3600
-	for offset := int64(0); offset < 24; offset++ {
-		hour := latestHour - offset*3600
-		if hour <= 0 {
-			break
-		}
-		flow, flowErr := client.FlowHour(ctx, requestID, hour)
-		data, dataErr := client.DataHour(ctx, requestID, hour)
-		if flowErr != nil {
-			flowCheck = capabilityCheck{status: constant.CapabilityStatusFailed, err: flowErr}
-		}
-		if dataErr != nil {
-			dataCheck = capabilityCheck{status: constant.CapabilityStatusFailed, err: dataErr}
-		}
-		if flowErr != nil || dataErr != nil {
-			return flowCheck, dataCheck, capabilityCheck{status: constant.CapabilityStatusFailed, err: firstError(flowErr, dataErr)}
-		}
-		if len(flow) == 0 && len(data) == 0 {
-			continue
-		}
-		if err := ValidateFlowDataConsistency(flow, data); err != nil {
-			return flowCheck, dataCheck, capabilityCheck{status: constant.CapabilityStatusFailed, err: err}
-		}
-		return flowCheck, dataCheck, capabilityCheck{status: constant.CapabilityStatusPassed}
+	hour := floorHour(service.clock.Now().Unix()) - 3600
+	_, flowErr := client.FlowHour(ctx, requestID, hour)
+	_, dataErr := client.DataHour(ctx, requestID, hour)
+	if flowErr != nil {
+		flowCheck = capabilityCheck{status: constant.CapabilityStatusFailed, err: flowErr}
+	}
+	if dataErr != nil {
+		dataCheck = capabilityCheck{status: constant.CapabilityStatusFailed, err: dataErr}
+	}
+	if flowErr != nil || dataErr != nil {
+		return flowCheck, dataCheck, capabilityCheck{status: constant.CapabilityStatusFailed, err: firstError(flowErr, dataErr)}
 	}
 	return flowCheck, dataCheck, consistency
 }

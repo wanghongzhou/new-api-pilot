@@ -15,6 +15,13 @@ import { DataStatusBadge } from '@/components/data/data-status'
 import { MetricValue } from '@/components/data/metric-value'
 import { QuotaAmount } from '@/components/data/quota-amount'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 
 import type {
@@ -94,34 +101,36 @@ export function AccountActions({
     'delete',
   ]
   return (
-    <details className='relative'>
-      <summary
-        aria-label={t('account.actions.open')}
-        className='hover:bg-muted focus-visible:ring-ring flex size-10 list-none items-center justify-center rounded-md outline-none focus-visible:ring-2 [&::-webkit-details-marker]:hidden'
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            aria-label={t('account.actions.open')}
+            size='icon'
+            title={t('account.actions.open')}
+            variant='ghost'
+          />
+        }
       >
         <HugeiconsIcon icon={MoreVerticalIcon} strokeWidth={2} />
-      </summary>
-      <div className='bg-popover absolute top-11 right-0 z-30 grid min-w-48 rounded-md border p-1 shadow-lg'>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align='end' className='min-w-48'>
         {actions.map((action) => (
-          <button
-            className={
-              action === 'archive' || action === 'delete'
-                ? 'text-destructive hover:bg-destructive/10 flex min-h-10 items-center gap-2 rounded-sm px-3 text-left text-sm'
-                : 'hover:bg-muted flex min-h-10 items-center gap-2 rounded-sm px-3 text-left text-sm'
-            }
+          <DropdownMenuItem
             key={action}
-            onClick={(event) => {
-              event.currentTarget.closest('details')?.removeAttribute('open')
-              onAction(action, account)
-            }}
-            type='button'
+            onClick={() => onAction(action, account)}
+            variant={
+              action === 'archive' || action === 'delete'
+                ? 'destructive'
+                : 'default'
+            }
           >
             <HugeiconsIcon icon={actionIcons[action]} strokeWidth={2} />
             {t(dynamicI18nKey('account', `account.actions.${action}`))}
-          </button>
+          </DropdownMenuItem>
         ))}
-      </div>
-    </details>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
@@ -139,8 +148,8 @@ export function AccountCard({
     <article
       className={
         account.managed_status === 'archived'
-          ? 'border-border bg-muted/25 grid gap-4 rounded-lg border p-4'
-          : 'border-border bg-card grid gap-4 rounded-lg border p-4'
+          ? 'bg-muted/25 text-card-foreground ring-foreground/10 grid gap-4 rounded-xl p-4 ring-1'
+          : 'bg-card text-card-foreground ring-foreground/10 grid gap-4 rounded-xl p-4 ring-1'
       }
     >
       <div className='flex min-w-0 items-start justify-between gap-2'>

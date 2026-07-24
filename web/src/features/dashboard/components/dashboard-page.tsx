@@ -15,6 +15,8 @@ import { CompletenessAlert } from '@/components/data/completeness-alert'
 import { DataFreshness } from '@/components/data/data-freshness'
 import { DataStatusBadge } from '@/components/data/data-status'
 import { MetricValue } from '@/components/data/metric-value'
+import { EmptyState } from '@/components/empty-state'
+import { ErrorState } from '@/components/error-state'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -79,24 +81,20 @@ function DashboardPanel({
     )
   } else if (state.error && !state.data) {
     content = (
-      <div className='border-destructive/30 bg-destructive/5 rounded-md border p-4'>
-        <p className='font-medium'>{t('dashboard.block.loadError')}</p>
-        <p className='text-muted-foreground mt-1 text-sm'>
-          {t('dashboard.block.loadErrorDescription')}
-        </p>
-        <Button className='mt-3' onClick={state.retry} variant='outline'>
-          {t('common.retry')}
-        </Button>
-      </div>
+      <ErrorState
+        className='min-h-40'
+        description={t('dashboard.block.loadErrorDescription')}
+        onRetry={state.retry}
+        title={t('dashboard.block.loadError')}
+      />
     )
   } else if (empty) {
     content = (
-      <div className='border-border rounded-md border px-4 py-10 text-center'>
-        <p className='font-medium'>{t('dashboard.block.empty')}</p>
-        <p className='text-muted-foreground mt-1 text-sm'>
-          {t('dashboard.block.emptyDescription')}
-        </p>
-      </div>
+      <EmptyState
+        className='min-h-40'
+        description={t('dashboard.block.emptyDescription')}
+        title={t('dashboard.block.empty')}
+      />
     )
   } else {
     content = (

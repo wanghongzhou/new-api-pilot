@@ -11,7 +11,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import type { ColumnDef } from '@tanstack/react-table'
+import type { ColumnDef, SortingState } from '@tanstack/react-table'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -87,8 +87,8 @@ export function PlatformUsersPage({
       p: search.page,
       page_size: search.pageSize,
       role: search.role,
-      sort_by: 'created_at',
-      sort_order: 'desc',
+      sort_by: search.sort,
+      sort_order: search.order,
       status: search.status,
     }),
     [search]
@@ -118,6 +118,25 @@ export function PlatformUsersPage({
   const enabledAdminTotal = enabledAdminQuery.data?.total ?? 0
   const pageData = usersQuery.data
   const initialLoading = usersQuery.isPending && !pageData
+  const updateSorting = (
+    updater: SortingState | ((old: SortingState) => SortingState)
+  ) => {
+    const current =
+      search.sort && search.order
+        ? [{ desc: search.order === 'desc', id: search.sort }]
+        : []
+    const next = typeof updater === 'function' ? updater(current) : updater
+    const first = next[0]
+    if (!first) {
+      onSearchChange({ order: undefined, page: 1, sort: undefined })
+      return
+    }
+    onSearchChange({
+      order: first.desc ? 'desc' : 'asc',
+      page: 1,
+      sort: first.id as PlatformUserSearch['sort'],
+    })
+  }
   const columns = useMemo<ColumnDef<PlatformUserItem, unknown>[]>(
     () => [
       {
@@ -129,6 +148,7 @@ export function PlatformUsersPage({
       },
       {
         accessorKey: 'display_name',
+        enableSorting: false,
         header: t('Display name'),
       },
       {
@@ -143,9 +163,10 @@ export function PlatformUsersPage({
         id: 'role',
       },
       {
+        accessorKey: 'status',
         cell: ({ row }) => <UserStatusBadge user={row.original} />,
+        enableSorting: true,
         header: t('Status'),
-        id: 'status',
       },
       {
         cell: ({ row }) =>
@@ -154,14 +175,16 @@ export function PlatformUsersPage({
         id: 'passwordChange',
       },
       {
+        accessorKey: 'last_login_at',
         cell: ({ row }) => formatTime(row.original.last_login_at) ?? t('Never'),
+        enableSorting: true,
         header: t('Last signed in'),
-        id: 'lastLogin',
       },
       {
+        accessorKey: 'created_at',
         cell: ({ row }) => formatTime(row.original.created_at),
+        enableSorting: true,
         header: t('Created at'),
-        id: 'createdAt',
       },
       ...(isAdmin
         ? [
@@ -224,6 +247,7 @@ export function PlatformUsersPage({
             fillAvailableHeight
             loading={initialLoading}
             onRetry={() => void usersQuery.refetch()}
+            onSortingChange={updateSorting}
             preserveHeaderWhenEmpty
             renderMobileCard={(user) => (
               <UserCard
@@ -238,6 +262,11 @@ export function PlatformUsersPage({
                 user={user}
               />
             )}
+            sorting={
+              search.sort && search.order
+                ? [{ desc: search.order === 'desc', id: search.sort }]
+                : []
+            }
           />
         </div>
       </div>
@@ -366,7 +395,7 @@ function UserCard(props: UserActionsProps) {
   const lastLogin = formatTime(user.last_login_at)
   const createdAt = formatTime(user.created_at)
   return (
-    <article className='border-border bg-card rounded-lg border p-4'>
+    <article className='bg-card text-card-foreground ring-foreground/10 rounded-xl p-4 ring-1'>
       <div className='flex items-start justify-between gap-3'>
         <div className='min-w-0'>
           <h2 className='truncate font-medium'>{user.display_name}</h2>

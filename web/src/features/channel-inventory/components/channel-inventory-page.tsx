@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 import { DataStatusBadge } from '@/components/data/data-status'
 import { FilterPanel } from '@/components/data/filter-panel'
 import { MetricValue } from '@/components/data/metric-value'
+import { ErrorState } from '@/components/error-state'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Badge } from '@/components/ui/badge'
@@ -33,6 +34,7 @@ import {
   parseMetricString,
 } from '@/lib/api-types'
 import { BEIJING_TIMEZONE, dayjs, fromUnixSeconds } from '@/lib/dayjs'
+import { hasFilterChanges } from '@/lib/filter-state'
 
 import {
   getChannelInventoryStatistics,
@@ -240,12 +242,26 @@ function InventoryFilters({
           .filter(Boolean),
         page: 1,
       })
+  const reset = buildChannelInventorySearch({ pageSize: search.pageSize })
   return (
     <FilterPanel
       description={t('channelInventory.filters.description')}
-      onReset={() =>
-        onChange(buildChannelInventorySearch({ pageSize: search.pageSize }))
-      }
+      hasActiveFilters={hasFilterChanges(search, reset, [
+        'end',
+        'groups',
+        'keyword',
+        'maxBalance',
+        'maxResponseTime',
+        'minBalance',
+        'minResponseTime',
+        'siteIds',
+        'start',
+        'states',
+        'statuses',
+        'tags',
+        'types',
+      ])}
+      onReset={() => onChange(reset)}
       title={t('channelInventory.filters.title')}
     >
       <div className='grid min-w-0 flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-4'>
@@ -778,7 +794,7 @@ export function ChannelInventoryPage({
           page={search.page}
           pageSize={search.pageSize}
           renderMobileCard={(item) => (
-            <article className='border-border bg-card grid gap-3 rounded-lg border p-4'>
+            <article className='bg-card text-card-foreground ring-foreground/10 grid gap-3 rounded-xl p-4 ring-1'>
               <div className='flex items-start justify-between gap-2'>
                 <div>
                   <p className='font-medium'>{item.name}</p>
@@ -823,16 +839,11 @@ export function ChannelInventoryPage({
           total={list?.total ?? 0}
         />
         {statisticsQuery.isError && !statistics && (
-          <section className='border-destructive/30 bg-destructive/5 rounded-lg border p-4'>
-            <p className='text-sm'>{t('channelInventory.statisticsError')}</p>
-            <Button
-              className='mt-3'
-              onClick={() => void statisticsQuery.refetch()}
-              variant='outline'
-            >
-              {t('common.retry')}
-            </Button>
-          </section>
+          <ErrorState
+            className='min-h-40'
+            onRetry={() => void statisticsQuery.refetch()}
+            title={t('channelInventory.statisticsError')}
+          />
         )}
         {statistics && (
           <>

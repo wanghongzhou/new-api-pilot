@@ -37,6 +37,7 @@ var (
 	ErrUpstreamCredentialOriginMismatch   = errors.New("upstream credentials are bound to another origin")
 	ErrUpstreamTokenRotationResultUnknown = errors.New("upstream token rotation result is unknown")
 	ErrUpstreamDataMismatch               = errors.New("upstream flow and data totals do not match")
+	ErrUpstreamLoginRejected              = errors.New("upstream login was rejected")
 	ErrUpstreamUserNotFound               = errors.New("upstream user was not found")
 	ErrUpstreamUserIdentityConflict       = errors.New("upstream user identity conflicts with the requested ID")
 )

@@ -272,6 +272,7 @@ export function AccountsPage({
 
   return (
     <SectionPageLayout
+      fixedContent
       actions={
         isAdmin ? (
           <>
@@ -297,7 +298,7 @@ export function AccountsPage({
       description={t('accounts.description')}
       title={t('accounts.title')}
     >
-      <div className='grid min-w-0 gap-5'>
+      <div className='flex h-full min-h-0 min-w-0 flex-col gap-4'>
         <AccountFilters
           customers={customersQuery.data?.items ?? []}
           onApply={(filters) => onSearchChange({ ...filters, page: 1 })}
@@ -315,13 +316,6 @@ export function AccountsPage({
           ariaLabel={t('accounts.table')}
           columns={columns}
           data={accounts}
-          emptyAction={
-            isAdmin ? (
-              <Button onClick={() => setOnboardingOpen(true)}>
-                {t('accounts.add')}
-              </Button>
-            ) : undefined
-          }
           emptyDescription={t('accounts.emptyDescription')}
           emptyTitle={t('accounts.empty')}
           error={accountsQuery.isError}
@@ -333,6 +327,7 @@ export function AccountsPage({
           onSortingChange={updateSorting}
           page={search.page}
           pageSize={search.pageSize}
+          paginationInFooter
           renderMobileCard={(account) => (
             <AccountCard
               account={account}

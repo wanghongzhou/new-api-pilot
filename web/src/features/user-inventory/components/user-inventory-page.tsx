@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 import { DataStatusBadge } from '@/components/data/data-status'
 import { FilterPanel } from '@/components/data/filter-panel'
 import { MetricValue } from '@/components/data/metric-value'
+import { ErrorState } from '@/components/error-state'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Badge } from '@/components/ui/badge'
@@ -31,6 +32,8 @@ import {
   parseMetricString,
 } from '@/lib/api-types'
 import { BEIJING_TIMEZONE, dayjs, fromUnixSeconds } from '@/lib/dayjs'
+import { formatDisplayValue } from '@/lib/display-value'
+import { hasFilterChanges } from '@/lib/filter-state'
 
 import {
   getSiteUserInventoryStatistics,
@@ -222,12 +225,24 @@ function InventoryFilters({
         onChange({ [key]: parseMetricString(value), page: 1 })
       }
     }
+  const reset = buildUserInventorySearch({ pageSize: search.pageSize })
   return (
     <FilterPanel
       description={t('userInventory.filters.description')}
-      onReset={() =>
-        onChange(buildUserInventorySearch({ pageSize: search.pageSize }))
-      }
+      hasActiveFilters={hasFilterChanges(search, reset, [
+        'end',
+        'groups',
+        'keyword',
+        'maxBalance',
+        'minBalance',
+        'remoteUserId',
+        'roles',
+        'siteIds',
+        'start',
+        'states',
+        'statuses',
+      ])}
+      onReset={() => onChange(reset)}
       title={t('userInventory.filters.title')}
     >
       <div className='grid w-full min-w-0 flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-4'>
@@ -601,7 +616,7 @@ export function UserInventoryPage({
           <div className='min-w-40'>
             <span className='font-medium'>{row.original.username}</span>
             <span className='text-muted-foreground block text-xs'>
-              {row.original.display_name || t('common.none')}
+              {formatDisplayValue(row.original.display_name)}
             </span>
             <code className='text-muted-foreground block text-xs'>
               {row.original.remote_user_id}
@@ -687,7 +702,7 @@ export function UserInventoryPage({
         cell: ({ row }) =>
           row.original.account_id ? (
             <Link
-              className='text-primary-strong underline-offset-4 hover:underline'
+              className='text-primary underline-offset-4 hover:underline'
               params={{ accountId: row.original.account_id }}
               to='/accounts/$accountId'
             >
@@ -791,7 +806,7 @@ export function UserInventoryPage({
           page={search.page}
           pageSize={search.pageSize}
           renderMobileCard={(item) => (
-            <article className='border-border bg-card grid gap-3 rounded-lg border p-4'>
+            <article className='bg-card text-card-foreground ring-foreground/10 grid gap-3 rounded-xl p-4 ring-1'>
               <div className='flex items-start justify-between gap-2'>
                 <div>
                   <p className='font-medium'>{item.username}</p>
@@ -832,7 +847,7 @@ export function UserInventoryPage({
               </dl>
               {item.account_id ? (
                 <Link
-                  className='text-primary-strong text-sm underline-offset-4 hover:underline'
+                  className='text-primary text-sm underline-offset-4 hover:underline'
                   params={{ accountId: item.account_id }}
                   to='/accounts/$accountId'
                 >
@@ -848,16 +863,11 @@ export function UserInventoryPage({
           total={list?.total ?? 0}
         />
         {statisticsQuery.isError && !statistics && (
-          <section className='border-destructive/30 bg-destructive/5 rounded-lg border p-4'>
-            <p className='text-sm'>{t('userInventory.statisticsError')}</p>
-            <Button
-              className='mt-3'
-              onClick={() => void statisticsQuery.refetch()}
-              variant='outline'
-            >
-              {t('common.retry')}
-            </Button>
-          </section>
+          <ErrorState
+            className='min-h-40'
+            onRetry={() => void statisticsQuery.refetch()}
+            title={t('userInventory.statisticsError')}
+          />
         )}
         {statistics && (
           <>

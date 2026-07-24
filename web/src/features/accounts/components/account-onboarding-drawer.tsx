@@ -407,6 +407,7 @@ export function AccountOnboardingDrawer({
                 required
               >
                 <Select
+                  alignItemWithTrigger={false}
                   id='account-onboarding-customer'
                   name='customerId'
                   onChange={(event) =>
@@ -452,6 +453,7 @@ export function AccountOnboardingDrawer({
                 required
               >
                 <Select
+                  alignItemWithTrigger={false}
                   id='account-onboarding-site'
                   name='siteId'
                   onChange={(event) => {

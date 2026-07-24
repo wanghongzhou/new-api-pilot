@@ -1,8 +1,4 @@
-import {
-  Alert02Icon,
-  ArrowUpDownIcon,
-  Database01Icon,
-} from '@hugeicons/core-free-icons'
+import { Alert02Icon, Database01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   flexRender,
@@ -17,7 +13,9 @@ import { useTranslation } from 'react-i18next'
 
 import { cn } from '@/lib/utils'
 
+import { PageFooterPortal } from '../layout/page-footer'
 import { Button } from './button'
+import { DataTableColumnHeader } from './data-table-column-header'
 import { DataTablePagination } from './data-table-pagination'
 import {
   Empty,
@@ -27,7 +25,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from './empty'
-import { Spinner } from './spinner'
 import {
   Table,
   TableBody,
@@ -54,6 +51,7 @@ interface DataTableProps<TData> {
   onSortingChange?: OnChangeFn<SortingState>
   page?: number
   pageSize?: number
+  paginationInFooter?: boolean
   preserveHeaderWhenEmpty?: boolean
   renderMobileCard?: (item: TData) => ReactNode
   sorting?: SortingState
@@ -69,7 +67,7 @@ export function DataTable<TData>({
   emptyTitle,
   error = false,
   fetching = false,
-  fillAvailableHeight = false,
+  fillAvailableHeight = true,
   loading = false,
   onPageChange,
   onPageSizeChange,
@@ -77,7 +75,8 @@ export function DataTable<TData>({
   onSortingChange,
   page = 1,
   pageSize = 20,
-  preserveHeaderWhenEmpty = false,
+  paginationInFooter = true,
+  preserveHeaderWhenEmpty = true,
   renderMobileCard,
   sorting = [],
   total = data.length,
@@ -91,7 +90,7 @@ export function DataTable<TData>({
     onSortingChange,
     state: { sorting },
   })
-  const pagination = onPageChange ? (
+  const paginationControl = onPageChange ? (
     <DataTablePagination
       onPageChange={onPageChange}
       onPageSizeChange={onPageSizeChange}
@@ -100,6 +99,12 @@ export function DataTable<TData>({
       total={total}
     />
   ) : null
+  const pagination =
+    paginationControl && paginationInFooter ? (
+      <PageFooterPortal>{paginationControl}</PageFooterPortal>
+    ) : (
+      paginationControl
+    )
 
   if (loading && data.length === 0 && !preserveHeaderWhenEmpty) {
     return (
@@ -220,9 +225,9 @@ export function DataTable<TData>({
       )
     }
     emptyTableBody = (
-      <TableRow className={fillAvailableHeight ? 'h-full' : undefined}>
+      <TableRow>
         <TableCell
-          className={fillAvailableHeight ? 'h-full p-0' : 'p-0'}
+          className='h-[400px] p-0'
           colSpan={Math.max(1, table.getVisibleLeafColumns().length)}
         >
           {content}
@@ -235,28 +240,21 @@ export function DataTable<TData>({
     <div
       className={
         fillAvailableHeight
-          ? 'flex h-full min-h-0 min-w-0 flex-col gap-3'
+          ? 'flex min-h-0 min-w-0 flex-1 flex-col gap-2.5 sm:gap-3'
           : 'grid min-w-0 gap-3'
       }
     >
-      {fetching && (
-        <div
-          aria-live='polite'
-          className='text-muted-foreground flex min-h-5 items-center gap-2 text-xs'
-        >
-          <Spinner />
-          {t('table.refreshing')}
-        </div>
-      )}
       <div
         className={cn(
-          'border-border bg-background overflow-hidden rounded-md border',
+          'border-border bg-background overflow-hidden rounded-md border transition-opacity duration-150',
           fillAvailableHeight && 'min-h-0 flex-1',
+          fetching && !loading && 'pointer-events-none opacity-60',
           renderMobileCard && 'hidden min-[641px]:block'
         )}
       >
         <div
           aria-label={ariaLabel}
+          aria-busy={loading || fetching}
           className={cn(
             'focus-visible:ring-ring overflow-x-auto focus-visible:ring-2 focus-visible:outline-none',
             fillAvailableHeight && 'h-full'
@@ -266,10 +264,7 @@ export function DataTable<TData>({
         >
           <Table
             aria-label={ariaLabel}
-            className={cn(
-              'w-full border-collapse text-sm',
-              fillAvailableHeight && data.length === 0 && 'h-full'
-            )}
+            className='w-full border-collapse text-sm'
           >
             <TableHeader className='bg-[var(--table-header)] text-left'>
               {table.getHeaderGroups().map((headerGroup) => (
@@ -286,28 +281,17 @@ export function DataTable<TData>({
                         header.column.columnDef.header,
                         header.getContext()
                       )
-                      content = header.column.getCanSort() ? (
-                        <button
-                          className='focus-visible:ring-ring inline-flex min-h-8 items-center gap-1 rounded-md outline-none focus-visible:ring-2'
-                          onClick={header.column.getToggleSortingHandler()}
-                          type='button'
-                        >
-                          {label}
-                          <HugeiconsIcon
-                            aria-hidden='true'
-                            icon={ArrowUpDownIcon}
-                            size={14}
-                            strokeWidth={2}
-                          />
-                        </button>
-                      ) : (
-                        label
+                      content = (
+                        <DataTableColumnHeader
+                          column={header.column}
+                          title={label}
+                        />
                       )
                     }
                     return (
                       <TableHead
                         aria-sort={ariaSort}
-                        className='text-muted-foreground px-3 py-2 text-[10px] font-medium tracking-wider whitespace-nowrap uppercase'
+                        className='relative px-3'
                         key={header.id}
                       >
                         {content}
@@ -317,11 +301,7 @@ export function DataTable<TData>({
                 </TableRow>
               ))}
             </TableHeader>
-            <TableBody
-              className={
-                fillAvailableHeight && data.length === 0 ? 'h-full' : undefined
-              }
-            >
+            <TableBody>
               {emptyTableBody ??
                 table.getRowModel().rows.map((row) => (
                   <TableRow
@@ -343,12 +323,68 @@ export function DataTable<TData>({
         </div>
       </div>
       {renderMobileCard && (
-        <div className='grid gap-3 min-[641px]:hidden'>
-          {data.map((item, index) => (
-            <div key={table.getRowModel().rows[index]?.id ?? index}>
-              {renderMobileCard(item)}
-            </div>
-          ))}
+        <div
+          aria-busy={loading || fetching}
+          className={cn(
+            'grid min-h-0 flex-1 gap-3 overflow-y-auto transition-opacity duration-150 min-[641px]:hidden',
+            fetching && !loading && 'pointer-events-none opacity-60'
+          )}
+        >
+          {loading && data.length === 0 ? (
+            Array.from({ length: 3 }, (_, index) => (
+              <div
+                aria-hidden='true'
+                className='bg-muted/40 h-40 animate-pulse rounded-xl border'
+                key={index}
+              />
+            ))
+          ) : error && data.length === 0 ? (
+            <Empty className='min-h-[300px]'>
+              <EmptyHeader>
+                <EmptyMedia variant='icon'>
+                  <HugeiconsIcon
+                    className='text-destructive size-6'
+                    icon={Alert02Icon}
+                    strokeWidth={2}
+                  />
+                </EmptyMedia>
+                <EmptyTitle>{t('table.loadError')}</EmptyTitle>
+                <EmptyDescription>
+                  {t('table.loadErrorDescription')}
+                </EmptyDescription>
+              </EmptyHeader>
+              {onRetry && (
+                <EmptyContent>
+                  <Button onClick={onRetry} size='sm' variant='outline'>
+                    {t('common.retry')}
+                  </Button>
+                </EmptyContent>
+              )}
+            </Empty>
+          ) : data.length === 0 ? (
+            <Empty className='min-h-[300px]'>
+              <EmptyHeader>
+                <EmptyMedia variant='icon'>
+                  <HugeiconsIcon
+                    className='size-6'
+                    icon={Database01Icon}
+                    strokeWidth={2}
+                  />
+                </EmptyMedia>
+                <EmptyTitle>{emptyTitle ?? t('table.empty')}</EmptyTitle>
+                {emptyDescription && (
+                  <EmptyDescription>{emptyDescription}</EmptyDescription>
+                )}
+              </EmptyHeader>
+              {emptyAction && <EmptyContent>{emptyAction}</EmptyContent>}
+            </Empty>
+          ) : (
+            data.map((item, index) => (
+              <div key={table.getRowModel().rows[index]?.id ?? index}>
+                {renderMobileCard(item)}
+              </div>
+            ))
+          )}
         </div>
       )}
       {pagination}

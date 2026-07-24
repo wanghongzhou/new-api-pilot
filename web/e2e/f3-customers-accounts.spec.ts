@@ -474,6 +474,85 @@ async function beginOnboarding(page: Page) {
   await clickOpenSelectOption(page, '1')
 }
 
+async function expectReferenceEmptyTableRow(page: Page) {
+  const emptyRow = page.locator(
+    '[data-slot="table-body"] > [data-slot="table-row"]'
+  )
+  await expect(emptyRow).toHaveCount(1)
+  const box = await emptyRow.boundingBox()
+  expect(box).not.toBeNull()
+  expect(Math.round(box?.height ?? 0)).toBe(400)
+  await emptyRow.hover()
+  await expect
+    .poll(() =>
+      emptyRow.evaluate((element) => getComputedStyle(element).backgroundColor)
+    )
+    .not.toBe('rgba(0, 0, 0, 0)')
+}
+
+test('uses the refreshed new-api list chrome for account and customer pages', async ({
+  page,
+}) => {
+  await seedAuth(page, admin)
+  await mockSelf(page, admin)
+
+  let accounts: ReturnType<typeof accountFixture>[] = []
+  await page.route(/\/api\/accounts(?:\?.*)?$/, async (route) => {
+    assertAuthenticatedRequest(route, admin)
+    await route.fulfill({ json: envelope(pageData(accounts)) })
+  })
+  await page.route(/\/api\/customers(?:\?.*)?$/, async (route) => {
+    assertAuthenticatedRequest(route, admin)
+    await route.fulfill({ json: envelope(pageData([])) })
+  })
+  await page.route(/\/api\/sites(?:\?.*)?$/, async (route) => {
+    assertAuthenticatedRequest(route, admin)
+    await route.fulfill({
+      json: envelope(
+        pageData([
+          {
+            auth_status: 'authorized',
+            data_export_enabled: true,
+            id: '1',
+            management_status: 'active',
+            name: '华东站点',
+          },
+        ])
+      ),
+    })
+  })
+
+  await page.goto('/accounts')
+  await expectReferenceEmptyTableRow(page)
+  await expect(page.getByRole('button', { name: '添加账户' })).toHaveCount(1)
+  await expect(page.getByRole('button', { name: '重置' })).toHaveCount(0)
+
+  const siteSelect = page.getByRole('combobox', { name: '所属站点' })
+  await siteSelect.click()
+  const listbox = page.getByRole('listbox')
+  await expect(listbox).toBeVisible()
+  const [triggerBox, listboxBox] = await Promise.all([
+    siteSelect.boundingBox(),
+    listbox.boundingBox(),
+  ])
+  expect(triggerBox).not.toBeNull()
+  expect(listboxBox).not.toBeNull()
+  if (!triggerBox || !listboxBox) throw new Error('select geometry unavailable')
+  expect(listboxBox.y).toBeGreaterThanOrEqual(triggerBox.y + triggerBox.height)
+  await page.keyboard.press('Escape')
+
+  accounts = [accountFixture()]
+  await page.reload()
+  const usernameSort = page.getByRole('button', { name: '用户名' })
+  await usernameSort.click()
+  await expect(page.getByRole('menuitem', { name: '升序' })).toBeVisible()
+  await expect(page.getByRole('menuitem', { name: '降序' })).toBeVisible()
+
+  await page.goto('/customers')
+  await expectReferenceEmptyTableRow(page)
+  await expect(page.getByRole('button', { name: '新建客户' })).toHaveCount(1)
+})
+
 test('keeps viewer customer and account detail read-only, accessible, and responsive', async ({
   page,
 }) => {

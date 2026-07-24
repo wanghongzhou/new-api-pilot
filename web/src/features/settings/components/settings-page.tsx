@@ -3,7 +3,6 @@ import {
   Delete02Icon,
   Edit03Icon,
   FloppyDiskIcon,
-  Refresh01Icon,
   Sent02Icon,
   Undo02Icon,
 } from '@hugeicons/core-free-icons'
@@ -20,7 +19,9 @@ import {
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import { ErrorState } from '@/components/error-state'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
+import { LoadingState } from '@/components/loading-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -225,7 +226,9 @@ function EditableSetting({
       min={displayConstraint(definition, item, 'minimum')}
       step={definition.step}
       type={
-        definition.kind === 'integer' || definition.kind === 'bigint'
+        definition.kind === 'decimal' ||
+        definition.kind === 'integer' ||
+        definition.kind === 'bigint'
           ? 'number'
           : 'text'
       }
@@ -431,16 +434,20 @@ function SettingRow({
   }
 
   return (
-    <div className='grid gap-3 py-4 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,32rem)] xl:items-start xl:gap-8'>
-      <div className='min-w-0'>
-        <h3 className='text-sm font-medium'>
-          {t(dynamicI18nKey('settings', definition.labelKey))}
-        </h3>
-        <p className='text-muted-foreground mt-1 max-w-2xl text-sm'>
-          {t(dynamicI18nKey('settings', definition.descriptionKey))}
-        </p>
-      </div>
-      <div className='w-full max-w-lg min-w-0'>{control}</div>
+    <div
+      className={
+        definition.kind === 'boolean' || definition.kind === 'multiline'
+          ? 'grid min-w-0 gap-1.5 lg:col-span-2'
+          : 'grid min-w-0 gap-1.5'
+      }
+    >
+      <h3 className='text-sm font-medium'>
+        {t(dynamicI18nKey('settings', definition.labelKey))}
+      </h3>
+      <div className='min-w-0'>{control}</div>
+      <p className='text-muted-foreground text-xs'>
+        {t(dynamicI18nKey('settings', definition.descriptionKey))}
+      </p>
     </div>
   )
 }
@@ -589,194 +596,165 @@ export function SettingsPage({
     }
   })
 
-  const actions = (
-    <>
-      <Button
-        aria-label={t('common.refresh')}
-        disabled={settingsQuery.isFetching}
-        onClick={() => void settingsQuery.refetch()}
-        size='icon'
-        title={t('common.refresh')}
-        type='button'
-        variant='outline'
-      >
-        {settingsQuery.isFetching ? (
-          <Spinner />
-        ) : (
-          <HugeiconsIcon icon={Refresh01Icon} strokeWidth={2} />
-        )}
-      </Button>
-      {isAdmin && settingsQuery.data && (
-        <>
-          <Button
-            aria-label={t('settings.reset')}
-            disabled={!form.formState.isDirty || updateMutation.isPending}
-            onClick={() => {
-              form.reset(initialValues)
-              setNotificationResult(null)
-            }}
-            size='icon'
-            title={t('settings.reset')}
-            type='button'
-            variant='ghost'
-          >
-            <HugeiconsIcon icon={Undo02Icon} strokeWidth={2} />
-          </Button>
-          <Button
-            disabled={!form.formState.isDirty || updateMutation.isPending}
-            form='settings-form'
-            type='submit'
-          >
-            {updateMutation.isPending ? (
-              <Spinner />
-            ) : (
-              <HugeiconsIcon icon={FloppyDiskIcon} strokeWidth={2} />
-            )}
-            {t('common.save')}
-          </Button>
-        </>
-      )}
-    </>
-  )
+  const actions =
+    isAdmin && settingsQuery.data ? (
+      <>
+        <Button
+          aria-label={t('settings.reset')}
+          disabled={!form.formState.isDirty || updateMutation.isPending}
+          onClick={() => {
+            form.reset(initialValues)
+            setNotificationResult(null)
+          }}
+          size='icon'
+          title={t('settings.reset')}
+          type='button'
+          variant='ghost'
+        >
+          <HugeiconsIcon icon={Undo02Icon} strokeWidth={2} />
+        </Button>
+        <Button
+          disabled={!form.formState.isDirty || updateMutation.isPending}
+          form='settings-form'
+          type='submit'
+        >
+          {updateMutation.isPending ? (
+            <Spinner />
+          ) : (
+            <HugeiconsIcon icon={FloppyDiskIcon} strokeWidth={2} />
+          )}
+          {t('common.save')}
+        </Button>
+      </>
+    ) : undefined
 
   return (
-    <SectionPageLayout
-      actions={actions}
-      description={t(
-        dynamicI18nKey(
-          'settings',
-          isAdmin ? 'settings.description.admin' : 'settings.description.viewer'
-        )
+    <SectionPageLayout>
+      <SectionPageLayout.Title>{t('settings.title')}</SectionPageLayout.Title>
+      {actions && (
+        <SectionPageLayout.Actions>{actions}</SectionPageLayout.Actions>
       )}
-      title={t('settings.title')}
-    >
-      {settingsQuery.isPending && (
-        <div className='grid gap-4' role='status'>
-          <span className='sr-only'>{t('settings.loading')}</span>
-          <div className='bg-muted/50 h-20 animate-pulse rounded-md' />
-          <div className='bg-muted/50 h-64 animate-pulse rounded-md' />
-        </div>
-      )}
-      {settingsQuery.isError && (
-        <section className='border-destructive/30 bg-destructive/5 border-y p-5'>
-          <h2 className='font-medium'>{t('settings.loadError')}</h2>
-          <Button
-            className='mt-3'
-            onClick={() => void settingsQuery.refetch()}
-            type='button'
-            variant='outline'
+      <SectionPageLayout.Content>
+        {settingsQuery.isPending && (
+          <LoadingState message={t('settings.loading')} />
+        )}
+        {settingsQuery.isError && (
+          <ErrorState
+            description={t('table.loadErrorDescription')}
+            onRetry={() => void settingsQuery.refetch()}
+            title={t('settings.loadError')}
+          />
+        )}
+        {settingsQuery.data && (
+          <form
+            className='grid w-full max-w-full min-w-0 gap-8 overflow-x-clip'
+            id='settings-form'
+            onSubmit={save}
           >
-            {t('common.retry')}
-          </Button>
-        </section>
-      )}
-      {settingsQuery.data && (
-        <form
-          className='grid w-full max-w-full min-w-0 gap-8 overflow-x-clip'
-          id='settings-form'
-          onSubmit={save}
-        >
-          <Tabs
-            className="bg-background before:bg-background sticky -top-1 z-10 -mt-2 w-full max-w-full min-w-0 pb-2 before:pointer-events-none before:absolute before:inset-x-0 before:-top-4 before:h-4 before:content-[''] sm:-top-1.5 sm:-mt-2.5 sm:before:-top-5 sm:before:h-5"
-            onValueChange={(section) =>
-              onSectionChange(section as SettingsSectionKey)
-            }
-            value={activeSection}
-          >
-            <div className='w-full min-w-0 overflow-x-auto overscroll-x-contain pb-1'>
-              <TabsList aria-label={t('settings.sections.label')}>
-                {settingsSections.map((section) => (
-                  <TabsTrigger key={section.key} value={section.key}>
-                    {t(dynamicI18nKey('settings', section.titleKey))}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </div>
-          </Tabs>
-          {settingsSections
-            .filter((section) => section.key === activeSection)
-            .map((section) => (
-              <section
-                aria-labelledby={`settings-section-${section.key}`}
-                className='min-w-0'
-                id={`settings-panel-${section.key}`}
-                key={section.key}
-                role='tabpanel'
-              >
-                <div className='mb-2'>
-                  <h2
-                    className='text-lg font-semibold'
-                    id={`settings-section-${section.key}`}
-                  >
-                    {t(dynamicI18nKey('settings', section.titleKey))}
-                  </h2>
-                  <p className='text-muted-foreground mt-1 text-sm'>
-                    {t(dynamicI18nKey('settings', section.descriptionKey))}
-                  </p>
-                </div>
-                <div className='border-border divide-border divide-y border-y'>
-                  {settingFieldDefinitions
-                    .filter((definition) => definition.section === section.key)
-                    .map((definition) => (
-                      <SettingRow
-                        definition={definition}
-                        form={form}
-                        isAdmin={isAdmin}
-                        item={items.get(definition.key)}
-                        key={definition.key}
-                      />
-                    ))}
-                </div>
-                {section.key === 'notification' && isAdmin && (
-                  <div className='mt-4 flex flex-wrap items-center justify-end gap-3'>
-                    <NotificationTest
-                      dirty={form.formState.isDirty}
-                      enabled={savedDingTalkEnabled}
-                      onResult={setNotificationResult}
-                      secretReady={
-                        secretState.secret.configured &&
-                        !secretState.secret.decryptError
-                      }
-                      webhookReady={
-                        secretState.webhook.configured &&
-                        !secretState.webhook.decryptError
-                      }
-                    />
-                    {notificationResult && (
-                      <div
-                        className='flex min-w-0 items-center gap-2'
-                        role='status'
-                      >
-                        <Badge
-                          variant={notificationResultVariant(
-                            notificationResult
-                          )}
-                        >
-                          {t(
-                            dynamicI18nKey(
-                              'settings',
-                              notificationResult.status === 'success'
-                                ? 'settings.notification.testSuccess'
-                                : 'settings.notification.testFailed'
-                            )
-                          )}
-                        </Badge>
-                        <span className='text-sm break-words'>
-                          {translateMessageRef(notificationResult.message)}
-                        </span>
-                      </div>
-                    )}
+            <Tabs
+              className="bg-background before:bg-background sticky -top-1 z-10 -mt-2 w-full max-w-full min-w-0 pb-2 before:pointer-events-none before:absolute before:inset-x-0 before:-top-4 before:h-4 before:content-[''] sm:-top-1.5 sm:-mt-2.5 sm:before:-top-5 sm:before:h-5"
+              onValueChange={(section) =>
+                onSectionChange(section as SettingsSectionKey)
+              }
+              value={activeSection}
+            >
+              <div className='w-full min-w-0 overflow-x-auto overscroll-x-contain pb-1'>
+                <TabsList aria-label={t('settings.sections.label')}>
+                  {settingsSections.map((section) => (
+                    <TabsTrigger key={section.key} value={section.key}>
+                      {t(dynamicI18nKey('settings', section.titleKey))}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </div>
+            </Tabs>
+            {settingsSections
+              .filter((section) => section.key === activeSection)
+              .map((section) => (
+                <section
+                  aria-labelledby={`settings-section-${section.key}`}
+                  className='min-w-0'
+                  id={`settings-panel-${section.key}`}
+                  key={section.key}
+                  role='tabpanel'
+                >
+                  <div className='mb-2'>
+                    <h2
+                      className='text-base font-semibold'
+                      id={`settings-section-${section.key}`}
+                    >
+                      {t(dynamicI18nKey('settings', section.titleKey))}
+                    </h2>
+                    <p className='text-muted-foreground mt-1 text-sm'>
+                      {t(dynamicI18nKey('settings', section.descriptionKey))}
+                    </p>
                   </div>
-                )}
-              </section>
-            ))}
-          {form.formState.errors.root?.message && (
-            <p className='text-destructive text-sm' role='alert'>
-              {form.formState.errors.root.message}
-            </p>
-          )}
-        </form>
-      )}
+                  <div className='grid min-w-0 gap-x-5 gap-y-6 lg:grid-cols-2'>
+                    {settingFieldDefinitions
+                      .filter(
+                        (definition) => definition.section === section.key
+                      )
+                      .map((definition) => (
+                        <SettingRow
+                          definition={definition}
+                          form={form}
+                          isAdmin={isAdmin}
+                          item={items.get(definition.key)}
+                          key={definition.key}
+                        />
+                      ))}
+                  </div>
+                  {section.key === 'notification' && isAdmin && (
+                    <div className='mt-4 flex flex-wrap items-center justify-end gap-3'>
+                      <NotificationTest
+                        dirty={form.formState.isDirty}
+                        enabled={savedDingTalkEnabled}
+                        onResult={setNotificationResult}
+                        secretReady={
+                          secretState.secret.configured &&
+                          !secretState.secret.decryptError
+                        }
+                        webhookReady={
+                          secretState.webhook.configured &&
+                          !secretState.webhook.decryptError
+                        }
+                      />
+                      {notificationResult && (
+                        <div
+                          className='flex min-w-0 items-center gap-2'
+                          role='status'
+                        >
+                          <Badge
+                            variant={notificationResultVariant(
+                              notificationResult
+                            )}
+                          >
+                            {t(
+                              dynamicI18nKey(
+                                'settings',
+                                notificationResult.status === 'success'
+                                  ? 'settings.notification.testSuccess'
+                                  : 'settings.notification.testFailed'
+                              )
+                            )}
+                          </Badge>
+                          <span className='text-sm break-words'>
+                            {translateMessageRef(notificationResult.message)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </section>
+              ))}
+            {form.formState.errors.root?.message && (
+              <p className='text-destructive text-sm' role='alert'>
+                {form.formState.errors.root.message}
+              </p>
+            )}
+          </form>
+        )}
+      </SectionPageLayout.Content>
     </SectionPageLayout>
   )
 }

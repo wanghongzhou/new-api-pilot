@@ -75,9 +75,35 @@ test('theme settings keep the official config drawer structure', async () => {
   expect(drawerSource).toContain('function SectionTitle')
   expect(drawerSource).toContain('<RotateCcw')
   expect(rootSource).toContain('<DirectionProvider>')
-  expect(rootSource).toContain('<Toaster closeButton />')
-  expect(globalStyles).toContain('@media (pointer: coarse)')
-  expect(globalStyles).toContain('min-height: 2.5rem')
+  expect(rootSource).toContain('<Toaster')
+  expect(rootSource).toContain('closeButton')
+  expect(rootSource).toContain('duration={5000}')
+  expect(rootSource).toContain("position='top-center'")
+  expect(rootSource).toContain('richColors')
+  expect(globalStyles).not.toContain('@media (pointer: coarse)')
+})
+
+test('shared buttons, badges, and confirmations use the reference visual tokens', async () => {
+  const buttonSource = await readFile(
+    new URL('../components/ui/button.tsx', import.meta.url),
+    'utf8'
+  )
+  const badgeSource = await readFile(
+    new URL('../components/ui/badge.tsx', import.meta.url),
+    'utf8'
+  )
+  const alertDialogSource = await readFile(
+    new URL('../components/ui/alert-dialog.tsx', import.meta.url),
+    'utf8'
+  )
+
+  expect(buttonSource).toContain('bg-primary text-primary-foreground')
+  expect(buttonSource).not.toContain('primary-strong')
+  expect(badgeSource).toContain('bg-primary text-primary-foreground')
+  expect(badgeSource).not.toContain('primary-strong')
+  expect(alertDialogSource).toContain('bg-black/10')
+  expect(alertDialogSource).toContain('rounded-xl p-4')
+  expect(alertDialogSource).toContain('bg-muted/50')
 })
 
 test('site management filters and onboarding follow the responsive drawer layout', async () => {
@@ -116,6 +142,56 @@ test('shared search filters use search actions and only show reset for active fi
   expect(source).toContain('{actions}')
 })
 
+test('shared tables use the reference sort menu and page-footer pagination', async () => {
+  const tableSource = await readFile(
+    new URL('../components/ui/data-table.tsx', import.meta.url),
+    'utf8'
+  )
+  const headerSource = await readFile(
+    new URL('../components/ui/data-table-column-header.tsx', import.meta.url),
+    'utf8'
+  )
+
+  expect(tableSource).toContain('<DataTableColumnHeader')
+  expect(tableSource).toContain('paginationInFooter = true')
+  expect(tableSource).toContain(
+    '<PageFooterPortal>{paginationControl}</PageFooterPortal>'
+  )
+  expect(tableSource).not.toContain('getToggleSortingHandler')
+  expect(headerSource).toContain("t('table.sortAscending')")
+  expect(headerSource).toContain("t('table.sortDescending')")
+  expect(headerSource).toContain("<DropdownMenuContent align='start'>")
+  expect(headerSource).not.toContain('toggleVisibility(false)')
+})
+
+test('legacy select controls use the new-api below-trigger popup position', async () => {
+  const source = await readFile(
+    new URL('../components/ui/select-control.tsx', import.meta.url),
+    'utf8'
+  )
+
+  expect(source).toContain('alignItemWithTrigger = false')
+  expect(source).toContain('alignItemWithTrigger={alignItemWithTrigger}')
+})
+
+test('account list keeps creation in the page action and pagination in the footer', async () => {
+  const source = await readFile(
+    new URL(
+      '../features/accounts/components/accounts-page.tsx',
+      import.meta.url
+    ),
+    'utf8'
+  )
+
+  const table = source.slice(
+    source.indexOf('<DataTable'),
+    source.indexOf('/>', source.indexOf('<DataTable')) + 2
+  )
+  expect(table).not.toContain('emptyAction=')
+  expect(table).toContain('paginationInFooter')
+  expect(source).toContain("t('accounts.add')")
+})
+
 test('site status filters use concise status titles', async () => {
   const locale = await readFile(
     new URL('../i18n/locales/zh-CN.json', import.meta.url),
@@ -132,13 +208,25 @@ test('site card and table views share the same empty-state presentation', async 
     'utf8'
   )
 
-  expect(source).toContain(
-    "<Empty className='border-border bg-background min-h-64 border'>"
-  )
-  expect(source).toContain('icon={Database01Icon}')
-  expect(source).toContain('icon={Alert02Icon}')
+  expect(source).toContain('<ErrorState')
+  expect(source).toContain('<EmptyState')
+  expect(source).toContain('bordered')
   expect(source).toContain('<PageFooterPortal>')
   expect(source).not.toContain('bg-card rounded-lg border p-8 text-center')
+})
+
+test('site cards preserve the reference data-table card boundary', async () => {
+  const source = await readFile(
+    new URL('../features/sites/components/site-card.tsx', import.meta.url),
+    'utf8'
+  )
+
+  expect(source).toContain(
+    'rounded-lg border bg-(--data-table-card-bg,var(--table-row)) px-3 py-2.5'
+  )
+  expect(source).not.toContain('overflow-hidden rounded-lg border')
+  expect(source).not.toContain('border-t px-4 py-3')
+  expect(source).not.toContain('rounded-xl ring-1')
 })
 
 test('site view controls follow the new-api channel toolbar pattern', async () => {
@@ -152,7 +240,7 @@ test('site view controls follow the new-api channel toolbar pattern', async () =
   expect(source).not.toContain("<div className='flex justify-end'>")
 })
 
-test('site filters auto-search and faceted menus close on outside clicks', async () => {
+test('site filters auto-search and faceted menus use the shared popover', async () => {
   const filtersSource = await readFile(
     new URL('../features/sites/components/site-filters.tsx', import.meta.url),
     'utf8'
@@ -165,8 +253,11 @@ test('site filters auto-search and faceted menus close on outside clicks', async
   expect(filtersSource).toContain('applyImmediately')
   expect(filtersSource).toContain('searchTimerRef.current = setTimeout')
   expect(filtersSource).not.toContain('onApply={() =>')
-  expect(facetedSource).toContain("document.addEventListener('pointerdown'")
-  expect(facetedSource).toContain("details.removeAttribute('open')")
+  expect(facetedSource).toContain('<Popover')
+  expect(facetedSource).toContain('<PopoverContent')
+  expect(facetedSource).toContain('<Input')
+  expect(facetedSource).not.toContain("document.addEventListener('pointerdown'")
+  expect(facetedSource).not.toContain('<details')
 })
 
 test('site list keeps its table header when no rows are available', async () => {
@@ -185,6 +276,10 @@ test('site list keeps its table header when no rows are available', async () => 
   expect(pageSource).not.toContain('emptyAction={')
   expect(tableSource).toContain('emptyTableBody')
   expect(tableSource).toContain('table.getVisibleLeafColumns().length')
+  expect(tableSource).toContain("className='h-[400px] p-0'")
+  expect(tableSource).not.toContain(
+    "<TableRow className={fillAvailableHeight ? 'h-full' : undefined}>"
+  )
 })
 
 test('site empty states do not render create actions', async () => {
@@ -255,6 +350,13 @@ test('entity create and edit flows use right-side drawers while short tasks keep
     ),
     'utf8'
   )
+  const accountOnboardingSource = await readFile(
+    new URL(
+      '../features/accounts/components/account-onboarding-drawer.tsx',
+      import.meta.url
+    ),
+    'utf8'
+  )
   const sitesSource = await readFile(
     new URL('../features/sites/components/site-dialogs.tsx', import.meta.url),
     'utf8'
@@ -287,6 +389,12 @@ test('entity create and edit flows use right-side drawers while short tasks keep
     platformUsersSource.match(/alignItemWithTrigger=\{false\}/g)
   ).toHaveLength(2)
   expect(platformUsersSource.match(/portalled=\{false\}/g)).toHaveLength(2)
+  expect(customersSource).toContain('alignItemWithTrigger={false}')
+  expect(customersSource).toContain('portalled={false}')
+  expect(
+    accountOnboardingSource.match(/alignItemWithTrigger=\{false\}/g)
+  ).toHaveLength(2)
+  expect(accountOnboardingSource.match(/portalled=\{false\}/g)).toHaveLength(2)
   expect(customersSource).toContain('<ConfirmDialog')
   expect(accountsSource).toContain('<ConfirmDialog')
   expect(sitesSource).toContain('function AuthorizationDialog')

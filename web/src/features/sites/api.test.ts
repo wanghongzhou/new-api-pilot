@@ -10,6 +10,7 @@ import {
   getSitePerformance,
   getSiteStatistics,
   listSites,
+  recheckSiteCapabilities,
 } from './api'
 
 const originalAdapter = api.defaults.adapter
@@ -19,6 +20,29 @@ afterEach(() => {
 })
 
 describe('site API', () => {
+  test('omits request params when the site list has no filters', async () => {
+    api.defaults.adapter = async (config) => {
+      expect(config.method).toBe('get')
+      expect(config.url).toBe('/api/sites')
+      expect(config.params).toBeUndefined()
+      return {
+        config,
+        data: {
+          code: '',
+          data: { items: [], page: 1, page_size: 20, total: 0 },
+          message: '',
+          request_id: 'req_sites',
+          success: true,
+        },
+        headers: {},
+        status: 200,
+        statusText: 'OK',
+      }
+    }
+
+    await listSites({})
+  })
+
   test('keeps authorization secrets in the POST body only', async () => {
     const siteId = parseIdString('9007199254740993')
     const secret = 'root-access-token-secret'
@@ -27,6 +51,7 @@ describe('site API', () => {
       expect(config.url).toBe(`/api/sites/${siteId}/authorize`)
       expect(config.url).not.toContain(secret)
       expect(config.params).toBeUndefined()
+      expect(config.timeout).toBe(30_000)
       expect(String(config.data)).toContain(secret)
       return {
         config,
@@ -65,6 +90,30 @@ describe('site API', () => {
       mode: 'existing_token',
       root_user_id: parseIdString('1'),
     })
+  })
+
+  test('keeps capability verification within the shared timeout', async () => {
+    const siteId = parseIdString('9007199254740993')
+    api.defaults.adapter = async (config) => {
+      expect(config.method).toBe('post')
+      expect(config.url).toBe(`/api/sites/${siteId}/recheck-capabilities`)
+      expect(config.timeout).toBe(30_000)
+      return {
+        config,
+        data: {
+          code: '',
+          data: {},
+          message: '',
+          request_id: 'req_recheck',
+          success: true,
+        },
+        headers: {},
+        status: 200,
+        statusText: 'OK',
+      }
+    }
+
+    await recheckSiteCapabilities(siteId)
   })
 
   test('serializes multi-status filters as repeated query keys', async () => {

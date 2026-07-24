@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -113,6 +114,26 @@ func TestTokenMutationUncertainSuccessfulResponse(t *testing.T) {
 	_, _, err := client.LoginAndGenerateAccessToken(context.Background(), "token-invalid-response", "root", "secret-password")
 	if !errors.Is(err, ErrUpstreamTokenRotationResultUnknown) || tokenHits.Load() != 1 {
 		t.Fatalf("invalid successful response classified as %v with %d token hits", err, tokenHits.Load())
+	}
+}
+
+func TestLoginRejectedEnvelopeHasDedicatedClassification(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/api/user/login" {
+			http.NotFound(writer, request)
+			return
+		}
+		_, _ = writer.Write([]byte(`{"success":false,"message":"untrusted login detail","data":{}}`))
+	}))
+	defer server.Close()
+
+	client := testClientForServer(t, server, false, testClientSettings{})
+	_, _, err := client.LoginAndGenerateAccessToken(context.Background(), "login-rejected", "root", "wrong-password")
+	if !errors.Is(err, ErrUpstreamLoginRejected) {
+		t.Fatalf("login rejection classified as %v", err)
+	}
+	if strings.Contains(err.Error(), "untrusted login detail") {
+		t.Fatal("login rejection exposed the upstream message")
 	}
 }
 

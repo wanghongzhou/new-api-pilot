@@ -179,6 +179,7 @@ export function FastTaskHistoryPanel({ siteId }: { siteId: string }) {
         onRetry={() => void query.refetch()}
         page={page}
         pageSize={50}
+        paginationInFooter={false}
         total={query.data?.total ?? 0}
       />
     </section>

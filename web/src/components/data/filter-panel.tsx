@@ -1,4 +1,4 @@
-import { Cancel01Icon } from '@hugeicons/core-free-icons'
+import { ArrowDown01Icon, Cancel01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   Children,
@@ -174,14 +174,24 @@ export function FilterPanel({
             <Button
               aria-expanded={expanded}
               className={cn(
-                'shrink-0',
-                hasAdvancedActive && !expanded && 'text-primary-strong'
+                'text-muted-foreground hover:text-foreground shrink-0 gap-1 px-2',
+                hasAdvancedActive &&
+                  !expanded &&
+                  'text-primary hover:text-primary'
               )}
               onClick={() => setExpanded((current) => !current)}
               type='button'
               variant='ghost'
             >
               {expanded ? t('common.collapse') : t('common.expand')}
+              <HugeiconsIcon
+                className={cn(
+                  'size-3.5 transition-transform duration-200',
+                  expanded && 'rotate-180'
+                )}
+                icon={ArrowDown01Icon}
+                strokeWidth={2}
+              />
             </Button>
           )}
         </div>

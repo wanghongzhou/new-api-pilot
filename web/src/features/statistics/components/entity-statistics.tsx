@@ -15,6 +15,8 @@ import { CompletenessAlert } from '@/components/data/completeness-alert'
 import { DataFreshness } from '@/components/data/data-freshness'
 import { DataStatusBadge } from '@/components/data/data-status'
 import { MetricValue } from '@/components/data/metric-value'
+import { ErrorState } from '@/components/error-state'
+import { LoadingState } from '@/components/loading-state'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
 import { Input } from '@/components/ui/input'
@@ -31,6 +33,7 @@ import {
   formatBeijingTimestamp,
   fromUnixSeconds,
 } from '@/lib/dayjs'
+import { formatNumericDisplayValue } from '@/lib/display-value'
 import { translateMessageRef } from '@/lib/message-ref'
 
 import { createStatisticsExport } from '../api'
@@ -521,8 +524,10 @@ export function MetricTrendChart({
       >
         {model.values.map((point) => (
           <li key={point.bucket_start}>
-            {point.label}: {t('statistics.tooltip.raw')} {point.rawValue ?? '-'}
-            ;{t('statistics.tooltip.displayValue')} {point.exactValue ?? '-'};
+            {point.label}: {t('statistics.tooltip.raw')}{' '}
+            {formatNumericDisplayValue(point.rawValue)};
+            {t('statistics.tooltip.displayValue')}{' '}
+            {formatNumericDisplayValue(point.exactValue)};
             {point.complete_site_count}/{point.expected_site_count};
             {point.is_final ? t('common.yes') : t('common.no')}
           </li>
@@ -760,7 +765,7 @@ function BreakdownMobileCard({
   const account =
     scope === 'account' ? (item as AccountStatisticsBreakdown) : null
   return (
-    <article className='border-border bg-card grid min-w-0 gap-4 rounded-lg border p-4'>
+    <article className='bg-card text-card-foreground ring-foreground/10 grid min-w-0 gap-4 rounded-xl p-4 ring-1'>
       <header className='flex min-w-0 flex-wrap items-start justify-between gap-2'>
         <div className='min-w-0'>
           <h3 className='font-medium break-words'>{item.dimension_name}</h3>
@@ -1178,23 +1183,14 @@ export function EntityStatistics<TBreakdown extends StatisticsBreakdownBase>({
   }
   let body: ReactNode
   if (loading && !data) {
-    body = (
-      <div
-        className='bg-muted h-64 animate-pulse rounded-lg'
-        aria-hidden='true'
-      />
-    )
+    body = <LoadingState message={t('common.loading')} />
   } else if (error && !data) {
     body = (
-      <section className='border-destructive/30 bg-destructive/5 rounded-lg border p-5'>
-        <h2 className='font-medium'>{t('statistics.loadError')}</h2>
-        <p className='text-muted-foreground mt-1 text-sm'>
-          {t('statistics.loadErrorDescription')}
-        </p>
-        <Button className='mt-3' onClick={onRetry} variant='outline'>
-          {t('common.retry')}
-        </Button>
-      </section>
+      <ErrorState
+        description={t('statistics.loadErrorDescription')}
+        onRetry={onRetry}
+        title={t('statistics.loadError')}
+      />
     )
   } else if (!data) {
     body = null

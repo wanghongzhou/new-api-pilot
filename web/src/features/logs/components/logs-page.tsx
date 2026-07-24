@@ -44,6 +44,8 @@ import {
   parseNonNegativeIdString,
 } from '@/lib/api-types'
 import { BEIJING_TIMEZONE, dayjs, fromUnixSeconds } from '@/lib/dayjs'
+import { formatDisplayValue } from '@/lib/display-value'
+import { hasFilterChanges } from '@/lib/filter-state'
 
 import { listLogs, listSiteLogs } from '../api'
 import { buildLogExportRequest } from '../export-request'
@@ -159,10 +161,24 @@ function LogFilters({
   const updateText =
     (key: keyof LogSearch) => (event: ChangeEvent<HTMLInputElement>) =>
       onChange({ [key]: event.target.value, page: 1 })
+  const reset = buildLogSearch({ pageSize: search.pageSize })
   return (
     <FilterPanel
       description={t('logs.filters.description')}
-      onReset={() => onChange(buildLogSearch({ pageSize: search.pageSize }))}
+      hasActiveFilters={hasFilterChanges(search, reset, [
+        'channelId',
+        'end',
+        'group',
+        'modelName',
+        'requestId',
+        'siteIds',
+        'start',
+        'tokenName',
+        'type',
+        'upstreamRequestId',
+        'username',
+      ])}
+      onReset={() => onChange(reset)}
       title={t('logs.filters.title')}
     >
       <div className='grid min-w-0 flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-4'>
@@ -338,7 +354,7 @@ function LogDetailDialog({
             {t('logs.contentRedacted')}
           </p>
           <pre className='border-border bg-muted/40 max-h-64 overflow-auto rounded-md border p-3 text-xs break-words whitespace-pre-wrap'>
-            {item.content || t('common.none')}
+            {formatDisplayValue(item.content)}
           </pre>
         </section>
         <DialogFooter>
@@ -427,7 +443,7 @@ export function LogsPage({
       {
         cell: ({ row }) => (
           <div className='min-w-36'>
-            <span>{row.original.username || t('common.none')}</span>
+            <span>{formatDisplayValue(row.original.username)}</span>
             <code className='text-muted-foreground block text-xs'>
               {row.original.remote_user_id}
             </code>
@@ -439,7 +455,7 @@ export function LogsPage({
       {
         cell: ({ row }) => (
           <div className='min-w-40'>
-            <span>{row.original.model_name || t('common.none')}</span>
+            <span>{formatDisplayValue(row.original.model_name)}</span>
             <span className='text-muted-foreground block text-xs'>
               {row.original.token_name || t('logs.tokenUnnamed')} ·{' '}
               {row.original.channel_id}
@@ -504,6 +520,7 @@ export function LogsPage({
   )
   return (
     <SectionPageLayout
+      fixedContent
       actions={actions}
       description={
         siteId
@@ -512,7 +529,7 @@ export function LogsPage({
       }
       title={siteId ? t('logs.siteTitle') : t('logs.title')}
     >
-      <div className='grid min-w-0 gap-5'>
+      <div className='flex h-full min-h-0 min-w-0 flex-col gap-4'>
         {siteId && (
           <DetailBackLink
             render={<Link params={{ siteId }} to='/sites/$siteId' />}
@@ -569,7 +586,7 @@ export function LogsPage({
           page={search.page}
           pageSize={search.pageSize}
           renderMobileCard={(item) => (
-            <article className='border-border bg-card grid gap-3 rounded-lg border p-4'>
+            <article className='bg-card text-card-foreground ring-foreground/10 grid gap-3 rounded-xl p-4 ring-1'>
               <div className='flex items-start justify-between gap-3'>
                 <div>
                   <time className='text-sm font-medium'>
@@ -588,7 +605,7 @@ export function LogsPage({
                   <dt className='text-muted-foreground text-xs'>
                     {t('logs.fields.user')}
                   </dt>
-                  <dd>{item.username || t('common.none')}</dd>
+                  <dd>{formatDisplayValue(item.username)}</dd>
                 </div>
                 <div>
                   <dt className='text-muted-foreground text-xs'>

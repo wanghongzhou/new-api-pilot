@@ -17,6 +17,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { changePassword } from '../api'
 import { changePasswordSchema, type ChangePasswordFormValues } from '../schema'
 import { markSessionVerified } from '../session'
+import { AuthLayout } from './auth-layout'
 
 export function ChangePasswordPage() {
   const { t } = useTranslation()
@@ -71,16 +72,17 @@ export function ChangePasswordPage() {
   })
 
   return (
-    <main
-      className='flex min-h-full items-center justify-center px-4 py-8'
-      id='main-content'
-    >
-      <section className='bg-card border-border w-full max-w-lg rounded-2xl border p-5 shadow-lg shadow-black/5 sm:p-6'>
-        <h1 className='text-lg font-semibold'>{t('Change password')}</h1>
-        <p className='text-muted-foreground mt-1 text-sm'>
-          {t('A new password is required before you can use the workspace')}
-        </p>
-        <form className='mt-5 grid gap-4' noValidate onSubmit={submit}>
+    <AuthLayout>
+      <section className='w-full space-y-8'>
+        <div className='space-y-2'>
+          <h1 className='text-center text-2xl font-semibold tracking-tight sm:text-left'>
+            {t('Change password')}
+          </h1>
+          <p className='text-muted-foreground text-left text-sm sm:text-base'>
+            {t('A new password is required before you can use the workspace')}
+          </p>
+        </div>
+        <form className='grid gap-4' noValidate onSubmit={submit}>
           <FormField
             error={
               errors.originalPassword?.message ===
@@ -140,14 +142,14 @@ export function ChangePasswordPage() {
               {errors.root.message}
             </p>
           )}
-          <div className='flex justify-end'>
-            <Button disabled={submitting} type='submit'>
+          <div>
+            <Button className='mt-2 w-full' disabled={submitting} type='submit'>
               {submitting && <Spinner />}
               {t('Change password')}
             </Button>
           </div>
         </form>
       </section>
-    </main>
+    </AuthLayout>
   )
 }

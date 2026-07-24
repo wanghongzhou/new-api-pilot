@@ -32,6 +32,7 @@ import {
   parseNonNegativeIdString,
 } from '@/lib/api-types'
 import { fromUnixSeconds } from '@/lib/dayjs'
+import { hasFilterChanges } from '@/lib/filter-state'
 
 import {
   getModelCoverage,
@@ -103,6 +104,10 @@ function Filters({
   search: ModelCatalogSearch
 }) {
   const { t } = useTranslation()
+  const reset = buildModelCatalogSearch({
+    pageSize: search.pageSize,
+    tab: search.tab,
+  })
   const choices = (key: 'statuses' | 'syncOfficial', label: string) => (
     <fieldset className='grid gap-1'>
       <legend className='text-sm'>{label}</legend>
@@ -135,14 +140,14 @@ function Filters({
   return (
     <FilterPanel
       description={t('modelCatalog.filters.description')}
-      onReset={() =>
-        onChange(
-          buildModelCatalogSearch({
-            pageSize: search.pageSize,
-            tab: search.tab,
-          })
-        )
-      }
+      hasActiveFilters={hasFilterChanges(search, reset, [
+        'keyword',
+        'siteIds',
+        'statuses',
+        'syncOfficial',
+        'vendorId',
+      ])}
+      onReset={() => onChange(reset)}
       title={t('modelCatalog.filters.title')}
     >
       <div className='grid min-w-0 flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-4'>
@@ -538,7 +543,7 @@ export function ModelCatalogPage({
             page={search.page}
             pageSize={search.pageSize}
             renderMobileCard={(item) => (
-              <article className='border-border bg-card grid gap-3 rounded-lg border p-4'>
+              <article className='bg-card text-card-foreground ring-foreground/10 grid gap-3 rounded-xl p-4 ring-1'>
                 <div className='flex items-start justify-between gap-2'>
                   <div className='min-w-0'>
                     <p className='font-medium'>{item.model_name}</p>
@@ -639,7 +644,7 @@ export function ModelCatalogPage({
               page={search.page}
               pageSize={search.pageSize}
               renderMobileCard={(item) => (
-                <article className='border-border bg-card grid gap-2 rounded-lg border p-4'>
+                <article className='bg-card text-card-foreground ring-foreground/10 grid gap-2 rounded-xl p-4 ring-1'>
                   <div className='flex items-start justify-between gap-2'>
                     <p className='font-medium'>{item.model_name}</p>
                     <DataStatusBadge status={item.data_status} />

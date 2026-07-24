@@ -159,11 +159,16 @@ func (service *SiteService) List(ctx context.Context, query dto.SiteListQuery) (
 		return common.PageData[dto.SiteListItem]{}, fmt.Errorf("list site usage overviews: %w", err)
 	}
 	performance := service.listPerformanceSummaries(sites, now)
+	backfills, err := service.sites.LatestBackfillRuns(ctx, siteIDs)
+	if err != nil {
+		return common.PageData[dto.SiteListItem]{}, fmt.Errorf("list latest site backfills: %w", err)
+	}
 	for _, site := range sites {
 		if err := validatePersistedSite(site); err != nil {
 			return common.PageData[dto.SiteListItem]{}, err
 		}
-		items = append(items, siteListItemFromModel(site, now, resources[site.ID], usage[site.ID], performance[site.ID]))
+		site.StatisticsStatus = statisticsStatusAfterBackfill(site.StatisticsStatus, backfills[site.ID])
+		items = append(items, siteListItemFromModel(site, now, resources[site.ID], usage[site.ID], performance[site.ID], backfillCompletenessRate(backfills[site.ID])))
 	}
 	return common.NewPageData(query.Page, query.PageSize, total, items), nil
 }
@@ -348,7 +353,7 @@ func (service *SiteService) detailFromModel(ctx context.Context, site model.Site
 		return dto.SiteDetail{}, fmt.Errorf("read site usage overview: %w", err)
 	}
 	detail := dto.SiteDetail{
-		SiteListItem: siteListItemFromModel(site, now, resources[site.ID], usage[site.ID], service.listPerformanceSummaries([]model.Site{site}, now)[site.ID]), Remark: site.Remark, ConfigVersion: site.ConfigVersion,
+		SiteListItem: siteListItemFromModel(site, now, resources[site.ID], usage[site.ID], service.listPerformanceSummaries([]model.Site{site}, now)[site.ID], 0), Remark: site.Remark, ConfigVersion: site.ConfigVersion,
 		RootCreatedAt: site.RootCreatedAt, StatisticsStartAt: site.StatisticsStartAt,
 		StatisticsStartSource: site.StatisticsStartSource, StatisticsEndAt: site.StatisticsEndAt,
 		MonitoringStartAt: site.MonitoringStartAt, LastProbeAt: site.LastProbeAt,
@@ -362,6 +367,8 @@ func (service *SiteService) detailFromModel(ctx context.Context, site model.Site
 	run, err := service.sites.LatestBackfillRun(ctx, site.ID)
 	if err == nil {
 		detail.Backfill = backfillSummaryFromRun(run)
+		detail.CompletenessRate = backfillCompletenessRate(run)
+		detail.StatisticsStatus = statisticsStatusAfterBackfill(detail.StatisticsStatus, run)
 	} else if !model.IsNotFound(err) {
 		return dto.SiteDetail{}, fmt.Errorf("read site backfill: %w", err)
 	}
@@ -373,7 +380,7 @@ func siteTodayUsageRange(now time.Time) (int64, int64) {
 	return start, now.Unix()
 }
 
-func siteListItemFromModel(site model.Site, now int64, resource model.SiteStatusMinutely, usage model.SiteUsageOverview, performance dto.SitePerformanceSummary) dto.SiteListItem {
+func siteListItemFromModel(site model.Site, now int64, resource model.SiteStatusMinutely, usage model.SiteUsageOverview, performance dto.SitePerformanceSummary, completenessRate float64) dto.SiteListItem {
 	zeroCount := 0
 	zeroPercent := 0.0
 	zeroMetric := "0"
@@ -391,7 +398,7 @@ func siteListItemFromModel(site model.Site, now int64, resource model.SiteStatus
 		Today: dto.UsageSummary{
 			RequestCount: &zeroMetric, Quota: &zeroMetric, TokenUsed: &zeroMetric,
 			ActiveUsers: &zeroMetric, AvgRPM: &zeroMetric, AvgTPM: &zeroMetric, DataStatus: "missing",
-		}, DisabledAt: site.DisabledAt, UpdatedAt: site.UpdatedAt,
+		}, CompletenessRate: completenessRate, DisabledAt: site.DisabledAt, UpdatedAt: site.UpdatedAt,
 	}
 	if site.Version != "" {
 		item.Version = stringPointer(site.Version)
@@ -459,6 +466,37 @@ func backfillSummaryFromRun(run model.CollectionRun) dto.BackfillSummary {
 	runID := strconv.FormatInt(run.ID, 10)
 	result.RunID = &runID
 	return result
+}
+
+func backfillCompletenessRate(run model.CollectionRun) float64 {
+	if run.TotalWindows <= 0 {
+		return 0
+	}
+	completed := run.CompletedWindows
+	if completed < 0 {
+		completed = 0
+	}
+	if completed > run.TotalWindows {
+		completed = run.TotalWindows
+	}
+	return float64(completed) / float64(run.TotalWindows)
+}
+
+func statisticsStatusAfterBackfill(current string, run model.CollectionRun) string {
+	if current != constant.SiteStatisticsBackfilling || run.TaskType != constant.TaskTypeUsageBackfill || run.TargetType != "site" {
+		return current
+	}
+	switch run.Status {
+	case model.CollectionTaskStatusSuccess:
+		if run.UnavailableWindows > 0 {
+			return constant.SiteStatisticsPartial
+		}
+		return constant.SiteStatisticsReady
+	case model.CollectionTaskStatusFailed:
+		return constant.SiteStatisticsPartial
+	default:
+		return current
+	}
 }
 
 func emptyCompleteness(site model.Site) dto.Completeness {

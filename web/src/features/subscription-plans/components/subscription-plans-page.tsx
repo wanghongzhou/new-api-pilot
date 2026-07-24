@@ -27,6 +27,7 @@ import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import { isIdString, parseIdString } from '@/lib/api-types'
 import { fromUnixSeconds } from '@/lib/dayjs'
+import { hasFilterChanges } from '@/lib/filter-state'
 
 import {
   getSiteSubscriptionPlanStatistics,
@@ -157,12 +158,17 @@ function Filters({
         : [...search.states, state],
     })
   }
+  const reset = buildSubscriptionPlanSearch({ pageSize: search.pageSize })
   return (
     <FilterPanel
       description={t('subscriptionPlans.filters.description')}
-      onReset={() =>
-        onChange(buildSubscriptionPlanSearch({ pageSize: search.pageSize }))
-      }
+      hasActiveFilters={hasFilterChanges(search, reset, [
+        'enabled',
+        'keyword',
+        'siteIds',
+        'states',
+      ])}
+      onReset={() => onChange(reset)}
       title={t('subscriptionPlans.filters.title')}
     >
       <div className='grid min-w-0 flex-1 gap-3 sm:grid-cols-2'>
@@ -534,7 +540,7 @@ export function SubscriptionPlansPage({
           page={search.page}
           pageSize={search.pageSize}
           renderMobileCard={(item) => (
-            <article className='border-border bg-card grid gap-3 rounded-lg border p-4'>
+            <article className='bg-card text-card-foreground ring-foreground/10 grid gap-3 rounded-xl p-4 ring-1'>
               <div className='flex items-start justify-between gap-2'>
                 <div className='min-w-0'>
                   <p className='font-medium'>{item.title}</p>

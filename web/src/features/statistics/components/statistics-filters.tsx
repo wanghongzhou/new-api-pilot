@@ -345,6 +345,7 @@ export function StatisticsFilters({
     <FilterPanel
       description={t('statistics.filter.description')}
       hasAdvancedActive={count > 0}
+      hasActiveFilters={count > 0}
       onApply={() => void submit()}
       onReset={() => {
         const reset = {

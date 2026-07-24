@@ -26,6 +26,8 @@ import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import { isIdString, parseIdString } from '@/lib/api-types'
 import { BEIJING_TIMEZONE, dayjs, fromUnixSeconds } from '@/lib/dayjs'
+import { formatNumericDisplayValue } from '@/lib/display-value'
+import { hasFilterChanges } from '@/lib/filter-state'
 
 import {
   getSiteSystemTaskStatistics,
@@ -199,12 +201,19 @@ function Filters({
         : [...values, value],
       page: 1,
     })
+  const reset = buildSystemTaskSearch({ pageSize: search.pageSize })
   return (
     <FilterPanel
       description={t('systemTasks.filters.description')}
-      onReset={() =>
-        onChange(buildSystemTaskSearch({ pageSize: search.pageSize }))
-      }
+      hasActiveFilters={hasFilterChanges(search, reset, [
+        'createdEnd',
+        'createdStart',
+        'errorPresent',
+        'siteIds',
+        'statuses',
+        'types',
+      ])}
+      onReset={() => onChange(reset)}
       title={t('systemTasks.filters.title')}
     >
       <div className='grid min-w-0 flex-1 gap-3 md:grid-cols-3'>
@@ -320,17 +329,22 @@ function ProgressView({ item }: { item: SystemTaskItem }) {
     <dl className='grid min-w-40 gap-1 text-xs'>
       <div>
         <dt className='inline'>{t('systemTasks.progress.percent')}：</dt>
-        <dd className='inline'>{item.progress.progress ?? '-'}</dd>
+        <dd className='inline'>
+          {formatNumericDisplayValue(item.progress.progress)}
+        </dd>
       </div>
       <div>
         <dt className='inline'>{t('systemTasks.progress.processed')}：</dt>
         <dd className='inline'>
-          {item.progress.processed ?? '-'} / {item.progress.total ?? '-'}
+          {formatNumericDisplayValue(item.progress.processed)} /{' '}
+          {formatNumericDisplayValue(item.progress.total)}
         </dd>
       </div>
       <div>
         <dt className='inline'>{t('systemTasks.progress.remaining')}：</dt>
-        <dd className='inline'>{item.progress.remaining ?? '-'}</dd>
+        <dd className='inline'>
+          {formatNumericDisplayValue(item.progress.remaining)}
+        </dd>
       </div>
     </dl>
   )
@@ -390,7 +404,7 @@ function ResultView({ item }: { item: SystemTaskItem }) {
       {entries.map(([label, value]) => (
         <div key={label}>
           <dt className='inline'>{label}：</dt>
-          <dd className='inline'>{value ?? '-'}</dd>
+          <dd className='inline'>{formatNumericDisplayValue(value)}</dd>
         </div>
       ))}
     </dl>
@@ -627,7 +641,7 @@ export function SystemTasksPage({
           page={search.page}
           pageSize={search.pageSize}
           renderMobileCard={(item) => (
-            <article className='border-border bg-card grid gap-3 rounded-lg border p-4'>
+            <article className='bg-card text-card-foreground ring-foreground/10 grid gap-3 rounded-xl p-4 ring-1'>
               <div className='flex items-start justify-between gap-2'>
                 <div>
                   <strong>{item.task_id}</strong>

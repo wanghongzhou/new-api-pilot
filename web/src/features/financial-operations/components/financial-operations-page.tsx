@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 import { DataStatusBadge } from '@/components/data/data-status'
 import { FilterPanel } from '@/components/data/filter-panel'
 import { MetricValue } from '@/components/data/metric-value'
+import { ErrorState } from '@/components/error-state'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Badge } from '@/components/ui/badge'
@@ -32,6 +33,7 @@ import {
   parseNonNegativeIdString,
 } from '@/lib/api-types'
 import { BEIJING_TIMEZONE, dayjs, fromUnixSeconds } from '@/lib/dayjs'
+import { hasFilterChanges } from '@/lib/filter-state'
 
 import {
   getRedemptionStatistics,
@@ -123,17 +125,26 @@ function Filters({
           .filter(Boolean),
         page: 1,
       })
+  const reset = buildFinancialOperationsSearch({
+    pageSize: search.pageSize,
+    tab: search.tab,
+  })
   return (
     <FilterPanel
       description={t('financialOperations.filters.description')}
-      onReset={() =>
-        onChange(
-          buildFinancialOperationsSearch({
-            pageSize: search.pageSize,
-            tab: search.tab,
-          })
-        )
-      }
+      hasActiveFilters={hasFilterChanges(search, reset, [
+        'end',
+        'keyword',
+        'methods',
+        'providers',
+        'remoteId',
+        'remoteUserId',
+        'siteIds',
+        'start',
+        'states',
+        'statuses',
+      ])}
+      onReset={() => onChange(reset)}
       title={t('financialOperations.filters.title')}
     >
       <div className='grid min-w-0 flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-4'>
@@ -327,7 +338,7 @@ function Breakdown({
         <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-3'>
           {items.map((item) => (
             <article
-              className='border-border bg-card grid gap-2 rounded-lg border p-4'
+              className='bg-card text-card-foreground ring-foreground/10 grid gap-2 rounded-xl p-4 ring-1'
               key={`${item.site_id}:${item.dimension_id}:${item.as_of ?? 'na'}:${item.count}:${item.missing_count}`}
             >
               <div className='flex items-start justify-between gap-2'>
@@ -351,8 +362,8 @@ function Breakdown({
               {nominal && (
                 <p className='text-sm break-all'>
                   {t('financialOperations.metric.nominalValue', {
-                    amount: item.amount ?? '-',
-                    money: item.money ?? '-',
+                    amount: item.amount ?? '0',
+                    money: item.money ?? '0',
                   })}
                 </p>
               )}
@@ -467,7 +478,7 @@ function TopupTable({
       page={page}
       pageSize={pageSize}
       renderMobileCard={(item) => (
-        <article className='border-border bg-card grid gap-3 rounded-lg border p-4'>
+        <article className='bg-card text-card-foreground ring-foreground/10 grid gap-3 rounded-xl p-4 ring-1'>
           <div className='flex justify-between gap-2'>
             <div>
               <code>{item.remote_id}</code>
@@ -617,7 +628,7 @@ function RedemptionTable(props: {
       page={props.page}
       pageSize={props.pageSize}
       renderMobileCard={(item) => (
-        <article className='border-border bg-card grid gap-3 rounded-lg border p-4'>
+        <article className='bg-card text-card-foreground ring-foreground/10 grid gap-3 rounded-xl p-4 ring-1'>
           <div className='flex justify-between gap-2'>
             <div>
               <p className='font-medium break-all'>{item.name || '-'}</p>
@@ -868,16 +879,11 @@ export function FinancialOperationsPage({
           />
         )}
         {statisticsQuery.isError && !statistics && (
-          <section className='border-destructive/30 bg-destructive/5 rounded-lg border p-4'>
-            <p>{t('financialOperations.statisticsError')}</p>
-            <Button
-              className='mt-3'
-              onClick={() => void statisticsQuery.refetch()}
-              variant='outline'
-            >
-              {t('common.retry')}
-            </Button>
-          </section>
+          <ErrorState
+            className='min-h-40'
+            onRetry={() => void statisticsQuery.refetch()}
+            title={t('financialOperations.statisticsError')}
+          />
         )}
         {statistics && (
           <>

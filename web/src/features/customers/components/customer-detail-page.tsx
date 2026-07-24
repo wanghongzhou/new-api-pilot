@@ -1,7 +1,6 @@
 import {
   ArrowLeft01Icon,
   Chart01Icon,
-  Refresh01Icon,
   UserGroupIcon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
@@ -21,11 +20,11 @@ import { DataFreshness } from '@/components/data/data-freshness'
 import { DataStatusBadge } from '@/components/data/data-status'
 import { MetricValue } from '@/components/data/metric-value'
 import { RunFeedbackSheet } from '@/components/data/run-feedback-sheet'
+import { ErrorState } from '@/components/error-state'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
-import { Button } from '@/components/ui/button'
+import { LoadingState } from '@/components/loading-state'
 import { DataTable } from '@/components/ui/data-table'
-import { Spinner } from '@/components/ui/spinner'
 import {
   AccountCard,
   ManagedStatusBadge,
@@ -39,6 +38,7 @@ import { buildStatisticsSearch } from '@/features/statistics/search'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { isIdString, parseIdString } from '@/lib/api-types'
 import { fromUnixSeconds } from '@/lib/dayjs'
+import { formatDisplayValue } from '@/lib/display-value'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { getCustomer, listCustomerAccounts } from '../api'
@@ -51,9 +51,8 @@ import {
 } from './customer-ui'
 
 function Timestamp({ value }: { value: number | null }) {
-  const { t } = useTranslation()
   return value == null
-    ? t('common.none')
+    ? formatDisplayValue(value)
     : fromUnixSeconds(value).format('YYYY-MM-DD HH:mm:ss')
 }
 
@@ -182,33 +181,21 @@ export function CustomerDetailPage({
   let content: ReactNode
   if (!validCustomerId || (detailQuery.isError && !customer)) {
     content = (
-      <section className='border-destructive/30 bg-destructive/5 rounded-lg border p-5'>
-        <h2 className='font-medium'>{t('customer.detail.loadError')}</h2>
-        <p className='text-muted-foreground mt-1 text-sm'>
-          {t(
-            dynamicI18nKey(
-              'customer',
-              validCustomerId
-                ? 'customer.detail.loadErrorDescription'
-                : 'customer.detail.invalidId'
-            )
-          )}
-        </p>
-        {validCustomerId && (
-          <Button className='mt-3' onClick={retry} variant='outline'>
-            <HugeiconsIcon icon={Refresh01Icon} strokeWidth={2} />
-            {t('common.retry')}
-          </Button>
+      <ErrorState
+        description={t(
+          dynamicI18nKey(
+            'customer',
+            validCustomerId
+              ? 'customer.detail.loadErrorDescription'
+              : 'customer.detail.invalidId'
+          )
         )}
-      </section>
+        onRetry={validCustomerId ? retry : undefined}
+        title={t('customer.detail.loadError')}
+      />
     )
   } else if (detailQuery.isPending || !customer) {
-    content = (
-      <div className='flex min-h-64 items-center justify-center' role='status'>
-        <Spinner />
-        <span className='sr-only'>{t('customer.detail.loading')}</span>
-      </div>
-    )
+    content = <LoadingState message={t('customer.detail.loading')} />
   } else {
     content = (
       <>
@@ -255,7 +242,7 @@ export function CustomerDetailPage({
                 {t('customer.contact')}
               </dt>
               <dd className='mt-1 text-sm font-medium break-words'>
-                {customer.contact || t('common.none')}
+                {formatDisplayValue(customer.contact)}
               </dd>
             </div>
             <div>
@@ -263,7 +250,7 @@ export function CustomerDetailPage({
                 {t('customer.remark')}
               </dt>
               <dd className='mt-1 text-sm font-medium break-words'>
-                {customer.remark || t('common.none')}
+                {formatDisplayValue(customer.remark)}
               </dd>
             </div>
             <div>

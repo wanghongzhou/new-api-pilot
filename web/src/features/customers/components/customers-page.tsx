@@ -15,6 +15,7 @@ import { DataStatusBadge } from '@/components/data/data-status'
 import { DataViewModeToggle } from '@/components/data/data-view-mode-toggle'
 import { MetricValue } from '@/components/data/metric-value'
 import { RunFeedbackSheet } from '@/components/data/run-feedback-sheet'
+import { PageFooterPortal } from '@/components/layout/page-footer'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
@@ -210,6 +211,7 @@ export function CustomersPage({
 
   return (
     <SectionPageLayout
+      fixedContent
       actions={
         isAdmin ? (
           <Button onClick={() => setDialogState({ action: 'create' })}>
@@ -221,7 +223,7 @@ export function CustomersPage({
       description={t('customers.description')}
       title={t('customers.title')}
     >
-      <div className='grid min-w-0 gap-5'>
+      <div className='flex h-full min-h-0 min-w-0 flex-col gap-4'>
         <CustomerFilters
           onApply={(filters) => onSearchChange({ ...filters, page: 1 })}
           value={{ filter: search.filter, status: search.status }}
@@ -237,7 +239,7 @@ export function CustomersPage({
         </div>
         {search.view === 'card' && customers.length > 0 ? (
           <>
-            <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'>
+            <div className='grid min-h-0 flex-1 gap-3 overflow-y-auto sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'>
               {customers.map((customer) => (
                 <CustomerCard
                   customer={customer}
@@ -248,28 +250,23 @@ export function CustomersPage({
                 />
               ))}
             </div>
-            <DataTablePagination
-              onPageChange={(page) => onSearchChange({ page })}
-              onPageSizeChange={(pageSize) =>
-                onSearchChange({ page: 1, pageSize })
-              }
-              page={search.page}
-              pageSize={search.pageSize}
-              total={total}
-            />
+            <PageFooterPortal>
+              <DataTablePagination
+                onPageChange={(page) => onSearchChange({ page })}
+                onPageSizeChange={(pageSize) =>
+                  onSearchChange({ page: 1, pageSize })
+                }
+                page={search.page}
+                pageSize={search.pageSize}
+                total={total}
+              />
+            </PageFooterPortal>
           </>
         ) : (
           <DataTable
             ariaLabel={t('customers.table')}
             columns={columns}
             data={customers}
-            emptyAction={
-              isAdmin ? (
-                <Button onClick={() => setDialogState({ action: 'create' })}>
-                  {t('customers.create')}
-                </Button>
-              ) : undefined
-            }
             emptyDescription={t('customers.emptyDescription')}
             emptyTitle={t('customers.empty')}
             error={customersQuery.isError}

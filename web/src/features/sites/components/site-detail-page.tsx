@@ -24,11 +24,12 @@ import { DataStatusBadge } from '@/components/data/data-status'
 import { MetricValue } from '@/components/data/metric-value'
 import { QuotaAmount } from '@/components/data/quota-amount'
 import { SiteStatusBadges } from '@/components/data/site-status-badges'
+import { ErrorState } from '@/components/error-state'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
+import { LoadingState } from '@/components/loading-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Spinner } from '@/components/ui/spinner'
 import { buildChannelInventorySearch } from '@/features/channel-inventory/search'
 import { buildFinancialOperationsSearch } from '@/features/financial-operations/search'
 import { buildLogSearch } from '@/features/logs/search'
@@ -49,6 +50,10 @@ import { buildUserInventorySearch } from '@/features/user-inventory/search'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { isIdString, parseIdString } from '@/lib/api-types'
 import { fromUnixSeconds } from '@/lib/dayjs'
+import {
+  formatDisplayValue,
+  formatNumericDisplayValue,
+} from '@/lib/display-value'
 import { useAuthStore } from '@/stores/auth-store'
 
 import {
@@ -334,7 +339,7 @@ function SiteMetadata({ site }: { site: SiteDetail }) {
       label: t('site.baseUrl'),
       value: (
         <a
-          className='text-primary-strong break-all hover:underline'
+          className='text-primary break-all hover:underline'
           href={site.base_url}
           rel='noreferrer'
           target='_blank'
@@ -343,11 +348,11 @@ function SiteMetadata({ site }: { site: SiteDetail }) {
         </a>
       ),
     },
-    { label: t('site.remark'), value: site.remark || t('common.none') },
-    { label: t('site.version'), value: site.version ?? t('common.unknown') },
+    { label: t('site.remark'), value: formatDisplayValue(site.remark) },
+    { label: t('site.version'), value: formatDisplayValue(site.version) },
     {
       label: t('site.systemName'),
-      value: site.system_name ?? t('common.unknown'),
+      value: formatDisplayValue(site.system_name),
     },
     {
       label: t('site.exportEnabled'),
@@ -363,7 +368,7 @@ function SiteMetadata({ site }: { site: SiteDetail }) {
     },
     {
       label: t('site.rootUserId'),
-      value: site.root_user_id ?? t('common.none'),
+      value: formatDisplayValue(site.root_user_id),
     },
     {
       label: t('site.rootCreatedAt'),
@@ -377,7 +382,7 @@ function SiteMetadata({ site }: { site: SiteDetail }) {
       label: t('site.statisticsStartSource'),
       value:
         site.statistics_start_source == null
-          ? t('common.none')
+          ? formatDisplayValue(site.statistics_start_source)
           : t('site.statisticsStartSource.rootCreatedAt'),
     },
     {
@@ -416,14 +421,16 @@ function SiteMetadata({ site }: { site: SiteDetail }) {
           <p className='text-muted-foreground text-xs'>
             {t('site.rate.quotaPerUnit')}
           </p>
-          <p className='mt-1 font-medium'>{site.rate.quota_per_unit ?? '-'}</p>
+          <p className='mt-1 font-medium'>
+            {formatNumericDisplayValue(site.rate.quota_per_unit)}
+          </p>
         </div>
         <div>
           <p className='text-muted-foreground text-xs'>
             {t('site.rate.usdExchangeRate')}
           </p>
           <p className='mt-1 font-medium'>
-            {site.rate.usd_exchange_rate ?? '-'}
+            {formatNumericDisplayValue(site.rate.usd_exchange_rate)}
           </p>
         </div>
         <div>
@@ -781,36 +788,21 @@ export function SiteDetailPage({
   let detailContent: ReactNode
   if (!validSiteId || (detailQuery.isError && !site)) {
     detailContent = (
-      <section className='border-destructive/30 bg-destructive/5 rounded-lg border p-5'>
-        <h2 className='font-medium'>{t('site.detail.loadError')}</h2>
-        <p className='text-muted-foreground mt-1 text-sm'>
-          {t(
-            dynamicI18nKey(
-              'site',
-              validSiteId
-                ? 'site.detail.loadErrorDescription'
-                : 'site.detail.invalidId'
-            )
-          )}
-        </p>
-        {validSiteId && (
-          <Button className='mt-3' onClick={retry} variant='outline'>
-            <HugeiconsIcon icon={Refresh01Icon} strokeWidth={2} />
-            {t('common.retry')}
-          </Button>
+      <ErrorState
+        description={t(
+          dynamicI18nKey(
+            'site',
+            validSiteId
+              ? 'site.detail.loadErrorDescription'
+              : 'site.detail.invalidId'
+          )
         )}
-      </section>
+        onRetry={validSiteId ? retry : undefined}
+        title={t('site.detail.loadError')}
+      />
     )
   } else if (detailQuery.isPending || !site) {
-    detailContent = (
-      <div
-        aria-label={t('site.detail.loading')}
-        className='border-border bg-muted/40 flex min-h-64 items-center justify-center rounded-lg border'
-        role='status'
-      >
-        <Spinner />
-      </div>
-    )
+    detailContent = <LoadingState message={t('site.detail.loading')} />
   } else {
     detailContent = (
       <>

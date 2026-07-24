@@ -41,9 +41,10 @@ type upstreamTransportDependencies struct {
 }
 
 type upstreamNetworkPolicy struct {
-	hostSuffixes []string
-	allowedCIDRs []netip.Prefix
-	resolver     upstreamResolver
+	hostSuffixes         []string
+	allowedCIDRs         []netip.Prefix
+	allowPrivateNetworks bool
+	resolver             upstreamResolver
 }
 
 type safeUpstreamDialer struct {
@@ -137,7 +138,7 @@ func normalizeUpstreamPort(scheme, raw string) (string, error) {
 	return strconv.Itoa(port), nil
 }
 
-func newUpstreamNetworkPolicy(hostSuffixes []string, allowedCIDRs []netip.Prefix, resolver upstreamResolver) (*upstreamNetworkPolicy, error) {
+func newUpstreamNetworkPolicy(hostSuffixes []string, allowedCIDRs []netip.Prefix, allowPrivateNetworks bool, resolver upstreamResolver) (*upstreamNetworkPolicy, error) {
 	normalizedSuffixes := make([]string, 0, len(hostSuffixes))
 	seenSuffixes := make(map[string]struct{}, len(hostSuffixes))
 	for _, raw := range hostSuffixes {
@@ -168,7 +169,10 @@ func newUpstreamNetworkPolicy(hostSuffixes []string, allowedCIDRs []netip.Prefix
 	if resolver == nil {
 		resolver = net.DefaultResolver
 	}
-	return &upstreamNetworkPolicy{hostSuffixes: normalizedSuffixes, allowedCIDRs: normalizedCIDRs, resolver: resolver}, nil
+	return &upstreamNetworkPolicy{
+		hostSuffixes: normalizedSuffixes, allowedCIDRs: normalizedCIDRs,
+		allowPrivateNetworks: allowPrivateNetworks, resolver: resolver,
+	}, nil
 }
 
 func (policy *upstreamNetworkPolicy) validateHost(host string) error {
@@ -247,10 +251,10 @@ func (policy *upstreamNetworkPolicy) validateResolvedAddress(address netip.Addr,
 			break
 		}
 	}
-	if literalHost && !allowed {
+	if literalHost && !allowed && !(policy.allowPrivateNetworks && address.IsPrivate()) {
 		return fmt.Errorf("%w: address does not match the configured CIDRs", ErrUpstreamAddressForbidden)
 	}
-	if address.IsPrivate() && !allowed {
+	if address.IsPrivate() && !allowed && !policy.allowPrivateNetworks {
 		return fmt.Errorf("%w: private address requires an explicit CIDR", ErrUpstreamAddressForbidden)
 	}
 	return nil
@@ -360,6 +364,7 @@ func newSafeUpstreamHTTPClient(
 	baseURL string,
 	hostSuffixes []string,
 	allowedCIDRs []netip.Prefix,
+	allowPrivateNetworks bool,
 	caFile string,
 	connectTimeout time.Duration,
 	headerTimeout time.Duration,
@@ -367,7 +372,7 @@ func newSafeUpstreamHTTPClient(
 	maxIdleConnsPerHost int,
 	dependencies upstreamTransportDependencies,
 ) (*http.Client, *http.Transport, error) {
-	policy, err := newUpstreamNetworkPolicy(hostSuffixes, allowedCIDRs, dependencies.resolver)
+	policy, err := newUpstreamNetworkPolicy(hostSuffixes, allowedCIDRs, allowPrivateNetworks, dependencies.resolver)
 	if err != nil {
 		return nil, nil, err
 	}

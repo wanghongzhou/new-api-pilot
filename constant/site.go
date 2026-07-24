@@ -95,6 +95,7 @@ const (
 	CodeBaseURLPreflightRequired   = "BASE_URL_PREFLIGHT_REQUIRED"
 	CodeSiteExportDisabled         = "SITE_EXPORT_DISABLED"
 	CodeSiteIncompatible           = "SITE_INCOMPATIBLE"
+	CodeUpstreamLoginRejected      = "UPSTREAM_LOGIN_REJECTED"
 	CodeTokenRotationResultUnknown = "TOKEN_ROTATION_RESULT_UNKNOWN"
 	CodeBackfillRunning            = "BACKFILL_RUNNING"
 	CodeTaskOverlap                = "TASK_OVERLAP"

@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 import { DataStatusBadge } from '@/components/data/data-status'
 import { FilterPanel } from '@/components/data/filter-panel'
 import { MetricValue } from '@/components/data/metric-value'
+import { ErrorState } from '@/components/error-state'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Badge } from '@/components/ui/badge'
@@ -31,6 +32,7 @@ import {
   parseNonNegativeIdString,
 } from '@/lib/api-types'
 import { BEIJING_TIMEZONE, dayjs, fromUnixSeconds } from '@/lib/dayjs'
+import { hasFilterChanges } from '@/lib/filter-state'
 
 import {
   getSiteUpstreamTaskStatistics,
@@ -155,6 +157,7 @@ function Filters({
   search: UpstreamTaskSearch
 }) {
   const { t } = useTranslation()
+  const reset = buildUpstreamTaskSearch({ pageSize: search.pageSize })
   const textFilter = (
     key: 'actions' | 'groups' | 'models' | 'platforms',
     label: string
@@ -172,9 +175,21 @@ function Filters({
   return (
     <FilterPanel
       description={t('upstreamTasks.filters.description')}
-      onReset={() =>
-        onChange(buildUpstreamTaskSearch({ pageSize: search.pageSize }))
-      }
+      hasActiveFilters={hasFilterChanges(search, reset, [
+        'actions',
+        'end',
+        'groups',
+        'models',
+        'platforms',
+        'remoteChannelId',
+        'remoteId',
+        'remoteUserId',
+        'siteIds',
+        'start',
+        'statuses',
+        'taskId',
+      ])}
+      onReset={() => onChange(reset)}
       title={t('upstreamTasks.filters.title')}
     >
       <div className='grid min-w-0 flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-4'>
@@ -592,7 +607,7 @@ export function UpstreamTasksPage({
           page={search.page}
           pageSize={search.pageSize}
           renderMobileCard={(item) => (
-            <article className='border-border bg-card grid gap-3 rounded-lg border p-4'>
+            <article className='bg-card text-card-foreground ring-foreground/10 grid gap-3 rounded-xl p-4 ring-1'>
               <div className='flex items-start justify-between gap-2'>
                 <div className='min-w-0'>
                   <code className='block truncate font-medium'>
@@ -648,16 +663,11 @@ export function UpstreamTasksPage({
           total={list?.total ?? 0}
         />
         {statisticsQuery.isError && !statistics && (
-          <section className='border-destructive/30 bg-destructive/5 rounded-lg border p-4'>
-            <p className='text-sm'>{t('upstreamTasks.statisticsError')}</p>
-            <Button
-              className='mt-3'
-              onClick={() => void statisticsQuery.refetch()}
-              variant='outline'
-            >
-              {t('common.retry')}
-            </Button>
-          </section>
+          <ErrorState
+            className='min-h-40'
+            onRetry={() => void statisticsQuery.refetch()}
+            title={t('upstreamTasks.statisticsError')}
+          />
         )}
         {statistics && (
           <div className='grid gap-6 xl:grid-cols-2'>

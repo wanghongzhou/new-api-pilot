@@ -461,6 +461,7 @@ test('supports URL filters, sorting, pagination, detail retry, and all delivery 
 }, testInfo) => {
   const state = await setup(page, admin, { detailFailures: 1 })
   await page.goto('/alerts')
+  await expect(page.getByRole('button', { name: '刷新' })).toHaveCount(0)
 
   await expect(
     page.getByRole('heading', { level: 1, name: '告警中心' })

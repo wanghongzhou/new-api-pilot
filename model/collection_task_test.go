@@ -462,7 +462,7 @@ func TestCollectionTaskClaimKeysetDoesNotSkipWhenEarlierPageShrinks(t *testing.T
 	}
 }
 
-func TestCollectionTaskWindowOrderingNewestExceptInitialBackfill(t *testing.T) {
+func TestCollectionTaskWindowOrderingNewestFirst(t *testing.T) {
 	database := openLockedSiteRunDatabase(t)
 	ctx := context.Background()
 	now := int64(1_752_400_800)
@@ -499,6 +499,10 @@ func TestCollectionTaskWindowOrderingNewestExceptInitialBackfill(t *testing.T) {
 	commitSuccessfulWindows(t, repository, olderClaim, now+4)
 
 	initialSite := createRunnableSite(t, database, "run-b3a-order-initial", now)
+	initialSite.StatisticsStatus = constant.SiteStatisticsBackfilling
+	if err := database.GORM.Save(&initialSite).Error; err != nil {
+		t.Fatalf("mark initial site backfilling: %v", err)
+	}
 	initial := createB3AWindowRun(t, database, initialSite, constant.TaskTypeUsageBackfill,
 		constant.CollectionTriggerRecovery, constant.CollectionPriorityInitialBackfill,
 		now-3*3600, now, "req_b3a_order_initial", now+5)
@@ -509,11 +513,15 @@ func TestCollectionTaskWindowOrderingNewestExceptInitialBackfill(t *testing.T) {
 		TaskTypes: []string{constant.TaskTypeUsageBackfill}, Now: now + 5,
 		RequestID: "wrk_b3a_order_initial", MaxWindow: 24,
 	})
-	if err != nil || len(initialClaim.Windows) != 3 || initialClaim.Windows[0].HourTS != now-3*3600 ||
-		initialClaim.Windows[2].HourTS != now-3600 {
-		t.Fatalf("initial oldest-first claim = %#v, %v", initialClaim.Windows, err)
+	if err != nil || len(initialClaim.Windows) != 3 || initialClaim.Windows[0].HourTS != now-3600 ||
+		initialClaim.Windows[2].HourTS != now-3*3600 {
+		t.Fatalf("initial newest-first claim = %#v, %v", initialClaim.Windows, err)
 	}
 	commitSuccessfulWindows(t, repository, initialClaim, now+6)
+	if err := database.GORM.First(&initialSite, initialSite.ID).Error; err != nil ||
+		initialSite.StatisticsStatus != constant.SiteStatisticsReady {
+		t.Fatalf("initial site terminal status = %q, %v", initialSite.StatisticsStatus, err)
+	}
 }
 
 func commitSuccessfulWindows(

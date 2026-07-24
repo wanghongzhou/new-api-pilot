@@ -21,11 +21,13 @@ import { useTranslation } from 'react-i18next'
 export function SkipToMain() {
   const { t } = useTranslation()
   return (
-    <a
-      className='bg-primary-strong hover:bg-primary-strong-hover focus-visible:ring-ring fixed start-44 z-999 inline-flex min-h-11 min-w-11 -translate-y-52 items-center px-4 py-2 text-sm font-medium whitespace-nowrap text-white opacity-95 shadow-sm transition focus:translate-y-3 focus:transform focus-visible:ring-1'
-      href='#main-content'
-    >
-      {t('Skip to main content')}
-    </a>
+    <nav aria-label={t('Skip to main content')}>
+      <a
+        className='bg-primary text-primary-foreground hover:bg-primary/80 focus-visible:ring-ring fixed start-44 z-999 inline-flex min-h-11 min-w-11 -translate-y-52 items-center px-4 py-2 text-sm font-medium whitespace-nowrap opacity-95 shadow-sm transition focus:translate-y-3 focus:transform focus-visible:ring-1'
+        href='#main-content'
+      >
+        {t('Skip to main content')}
+      </a>
+    </nav>
   )
 }

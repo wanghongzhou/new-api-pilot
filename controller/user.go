@@ -173,8 +173,8 @@ func parsePlatformUserListQuery(c *gin.Context) (dto.PlatformUserListQuery, map[
 	if raw := c.Query("sort_by"); raw != "" {
 		query.SortBy = raw
 	}
-	if query.SortBy != "created_at" && query.SortBy != "username" && query.SortBy != "last_login_at" {
-		errors["sort_by"] = "must be created_at, username, or last_login_at"
+	if query.SortBy != "created_at" && query.SortBy != "username" && query.SortBy != "last_login_at" && query.SortBy != "status" {
+		errors["sort_by"] = "must be created_at, username, last_login_at, or status"
 	}
 	if raw := c.Query("sort_order"); raw != "" {
 		query.SortOrder = strings.ToLower(raw)

@@ -154,9 +154,13 @@ test('A05/A55 makes Token rotation explicit and requires an explicit retry after
 
   await page.goto('/sites')
   await page.getByLabel('打开站点操作').click()
-  await page
-    .getByRole('button', { name: '授权或重新授权', exact: true })
-    .click()
+  await expect(
+    page.getByRole('button', { name: '检查能力', exact: true })
+  ).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: '刷新状态', exact: true })
+  ).toBeVisible()
+  await page.getByRole('button', { name: '重写授权', exact: true }).click()
 
   const dialog = page.getByRole('dialog', { name: '站点授权' })
   await dialog

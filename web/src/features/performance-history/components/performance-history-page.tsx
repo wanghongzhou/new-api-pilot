@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 import { DataStatusBadge } from '@/components/data/data-status'
 import { FilterPanel } from '@/components/data/filter-panel'
 import { MetricValue } from '@/components/data/metric-value'
+import { ErrorState } from '@/components/error-state'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Badge } from '@/components/ui/badge'
@@ -26,6 +27,7 @@ import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import { isIdString, parseIdString } from '@/lib/api-types'
 import { BEIJING_TIMEZONE, dayjs, fromUnixSeconds } from '@/lib/dayjs'
+import { hasFilterChanges } from '@/lib/filter-state'
 
 import {
   getPerformanceHistoryStatistics,
@@ -131,6 +133,10 @@ function Filters({
   search: PerformanceHistorySearch
 }) {
   const { t } = useTranslation()
+  const reset = buildPerformanceHistorySearch({
+    hours: search.hours,
+    pageSize: search.pageSize,
+  })
   const stringList =
     (key: 'groups' | 'models') =>
     (event: React.ChangeEvent<HTMLInputElement>) =>
@@ -145,14 +151,14 @@ function Filters({
   return (
     <FilterPanel
       description={t('performanceHistory.filters.description')}
-      onReset={() =>
-        onChange(
-          buildPerformanceHistorySearch({
-            hours: search.hours,
-            pageSize: search.pageSize,
-          })
-        )
-      }
+      hasActiveFilters={hasFilterChanges(search, reset, [
+        'end',
+        'groups',
+        'models',
+        'siteIds',
+        'start',
+      ])}
+      onReset={() => onChange(reset)}
       title={t('performanceHistory.filters.title')}
     >
       <fieldset className='grid gap-2'>
@@ -564,7 +570,7 @@ export function PerformanceHistoryPage({
           page={search.page}
           pageSize={search.pageSize}
           renderMobileCard={(item) => (
-            <article className='border-border bg-card grid gap-3 rounded-lg border p-4'>
+            <article className='bg-card text-card-foreground ring-foreground/10 grid gap-3 rounded-xl p-4 ring-1'>
               <div className='flex items-start justify-between gap-2'>
                 <div>
                   <p className='font-medium break-all'>{item.model_name}</p>
@@ -612,16 +618,11 @@ export function PerformanceHistoryPage({
           total={list?.total ?? 0}
         />
         {statisticsQuery.isError && !statistics && (
-          <section className='border-destructive/30 bg-destructive/5 rounded-lg border p-4'>
-            <p className='text-sm'>{t('performanceHistory.statisticsError')}</p>
-            <Button
-              className='mt-3'
-              onClick={() => void statisticsQuery.refetch()}
-              variant='outline'
-            >
-              {t('common.retry')}
-            </Button>
-          </section>
+          <ErrorState
+            className='min-h-40'
+            onRetry={() => void statisticsQuery.refetch()}
+            title={t('performanceHistory.statisticsError')}
+          />
         )}
         {statistics && (
           <>
