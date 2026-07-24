@@ -5,7 +5,11 @@ import {
   parseNonNegativeIdString,
 } from '@/lib/api-types'
 
-import type { ModelBinaryState, ModelCatalogTab } from './types'
+import type {
+  ModelBinaryState,
+  ModelCatalogQueryParams,
+  ModelCatalogTab,
+} from './types'
 
 export interface ModelCatalogSearch {
   tab: ModelCatalogTab
@@ -63,5 +67,73 @@ export function buildModelCatalogSearch(raw: SearchInput): ModelCatalogSearch {
       typeof raw.vendorId === 'string' && isNonNegativeIdString(raw.vendorId)
         ? parseNonNegativeIdString(raw.vendorId)
         : undefined,
+  }
+}
+
+export function buildModelCatalogQueryParams(
+  search: ModelCatalogSearch,
+  tab: ModelCatalogTab = search.tab
+): ModelCatalogQueryParams {
+  const common = {
+    keyword: search.keyword || undefined,
+    p: search.page,
+    page_size: search.pageSize,
+    site_ids: search.siteIds,
+  }
+  if (tab === 'missing') return common
+  return {
+    ...common,
+    statuses: search.statuses,
+    sync_official: search.syncOfficial,
+    vendor_id: search.vendorId,
+  }
+}
+
+export function changeModelCatalogTab(
+  tab: ModelCatalogTab
+): Partial<ModelCatalogSearch> {
+  if (tab === 'coverage') {
+    return {
+      keyword: '',
+      page: 1,
+      pageSize: 20,
+      siteIds: [],
+      statuses: [],
+      syncOfficial: [],
+      tab,
+      vendorId: undefined,
+    }
+  }
+  return tab === 'missing'
+    ? {
+        page: 1,
+        statuses: [],
+        syncOfficial: [],
+        tab,
+        vendorId: undefined,
+      }
+    : { page: 1, tab }
+}
+
+export function hasMissingIncompatibleFilters(search: ModelCatalogSearch) {
+  return (
+    search.vendorId != null ||
+    search.statuses.length > 0 ||
+    search.syncOfficial.length > 0
+  )
+}
+
+export function serializeModelCatalogSearch(search: ModelCatalogSearch) {
+  return {
+    exportId: search.exportId,
+    keyword: search.keyword || undefined,
+    page: search.page === 1 ? undefined : search.page,
+    pageSize: search.pageSize === 20 ? undefined : search.pageSize,
+    siteIds: search.siteIds.length > 0 ? search.siteIds : undefined,
+    statuses: search.statuses.length > 0 ? search.statuses : undefined,
+    syncOfficial:
+      search.syncOfficial.length > 0 ? search.syncOfficial : undefined,
+    tab: search.tab === 'catalog' ? undefined : search.tab,
+    vendorId: search.vendorId,
   }
 }

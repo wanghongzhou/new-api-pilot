@@ -1,15 +1,16 @@
 import {
-  ArrowRight01Icon,
   Chart01Icon,
   Copy01Icon,
   CpuIcon,
   Database01Icon,
   RamMemoryIcon,
   ServerStack01Icon,
+  ViewIcon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Link } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
 import { MetricValue } from '@/components/data/metric-value'
 import { QuotaAmount } from '@/components/data/quota-amount'
@@ -152,6 +153,17 @@ export function SiteCard({
 }) {
   const { t } = useTranslation()
   const performanceAvailable = site.performance.data_status === 'complete'
+  const copyBaseUrl = async () => {
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error('clipboard unavailable')
+      }
+      await navigator.clipboard.writeText(site.base_url)
+      toast.success(t('site.toast.baseUrlCopied'))
+    } catch {
+      toast.error(t('site.toast.copyFailed'))
+    }
+  }
 
   return (
     <article
@@ -180,11 +192,10 @@ export function SiteCard({
                 {site.base_url}
               </p>
               <button
+                aria-label={t('site.copyBaseUrl')}
                 className='text-muted-foreground hover:text-foreground shrink-0 transition-colors'
-                onClick={() =>
-                  void navigator.clipboard?.writeText(site.base_url)
-                }
-                title={site.base_url}
+                onClick={() => void copyBaseUrl()}
+                title={t('site.copyBaseUrl')}
                 type='button'
               >
                 <HugeiconsIcon icon={Copy01Icon} size={14} strokeWidth={2} />
@@ -319,7 +330,7 @@ export function SiteCard({
             title={t('site.viewDetails')}
             to='/sites/$siteId'
           >
-            <HugeiconsIcon icon={ArrowRight01Icon} size={17} strokeWidth={2} />
+            <HugeiconsIcon icon={ViewIcon} size={17} strokeWidth={2} />
           </Link>
         </div>
       </footer>

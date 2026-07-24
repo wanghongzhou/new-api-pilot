@@ -1,15 +1,22 @@
-import { ArrowLeft01Icon, FileExportIcon } from '@hugeicons/core-free-icons'
+import {
+  Alert02Icon,
+  ArrowLeft01Icon,
+  Chart01Icon,
+  Database01Icon,
+  FileExportIcon,
+  Search01Icon,
+} from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import type { ColumnDef } from '@tanstack/react-table'
 import type { TFunction } from 'i18next'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { DataStatusBadge } from '@/components/data/data-status'
-import { FilterPanel } from '@/components/data/filter-panel'
+import { FacetedFilter } from '@/components/data/faceted-filter'
 import { MetricValue } from '@/components/data/metric-value'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
@@ -17,6 +24,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
 import { Input } from '@/components/ui/input'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { listSites } from '@/features/sites/api'
+import { siteKeys } from '@/features/sites/query-keys'
+import type { SiteListItem } from '@/features/sites/types'
 import { createStatisticsExport } from '@/features/statistics/api'
 import { ExportTaskSheet } from '@/features/statistics/components/export-task-sheet'
 import type {
@@ -39,6 +50,8 @@ import { buildSubscriptionPlanExportRequest } from '../export-request'
 import { subscriptionPlanKeys } from '../query-keys'
 import {
   buildSubscriptionPlanSearch,
+  changeSubscriptionPlanTab,
+  hasSubscriptionPlanAnalysisFilters,
   type SubscriptionPlanSearch,
 } from '../search'
 import type {
@@ -143,143 +156,160 @@ function Filters({
   global,
   onChange,
   search,
+  sites,
 }: {
   global: boolean
   onChange: (changes: Partial<SubscriptionPlanSearch>) => void
   search: SubscriptionPlanSearch
+  sites: SiteListItem[]
 }) {
   const { t } = useTranslation()
-  const toggleState = (state: SubscriptionPlanState) => {
-    const active = search.states.includes(state)
+  const setState = (value: string) => {
     onChange({
       page: 1,
-      states: active
-        ? search.states.filter((value) => value !== state)
-        : [...search.states, state],
+      states:
+        value === 'normal' || value === 'missing'
+          ? [value as SubscriptionPlanState]
+          : [],
     })
   }
+  const setEnabled = (value: string) => {
+    let enabled: boolean | undefined
+    if (value === 'enabled') enabled = true
+    if (value === 'disabled') enabled = false
+    onChange({ enabled, page: 1 })
+  }
+  let enabledValue = ''
+  if (search.enabled === true) enabledValue = 'enabled'
+  if (search.enabled === false) enabledValue = 'disabled'
   const reset = buildSubscriptionPlanSearch({ pageSize: search.pageSize })
+  const hasActiveFilters = hasFilterChanges(search, reset, [
+    'enabled',
+    'keyword',
+    'siteIds',
+    'states',
+  ])
   return (
-    <FilterPanel
-      description={t('subscriptionPlans.filters.description')}
-      hasActiveFilters={hasFilterChanges(search, reset, [
-        'enabled',
-        'keyword',
-        'siteIds',
-        'states',
-      ])}
-      onReset={() => onChange(reset)}
-      title={t('subscriptionPlans.filters.title')}
+    <section
+      aria-label={t('subscriptionPlans.filters.title')}
+      className='flex min-w-0 flex-wrap items-center gap-2'
     >
-      <div className='grid min-w-0 flex-1 gap-3 sm:grid-cols-2'>
-        <label className='grid gap-1 text-sm'>
-          <span>{t('subscriptionPlans.filters.keyword')}</span>
-          <Input
-            onChange={(event) =>
-              onChange({ keyword: event.target.value, page: 1 })
-            }
-            value={search.keyword}
-          />
-        </label>
-        {global && (
-          <label className='grid gap-1 text-sm'>
-            <span>{t('subscriptionPlans.filters.siteIds')}</span>
-            <Input
-              inputMode='numeric'
-              onChange={(event) =>
-                onChange({
-                  page: 1,
-                  siteIds: event.target.value
-                    .split(',')
-                    .map((value) => value.trim())
-                    .filter(isIdString)
-                    .map(parseIdString),
-                })
-              }
-              value={search.siteIds.join(',')}
-            />
-          </label>
-        )}
-      </div>
-      <div className='grid min-w-0 flex-1 gap-3 sm:grid-cols-2'>
-        <fieldset className='grid gap-1'>
-          <legend className='text-sm'>
-            {t('subscriptionPlans.filters.enabled')}
-          </legend>
-          <div className='flex flex-wrap gap-2'>
-            {(
-              [
-                [undefined, t('subscriptionPlans.filters.all')],
-                [true, t('subscriptionPlans.enabled')],
-                [false, t('subscriptionPlans.disabled')],
-              ] as const
-            ).map(([value, label]) => (
-              <Button
-                aria-pressed={search.enabled === value}
-                key={String(value)}
-                onClick={() => onChange({ enabled: value, page: 1 })}
-                size='sm'
-                type='button'
-                variant={search.enabled === value ? 'secondary' : 'outline'}
-              >
-                {label}
-              </Button>
-            ))}
-          </div>
-        </fieldset>
-        <fieldset className='grid gap-1'>
-          <legend className='text-sm'>
-            {t('subscriptionPlans.filters.states')}
-          </legend>
-          <div className='flex flex-wrap gap-2'>
-            {(['normal', 'missing'] as const).map((state) => (
-              <Button
-                aria-pressed={search.states.includes(state)}
-                key={state}
-                onClick={() => toggleState(state)}
-                size='sm'
-                type='button'
-                variant={
-                  search.states.includes(state) ? 'secondary' : 'outline'
-                }
-              >
-                {state === 'normal'
-                  ? t('subscriptionPlans.state.normal')
-                  : t('subscriptionPlans.state.missing')}
-              </Button>
-            ))}
-          </div>
-        </fieldset>
-      </div>
-    </FilterPanel>
+      <label className='relative min-w-48 flex-1 sm:max-w-72'>
+        <span className='sr-only'>
+          {t('subscriptionPlans.filters.keyword')}
+        </span>
+        <HugeiconsIcon
+          className='text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2'
+          icon={Search01Icon}
+          size={15}
+          strokeWidth={2}
+        />
+        <Input
+          aria-label={t('subscriptionPlans.filters.keyword')}
+          className='h-8 pl-8'
+          onChange={(event) =>
+            onChange({ keyword: event.target.value, page: 1 })
+          }
+          placeholder={t('subscriptionPlans.filters.keywordPlaceholder')}
+          value={search.keyword}
+        />
+      </label>
+      {global && (
+        <FacetedFilter
+          clearLabel={t('subscriptionPlans.filters.allSites')}
+          onChange={(value) =>
+            onChange({
+              page: 1,
+              siteIds: isIdString(value) ? [parseIdString(value)] : [],
+            })
+          }
+          options={sites.map((site) => ({ label: site.name, value: site.id }))}
+          title={t('subscriptionPlans.filters.site')}
+          value={search.siteIds.length === 1 ? search.siteIds[0] : ''}
+        />
+      )}
+      <FacetedFilter
+        clearLabel={t('subscriptionPlans.filters.all')}
+        onChange={setEnabled}
+        options={[
+          { label: t('subscriptionPlans.enabled'), value: 'enabled' },
+          { label: t('subscriptionPlans.disabled'), value: 'disabled' },
+        ]}
+        title={t('subscriptionPlans.filters.enabled')}
+        value={enabledValue}
+      />
+      <FacetedFilter
+        clearLabel={t('subscriptionPlans.filters.allStates')}
+        onChange={setState}
+        options={[
+          { label: t('subscriptionPlans.state.normal'), value: 'normal' },
+          { label: t('subscriptionPlans.state.missing'), value: 'missing' },
+        ]}
+        title={t('subscriptionPlans.filters.states')}
+        value={search.states.length === 1 ? search.states[0] : ''}
+      />
+      {hasActiveFilters && (
+        <Button
+          className='text-muted-foreground px-2'
+          onClick={() => onChange(reset)}
+          size='sm'
+          type='button'
+          variant='ghost'
+        >
+          {t('common.reset')}
+        </Button>
+      )}
+    </section>
   )
 }
 
 function StatisticsGrid({
   values,
 }: {
-  values: Pick<
+  values?: Pick<
     SubscriptionPlanStatistics,
     'disabled' | 'enabled' | 'missing' | 'total'
   >
 }) {
   const { t } = useTranslation()
-  const items: ReadonlyArray<
-    readonly [string, SubscriptionPlanStatistics['total']]
-  > = [
-    [t('subscriptionPlans.metric.total'), values.total],
-    [t('subscriptionPlans.metric.enabled'), values.enabled],
-    [t('subscriptionPlans.metric.disabled'), values.disabled],
-    [t('subscriptionPlans.metric.missing'), values.missing],
-  ]
+  const items = [
+    {
+      icon: Database01Icon,
+      label: t('subscriptionPlans.metric.total'),
+      value: values?.total,
+    },
+    {
+      icon: Chart01Icon,
+      label: t('subscriptionPlans.metric.enabled'),
+      value: values?.enabled,
+    },
+    {
+      icon: Chart01Icon,
+      label: t('subscriptionPlans.metric.disabled'),
+      value: values?.disabled,
+    },
+    {
+      icon: Alert02Icon,
+      label: t('subscriptionPlans.metric.missing'),
+      value: values?.missing,
+    },
+  ] as const
   return (
-    <dl className='border-border grid overflow-hidden rounded-lg border sm:grid-cols-2 xl:grid-cols-4'>
-      {items.map(([label, value]) => (
-        <div className='border-border p-4 sm:border-r' key={label}>
-          <dt className='text-muted-foreground text-xs'>{label}</dt>
-          <dd className='mt-1 text-xl font-semibold'>
-            <MetricValue value={value} />
-          </dd>
+    <dl className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
+      {items.map(({ icon, label, value }) => (
+        <div
+          className='bg-card text-card-foreground ring-foreground/10 flex items-center gap-3 rounded-xl p-4 ring-1'
+          key={label}
+        >
+          <span className='bg-muted text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-lg'>
+            <HugeiconsIcon icon={icon} size={18} strokeWidth={2} />
+          </span>
+          <div>
+            <dt className='text-muted-foreground text-xs'>{label}</dt>
+            <dd className='mt-0.5 text-2xl font-semibold tracking-tight'>
+              {value == null ? '-' : <MetricValue value={value} />}
+            </dd>
+          </div>
         </div>
       ))}
     </dl>
@@ -339,10 +369,41 @@ export function SubscriptionPlansPage({
 }) {
   const { t } = useTranslation()
   const [initialJob, setInitialJob] = useState<StatisticsExportJobItem>()
+  const canonicalizedSearch = useRef(false)
+  useEffect(() => {
+    if (
+      search.tab === 'site-analysis' &&
+      hasSubscriptionPlanAnalysisFilters(search)
+    ) {
+      onSearchChange(changeSubscriptionPlanTab('site-analysis'))
+    } else if (!canonicalizedSearch.current) {
+      canonicalizedSearch.current = true
+      onSearchChange({})
+    }
+  }, [onSearchChange, search])
   const validSiteId = siteId == null || isIdString(siteId)
   const currentParams = useMemo(() => params(search), [search])
+  const overviewParams = useMemo(
+    () => params(buildSubscriptionPlanSearch({})),
+    []
+  )
+  const siteParams = useMemo(
+    () => ({
+      p: 1,
+      page_size: 100,
+      sort_by: 'name',
+      sort_order: 'asc' as const,
+    }),
+    []
+  )
+  const sitesQuery = useQuery({
+    enabled: siteId == null,
+    queryFn: () => listSites(siteParams),
+    queryKey: siteKeys.list(siteParams),
+    staleTime: 5 * 60_000,
+  })
   const listQuery = useQuery({
-    enabled: validSiteId,
+    enabled: validSiteId && search.tab === 'plans',
     placeholderData: keepPreviousData,
     queryFn: () =>
       siteId && isIdString(siteId)
@@ -360,13 +421,13 @@ export function SubscriptionPlansPage({
       siteId && isIdString(siteId)
         ? getSiteSubscriptionPlanStatistics(
             parseIdString(siteId),
-            currentParams
+            overviewParams
           )
-        : getSubscriptionPlanStatistics(currentParams),
+        : getSubscriptionPlanStatistics(overviewParams),
     queryKey:
       siteId && isIdString(siteId)
-        ? subscriptionPlanKeys.site(siteId, 'statistics', currentParams)
-        : subscriptionPlanKeys.global('statistics', currentParams),
+        ? subscriptionPlanKeys.site(siteId, 'statistics', overviewParams)
+        : subscriptionPlanKeys.global('statistics', overviewParams),
   })
   const exportMutation = useMutation({
     mutationFn: (format: StatisticsExportFormat) =>
@@ -462,19 +523,35 @@ export function SubscriptionPlansPage({
     [t]
   )
   const statistics = statisticsQuery.data
+  const listTab = search.tab === 'plans'
+  const purpose = listTab
+    ? {
+        description: t('subscriptionPlans.purpose.description'),
+        title: t('subscriptionPlans.purpose.title'),
+      }
+    : {
+        description: t('subscriptionPlans.purpose.siteAnalysis.description'),
+        title: t('subscriptionPlans.purpose.siteAnalysis.title'),
+      }
   return (
     <SectionPageLayout
-      actions={(['xlsx', 'csv'] as const).map((format) => (
-        <Button
-          disabled={exportMutation.isPending || !validSiteId}
-          key={format}
-          onClick={() => exportMutation.mutate(format)}
-          variant='outline'
-        >
-          <HugeiconsIcon icon={FileExportIcon} strokeWidth={2} />
-          {t('subscriptionPlans.export', { format: format.toUpperCase() })}
-        </Button>
-      ))}
+      actions={
+        listTab
+          ? (['xlsx', 'csv'] as const).map((format) => (
+              <Button
+                disabled={exportMutation.isPending || !validSiteId}
+                key={format}
+                onClick={() => exportMutation.mutate(format)}
+                variant='outline'
+              >
+                <HugeiconsIcon icon={FileExportIcon} strokeWidth={2} />
+                {t('subscriptionPlans.export', {
+                  format: format.toUpperCase(),
+                })}
+              </Button>
+            ))
+          : undefined
+      }
       description={
         siteId
           ? t('subscriptionPlans.siteDescription', { id: siteId })
@@ -483,8 +560,9 @@ export function SubscriptionPlansPage({
       title={
         siteId ? t('subscriptionPlans.siteTitle') : t('subscriptionPlans.title')
       }
+      fixedContent
     >
-      <div className='grid min-w-0 gap-6'>
+      <div className='flex h-full min-h-0 min-w-0 flex-col gap-4'>
         {siteId && (
           <DetailBackLink
             render={<Link params={{ siteId }} to='/sites/$siteId' />}
@@ -493,25 +571,64 @@ export function SubscriptionPlansPage({
             {t('subscriptionPlans.backToSite')}
           </DetailBackLink>
         )}
-        <section
-          className='border-primary/30 bg-primary/5 rounded-lg border p-4'
-          role='note'
+        <StatisticsGrid values={statistics} />
+        <Tabs
+          onValueChange={(tab) =>
+            onSearchChange(
+              changeSubscriptionPlanTab(tab as SubscriptionPlanSearch['tab'])
+            )
+          }
+          value={search.tab}
         >
-          <p className='font-medium'>{t('subscriptionPlans.boundary.title')}</p>
-          <p className='text-muted-foreground mt-1 text-sm'>
-            {t('subscriptionPlans.boundary.description')}
-          </p>
-        </section>
-        <Filters global={!siteId} onChange={onSearchChange} search={search} />
-        {statistics && (
-          <div className='grid gap-5'>
-            <div className='flex items-center gap-2' role='status'>
-              <span>{t('subscriptionPlans.statisticsStatus')}</span>
-              <DataStatusBadge status={statistics.data_status} />
+          <TabsList aria-label={t('subscriptionPlans.tabs.label')}>
+            <TabsTrigger value='plans'>
+              <HugeiconsIcon icon={Database01Icon} size={15} strokeWidth={2} />
+              {t('subscriptionPlans.tabs.plans')}
+              {statistics && (
+                <Badge className='px-1.5 font-mono' variant='secondary'>
+                  {statistics.total}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value='site-analysis'>
+              <HugeiconsIcon icon={Chart01Icon} size={15} strokeWidth={2} />
+              {t('subscriptionPlans.tabs.siteAnalysis')}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <section className='border-border bg-muted/30 flex items-start gap-3 rounded-xl border p-4'>
+          <span className='bg-background text-muted-foreground ring-foreground/10 flex size-9 shrink-0 items-center justify-center rounded-lg ring-1'>
+            <HugeiconsIcon
+              icon={listTab ? Database01Icon : Chart01Icon}
+              size={18}
+              strokeWidth={2}
+            />
+          </span>
+          <div className='min-w-0 flex-1'>
+            <div className='flex flex-wrap items-center gap-2'>
+              <h2 className='font-medium'>{purpose.title}</h2>
+              {(listQuery.data?.data_status ?? statistics?.data_status) && (
+                <DataStatusBadge
+                  status={
+                    (listTab
+                      ? listQuery.data?.data_status
+                      : statistics?.data_status) ?? 'pending'
+                  }
+                />
+              )}
             </div>
-            <StatisticsGrid values={statistics} />
-            <SiteBreakdown items={statistics.site_breakdown} />
+            <p className='text-muted-foreground mt-1 text-sm'>
+              {purpose.description}
+            </p>
           </div>
+        </section>
+        {listTab && (
+          <Filters
+            global={!siteId}
+            onChange={onSearchChange}
+            search={search}
+            sites={sitesQuery.data?.items ?? []}
+          />
         )}
         {statisticsQuery.isError && (
           <Button
@@ -521,58 +638,63 @@ export function SubscriptionPlansPage({
             {t('common.retry')}
           </Button>
         )}
-        <div className='flex items-center gap-2' role='status'>
-          <span>{t('subscriptionPlans.listStatus')}</span>
-          <DataStatusBadge status={listQuery.data?.data_status ?? 'pending'} />
-        </div>
-        <DataTable
-          ariaLabel={t('subscriptionPlans.table')}
-          columns={columns}
-          data={listQuery.data?.items ?? []}
-          emptyDescription={t('subscriptionPlans.emptyDescription')}
-          emptyTitle={t('subscriptionPlans.empty')}
-          error={!validSiteId || listQuery.isError}
-          fetching={listQuery.isFetching}
-          loading={listQuery.isPending}
-          onPageChange={(page) => onSearchChange({ page })}
-          onPageSizeChange={(pageSize) => onSearchChange({ page: 1, pageSize })}
-          onRetry={() => void listQuery.refetch()}
-          page={search.page}
-          pageSize={search.pageSize}
-          renderMobileCard={(item) => (
-            <article className='bg-card text-card-foreground ring-foreground/10 grid gap-3 rounded-xl p-4 ring-1'>
-              <div className='flex items-start justify-between gap-2'>
-                <div className='min-w-0'>
-                  <p className='font-medium'>{item.title}</p>
-                  <p className='text-muted-foreground text-xs'>
-                    {item.subtitle || '-'}
-                  </p>
-                  <p className='text-muted-foreground text-xs'>
-                    {item.site_name} · {item.site_id} · {item.remote_id}
-                  </p>
+        {listTab && (
+          <DataTable
+            ariaLabel={t('subscriptionPlans.table')}
+            columns={columns}
+            data={listQuery.data?.items ?? []}
+            emptyDescription={t('subscriptionPlans.emptyDescription')}
+            emptyTitle={t('subscriptionPlans.empty')}
+            error={!validSiteId || listQuery.isError}
+            fetching={listQuery.isFetching}
+            loading={listQuery.isPending}
+            onPageChange={(page) => onSearchChange({ page })}
+            onPageSizeChange={(pageSize) =>
+              onSearchChange({ page: 1, pageSize })
+            }
+            onRetry={() => void listQuery.refetch()}
+            page={search.page}
+            pageSize={search.pageSize}
+            renderMobileCard={(item) => (
+              <article className='bg-card text-card-foreground ring-foreground/10 grid gap-3 rounded-xl p-4 ring-1'>
+                <div className='flex items-start justify-between gap-2'>
+                  <div className='min-w-0'>
+                    <p className='font-medium'>{item.title}</p>
+                    <p className='text-muted-foreground text-xs'>
+                      {item.subtitle || '-'}
+                    </p>
+                    <p className='text-muted-foreground text-xs'>
+                      {item.site_name} · {item.site_id} · {item.remote_id}
+                    </p>
+                  </div>
+                  <EnabledBadge enabled={item.enabled} />
                 </div>
-                <EnabledBadge enabled={item.enabled} />
-              </div>
-              <strong>
-                {item.currency} {item.price_amount}
-              </strong>
-              <span>
-                {item.total_amount === '0'
-                  ? t('subscriptionPlans.unlimited')
-                  : t('subscriptionPlans.quotaValue', {
-                      value: item.total_amount,
-                    })}
-              </span>
-              <span>{durationText(item, t)}</span>
-              <span>{resetText(item, t)}</span>
-              <div className='flex flex-wrap gap-2'>
-                <StateBadge state={item.remote_state} />
-                <DataStatusBadge status={item.data_status} />
-              </div>
-            </article>
-          )}
-          total={listQuery.data?.total ?? 0}
-        />
+                <strong>
+                  {item.currency} {item.price_amount}
+                </strong>
+                <span>
+                  {item.total_amount === '0'
+                    ? t('subscriptionPlans.unlimited')
+                    : t('subscriptionPlans.quotaValue', {
+                        value: item.total_amount,
+                      })}
+                </span>
+                <span>{durationText(item, t)}</span>
+                <span>{resetText(item, t)}</span>
+                <div className='flex flex-wrap gap-2'>
+                  <StateBadge state={item.remote_state} />
+                  <DataStatusBadge status={item.data_status} />
+                </div>
+              </article>
+            )}
+            total={listQuery.data?.total ?? 0}
+          />
+        )}
+        {!listTab && (
+          <div className='min-h-0 flex-1 overflow-y-auto'>
+            {statistics && <SiteBreakdown items={statistics.site_breakdown} />}
+          </div>
+        )}
       </div>
       <ExportTaskSheet
         exportId={search.exportId}

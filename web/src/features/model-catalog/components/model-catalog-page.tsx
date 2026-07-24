@@ -1,14 +1,21 @@
-import { ArrowLeft01Icon, FileExportIcon } from '@hugeicons/core-free-icons'
+import {
+  Alert02Icon,
+  ArrowLeft01Icon,
+  Chart01Icon,
+  Database01Icon,
+  FileExportIcon,
+  Search01Icon,
+} from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import type { ColumnDef } from '@tanstack/react-table'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { DataStatusBadge } from '@/components/data/data-status'
-import { FilterPanel } from '@/components/data/filter-panel'
+import { FacetedFilter } from '@/components/data/faceted-filter'
 import { MetricValue } from '@/components/data/metric-value'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
@@ -17,6 +24,9 @@ import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { listSites } from '@/features/sites/api'
+import { siteKeys } from '@/features/sites/query-keys'
+import type { SiteListItem } from '@/features/sites/types'
 import { createStatisticsExport } from '@/features/statistics/api'
 import { ExportTaskSheet } from '@/features/statistics/components/export-task-sheet'
 import type {
@@ -42,30 +52,27 @@ import {
   listSiteMissingModels,
   listSiteModelCatalog,
 } from '../api'
+import {
+  getMissingModelEmptyState,
+  getModelCatalogEmptyState,
+} from '../empty-state'
 import { buildModelCatalogExportRequest } from '../export-request'
 import { modelCatalogKeys } from '../query-keys'
-import { buildModelCatalogSearch, type ModelCatalogSearch } from '../search'
+import {
+  buildModelCatalogQueryParams,
+  buildModelCatalogSearch,
+  changeModelCatalogTab,
+  hasMissingIncompatibleFilters,
+  type ModelCatalogSearch,
+} from '../search'
 import type {
   MissingModelItem,
   ModelBinaryState,
   ModelCatalogItem,
-  ModelCatalogQueryParams,
   ModelCoverageBreakdown,
   ModelCoverageMetric,
   ModelNameRule,
 } from '../types'
-
-function params(search: ModelCatalogSearch): ModelCatalogQueryParams {
-  return {
-    keyword: search.keyword || undefined,
-    p: search.page,
-    page_size: search.pageSize,
-    site_ids: search.siteIds,
-    statuses: search.statuses,
-    sync_official: search.syncOfficial,
-    vendor_id: search.vendorId,
-  }
-}
 
 function timestamp(value: number | null) {
   if (value == null || value <= 0) return '-'
@@ -98,131 +105,224 @@ function Filters({
   global,
   onChange,
   search,
+  sites,
 }: {
   global: boolean
   onChange: (changes: Partial<ModelCatalogSearch>) => void
   search: ModelCatalogSearch
+  sites: SiteListItem[]
 }) {
   const { t } = useTranslation()
   const reset = buildModelCatalogSearch({
     pageSize: search.pageSize,
     tab: search.tab,
   })
-  const choices = (key: 'statuses' | 'syncOfficial', label: string) => (
-    <fieldset className='grid gap-1'>
-      <legend className='text-sm'>{label}</legend>
-      <div className='flex gap-2'>
-        {([0, 1] as const).map((value) => {
-          const active = search[key].includes(value)
-          return (
-            <Button
-              aria-pressed={active}
-              key={value}
-              onClick={() =>
-                onChange({
-                  [key]: active
-                    ? search[key].filter((item) => item !== value)
-                    : [...search[key], value],
-                  page: 1,
-                })
-              }
-              size='sm'
-              type='button'
-              variant={active ? 'secondary' : 'outline'}
-            >
-              {binaryText(value, t)}
-            </Button>
-          )
-        })}
-      </div>
-    </fieldset>
-  )
+  const supportsCatalogFilters = search.tab !== 'missing'
+  const hasActiveFilters = hasFilterChanges(search, reset, [
+    'keyword',
+    'siteIds',
+    ...(supportsCatalogFilters
+      ? (['statuses', 'syncOfficial', 'vendorId'] as const)
+      : []),
+  ])
+  const binaryOptions = ([0, 1] as const).map((value) => ({
+    label: binaryText(value, t),
+    value: String(value),
+  }))
+  const binaryValue = (values: ModelBinaryState[]) =>
+    values.length === 1 ? String(values[0]) : ''
+  const updateBinary = (key: 'statuses' | 'syncOfficial', value: string) =>
+    onChange({
+      [key]: value === '0' || value === '1' ? [Number(value)] : [],
+      page: 1,
+    })
   return (
-    <FilterPanel
-      description={t('modelCatalog.filters.description')}
-      hasActiveFilters={hasFilterChanges(search, reset, [
-        'keyword',
-        'siteIds',
-        'statuses',
-        'syncOfficial',
-        'vendorId',
-      ])}
-      onReset={() => onChange(reset)}
-      title={t('modelCatalog.filters.title')}
+    <section
+      aria-label={t('modelCatalog.filters.title')}
+      className='flex min-w-0 flex-wrap items-center gap-2'
     >
-      <div className='grid min-w-0 flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-4'>
-        <label className='grid gap-1 text-sm'>
-          <span>{t('modelCatalog.filters.keyword')}</span>
-          <Input
-            onChange={(event) =>
-              onChange({ keyword: event.target.value, page: 1 })
-            }
-            value={search.keyword}
+      <label className='relative min-w-48 flex-1 sm:max-w-72'>
+        <span className='sr-only'>{t('modelCatalog.filters.keyword')}</span>
+        <HugeiconsIcon
+          className='text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2'
+          icon={Search01Icon}
+          size={15}
+          strokeWidth={2}
+        />
+        <Input
+          aria-label={t('modelCatalog.filters.keyword')}
+          className='h-8 pl-8'
+          onChange={(event) =>
+            onChange({ keyword: event.target.value, page: 1 })
+          }
+          placeholder={t('modelCatalog.filters.keywordPlaceholder')}
+          value={search.keyword}
+        />
+      </label>
+      {global && (
+        <FacetedFilter
+          clearLabel={t('modelCatalog.filters.allSites')}
+          onChange={(value) =>
+            onChange({
+              page: 1,
+              siteIds: isIdString(value) ? [parseIdString(value)] : [],
+            })
+          }
+          options={sites.map((site) => ({
+            label: site.name,
+            value: site.id,
+          }))}
+          title={t('modelCatalog.filters.site')}
+          value={search.siteIds.length === 1 ? search.siteIds[0] : ''}
+        />
+      )}
+      {supportsCatalogFilters && (
+        <>
+          <FacetedFilter
+            clearLabel={t('modelCatalog.filters.allStatuses')}
+            onChange={(value) => updateBinary('statuses', value)}
+            options={binaryOptions}
+            title={t('modelCatalog.filters.statuses')}
+            value={binaryValue(search.statuses)}
           />
-        </label>
-        {global && (
-          <label className='grid gap-1 text-sm'>
-            <span>{t('modelCatalog.filters.siteIds')}</span>
+          <FacetedFilter
+            clearLabel={t('modelCatalog.filters.allSyncStates')}
+            onChange={(value) => updateBinary('syncOfficial', value)}
+            options={binaryOptions}
+            title={t('modelCatalog.filters.syncOfficial')}
+            value={binaryValue(search.syncOfficial)}
+          />
+          <label>
+            <span className='sr-only'>
+              {t('modelCatalog.filters.vendorId')}
+            </span>
             <Input
+              aria-label={t('modelCatalog.filters.vendorId')}
+              className='h-8 w-32'
               inputMode='numeric'
-              onChange={(event) =>
+              onChange={(event) => {
+                const value = event.target.value
                 onChange({
                   page: 1,
-                  siteIds: event.target.value
-                    .split(',')
-                    .map((value) => value.trim())
-                    .filter(isIdString)
-                    .map(parseIdString),
+                  vendorId: isNonNegativeIdString(value)
+                    ? parseNonNegativeIdString(value)
+                    : undefined,
                 })
-              }
-              value={search.siteIds.join(',')}
+              }}
+              placeholder={t('modelCatalog.filters.vendorId')}
+              value={search.vendorId ?? ''}
             />
           </label>
-        )}
-        <label className='grid gap-1 text-sm'>
-          <span>{t('modelCatalog.filters.vendorId')}</span>
-          <Input
-            inputMode='numeric'
-            onChange={(event) => {
-              const value = event.target.value
-              onChange({
-                page: 1,
-                vendorId: isNonNegativeIdString(value)
-                  ? parseNonNegativeIdString(value)
-                  : undefined,
-              })
-            }}
-            value={search.vendorId ?? ''}
-          />
-        </label>
-      </div>
-      <div className='grid min-w-0 flex-1 gap-3 sm:grid-cols-2'>
-        {choices('statuses', t('modelCatalog.filters.statuses'))}
-        {choices('syncOfficial', t('modelCatalog.filters.syncOfficial'))}
-      </div>
-    </FilterPanel>
+        </>
+      )}
+      {hasActiveFilters && (
+        <Button
+          className='text-muted-foreground px-2'
+          onClick={() => onChange(reset)}
+          size='sm'
+          type='button'
+          variant='ghost'
+        >
+          {t('common.reset')}
+        </Button>
+      )}
+    </section>
   )
 }
 
-function CoverageGrid({ metric }: { metric: ModelCoverageMetric }) {
+function CoverageGrid({
+  metric,
+  missingValue,
+}: {
+  metric?: ModelCoverageMetric
+  missingValue?: ModelCoverageMetric['exact_missing_models']
+}) {
   const { t } = useTranslation()
   const values = [
-    [t('modelCatalog.metric.catalog'), metric.catalog_models],
-    [t('modelCatalog.metric.covered'), metric.exact_covered_models],
-    [t('modelCatalog.metric.missing'), metric.exact_missing_models],
-    [t('modelCatalog.metric.mappings'), metric.channel_mappings],
+    {
+      icon: Database01Icon,
+      label: t('modelCatalog.metric.catalog'),
+      value: metric?.catalog_models,
+    },
+    {
+      icon: Chart01Icon,
+      label: t('modelCatalog.metric.covered'),
+      value: metric?.exact_covered_models,
+    },
+    {
+      icon: Alert02Icon,
+      label: t('modelCatalog.metric.missing'),
+      value: missingValue,
+    },
+    {
+      icon: Chart01Icon,
+      label: t('modelCatalog.metric.mappings'),
+      value: metric?.channel_mappings,
+    },
   ] as const
   return (
-    <dl className='border-border grid overflow-hidden rounded-lg border sm:grid-cols-2 xl:grid-cols-4'>
-      {values.map(([label, value]) => (
-        <div className='border-border p-4 sm:border-r' key={label}>
-          <dt className='text-muted-foreground text-xs'>{label}</dt>
-          <dd className='mt-1 text-xl font-semibold'>
-            <MetricValue value={value} />
-          </dd>
+    <dl className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
+      {values.map(({ icon, label, value }) => (
+        <div
+          className='bg-card text-card-foreground ring-foreground/10 flex items-center gap-3 rounded-xl p-4 ring-1'
+          key={label}
+        >
+          <span className='bg-muted text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-lg'>
+            <HugeiconsIcon icon={icon} size={18} strokeWidth={2} />
+          </span>
+          <div className='min-w-0'>
+            <dt className='text-muted-foreground truncate text-xs'>{label}</dt>
+            <dd className='mt-0.5 text-2xl font-semibold tracking-tight'>
+              {value == null ? '-' : <MetricValue value={value} />}
+            </dd>
+          </div>
         </div>
       ))}
     </dl>
+  )
+}
+
+function TabPurpose({
+  status,
+  tab,
+}: {
+  status?: ModelCoverageBreakdown['data_status']
+  tab: ModelCatalogSearch['tab']
+}) {
+  const { t } = useTranslation()
+  let content = {
+    description: t('modelCatalog.purpose.catalogDescription'),
+    icon: Database01Icon,
+    title: t('modelCatalog.purpose.catalogTitle'),
+  }
+  if (tab === 'coverage') {
+    content = {
+      description: t('modelCatalog.purpose.coverageDescription'),
+      icon: Chart01Icon,
+      title: t('modelCatalog.purpose.coverageTitle'),
+    }
+  } else if (tab === 'missing') {
+    content = {
+      description: t('modelCatalog.purpose.missingDescription'),
+      icon: Alert02Icon,
+      title: t('modelCatalog.purpose.missingTitle'),
+    }
+  }
+  return (
+    <section className='border-border bg-muted/30 flex items-start gap-3 rounded-xl border p-4'>
+      <span className='bg-background text-muted-foreground ring-foreground/10 flex size-9 shrink-0 items-center justify-center rounded-lg ring-1'>
+        <HugeiconsIcon icon={content.icon} size={18} strokeWidth={2} />
+      </span>
+      <div className='min-w-0 flex-1'>
+        <div className='flex flex-wrap items-center gap-2'>
+          <h2 className='font-medium'>{content.title}</h2>
+          {status && <DataStatusBadge status={status} />}
+        </div>
+        <p className='text-muted-foreground mt-1 text-sm'>
+          {content.description}
+        </p>
+      </div>
+    </section>
   )
 }
 
@@ -235,7 +335,7 @@ function CoverageBreakdown({
 }) {
   const { t } = useTranslation()
   return (
-    <section className='grid gap-3'>
+    <section className='grid min-w-0 content-start gap-3'>
       <h3 className='font-semibold'>{title}</h3>
       {items.length === 0 ? (
         <p className='text-muted-foreground text-sm'>{t('common.none')}</p>
@@ -290,8 +390,50 @@ export function ModelCatalogPage({
 }) {
   const { t } = useTranslation()
   const [initialJob, setInitialJob] = useState<StatisticsExportJobItem>()
+  const canonicalizedSearch = useRef(false)
   const validSiteId = siteId == null || isIdString(siteId)
-  const currentParams = useMemo(() => params(search), [search])
+  const currentParams = useMemo(
+    () => buildModelCatalogQueryParams(search),
+    [search]
+  )
+  const coverageParams = useMemo(
+    () => buildModelCatalogQueryParams(buildModelCatalogSearch({}), 'coverage'),
+    []
+  )
+  const hasAnyViewFilter =
+    search.keyword !== '' ||
+    search.siteIds.length > 0 ||
+    hasMissingIncompatibleFilters(search)
+  const hasCoverageIncompatibleState =
+    hasAnyViewFilter || search.page !== 1 || search.pageSize !== 20
+  useEffect(() => {
+    if (search.tab === 'coverage' && hasCoverageIncompatibleState) {
+      onSearchChange(changeModelCatalogTab('coverage'))
+    } else if (
+      search.tab === 'missing' &&
+      hasMissingIncompatibleFilters(search)
+    ) {
+      onSearchChange(changeModelCatalogTab('missing'))
+    } else if (!canonicalizedSearch.current) {
+      canonicalizedSearch.current = true
+      onSearchChange({})
+    }
+  }, [hasCoverageIncompatibleState, onSearchChange, search])
+  const siteParams = useMemo(
+    () => ({
+      p: 1,
+      page_size: 100,
+      sort_by: 'name',
+      sort_order: 'asc' as const,
+    }),
+    []
+  )
+  const sitesQuery = useQuery({
+    enabled: siteId == null,
+    queryFn: () => listSites(siteParams),
+    queryKey: siteKeys.list(siteParams),
+    staleTime: 5 * 60_000,
+  })
   const catalogQuery = useQuery({
     enabled: validSiteId && search.tab === 'catalog',
     placeholderData: keepPreviousData,
@@ -305,16 +447,16 @@ export function ModelCatalogPage({
         : modelCatalogKeys.global('catalog', currentParams),
   })
   const coverageQuery = useQuery({
-    enabled: validSiteId && search.tab === 'coverage',
+    enabled: validSiteId,
     placeholderData: keepPreviousData,
     queryFn: () =>
       siteId && isIdString(siteId)
-        ? getSiteModelCoverage(parseIdString(siteId), currentParams)
-        : getModelCoverage(currentParams),
+        ? getSiteModelCoverage(parseIdString(siteId), coverageParams)
+        : getModelCoverage(coverageParams),
     queryKey:
       siteId && isIdString(siteId)
-        ? modelCatalogKeys.site(siteId, 'coverage', currentParams)
-        : modelCatalogKeys.global('coverage', currentParams),
+        ? modelCatalogKeys.site(siteId, 'coverage', coverageParams)
+        : modelCatalogKeys.global('coverage', coverageParams),
   })
   const missingQuery = useQuery({
     enabled: validSiteId && search.tab === 'missing',
@@ -348,29 +490,70 @@ export function ModelCatalogPage({
     () => [
       {
         cell: ({ row }) => (
-          <div className='min-w-44'>
-            <span className='font-medium'>{row.original.model_name}</span>
-            <span className='text-muted-foreground block text-xs'>
-              {row.original.site_name} · {row.original.site_id}
-            </span>
-            <code className='text-muted-foreground block text-xs'>
-              {row.original.remote_id}
-            </code>
+          <div className='max-w-96 min-w-56'>
+            <p className='font-mono font-medium break-all'>
+              {row.original.model_name}
+            </p>
+            <p className='text-muted-foreground mt-1 line-clamp-2 text-xs'>
+              {row.original.description || '-'}
+            </p>
           </div>
         ),
-        header: t('modelCatalog.identity'),
-        id: 'identity',
+        header: t('modelCatalog.model'),
+        id: 'model',
       },
       {
         cell: ({ row }) => (
-          <div className='grid min-w-52 gap-1 text-xs'>
-            <span className='whitespace-pre-wrap'>
-              {row.original.description || '-'}
+          <div className='grid min-w-36 gap-0.5 text-xs'>
+            <span className='font-medium'>{row.original.site_name}</span>
+            <span className='text-muted-foreground'>
+              {t('modelCatalog.siteIdValue', { value: row.original.site_id })}
             </span>
-            <code className='border-border bg-muted/50 rounded border p-1.5 break-all'>
+            <span className='text-muted-foreground'>
+              {t('modelCatalog.remoteIdValue', {
+                value: row.original.remote_id,
+              })}
+            </span>
+          </div>
+        ),
+        header: t('modelCatalog.siteIdentity'),
+        id: 'siteIdentity',
+      },
+      {
+        cell: ({ row }) => (
+          <div className='flex min-w-28 flex-wrap gap-1'>
+            <BinaryBadge value={row.original.status} />
+            <Badge
+              variant={row.original.sync_official === 1 ? 'success' : 'neutral'}
+            >
+              {row.original.sync_official === 1
+                ? t('modelCatalog.sync.official')
+                : t('modelCatalog.sync.manual')}
+            </Badge>
+          </div>
+        ),
+        header: t('modelCatalog.state'),
+        id: 'state',
+      },
+      {
+        cell: ({ row }) => (
+          <div className='grid min-w-40 gap-1 text-xs'>
+            <div className='flex flex-wrap gap-1'>
+              <Badge variant='outline'>
+                {t('modelCatalog.vendorValue', {
+                  value: row.original.vendor_id,
+                })}
+              </Badge>
+              <Badge variant='outline'>
+                {ruleText(row.original.name_rule, t)}
+              </Badge>
+            </div>
+            <span className='text-muted-foreground line-clamp-1'>
+              {row.original.tags || '-'}
+            </span>
+            <code className='text-muted-foreground line-clamp-1 break-all'>
               {row.original.icon || '-'}
             </code>
-            <span>{row.original.tags || '-'}</span>
           </div>
         ),
         header: t('modelCatalog.metadata'),
@@ -379,25 +562,7 @@ export function ModelCatalogPage({
       {
         cell: ({ row }) => (
           <div className='grid min-w-32 gap-1 text-xs'>
-            <span>
-              {t('modelCatalog.vendorValue', { value: row.original.vendor_id })}
-            </span>
-            <BinaryBadge value={row.original.status} />
-            <span>
-              {t('modelCatalog.syncValue', {
-                value: binaryText(row.original.sync_official, t),
-              })}
-            </span>
-            <span>{ruleText(row.original.name_rule, t)}</span>
-          </div>
-        ),
-        header: t('modelCatalog.policy'),
-        id: 'policy',
-      },
-      {
-        cell: ({ row }) => (
-          <div className='grid min-w-36 gap-1 text-xs'>
-            <span>
+            <span className='font-medium'>
               {t('modelCatalog.channelsValue', {
                 value: row.original.covered_channels,
               })}
@@ -415,13 +580,17 @@ export function ModelCatalogPage({
       },
       {
         cell: ({ row }) => (
-          <div className='grid min-w-40 gap-1 text-xs'>
-            <span>{timestamp(row.original.created_time)}</span>
+          <div className='grid min-w-36 gap-1 text-xs'>
             <span>{timestamp(row.original.updated_time)}</span>
+            <span className='text-muted-foreground'>
+              {t('modelCatalog.createdValue', {
+                value: timestamp(row.original.created_time),
+              })}
+            </span>
           </div>
         ),
-        header: t('modelCatalog.timestamps'),
-        id: 'timestamps',
+        header: t('modelCatalog.updatedAt'),
+        id: 'updatedAt',
       },
     ],
     [t]
@@ -462,10 +631,40 @@ export function ModelCatalogPage({
     [t]
   )
   const tabs = [
-    ['catalog', t('modelCatalog.tabs.catalog')],
-    ['coverage', t('modelCatalog.tabs.coverage')],
-    ['missing', t('modelCatalog.tabs.missing')],
+    {
+      count: coverageQuery.data?.catalog_models,
+      icon: Database01Icon,
+      label: t('modelCatalog.tabs.catalog'),
+      value: 'catalog',
+    },
+    {
+      count: coverageQuery.data?.exact_covered_models,
+      icon: Chart01Icon,
+      label: t('modelCatalog.tabs.coverage'),
+      value: 'coverage',
+    },
+    {
+      count: coverageQuery.data?.exact_missing_models,
+      icon: Alert02Icon,
+      label: t('modelCatalog.tabs.missing'),
+      value: 'missing',
+    },
   ] as const
+  const catalogEmptyState = getModelCatalogEmptyState(
+    catalogQuery.data?.data_status,
+    search
+  )
+  const missingEmptyState = getMissingModelEmptyState(
+    missingQuery.data?.data_status,
+    search
+  )
+  let activeDataStatus = coverageQuery.data?.data_status
+  if (search.tab === 'catalog') {
+    activeDataStatus = catalogQuery.data?.data_status
+  }
+  if (search.tab === 'missing') {
+    activeDataStatus = missingQuery.data?.data_status
+  }
   return (
     <SectionPageLayout
       actions={(['xlsx', 'csv'] as const).map((format) => (
@@ -484,9 +683,10 @@ export function ModelCatalogPage({
           ? t('modelCatalog.siteDescription', { id: siteId })
           : t('modelCatalog.description')
       }
+      fixedContent
       title={siteId ? t('modelCatalog.siteTitle') : t('modelCatalog.title')}
     >
-      <div className='grid min-w-0 gap-6'>
+      <div className='flex h-full min-h-0 min-w-0 flex-col gap-4'>
         {siteId && (
           <DetailBackLink
             render={<Link params={{ siteId }} to='/sites/$siteId' />}
@@ -495,21 +695,15 @@ export function ModelCatalogPage({
             {t('modelCatalog.backToSite')}
           </DetailBackLink>
         )}
-        <section
-          className='border-primary/30 bg-primary/5 rounded-lg border p-4'
-          role='note'
-        >
-          <p className='font-medium'>{t('modelCatalog.boundary.title')}</p>
-          <p className='text-muted-foreground mt-1 text-sm'>
-            {t('modelCatalog.boundary.description')}
-          </p>
-        </section>
+        <CoverageGrid
+          metric={coverageQuery.data}
+          missingValue={coverageQuery.data?.exact_missing_models}
+        />
         <Tabs
           onValueChange={(tab) =>
-            onSearchChange({
-              page: 1,
-              tab: tab as ModelCatalogSearch['tab'],
-            })
+            onSearchChange(
+              changeModelCatalogTab(tab as ModelCatalogSearch['tab'])
+            )
           }
           value={search.tab}
         >
@@ -517,21 +711,39 @@ export function ModelCatalogPage({
             aria-label={t('modelCatalog.tabs.label')}
             className='max-w-full flex-wrap justify-start group-data-horizontal/tabs:h-auto'
           >
-            {tabs.map(([tab, label]) => (
-              <TabsTrigger key={tab} value={tab}>
-                {label}
+            {tabs.map((tab) => (
+              <TabsTrigger key={tab.value} value={tab.value}>
+                <HugeiconsIcon icon={tab.icon} size={15} strokeWidth={2} />
+                {tab.label}
+                {tab.count != null && (
+                  <Badge className='px-1.5 font-mono' variant='secondary'>
+                    {tab.count}
+                  </Badge>
+                )}
               </TabsTrigger>
             ))}
           </TabsList>
         </Tabs>
-        <Filters global={!siteId} onChange={onSearchChange} search={search} />
+        <TabPurpose status={activeDataStatus} tab={search.tab} />
+        {search.tab !== 'coverage' && (
+          <Filters
+            global={!siteId}
+            onChange={onSearchChange}
+            search={search}
+            sites={sitesQuery.data?.items ?? []}
+          />
+        )}
         {search.tab === 'catalog' && (
           <DataTable
             ariaLabel={t('modelCatalog.table')}
             columns={catalogColumns}
             data={catalogQuery.data?.items ?? []}
-            emptyDescription={t('modelCatalog.emptyDescription')}
-            emptyTitle={t('modelCatalog.empty')}
+            emptyDescription={t(
+              dynamicI18nKey('modelCatalog', catalogEmptyState.descriptionKey)
+            )}
+            emptyTitle={t(
+              dynamicI18nKey('modelCatalog', catalogEmptyState.titleKey)
+            )}
             error={!validSiteId || catalogQuery.isError}
             fetching={catalogQuery.isFetching}
             loading={catalogQuery.isPending}
@@ -588,81 +800,80 @@ export function ModelCatalogPage({
             total={catalogQuery.data?.total ?? 0}
           />
         )}
-        {search.tab === 'coverage' && coverageQuery.data && (
-          <div className='grid gap-6'>
-            <div className='flex items-center gap-2' role='status'>
-              <span>{t('modelCatalog.coverageStatus')}</span>
-              <DataStatusBadge status={coverageQuery.data.data_status} />
-            </div>
-            <CoverageGrid metric={coverageQuery.data} />
-            <div className='grid gap-6 xl:grid-cols-3'>
-              <CoverageBreakdown
-                items={coverageQuery.data.site_breakdown}
-                title={t('modelCatalog.breakdown.site')}
+        {search.tab === 'coverage' && (
+          <div className='min-h-0 flex-1 overflow-y-auto'>
+            {coverageQuery.isPending && (
+              <div
+                aria-hidden='true'
+                className='border-border bg-muted/40 h-64 animate-pulse rounded-xl border'
               />
-              <CoverageBreakdown
-                items={coverageQuery.data.vendor_breakdown}
-                title={t('modelCatalog.breakdown.vendor')}
-              />
-              <CoverageBreakdown
-                items={coverageQuery.data.status_breakdown}
-                title={t('modelCatalog.breakdown.status')}
-              />
-            </div>
+            )}
+            {coverageQuery.data && (
+              <div className='grid gap-4 xl:grid-cols-3'>
+                <CoverageBreakdown
+                  items={coverageQuery.data.site_breakdown}
+                  title={t('modelCatalog.breakdown.site')}
+                />
+                <CoverageBreakdown
+                  items={coverageQuery.data.vendor_breakdown}
+                  title={t('modelCatalog.breakdown.vendor')}
+                />
+                <CoverageBreakdown
+                  items={coverageQuery.data.status_breakdown}
+                  title={t('modelCatalog.breakdown.status')}
+                />
+              </div>
+            )}
+            {coverageQuery.isError && (
+              <Button
+                onClick={() => void coverageQuery.refetch()}
+                variant='outline'
+              >
+                {t('common.retry')}
+              </Button>
+            )}
           </div>
-        )}
-        {search.tab === 'coverage' && coverageQuery.isError && (
-          <Button
-            onClick={() => void coverageQuery.refetch()}
-            variant='outline'
-          >
-            {t('common.retry')}
-          </Button>
         )}
         {search.tab === 'missing' && (
-          <div className='grid gap-4'>
-            <section
-              className='border-warning/30 bg-warning/5 rounded-lg border p-4'
-              role='note'
-            >
-              {t('modelCatalog.exactBoundary')}
-            </section>
-            <DataTable
-              ariaLabel={t('modelCatalog.missingTable')}
-              columns={missingColumns}
-              data={missingQuery.data?.items ?? []}
-              emptyDescription={t('modelCatalog.missingEmptyDescription')}
-              emptyTitle={t('modelCatalog.missingEmpty')}
-              error={!validSiteId || missingQuery.isError}
-              fetching={missingQuery.isFetching}
-              loading={missingQuery.isPending}
-              onPageChange={(page) => onSearchChange({ page })}
-              onPageSizeChange={(pageSize) =>
-                onSearchChange({ page: 1, pageSize })
-              }
-              onRetry={() => void missingQuery.refetch()}
-              page={search.page}
-              pageSize={search.pageSize}
-              renderMobileCard={(item) => (
-                <article className='bg-card text-card-foreground ring-foreground/10 grid gap-2 rounded-xl p-4 ring-1'>
-                  <div className='flex items-start justify-between gap-2'>
-                    <p className='font-medium'>{item.model_name}</p>
-                    <DataStatusBadge status={item.data_status} />
-                  </div>
-                  <p className='text-muted-foreground text-xs'>
-                    {item.site_name} · {item.site_id}
-                  </p>
-                  <p className='text-sm'>
-                    {item.channel_name || '-'} · {item.remote_channel_id}
-                  </p>
-                  <p className='text-sm'>
-                    {t('modelCatalog.groupValue', { value: item.group || '-' })}
-                  </p>
-                </article>
-              )}
-              total={missingQuery.data?.total ?? 0}
-            />
-          </div>
+          <DataTable
+            ariaLabel={t('modelCatalog.missingTable')}
+            columns={missingColumns}
+            data={missingQuery.data?.items ?? []}
+            emptyDescription={t(
+              dynamicI18nKey('modelCatalog', missingEmptyState.descriptionKey)
+            )}
+            emptyTitle={t(
+              dynamicI18nKey('modelCatalog', missingEmptyState.titleKey)
+            )}
+            error={!validSiteId || missingQuery.isError}
+            fetching={missingQuery.isFetching}
+            loading={missingQuery.isPending}
+            onPageChange={(page) => onSearchChange({ page })}
+            onPageSizeChange={(pageSize) =>
+              onSearchChange({ page: 1, pageSize })
+            }
+            onRetry={() => void missingQuery.refetch()}
+            page={search.page}
+            pageSize={search.pageSize}
+            renderMobileCard={(item) => (
+              <article className='bg-card text-card-foreground ring-foreground/10 grid gap-2 rounded-xl p-4 ring-1'>
+                <div className='flex items-start justify-between gap-2'>
+                  <p className='font-medium'>{item.model_name}</p>
+                  <DataStatusBadge status={item.data_status} />
+                </div>
+                <p className='text-muted-foreground text-xs'>
+                  {item.site_name} · {item.site_id}
+                </p>
+                <p className='text-sm'>
+                  {item.channel_name || '-'} · {item.remote_channel_id}
+                </p>
+                <p className='text-sm'>
+                  {t('modelCatalog.groupValue', { value: item.group || '-' })}
+                </p>
+              </article>
+            )}
+            total={missingQuery.data?.total ?? 0}
+          />
         )}
       </div>
       <ExportTaskSheet

@@ -2,7 +2,12 @@ import { describe, expect, test } from 'bun:test'
 
 import { parseIdString } from '@/lib/api-types'
 
-import { buildSubscriptionPlanSearch } from './search'
+import { subscriptionPlanSearchSchema } from './schema'
+import {
+  buildSubscriptionPlanSearch,
+  changeSubscriptionPlanTab,
+  serializeSubscriptionPlanSearch,
+} from './search'
 
 describe('subscription plan URL search', () => {
   test('preserves bigint sites, enabled false, safe keyword and states', () => {
@@ -24,6 +29,7 @@ describe('subscription plan URL search', () => {
     expect(search.states).toEqual(['missing', 'normal'])
     expect(search.page).toBe(3)
     expect(search.pageSize).toBe(50)
+    expect(search.tab).toBe('plans')
   })
 
   test('fails closed for invalid ids, states, pagination and long keyword', () => {
@@ -40,5 +46,54 @@ describe('subscription plan URL search', () => {
     expect(search.pageSize).toBe(20)
     expect(search.siteIds).toEqual([])
     expect(search.states).toEqual([])
+  })
+
+  test('keeps the default route URL empty', () => {
+    expect(subscriptionPlanSearchSchema.parse({})).toEqual({})
+    expect(
+      serializeSubscriptionPlanSearch(buildSubscriptionPlanSearch({}))
+    ).toEqual({
+      enabled: undefined,
+      exportId: undefined,
+      keyword: undefined,
+      page: undefined,
+      pageSize: undefined,
+      siteIds: undefined,
+      states: undefined,
+      tab: undefined,
+    })
+  })
+
+  test('keeps site analysis filter-free and serializes only the tab', () => {
+    expect(changeSubscriptionPlanTab('site-analysis')).toMatchObject({
+      enabled: undefined,
+      keyword: '',
+      page: 1,
+      pageSize: 20,
+      siteIds: [],
+      states: [],
+      tab: 'site-analysis',
+    })
+    expect(
+      serializeSubscriptionPlanSearch(
+        buildSubscriptionPlanSearch({
+          enabled: false,
+          keyword: 'plan',
+          page: 3,
+          siteIds: ['1'],
+          states: ['missing'],
+          tab: 'site-analysis',
+        })
+      )
+    ).toEqual({
+      enabled: undefined,
+      exportId: undefined,
+      keyword: undefined,
+      page: undefined,
+      pageSize: undefined,
+      siteIds: undefined,
+      states: undefined,
+      tab: 'site-analysis',
+    })
   })
 })

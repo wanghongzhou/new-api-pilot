@@ -65,7 +65,7 @@ describe('alert event target text', () => {
   })
 })
 
-test('keeps event filters flat and summary inside a rounded capsule', async () => {
+test('keeps event filters flat and summary in shared metric cards', async () => {
   const [filters, page] = await Promise.all([
     readFile(new URL('./alert-filters.tsx', import.meta.url), 'utf8'),
     readFile(new URL('./alerts-page.tsx', import.meta.url), 'utf8'),
@@ -82,14 +82,15 @@ test('keeps event filters flat and summary inside a rounded capsule', async () =
   )
   expect(picker).toContain("'alerts.filters.thisWeek'")
   expect(picker).toContain("'alerts.filters.thisMonth'")
-  expect(page).toContain("className='bg-card border-border rounded-2xl")
+  expect(page).toContain("className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'")
   expect(page).toContain('items-center justify-between gap-2')
+  expect(page).toContain("search.tab === 'events' && summaryQuery.data")
   expect(page).toContain('summaryQuery.data.updated_at')
-  expect(page).toContain('items-center justify-center px-4 py-4 text-center')
+  expect(page).toContain('rounded-xl p-4 ring-1')
   expect(page).toContain('Activity03Icon')
   expect(page).toContain('AlertCircleIcon')
   expect(page).toContain('CheckmarkCircle02Icon')
-  expect(page).toContain('sm:text-3xl')
+  expect(page).toContain('text-2xl leading-none font-semibold')
   expect(page).toContain("id: 'site_name'")
   expect(page).toContain("id: 'level'")
   expect(page).toContain("id: 'last_fired_at'")

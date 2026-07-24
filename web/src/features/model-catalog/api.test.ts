@@ -38,7 +38,7 @@ function response(config: Parameters<AxiosAdapter>[0]) {
 }
 
 describe('model catalog API contract', () => {
-  test('serializes all frozen global filters for all three routes', async () => {
+  test('serializes only the filters supported by each route', async () => {
     const requests: Parameters<AxiosAdapter>[0][] = []
     api.defaults.adapter = (async (config) => {
       requests.push(config)
@@ -61,7 +61,7 @@ describe('model catalog API contract', () => {
       '/api/model-catalog/coverage',
       '/api/model-catalog/missing',
     ])
-    for (const request of requests) {
+    for (const request of requests.slice(0, 2)) {
       const params = request.params as URLSearchParams
       expect(params.getAll('site_ids')).toEqual(['9007199254740993'])
       expect(params.getAll('statuses')).toEqual(['0', '1'])
@@ -69,6 +69,12 @@ describe('model catalog API contract', () => {
       expect(params.get('vendor_id')).toBe('0')
       expect(params.get('keyword')).toBe('safe-model')
     }
+    const missingParams = requests[2]?.params as URLSearchParams
+    expect(missingParams.getAll('site_ids')).toEqual(['9007199254740993'])
+    expect(missingParams.get('keyword')).toBe('safe-model')
+    expect(missingParams.has('statuses')).toBe(false)
+    expect(missingParams.has('sync_official')).toBe(false)
+    expect(missingParams.has('vendor_id')).toBe(false)
   })
 
   test('uses forced site routes and strips site ids', async () => {

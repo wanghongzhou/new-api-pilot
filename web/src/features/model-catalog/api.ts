@@ -16,14 +16,19 @@ function appendValues(
   for (const value of values ?? []) params.append(key, String(value))
 }
 
-function catalogParams(values: ModelCatalogQueryParams) {
+function catalogParams(
+  values: ModelCatalogQueryParams,
+  suffix: '' | '/coverage' | '/missing'
+) {
   const params = new URLSearchParams()
   params.set('p', String(values.p))
   params.set('page_size', String(values.page_size))
   appendValues(params, 'site_ids', values.site_ids)
-  appendValues(params, 'statuses', values.statuses)
-  appendValues(params, 'sync_official', values.sync_official)
-  if (values.vendor_id != null) params.set('vendor_id', values.vendor_id)
+  if (suffix !== '/missing') {
+    appendValues(params, 'statuses', values.statuses)
+    appendValues(params, 'sync_official', values.sync_official)
+    if (values.vendor_id != null) params.set('vendor_id', values.vendor_id)
+  }
   if (values.keyword) params.set('keyword', values.keyword)
   return params
 }
@@ -35,10 +40,13 @@ function requestCatalog<T>(
 ) {
   return requestApiData<T>({
     method: 'get',
-    params: catalogParams({
-      ...values,
-      site_ids: siteId ? undefined : values.site_ids,
-    }),
+    params: catalogParams(
+      {
+        ...values,
+        site_ids: siteId ? undefined : values.site_ids,
+      },
+      suffix
+    ),
     url: siteId
       ? `/api/sites/${siteId}/model-catalog${suffix}`
       : `/api/model-catalog${suffix}`,

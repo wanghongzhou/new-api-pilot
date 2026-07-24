@@ -2,7 +2,12 @@ import { describe, expect, test } from 'bun:test'
 
 import { parseIdString } from '@/lib/api-types'
 
-import { buildPricingGroupSearch } from './search'
+import { pricingGroupSearchSchema } from './schema'
+import {
+  buildPricingGroupSearch,
+  changePricingGroupTab,
+  serializePricingGroupSearch,
+} from './search'
 
 describe('pricing/group URL search', () => {
   test('preserves bigint sites and normalizes tab, text and states', () => {
@@ -43,6 +48,54 @@ describe('pricing/group URL search', () => {
       siteIds: [],
       states: [],
       tab: 'pricing',
+    })
+  })
+
+  test('keeps the default route URL empty', () => {
+    expect(pricingGroupSearchSchema.parse({})).toEqual({})
+    expect(serializePricingGroupSearch(buildPricingGroupSearch({}))).toEqual({
+      exportId: undefined,
+      group: undefined,
+      keyword: undefined,
+      page: undefined,
+      pageSize: undefined,
+      siteIds: undefined,
+      states: undefined,
+      tab: undefined,
+    })
+  })
+
+  test('keeps analysis tabs filter-free and serializes only the tab', () => {
+    const changes = changePricingGroupTab('vendor-analysis')
+    expect(changes).toMatchObject({
+      group: '',
+      keyword: '',
+      page: 1,
+      pageSize: 20,
+      siteIds: [],
+      states: [],
+      tab: 'vendor-analysis',
+    })
+    expect(
+      serializePricingGroupSearch(
+        buildPricingGroupSearch({
+          group: 'vip',
+          keyword: 'gpt',
+          page: 3,
+          siteIds: ['1'],
+          states: ['missing'],
+          tab: 'vendor-analysis',
+        })
+      )
+    ).toEqual({
+      exportId: undefined,
+      group: undefined,
+      keyword: undefined,
+      page: undefined,
+      pageSize: undefined,
+      siteIds: undefined,
+      states: undefined,
+      tab: 'vendor-analysis',
     })
   })
 })

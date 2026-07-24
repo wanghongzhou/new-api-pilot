@@ -7,6 +7,7 @@ import type {
 } from '@/lib/api-types'
 
 export type SubscriptionPlanState = 'normal' | 'missing'
+export type SubscriptionPlanTab = 'plans' | 'site-analysis'
 export type SubscriptionDurationUnit =
   | 'year'
   | 'month'

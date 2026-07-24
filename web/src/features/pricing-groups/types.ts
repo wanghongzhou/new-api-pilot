@@ -6,7 +6,13 @@ import type {
   Timestamp,
 } from '@/lib/api-types'
 
-export type PricingCatalogTab = 'pricing' | 'groups'
+export type PricingCatalogTab =
+  | 'pricing'
+  | 'groups'
+  | 'site-analysis'
+  | 'vendor-analysis'
+  | 'group-model-analysis'
+  | 'group-availability-analysis'
 export type PricingCatalogState = 'normal' | 'missing'
 
 export interface PricingCatalogItem {

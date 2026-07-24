@@ -99,32 +99,31 @@ function SummaryStrip({ summary }: { summary?: AlertSummary }) {
     },
   ]
   return (
-    <section
-      aria-label={t('alerts.summary.title')}
-      className='bg-card border-border rounded-2xl border px-2 py-2 shadow-xs sm:px-3'
-    >
-      <dl className='divide-border grid divide-y sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4'>
+    <section aria-label={t('alerts.summary.title')}>
+      <dl className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
         {items.map((item) => (
           <div
-            className='flex min-w-0 flex-col items-center justify-center px-4 py-4 text-center'
+            className='bg-card text-card-foreground ring-foreground/10 flex min-w-0 items-center gap-3 rounded-xl p-4 ring-1'
             key={item.key}
           >
-            <dt className='text-muted-foreground flex items-center justify-center gap-2 text-sm font-medium'>
-              <span
-                aria-hidden='true'
-                className={`flex size-7 items-center justify-center rounded-full ${item.iconClassName}`}
-              >
-                <HugeiconsIcon icon={item.icon} size={16} strokeWidth={2} />
-              </span>
-              <span>{item.label}</span>
-            </dt>
-            <dd className='mt-2 text-2xl leading-none font-bold tracking-tight tabular-nums sm:text-3xl'>
-              {item.value == null ? (
-                <Spinner />
-              ) : (
-                item.value.toLocaleString('zh-CN')
-              )}
-            </dd>
+            <span
+              aria-hidden='true'
+              className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${item.iconClassName}`}
+            >
+              <HugeiconsIcon icon={item.icon} size={18} strokeWidth={2} />
+            </span>
+            <div className='min-w-0'>
+              <dt className='text-muted-foreground truncate text-xs'>
+                {item.label}
+              </dt>
+              <dd className='mt-0.5 text-2xl leading-none font-semibold tracking-tight tabular-nums'>
+                {item.value == null ? (
+                  <Spinner />
+                ) : (
+                  item.value.toLocaleString('zh-CN')
+                )}
+              </dd>
+            </div>
           </div>
         ))}
       </dl>
@@ -636,7 +635,7 @@ export function AlertsPage({
               <TabsTrigger value='rules'>{t('alerts.tabs.rules')}</TabsTrigger>
             </TabsList>
           </Tabs>
-          {summaryQuery.data && (
+          {search.tab === 'events' && summaryQuery.data && (
             <p className='text-muted-foreground shrink-0 text-right text-xs tabular-nums'>
               {t('alerts.summary.updatedAt', {
                 time: fromUnixSeconds(summaryQuery.data.updated_at).format(

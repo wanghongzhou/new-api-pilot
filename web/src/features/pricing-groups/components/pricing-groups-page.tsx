@@ -1,14 +1,21 @@
-import { ArrowLeft01Icon, FileExportIcon } from '@hugeicons/core-free-icons'
+import {
+  Alert02Icon,
+  ArrowLeft01Icon,
+  Chart01Icon,
+  Database01Icon,
+  FileExportIcon,
+  Search01Icon,
+} from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import type { ColumnDef } from '@tanstack/react-table'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { DataStatusBadge } from '@/components/data/data-status'
-import { FilterPanel } from '@/components/data/filter-panel'
+import { FacetedFilter } from '@/components/data/faceted-filter'
 import { MetricValue } from '@/components/data/metric-value'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
@@ -17,6 +24,9 @@ import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { listSites } from '@/features/sites/api'
+import { siteKeys } from '@/features/sites/query-keys'
+import type { SiteListItem } from '@/features/sites/types'
 import { createStatisticsExport } from '@/features/statistics/api'
 import { ExportTaskSheet } from '@/features/statistics/components/export-task-sheet'
 import type {
@@ -40,11 +50,19 @@ import {
 } from '../api'
 import { buildPricingGroupExportRequest } from '../export-request'
 import { pricingGroupKeys } from '../query-keys'
-import { buildPricingGroupSearch, type PricingGroupSearch } from '../search'
+import {
+  buildPricingGroupSearch,
+  changePricingGroupTab,
+  hasPricingAnalysisFilters,
+  isPricingAnalysisTab,
+  type PricingGroupSearch,
+} from '../search'
 import type {
+  PricingCatalogTab,
   PricingCatalogItem,
   PricingCatalogQueryParams,
   PricingCatalogSiteBreakdown,
+  PricingCatalogStatistics,
   PricingCatalogState,
   PricingGroupItem,
 } from '../types'
@@ -108,143 +126,177 @@ function Filters({
   global,
   onChange,
   search,
+  sites,
 }: {
   global: boolean
   onChange: (changes: Partial<PricingGroupSearch>) => void
   search: PricingGroupSearch
+  sites: SiteListItem[]
 }) {
   const { t } = useTranslation()
-  const toggleState = (state: PricingCatalogState) =>
+  const setState = (value: string) =>
     onChange({
       page: 1,
-      states: search.states.includes(state)
-        ? search.states.filter((value) => value !== state)
-        : [...search.states, state],
+      states:
+        value === 'normal' || value === 'missing'
+          ? [value as PricingCatalogState]
+          : [],
     })
   const reset = buildPricingGroupSearch({
     pageSize: search.pageSize,
     tab: search.tab,
   })
+  const hasActiveFilters = hasFilterChanges(search, reset, [
+    'group',
+    'keyword',
+    'siteIds',
+    'states',
+  ])
   return (
-    <FilterPanel
-      description={t('pricingGroups.filters.description')}
-      hasActiveFilters={hasFilterChanges(search, reset, [
-        'group',
-        'keyword',
-        'siteIds',
-        'states',
-      ])}
-      onReset={() => onChange(reset)}
-      title={t('pricingGroups.filters.title')}
+    <section
+      aria-label={t('pricingGroups.filters.title')}
+      className='flex min-w-0 flex-wrap items-center gap-2'
     >
-      <div className='grid min-w-0 flex-1 gap-3 md:grid-cols-3'>
-        <label className='grid gap-1 text-sm'>
-          <span>{t('pricingGroups.filters.keyword')}</span>
-          <Input
-            onChange={(event) =>
-              onChange({ keyword: event.target.value, page: 1 })
-            }
-            value={search.keyword}
-          />
-        </label>
-        <label className='grid gap-1 text-sm'>
-          <span>{t('pricingGroups.filters.group')}</span>
-          <Input
-            onChange={(event) =>
-              onChange({ group: event.target.value, page: 1 })
-            }
-            value={search.group}
-          />
-        </label>
-        {global && (
-          <label className='grid gap-1 text-sm'>
-            <span>{t('pricingGroups.filters.siteIds')}</span>
-            <Input
-              inputMode='numeric'
-              onChange={(event) =>
-                onChange({
-                  page: 1,
-                  siteIds: event.target.value
-                    .split(',')
-                    .map((value) => value.trim())
-                    .filter(isIdString)
-                    .map(parseIdString),
-                })
-              }
-              value={search.siteIds.join(',')}
-            />
-          </label>
-        )}
-      </div>
-      <fieldset className='grid gap-1'>
-        <legend className='text-sm'>{t('pricingGroups.filters.states')}</legend>
-        <div className='flex flex-wrap gap-2'>
-          {(['normal', 'missing'] as const).map((state) => (
-            <Button
-              aria-pressed={search.states.includes(state)}
-              key={state}
-              onClick={() => toggleState(state)}
-              size='sm'
-              type='button'
-              variant={search.states.includes(state) ? 'secondary' : 'outline'}
-            >
-              {state === 'normal'
-                ? t('pricingGroups.state.normal')
-                : t('pricingGroups.state.missing')}
-            </Button>
-          ))}
-        </div>
-      </fieldset>
-    </FilterPanel>
-  )
-}
-
-function SiteBreakdown({ items }: { items: PricingCatalogSiteBreakdown[] }) {
-  const { t } = useTranslation()
-  return (
-    <section className='grid gap-3'>
-      <h2 className='font-semibold'>{t('pricingGroups.breakdown.site')}</h2>
-      <div className='grid gap-2 md:grid-cols-2 xl:grid-cols-3'>
-        {items.map((item) => (
-          <article
-            className='border-border grid gap-2 rounded-lg border p-3'
-            key={item.site_id}
-          >
-            <div className='flex items-start justify-between gap-2'>
-              <div>
-                <p className='font-medium'>{item.site_name}</p>
-                <code className='text-muted-foreground text-xs'>
-                  {item.site_id}
-                </code>
-              </div>
-              <DataStatusBadge status={item.data_status} />
-            </div>
-            <p className='text-muted-foreground text-xs'>
-              {t('pricingGroups.breakdown.values', {
-                missing: item.missing,
-                total: item.total,
-              })}
-            </p>
-            <p className='text-muted-foreground text-xs'>
-              {t('pricingGroups.asOf', { time: timestamp(item.as_of) })}
-            </p>
-          </article>
-        ))}
-      </div>
+      <label className='relative min-w-48 flex-1 sm:max-w-72'>
+        <span className='sr-only'>{t('pricingGroups.filters.keyword')}</span>
+        <HugeiconsIcon
+          className='text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2'
+          icon={Search01Icon}
+          size={15}
+          strokeWidth={2}
+        />
+        <Input
+          aria-label={t('pricingGroups.filters.keyword')}
+          className='h-8 pl-8'
+          onChange={(event) =>
+            onChange({ keyword: event.target.value, page: 1 })
+          }
+          placeholder={
+            search.tab === 'pricing'
+              ? t('pricingGroups.filters.modelPlaceholder')
+              : t('pricingGroups.filters.groupPlaceholder')
+          }
+          value={search.keyword}
+        />
+      </label>
+      {search.tab === 'pricing' && (
+        <Input
+          aria-label={t('pricingGroups.filters.group')}
+          className='h-8 w-36'
+          onChange={(event) => onChange({ group: event.target.value, page: 1 })}
+          placeholder={t('pricingGroups.filters.group')}
+          value={search.group}
+        />
+      )}
+      {global && (
+        <FacetedFilter
+          clearLabel={t('pricingGroups.filters.allSites')}
+          onChange={(value) =>
+            onChange({
+              page: 1,
+              siteIds: isIdString(value) ? [parseIdString(value)] : [],
+            })
+          }
+          options={sites.map((site) => ({ label: site.name, value: site.id }))}
+          title={t('pricingGroups.filters.site')}
+          value={search.siteIds.length === 1 ? search.siteIds[0] : ''}
+        />
+      )}
+      <FacetedFilter
+        clearLabel={t('pricingGroups.filters.allStates')}
+        onChange={setState}
+        options={[
+          { label: t('pricingGroups.state.normal'), value: 'normal' },
+          { label: t('pricingGroups.state.missing'), value: 'missing' },
+        ]}
+        title={t('pricingGroups.filters.states')}
+        value={search.states.length === 1 ? search.states[0] : ''}
+      />
+      {hasActiveFilters && (
+        <Button
+          className='text-muted-foreground px-2'
+          onClick={() => onChange(reset)}
+          size='sm'
+          type='button'
+          variant='ghost'
+        >
+          {t('common.reset')}
+        </Button>
+      )}
     </section>
   )
 }
 
-function TypedBreakdowns({
-  statistics,
+function SiteBreakdown({
+  items,
+  kind,
 }: {
-  statistics: Awaited<ReturnType<typeof getPricingCatalogStatistics>>
+  items: PricingCatalogSiteBreakdown[]
+  kind: 'groups' | 'pricing'
 }) {
   const { t } = useTranslation()
   return (
-    <div className='grid gap-5 lg:grid-cols-3'>
+    <section className='grid gap-3'>
+      <h2 className='font-semibold'>
+        {kind === 'pricing'
+          ? t('pricingGroups.breakdown.pricingSite')
+          : t('pricingGroups.breakdown.groupSite')}
+      </h2>
+      {items.length === 0 ? (
+        <p className='text-muted-foreground text-sm'>{t('common.none')}</p>
+      ) : (
+        <div className='grid gap-2 md:grid-cols-2 xl:grid-cols-3'>
+          {items.map((item) => (
+            <article
+              className='border-border grid gap-2 rounded-lg border p-3'
+              key={item.site_id}
+            >
+              <div className='flex items-start justify-between gap-2'>
+                <div>
+                  <p className='font-medium'>{item.site_name}</p>
+                  <code className='text-muted-foreground text-xs'>
+                    {item.site_id}
+                  </code>
+                </div>
+                <DataStatusBadge status={item.data_status} />
+              </div>
+              <p className='text-muted-foreground text-xs'>
+                {kind === 'pricing'
+                  ? t('pricingGroups.breakdown.values', {
+                      missing: item.missing,
+                      total: item.total,
+                    })
+                  : t('pricingGroups.breakdown.groupSiteValues', {
+                      missing: item.missing,
+                      total: item.total,
+                    })}
+              </p>
+              <p className='text-muted-foreground text-xs'>
+                {t('pricingGroups.asOf', { time: timestamp(item.as_of) })}
+              </p>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function TypedBreakdown({
+  tab,
+  statistics,
+}: {
+  tab: PricingCatalogTab
+  statistics: Awaited<ReturnType<typeof getPricingCatalogStatistics>>
+}) {
+  const { t } = useTranslation()
+  if (tab === 'vendor-analysis') {
+    return (
       <section className='grid content-start gap-2'>
         <h2 className='font-semibold'>{t('pricingGroups.breakdown.vendor')}</h2>
+        {statistics.vendor_breakdown.length === 0 && (
+          <p className='text-muted-foreground text-sm'>{t('common.none')}</p>
+        )}
         {statistics.vendor_breakdown.map((item) => (
           <article
             className='border-border rounded-lg border p-3 text-sm'
@@ -263,8 +315,15 @@ function TypedBreakdowns({
           </article>
         ))}
       </section>
+    )
+  }
+  if (tab === 'group-model-analysis') {
+    return (
       <section className='grid content-start gap-2'>
         <h2 className='font-semibold'>{t('pricingGroups.breakdown.group')}</h2>
+        {statistics.group_breakdown.length === 0 && (
+          <p className='text-muted-foreground text-sm'>{t('common.none')}</p>
+        )}
         {statistics.group_breakdown.map((item) => (
           <article
             className='border-border rounded-lg border p-3 text-sm'
@@ -279,32 +338,82 @@ function TypedBreakdowns({
           </article>
         ))}
       </section>
-      <section className='grid content-start gap-2'>
-        <h2 className='font-semibold'>
-          {t('pricingGroups.breakdown.availability')}
-        </h2>
-        {statistics.group_catalog_breakdown.map((item) => (
-          <article
-            className='border-border rounded-lg border p-3 text-sm'
-            key={`${item.root_visible}:${item.ratio_available}`}
-          >
-            <div className='flex flex-wrap gap-2'>
-              <VisibilityBadge visible={item.root_visible} />
-              <Badge variant={item.ratio_available ? 'success' : 'neutral'}>
-                {item.ratio_available
-                  ? t('pricingGroups.ratio.available')
-                  : t('pricingGroups.ratio.unavailable')}
-              </Badge>
-            </div>
-            <p className='text-muted-foreground mt-2 text-xs'>
-              {t('pricingGroups.breakdown.availabilityValues', {
-                count: item.count,
-              })}
-            </p>
-          </article>
-        ))}
-      </section>
-    </div>
+    )
+  }
+  return (
+    <section className='grid content-start gap-2'>
+      <h2 className='font-semibold'>
+        {t('pricingGroups.breakdown.availability')}
+      </h2>
+      {statistics.group_catalog_breakdown.length === 0 && (
+        <p className='text-muted-foreground text-sm'>{t('common.none')}</p>
+      )}
+      {statistics.group_catalog_breakdown.map((item) => (
+        <article
+          className='border-border rounded-lg border p-3 text-sm'
+          key={`${item.root_visible}:${item.ratio_available}`}
+        >
+          <div className='flex flex-wrap gap-2'>
+            <VisibilityBadge visible={item.root_visible} />
+            <Badge variant={item.ratio_available ? 'success' : 'neutral'}>
+              {item.ratio_available
+                ? t('pricingGroups.ratio.available')
+                : t('pricingGroups.ratio.unavailable')}
+            </Badge>
+          </div>
+          <p className='text-muted-foreground mt-2 text-xs'>
+            {t('pricingGroups.breakdown.availabilityValues', {
+              count: item.count,
+            })}
+          </p>
+        </article>
+      ))}
+    </section>
+  )
+}
+
+function SummaryGrid({
+  statistics,
+}: {
+  statistics?: PricingCatalogStatistics
+}) {
+  const { t } = useTranslation()
+  const items = [
+    {
+      icon: Database01Icon,
+      label: t('pricingGroups.metric.pricing'),
+      value: statistics?.total,
+    },
+    {
+      icon: Chart01Icon,
+      label: t('pricingGroups.metric.groups'),
+      value: statistics?.group_total,
+    },
+    {
+      icon: Alert02Icon,
+      label: t('pricingGroups.metric.missing'),
+      value: statistics?.missing,
+    },
+  ] as const
+  return (
+    <dl className='grid gap-3 sm:grid-cols-3'>
+      {items.map(({ icon, label, value }) => (
+        <div
+          className='bg-card text-card-foreground ring-foreground/10 flex items-center gap-3 rounded-xl p-4 ring-1'
+          key={label}
+        >
+          <span className='bg-muted text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-lg'>
+            <HugeiconsIcon icon={icon} size={18} strokeWidth={2} />
+          </span>
+          <div>
+            <dt className='text-muted-foreground text-xs'>{label}</dt>
+            <dd className='mt-0.5 text-2xl font-semibold tracking-tight'>
+              {value == null ? '-' : <MetricValue value={value} />}
+            </dd>
+          </div>
+        </div>
+      ))}
+    </dl>
   )
 }
 
@@ -319,10 +428,39 @@ export function PricingGroupsPage({
 }) {
   const { t } = useTranslation()
   const [initialJob, setInitialJob] = useState<StatisticsExportJobItem>()
+  const canonicalizedSearch = useRef(false)
   const validSiteId = siteId == null || isIdString(siteId)
   const currentParams = useMemo(() => params(search), [search])
+  const overviewParams = useMemo(() => params(buildPricingGroupSearch({})), [])
+  const groupsParams =
+    search.tab === 'site-analysis' ? overviewParams : currentParams
+  const siteParams = useMemo(
+    () => ({
+      p: 1,
+      page_size: 100,
+      sort_by: 'name',
+      sort_order: 'asc' as const,
+    }),
+    []
+  )
   const parsedSiteId =
     siteId && isIdString(siteId) ? parseIdString(siteId) : undefined
+  useEffect(() => {
+    if (isPricingAnalysisTab(search.tab) && hasPricingAnalysisFilters(search)) {
+      onSearchChange(changePricingGroupTab(search.tab))
+    } else if (search.tab === 'groups' && search.group !== '') {
+      onSearchChange({ group: '', page: 1 })
+    } else if (!canonicalizedSearch.current) {
+      canonicalizedSearch.current = true
+      onSearchChange({})
+    }
+  }, [onSearchChange, search])
+  const sitesQuery = useQuery({
+    enabled: siteId == null,
+    queryFn: () => listSites(siteParams),
+    queryKey: siteKeys.list(siteParams),
+    staleTime: 5 * 60_000,
+  })
   const pricingQuery = useQuery({
     enabled: validSiteId && search.tab === 'pricing',
     placeholderData: keepPreviousData,
@@ -335,26 +473,28 @@ export function PricingGroupsPage({
       : pricingGroupKeys.global('pricing', currentParams),
   })
   const groupsQuery = useQuery({
-    enabled: validSiteId && search.tab === 'groups',
+    enabled:
+      validSiteId &&
+      (search.tab === 'groups' || search.tab === 'site-analysis'),
     placeholderData: keepPreviousData,
     queryFn: () =>
       parsedSiteId
-        ? listSitePricingGroups(parsedSiteId, currentParams)
-        : listPricingGroups(currentParams),
+        ? listSitePricingGroups(parsedSiteId, groupsParams)
+        : listPricingGroups(groupsParams),
     queryKey: parsedSiteId
-      ? pricingGroupKeys.site(siteId ?? '', 'groups', currentParams)
-      : pricingGroupKeys.global('groups', currentParams),
+      ? pricingGroupKeys.site(siteId ?? '', 'groups', groupsParams)
+      : pricingGroupKeys.global('groups', groupsParams),
   })
   const statisticsQuery = useQuery({
     enabled: validSiteId,
     placeholderData: keepPreviousData,
     queryFn: () =>
       parsedSiteId
-        ? getSitePricingCatalogStatistics(parsedSiteId, currentParams)
-        : getPricingCatalogStatistics(currentParams),
+        ? getSitePricingCatalogStatistics(parsedSiteId, overviewParams)
+        : getPricingCatalogStatistics(overviewParams),
     queryKey: parsedSiteId
-      ? pricingGroupKeys.site(siteId ?? '', 'statistics', currentParams)
-      : pricingGroupKeys.global('statistics', currentParams),
+      ? pricingGroupKeys.site(siteId ?? '', 'statistics', overviewParams)
+      : pricingGroupKeys.global('statistics', overviewParams),
   })
   const exportMutation = useMutation({
     mutationFn: (format: StatisticsExportFormat) =>
@@ -487,27 +627,101 @@ export function PricingGroupsPage({
     [t]
   )
   const statistics = statisticsQuery.data
+  const listTab = search.tab === 'pricing' || search.tab === 'groups'
+  const tabs = [
+    {
+      count: statistics?.total,
+      icon: Database01Icon,
+      label: t('pricingGroups.tabs.pricing'),
+      value: 'pricing',
+    },
+    {
+      count: statistics?.group_total,
+      icon: Chart01Icon,
+      label: t('pricingGroups.tabs.groups'),
+      value: 'groups',
+    },
+    {
+      icon: Chart01Icon,
+      label: t('pricingGroups.tabs.siteAnalysis'),
+      value: 'site-analysis',
+    },
+    {
+      icon: Chart01Icon,
+      label: t('pricingGroups.tabs.vendorAnalysis'),
+      value: 'vendor-analysis',
+    },
+    {
+      icon: Chart01Icon,
+      label: t('pricingGroups.tabs.groupModelAnalysis'),
+      value: 'group-model-analysis',
+    },
+    {
+      icon: Chart01Icon,
+      label: t('pricingGroups.tabs.groupAvailabilityAnalysis'),
+      value: 'group-availability-analysis',
+    },
+  ] as const
+  const purpose = {
+    'group-availability-analysis': {
+      description: t(
+        'pricingGroups.purpose.groupAvailabilityAnalysis.description'
+      ),
+      title: t('pricingGroups.purpose.groupAvailabilityAnalysis.title'),
+    },
+    'group-model-analysis': {
+      description: t('pricingGroups.purpose.groupModelAnalysis.description'),
+      title: t('pricingGroups.purpose.groupModelAnalysis.title'),
+    },
+    groups: {
+      description: t('pricingGroups.purpose.groups.description'),
+      title: t('pricingGroups.purpose.groups.title'),
+    },
+    pricing: {
+      description: t('pricingGroups.purpose.pricing.description'),
+      title: t('pricingGroups.purpose.pricing.title'),
+    },
+    'site-analysis': {
+      description: t('pricingGroups.purpose.siteAnalysis.description'),
+      title: t('pricingGroups.purpose.siteAnalysis.title'),
+    },
+    'vendor-analysis': {
+      description: t('pricingGroups.purpose.vendorAnalysis.description'),
+      title: t('pricingGroups.purpose.vendorAnalysis.title'),
+    },
+  }[search.tab]
+  let activeDataStatus = statistics?.data_status
+  if (search.tab === 'pricing') {
+    activeDataStatus = pricingQuery.data?.data_status
+  } else if (search.tab === 'groups') {
+    activeDataStatus = groupsQuery.data?.data_status
+  }
   return (
     <SectionPageLayout
-      actions={(['xlsx', 'csv'] as const).map((format) => (
-        <Button
-          disabled={exportMutation.isPending || !validSiteId}
-          key={format}
-          onClick={() => exportMutation.mutate(format)}
-          variant='outline'
-        >
-          <HugeiconsIcon icon={FileExportIcon} strokeWidth={2} />
-          {t('pricingGroups.export', { format: format.toUpperCase() })}
-        </Button>
-      ))}
+      actions={
+        listTab
+          ? (['xlsx', 'csv'] as const).map((format) => (
+              <Button
+                disabled={exportMutation.isPending || !validSiteId}
+                key={format}
+                onClick={() => exportMutation.mutate(format)}
+                variant='outline'
+              >
+                <HugeiconsIcon icon={FileExportIcon} strokeWidth={2} />
+                {t('pricingGroups.export', { format: format.toUpperCase() })}
+              </Button>
+            ))
+          : undefined
+      }
       description={
         siteId
           ? t('pricingGroups.siteDescription', { id: siteId })
           : t('pricingGroups.description')
       }
+      fixedContent
       title={siteId ? t('pricingGroups.siteTitle') : t('pricingGroups.title')}
     >
-      <div className='grid min-w-0 gap-6'>
+      <div className='flex h-full min-h-0 min-w-0 flex-col gap-4'>
         {siteId && (
           <DetailBackLink
             render={<Link params={{ siteId }} to='/sites/$siteId' />}
@@ -516,75 +730,70 @@ export function PricingGroupsPage({
             {t('pricingGroups.backToSite')}
           </DetailBackLink>
         )}
-        <section
-          className='border-primary/30 bg-primary/5 rounded-lg border p-4'
-          role='note'
-        >
-          <p className='font-medium'>{t('pricingGroups.boundary.title')}</p>
-          <p className='text-muted-foreground mt-1 text-sm'>
-            {t('pricingGroups.boundary.description')}
-          </p>
-        </section>
+        <SummaryGrid statistics={statistics} />
         <Tabs
           onValueChange={(tab) =>
-            onSearchChange({
-              page: 1,
-              tab: tab as PricingGroupSearch['tab'],
-            })
+            onSearchChange(
+              changePricingGroupTab(tab as PricingGroupSearch['tab'])
+            )
           }
           value={search.tab}
         >
-          <TabsList aria-label={t('pricingGroups.tabs.label')}>
-            <TabsTrigger value='pricing'>
-              {t('pricingGroups.tabs.pricing')}
-            </TabsTrigger>
-            <TabsTrigger value='groups'>
-              {t('pricingGroups.tabs.groups')}
-            </TabsTrigger>
+          <TabsList
+            aria-label={t('pricingGroups.tabs.label')}
+            className='max-w-full flex-wrap justify-start group-data-horizontal/tabs:h-auto'
+          >
+            {tabs.map((tab) => (
+              <TabsTrigger key={tab.value} value={tab.value}>
+                <HugeiconsIcon icon={tab.icon} size={15} strokeWidth={2} />
+                {tab.label}
+                {'count' in tab && tab.count != null && (
+                  <Badge className='px-1.5 font-mono' variant='secondary'>
+                    {tab.count}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            ))}
           </TabsList>
         </Tabs>
-        <Filters global={!siteId} onChange={onSearchChange} search={search} />
-        {statistics && (
-          <div className='grid gap-5'>
-            <div className='flex items-center gap-2' role='status'>
-              <span>{t('pricingGroups.statisticsStatus')}</span>
-              <DataStatusBadge status={statistics.data_status} />
+        <section className='border-border bg-muted/30 flex items-start gap-3 rounded-xl border p-4'>
+          <span className='bg-background text-muted-foreground ring-foreground/10 flex size-9 shrink-0 items-center justify-center rounded-lg ring-1'>
+            <HugeiconsIcon
+              icon={search.tab === 'pricing' ? Database01Icon : Chart01Icon}
+              size={18}
+              strokeWidth={2}
+            />
+          </span>
+          <div className='min-w-0 flex-1'>
+            <div className='flex flex-wrap items-center gap-2'>
+              <h2 className='font-medium'>{purpose.title}</h2>
+              {activeDataStatus && (
+                <DataStatusBadge status={activeDataStatus} />
+              )}
             </div>
-            <dl className='border-border grid overflow-hidden rounded-lg border sm:grid-cols-3'>
-              {(
-                [
-                  [t('pricingGroups.metric.pricing'), statistics.total],
-                  [t('pricingGroups.metric.groups'), statistics.group_total],
-                  [t('pricingGroups.metric.missing'), statistics.missing],
-                ] as const
-              ).map(([label, value]) => (
-                <div className='border-border p-4 sm:border-r' key={label}>
-                  <dt className='text-muted-foreground text-xs'>{label}</dt>
-                  <dd className='mt-1 text-xl font-semibold'>
-                    <MetricValue value={value} />
-                  </dd>
-                </div>
-              ))}
-            </dl>
-            <SiteBreakdown items={statistics.site_breakdown} />
-            <TypedBreakdowns statistics={statistics} />
+            <p className='text-muted-foreground mt-1 text-sm'>
+              {purpose.description}
+            </p>
           </div>
+        </section>
+        {listTab && (
+          <Filters
+            global={!siteId}
+            onChange={onSearchChange}
+            search={search}
+            sites={sitesQuery.data?.items ?? []}
+          />
         )}
-        {search.tab === 'groups' && groupsQuery.data && (
-          <div className='grid gap-3'>
-            <div className='flex items-center gap-2' role='status'>
-              <span>{t('pricingGroups.groupCompleteness')}</span>
-              <DataStatusBadge status={groupsQuery.data.data_status} />
-              <span className='text-muted-foreground text-xs'>
-                {t('pricingGroups.asOf', {
-                  time: timestamp(groupsQuery.data.as_of),
-                })}
-              </span>
-            </div>
-            <SiteBreakdown items={groupsQuery.data.site_breakdown} />
-          </div>
+        {statisticsQuery.isError && (
+          <Button
+            className='justify-self-start'
+            onClick={() => void statisticsQuery.refetch()}
+            variant='outline'
+          >
+            {t('common.retry')}
+          </Button>
         )}
-        {search.tab === 'pricing' ? (
+        {search.tab === 'pricing' && (
           <DataTable
             ariaLabel={t('pricingGroups.pricing.table')}
             columns={pricingColumns}
@@ -629,7 +838,8 @@ export function PricingGroupsPage({
             )}
             total={pricingQuery.data?.total ?? 0}
           />
-        ) : (
+        )}
+        {search.tab === 'groups' && (
           <DataTable
             ariaLabel={t('pricingGroups.groups.table')}
             columns={groupColumns}
@@ -667,6 +877,29 @@ export function PricingGroupsPage({
             )}
             total={groupsQuery.data?.total ?? 0}
           />
+        )}
+        {isPricingAnalysisTab(search.tab) && (
+          <div className='min-h-0 flex-1 overflow-y-auto'>
+            {search.tab === 'site-analysis' && (
+              <div className='grid gap-5'>
+                {statistics && (
+                  <SiteBreakdown
+                    items={statistics.site_breakdown}
+                    kind='pricing'
+                  />
+                )}
+                {groupsQuery.data && (
+                  <SiteBreakdown
+                    items={groupsQuery.data.site_breakdown}
+                    kind='groups'
+                  />
+                )}
+              </div>
+            )}
+            {statistics && search.tab !== 'site-analysis' && (
+              <TypedBreakdown statistics={statistics} tab={search.tab} />
+            )}
+          </div>
         )}
       </div>
       <ExportTaskSheet

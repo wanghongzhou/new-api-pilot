@@ -8,6 +8,7 @@ export function buildModelCatalogExportRequest(
   search: ModelCatalogSearch,
   forcedSiteId?: IdString
 ): StatisticsExportCreateRequest {
+  const supportsCatalogFilters = search.tab !== 'missing'
   return {
     filters: {
       account_ids: [],
@@ -17,9 +18,9 @@ export function buildModelCatalogExportRequest(
       granularity: 'hour',
       keyword: search.keyword || undefined,
       model_names: [],
-      model_statuses: search.statuses,
-      model_sync_official: search.syncOfficial,
-      model_vendor_id: search.vendorId,
+      model_statuses: supportsCatalogFilters ? search.statuses : [],
+      model_sync_official: supportsCatalogFilters ? search.syncOfficial : [],
+      model_vendor_id: supportsCatalogFilters ? search.vendorId : undefined,
       node_names: [],
       site_ids: forcedSiteId ? [forcedSiteId] : search.siteIds,
       sort_by: 'name',

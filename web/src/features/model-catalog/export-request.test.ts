@@ -36,4 +36,21 @@ describe('model catalog export request', () => {
       expect(serialized).not.toContain(field)
     }
   })
+
+  test('omits catalog-only filters from a missing-view export', () => {
+    const request = buildModelCatalogExportRequest(
+      'csv',
+      buildModelCatalogSearch({
+        keyword: 'safe-model',
+        statuses: [1],
+        syncOfficial: [0],
+        tab: 'missing',
+        vendorId: parseNonNegativeIdString('8'),
+      })
+    )
+    expect(request.filters.keyword).toBe('safe-model')
+    expect(request.filters.model_statuses).toEqual([])
+    expect(request.filters.model_sync_official).toEqual([])
+    expect(request.filters.model_vendor_id).toBeUndefined()
+  })
 })

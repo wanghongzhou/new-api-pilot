@@ -1,8 +1,9 @@
 import { isIdString, parseIdString } from '@/lib/api-types'
 
-import type { SubscriptionPlanState } from './types'
+import type { SubscriptionPlanState, SubscriptionPlanTab } from './types'
 
 export interface SubscriptionPlanSearch {
+  tab: SubscriptionPlanTab
   page: number
   pageSize: number
   siteIds: ReturnType<typeof parseIdString>[]
@@ -50,5 +51,53 @@ export function buildSubscriptionPlanSearch(
           value === 'normal' || value === 'missing'
       )
       .sort(),
+    tab: raw.tab === 'site-analysis' ? 'site-analysis' : 'plans',
+  }
+}
+
+export function changeSubscriptionPlanTab(
+  tab: SubscriptionPlanTab
+): Partial<SubscriptionPlanSearch> {
+  return tab === 'site-analysis'
+    ? {
+        enabled: undefined,
+        exportId: undefined,
+        keyword: '',
+        page: 1,
+        pageSize: 20,
+        siteIds: [],
+        states: [],
+        tab,
+      }
+    : { page: 1, tab }
+}
+
+export function hasSubscriptionPlanAnalysisFilters(
+  search: SubscriptionPlanSearch
+) {
+  return (
+    search.enabled != null ||
+    search.keyword !== '' ||
+    search.page !== 1 ||
+    search.pageSize !== 20 ||
+    search.siteIds.length > 0 ||
+    search.states.length > 0
+  )
+}
+
+export function serializeSubscriptionPlanSearch(
+  search: SubscriptionPlanSearch
+) {
+  const analysis = search.tab === 'site-analysis'
+  return {
+    enabled: analysis ? undefined : search.enabled,
+    exportId: search.exportId,
+    keyword: !analysis && search.keyword ? search.keyword : undefined,
+    page: !analysis && search.page !== 1 ? search.page : undefined,
+    pageSize: !analysis && search.pageSize !== 20 ? search.pageSize : undefined,
+    siteIds:
+      !analysis && search.siteIds.length > 0 ? search.siteIds : undefined,
+    states: !analysis && search.states.length > 0 ? search.states : undefined,
+    tab: search.tab === 'plans' ? undefined : search.tab,
   }
 }
