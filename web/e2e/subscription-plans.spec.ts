@@ -44,6 +44,17 @@ async function seedAuth(page: Page, testInfo: TestInfo) {
     assertAuthenticated(route)
     await route.fulfill({ json: envelope(viewer, 'req_subscription_self') })
   })
+  await page.route(/\/api\/sites(?:\?.*)?$/, async (route) => {
+    assertAuthenticated(route)
+    await route.fulfill({
+      json: envelope({
+        items: [{ id: '9007199254740997', name: '华东计划站点' }],
+        page: 1,
+        page_size: 100,
+        total: 1,
+      }),
+    })
+  })
 }
 
 const units = ['year', 'month', 'day', 'hour', 'custom'] as const
@@ -216,19 +227,26 @@ test('A98 keeps subscription plan catalog exact, private, bounded and responsive
     '/subscription-plans?siteIds=9007199254740997&keyword=plan&enabled=false&states=missing'
   )
   await expect(
-    page.getByRole('heading', { exact: true, name: '订阅计划目录' })
+    page.getByRole('heading', { exact: true, name: '订阅计划' })
   ).toBeVisible()
   await expect.poll(() => reads.length).toBe(2)
   expect(reads.map((url) => url.pathname).sort()).toEqual([
     '/api/subscription-plans',
     '/api/subscription-plans/statistics',
   ])
-  for (const read of reads) {
-    expect(read.searchParams.get('enabled')).toBe('false')
-    expect(read.searchParams.get('keyword')).toBe('plan')
-    expect(read.searchParams.getAll('site_ids')).toEqual(['9007199254740997'])
-    expect(read.searchParams.getAll('states')).toEqual(['missing'])
-  }
+  const listRead = reads.find(
+    (read) => read.pathname === '/api/subscription-plans'
+  )
+  const statisticsRead = reads.find(
+    (read) => read.pathname === '/api/subscription-plans/statistics'
+  )
+  expect(listRead?.searchParams.get('enabled')).toBe('false')
+  expect(listRead?.searchParams.get('keyword')).toBe('plan')
+  expect(listRead?.searchParams.getAll('site_ids')).toEqual([
+    '9007199254740997',
+  ])
+  expect(listRead?.searchParams.getAll('states')).toEqual(['missing'])
+  expect(statisticsRead?.search).toBe('?p=1&page_size=20')
   await expect(
     page.getByText('USD 19.990000').filter({ visible: true }).first()
   ).toBeVisible()
@@ -263,11 +281,9 @@ test('A98 keeps subscription plan catalog exact, private, bounded and responsive
       page.getByText(label, { exact: true }).filter({ visible: true }).first()
     ).toBeVisible()
   }
-  await expect(page.getByText('站点计划拆分')).toBeVisible()
   await expect(
-    page.getByText('不可用').filter({ visible: true }).first()
+    page.getByText(/不代表订单、收入或用户已经购买的订阅/)
   ).toBeVisible()
-  await expect(page.getByText(/不是订阅收入、订单或用户订阅库存/)).toBeVisible()
 
   await page.getByRole('button', { name: '导出 XLSX' }).click()
   await expect
@@ -277,6 +293,14 @@ test('A98 keeps subscription plan catalog exact, private, bounded and responsive
   expect(exports.at(-1)?.filters.inventory_states).toEqual(['missing'])
   expect(exports.at(-1)?.filters.site_ids).toEqual(['9007199254740997'])
   await page.getByRole('button', { name: '关闭' }).click()
+
+  await page.getByRole('tab', { name: '站点分析' }).click()
+  await expect(
+    page.getByRole('heading', { name: '站点计划情况' })
+  ).toBeVisible()
+  await expect(
+    page.getByText('不可用').filter({ visible: true }).first()
+  ).toBeVisible()
 
   const scan = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa'])
@@ -311,7 +335,7 @@ test('A98 keeps subscription plan catalog exact, private, bounded and responsive
   await expect(
     page.getByRole('heading', {
       exact: true,
-      name: '站点订阅计划目录',
+      name: '站点订阅计划',
     })
   ).toBeVisible()
   await page.getByRole('button', { name: '导出 CSV' }).click()

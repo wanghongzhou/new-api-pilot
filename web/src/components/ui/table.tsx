@@ -22,12 +22,25 @@ import * as React from 'react'
 
 import { cn } from '@/lib/utils'
 
-function Table({ className, ...props }: React.ComponentProps<'table'>) {
+interface TableProps extends React.ComponentProps<'table'> {
+  containerClassName?: string
+  containerTabIndex?: number
+}
+
+function Table({
+  className,
+  containerClassName,
+  containerTabIndex = 0,
+  ...props
+}: TableProps) {
   return (
     <div
       data-slot='table-container'
-      className='relative w-full overflow-x-auto overflow-y-hidden'
-      tabIndex={0}
+      className={cn(
+        'relative w-full overflow-x-auto overflow-y-hidden',
+        containerClassName
+      )}
+      tabIndex={containerTabIndex}
     >
       <table
         data-slot='table'

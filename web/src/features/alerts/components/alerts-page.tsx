@@ -103,27 +103,25 @@ function SummaryStrip({ summary }: { summary?: AlertSummary }) {
       <dl className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
         {items.map((item) => (
           <div
-            className='bg-card text-card-foreground ring-foreground/10 flex min-w-0 items-center gap-3 rounded-xl p-4 ring-1'
+            className='bg-card text-card-foreground ring-foreground/10 grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 rounded-xl p-4 ring-1'
             key={item.key}
           >
-            <span
-              aria-hidden='true'
-              className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${item.iconClassName}`}
-            >
-              <HugeiconsIcon icon={item.icon} size={18} strokeWidth={2} />
-            </span>
-            <div className='min-w-0'>
-              <dt className='text-muted-foreground truncate text-xs'>
-                {item.label}
-              </dt>
-              <dd className='mt-0.5 text-2xl leading-none font-semibold tracking-tight tabular-nums'>
-                {item.value == null ? (
-                  <Spinner />
-                ) : (
-                  item.value.toLocaleString('zh-CN')
-                )}
-              </dd>
-            </div>
+            <dt className='text-muted-foreground col-span-2 grid min-w-0 grid-cols-subgrid items-center text-xs'>
+              <span
+                aria-hidden='true'
+                className={`row-span-2 flex size-9 shrink-0 items-center justify-center rounded-lg ${item.iconClassName}`}
+              >
+                <HugeiconsIcon icon={item.icon} size={18} strokeWidth={2} />
+              </span>
+              <span className='min-w-0 truncate'>{item.label}</span>
+            </dt>
+            <dd className='col-start-2 mt-0.5 text-2xl leading-none font-semibold tracking-tight tabular-nums'>
+              {item.value == null ? (
+                <Spinner />
+              ) : (
+                item.value.toLocaleString('zh-CN')
+              )}
+            </dd>
           </div>
         ))}
       </dl>
@@ -745,7 +743,7 @@ export function AlertsPage({
                 data={rules}
                 emptyDescription={t('alerts.rules.emptyDescription')}
                 emptyTitle={t('alerts.rules.empty')}
-                error={rulesQuery.isError || sitesQuery.isError}
+                error={rulesQuery.isError}
                 fetching={rulesQuery.isFetching}
                 loading={rulesQuery.isPending}
                 onPageChange={(rulePage) => onSearchChange({ rulePage })}

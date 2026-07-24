@@ -115,7 +115,7 @@ export function PlatformUsersPage({
   const invalidateUsers = () => {
     void queryClient.invalidateQueries({ queryKey: platformUserKeys.all })
   }
-  const enabledAdminTotal = enabledAdminQuery.data?.total ?? 0
+  const enabledAdminTotal = enabledAdminQuery.data?.total ?? null
   const pageData = usersQuery.data
   const initialLoading = usersQuery.isPending && !pageData
   const updateSorting = (
@@ -235,6 +235,23 @@ export function PlatformUsersPage({
           }}
         />
 
+        {isAdmin && enabledAdminQuery.isError && (
+          <div
+            className='border-destructive/35 bg-destructive/5 text-destructive flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm'
+            role='alert'
+          >
+            <span>{t('Unable to verify administrator safeguards')}</span>
+            <Button
+              onClick={() => void enabledAdminQuery.refetch()}
+              size='sm'
+              type='button'
+              variant='outline'
+            >
+              {t('common.retry')}
+            </Button>
+          </div>
+        )}
+
         <div className='flex min-h-0 flex-1 flex-col'>
           <DataTable
             ariaLabel={t('Platform users')}
@@ -290,6 +307,7 @@ export function PlatformUsersPage({
         isLastEnabledAdmin={
           editUser?.role === 'admin' &&
           editUser.status === 1 &&
+          enabledAdminTotal != null &&
           enabledAdminTotal <= 1
         }
         onOpenChange={(open) => !open && setEditUser(null)}
@@ -316,7 +334,7 @@ export function PlatformUsersPage({
 
 interface UserActionsProps {
   currentUserId: string | undefined
-  enabledAdminTotal: number
+  enabledAdminTotal: number | null
   isAdmin: boolean
   onEdit: (user: PlatformUserItem) => void
   onReset: (user: PlatformUserItem) => void
@@ -338,22 +356,35 @@ function UserActions({
 
   const isCurrentUser = user.id === currentUserId
   const isLastEnabledAdmin =
-    user.role === 'admin' && user.status === 1 && enabledAdminTotal <= 1
-  const toggleDisabled = isCurrentUser || isLastEnabledAdmin
+    user.role === 'admin' &&
+    user.status === 1 &&
+    enabledAdminTotal != null &&
+    enabledAdminTotal <= 1
+  const adminSafeguardUnknown =
+    user.role === 'admin' && user.status === 1 && enabledAdminTotal == null
+  const toggleDisabled =
+    isCurrentUser || isLastEnabledAdmin || adminSafeguardUnknown
   const toggleLabel = user.status === 1 ? 'Disable user' : 'Enable user'
   let toggleTitle = t(dynamicI18nKey('platformUser', toggleLabel))
+  const editTitle = adminSafeguardUnknown
+    ? t('Unable to verify administrator safeguards')
+    : t('Edit user')
   if (isCurrentUser) toggleTitle = t('You cannot disable your own account')
   else if (isLastEnabledAdmin) {
     toggleTitle = t('The last enabled administrator cannot be disabled')
+  } else if (adminSafeguardUnknown) {
+    toggleTitle = t('Unable to verify administrator safeguards')
   }
 
   return (
     <div className='flex justify-end gap-1'>
       <Button
-        aria-label={t('Edit user')}
+        aria-label={editTitle}
+        disabled={adminSafeguardUnknown}
         onClick={() => onEdit(user)}
+        className='min-h-10 min-w-10'
         size='icon'
-        title={t('Edit user')}
+        title={editTitle}
         variant='ghost'
       >
         <HugeiconsIcon icon={Edit03Icon} strokeWidth={2} />
@@ -362,6 +393,7 @@ function UserActions({
         aria-label={t('Reset password')}
         disabled={isCurrentUser}
         onClick={() => onReset(user)}
+        className='min-h-10 min-w-10'
         size='icon'
         title={
           isCurrentUser
@@ -376,6 +408,7 @@ function UserActions({
         aria-label={t(dynamicI18nKey('platformUser', toggleLabel))}
         disabled={toggleDisabled}
         onClick={() => onToggle(user, user.status === 1 ? 'disable' : 'enable')}
+        className='min-h-10 min-w-10'
         size='icon'
         title={toggleTitle}
         variant={user.status === 1 ? 'ghost' : 'outline'}

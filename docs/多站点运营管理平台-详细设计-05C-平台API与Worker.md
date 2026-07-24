@@ -1443,9 +1443,9 @@ API：`GET /api/performance-history`、`GET /api/performance-history/statistics`
 # T1 任务 API 与 Worker
 
 新增 `upstream_task_sync` required task、metadata queue、resource concurrency、独立 lease/active_key/max attempts=3。API：`GET /api/upstream-tasks`、`/statistics` 及对应站点四接口；支持 site/task/platform/user/group/channel/action/status/model/submit time 筛选。export runtime 接受 `upstream_tasks`。所有 bigint 为字符串，统一 envelope，viewer 可读。
-平台新增 `/api/model-catalog`、`/api/model-catalog/coverage`、`/api/model-catalog/missing` 及对应 `/api/sites/:id/...` 只读接口；导出类型 `model_catalog` 复用异步导出运行时。
+平台新增 `/api/model-catalog`、`/api/model-catalog/coverage`、`/api/model-catalog/missing` 及对应 `/api/sites/:id/...` 只读接口；导出类型 `model_catalog` 复用异步导出运行时。目录类 GET 接口执行严格查询契约：未知参数、超长关键词/分组、超过 100 个站点、重复枚举归一化后仍超出枚举基数，以及视图不支持的筛选均返回 `VALIDATION_ERROR`；强制站点接口拒绝 `site_ids`。`model-catalog` 仅接受目录筛选，`missing` 仅接受站点与关键词，`coverage` 不接受列表筛选。参数校验在数据库访问前完成，数据库或未分类服务错误返回内部错误，不得伪装成客户端参数错误。
 本地排行提供 `/api/rankings/models`、`/api/rankings/vendors` 与 `/api/sites/:id/rankings/...`，支持 `period=today|week|month|year`；`statistics_type=model_rankings|vendor_rankings` 支持 CSV/XLSX。
-新增 `/api/subscription-plans`、`/api/subscription-plans/statistics` 与对应站点接口；无用户订阅/订单全局聚合端点。
+新增 `/api/subscription-plans`、`/api/subscription-plans/statistics` 与对应站点接口；无用户订阅/订单全局聚合端点。订阅计划查询最多接受 100 个站点、2 个库存状态和 128 UTF-8 字节关键词；定价与分组查询最多接受 100 个站点、2 个库存状态、255 UTF-8 字节关键词和 128 UTF-8 字节精确分组。两类接口均拒绝未知参数，并在进入数据库前完成校验。
 # D138 定价与分组目录 API/Worker
 
 提供 `GET /api/pricing-catalog`、`GET /api/pricing-catalog/statistics`、`GET /api/group-catalog`，以及三个对应的 `/api/sites/:id/...` 强制站点端点。全局端点可接收 `site_ids`，站点端点拒绝 `site_ids`；列表统一服务端分页，pricing statistics 与 pricing list 使用同一安全筛选语义，group 的计数与 completeness 随 catalog 响应返回。pricing item 仅包含 site identity、model/vendor、exact decimal pricing/group ratio、usable groups、supported endpoints、remote state 与采集元数据；group item 仅包含 site identity、group name、remote state 与采集元数据。

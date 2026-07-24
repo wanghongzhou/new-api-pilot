@@ -286,6 +286,13 @@ export function SitesPage({
       {
         cell: ({ row }) => {
           const performance = row.original.performance
+          if (performance.data_status !== 'complete') {
+            return (
+              <span className='text-muted-foreground whitespace-nowrap'>
+                {t('site.performance.unavailable')}
+              </span>
+            )
+          }
           return (
             <div className='grid gap-1 whitespace-nowrap'>
               <span>
@@ -397,7 +404,7 @@ export function SitesPage({
         />
 
         {search.view === 'card' ? (
-          <div className='min-h-0 flex-1 overflow-y-auto'>
+          <div className='min-h-0 flex-1 overflow-y-auto' tabIndex={0}>
             <CardGridState
               error={sitesQuery.isError}
               fetching={sitesQuery.isFetching}

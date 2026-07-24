@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"new-api-pilot/common"
@@ -46,6 +47,7 @@ type SettingService struct {
 	publicOrigin  string
 	dingTalkHosts map[string]struct{}
 	runtime       *RuntimeSettingsStore
+	updateMu      sync.Mutex
 }
 
 type settingDefinition struct {
@@ -132,6 +134,13 @@ func (service *SettingService) Update(
 	ctx context.Context,
 	request dto.SettingPatchRequest,
 ) ([]dto.SettingGroup, error) {
+	// Keep the database commit and the subsequent in-memory runtime refresh in
+	// one process-local order. Row locks serialize database writers, but without
+	// this guard an earlier writer could publish its snapshot after a later
+	// transaction has already committed and refreshed the runtime store.
+	service.updateMu.Lock()
+	defer service.updateMu.Unlock()
+
 	request.Normalize()
 	if fieldErrors := request.Validate(); fieldErrors != nil {
 		return nil, &SettingValidationError{Fields: fieldErrors}

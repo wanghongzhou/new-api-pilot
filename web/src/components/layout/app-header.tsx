@@ -12,6 +12,7 @@ import { buttonVariants } from '../ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -67,24 +68,26 @@ export function AppHeader({
             </Avatar>
           </DropdownMenuTrigger>
           <DropdownMenuContent align='end' className='w-56' sideOffset={8}>
-            <DropdownMenuLabel className='flex items-center gap-2 px-1.5 py-1.5 font-normal'>
-              <Avatar className='size-8'>
-                <AvatarFallback
-                  className='text-xs font-semibold text-white'
-                  style={avatarFallbackStyle}
-                >
-                  {avatarFallback}
-                </AvatarFallback>
-              </Avatar>
-              <div className='flex min-w-0 flex-1 flex-col gap-0.5 overflow-hidden'>
-                <p className='text-foreground truncate text-sm font-medium'>
-                  {user.display_name}
-                </p>
-                <span className='text-muted-foreground truncate text-xs'>
-                  {roleLabel}
-                </span>
-              </div>
-            </DropdownMenuLabel>
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className='flex items-center gap-2 px-1.5 py-1.5 font-normal'>
+                <Avatar className='size-8'>
+                  <AvatarFallback
+                    className='text-xs font-semibold text-white'
+                    style={avatarFallbackStyle}
+                  >
+                    {avatarFallback}
+                  </AvatarFallback>
+                </Avatar>
+                <div className='flex min-w-0 flex-1 flex-col gap-0.5 overflow-hidden'>
+                  <p className='text-foreground truncate text-sm font-medium'>
+                    {user.display_name}
+                  </p>
+                  <span className='text-muted-foreground truncate text-xs'>
+                    {roleLabel}
+                  </span>
+                </div>
+              </DropdownMenuLabel>
+            </DropdownMenuGroup>
             <DropdownMenuSeparator />
             {!user.must_change_password && (
               <DropdownMenuItem

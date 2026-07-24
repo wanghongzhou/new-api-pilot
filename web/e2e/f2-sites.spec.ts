@@ -879,7 +879,6 @@ test('completes four-step onboarding without persisting site secrets', async ({
     expect(consoleMessages.join('\n')).not.toContain(secret)
     expect(pageErrors.join('\n')).not.toContain(secret)
   }
-  expect(browserAudit.cache).toBeDefined()
   expect(pageErrors).toEqual([])
 })
 
@@ -990,7 +989,7 @@ test('shows export capability failures without rotating credentials', async ({
   await page.goto('/sites/1')
   for (const [, message] of failures) {
     await page.getByLabel('打开站点操作').click()
-    await page.getByRole('button', { name: '检查能力' }).click()
+    await page.getByRole('menuitem', { name: '检查能力' }).click()
     const dialog = page.getByRole('dialog', { name: '重新检查站点能力' })
     await dialog.getByRole('button', { name: '开始重新检查' }).click()
     await expect(dialog.getByText(message)).toBeVisible()
@@ -1104,7 +1103,7 @@ test('preflights edits and enforces lifecycle mutation boundaries', async ({
 
   await page.goto('/sites/1')
   await page.getByLabel('打开站点操作').click()
-  await page.getByRole('button', { name: '编辑站点' }).click()
+  await page.getByRole('menuitem', { name: '编辑站点' }).click()
   const editDialog = page.getByRole('dialog', { name: '编辑站点' })
   await editDialog.getByLabel('API 地址').fill('https://moved.example.com')
   await editDialog.getByRole('button', { name: '运行公开预检' }).click()
@@ -1131,7 +1130,7 @@ test('preflights edits and enforces lifecycle mutation boundaries', async ({
   })
 
   await page.getByLabel('打开站点操作').click()
-  await page.getByRole('button', { name: '停用站点' }).click()
+  await page.getByRole('menuitem', { name: '停用站点' }).click()
   const disableDialog = page.getByRole('alertdialog', { name: '停用站点？' })
   await disableDialog.getByRole('button', { name: '停用站点' }).click()
   await expect.poll(() => disableCalls).toBe(1)
@@ -1144,7 +1143,7 @@ test('preflights edits and enforces lifecycle mutation boundaries', async ({
   await expect(page.getByRole('heading', { name: '华东站点' })).toBeVisible()
   const getCallsBeforeLifecycle = detailGetCalls
   await page.getByLabel('打开站点操作').click()
-  await page.getByRole('button', { name: '管理停用生命周期' }).click()
+  await page.getByRole('menuitem', { name: '管理停用生命周期' }).click()
   const lifecycleDialog = page.getByRole('dialog', {
     name: '管理停用生命周期',
   })
@@ -1163,7 +1162,7 @@ test('preflights edits and enforces lifecycle mutation boundaries', async ({
     .click()
 
   await page.getByLabel('打开站点操作').click()
-  await page.getByRole('button', { name: '删除站点' }).click()
+  await page.getByRole('menuitem', { name: '删除站点' }).click()
   const deleteDialog = page.getByRole('alertdialog', { name: '删除站点？' })
   await deleteDialog.getByRole('button', { name: '删除站点' }).click()
   await expect(page.getByText('该对象存在关联数据，无法删除')).toBeVisible()

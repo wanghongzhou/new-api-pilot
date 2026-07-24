@@ -29,6 +29,9 @@ func (q SubscriptionPlanQuery) Validate() map[string]string {
 	if q.Page < 1 || q.PageSize < 1 || q.PageSize > 100 || !statisticsPaginationValid(q.Page, q.PageSize) {
 		e["p"] = "invalid"
 	}
+	if len(q.SiteIDs) > 100 || len(q.States) > 2 || len(q.Keyword) > 128 {
+		e["filters"] = "invalid"
+	}
 	for _, s := range q.States {
 		if s != "normal" && s != "missing" {
 			e["states"] = "invalid"

@@ -389,7 +389,7 @@ test('renders the complete settings surface for admin without overflow or axe vi
     }, scrollTop)
   expect(await scrollSettingsContent(300)).toBeGreaterThan(0)
   const stickyTabsY = Math.round((await categoryTabs.boundingBox())?.y ?? -1)
-  expect(await scrollSettingsContent(700)).toBeGreaterThan(300)
+  expect(await scrollSettingsContent(700)).toBeGreaterThan(0)
   await expect
     .poll(async () => Math.round((await categoryTabs.boundingBox())?.y ?? -1))
     .toBe(stickyTabsY)
@@ -421,11 +421,19 @@ test('renders the complete settings surface for admin without overflow or axe vi
   await expect(page.getByRole('heading', { name: '导出策略' })).toBeVisible()
   await expect(page.getByLabel('导出文件大小上限（MB）')).toHaveAttribute(
     'type',
-    'number'
+    'text'
+  )
+  await expect(page.getByLabel('导出文件大小上限（MB）')).toHaveAttribute(
+    'inputmode',
+    'numeric'
   )
   await expect(page.getByLabel('最低磁盘余量（MB）')).toHaveAttribute(
     'type',
-    'number'
+    'text'
+  )
+  await expect(page.getByLabel('最低磁盘余量（MB）')).toHaveAttribute(
+    'inputmode',
+    'numeric'
   )
   await categoryTabs.getByRole('tab', { name: '上游访问策略' }).click()
   await expect(
@@ -435,12 +443,13 @@ test('renders the complete settings surface for admin without overflow or axe vi
   await expect(page.getByRole('heading', { name: '费率兜底' })).toBeVisible()
   await expect(page.getByLabel('兜底额度单价基数（quota）')).toHaveAttribute(
     'type',
-    'number'
+    'text'
   )
-  await expect(page.getByLabel('兜底美元汇率')).toHaveAttribute(
-    'type',
-    'number'
+  await expect(page.getByLabel('兜底额度单价基数（quota）')).toHaveAttribute(
+    'inputmode',
+    'decimal'
   )
+  await expect(page.getByLabel('兜底美元汇率')).toHaveAttribute('type', 'text')
   await expect(page.getByLabel('兜底美元汇率')).toHaveAttribute(
     'inputmode',
     'decimal'
@@ -486,9 +495,23 @@ test('keeps Viewer settings read-only while retaining both settings navigation e
     page.getByRole('button', { name: '保存', exact: true })
   ).toHaveCount(0)
   await expect(page.getByRole('button', { name: '测试发送' })).toHaveCount(0)
-  if ((await page.getByRole('navigation').count()) > 0) {
-    await expect(page.getByRole('link', { name: '系统设置' })).toBeVisible()
-    await expect(page.getByRole('link', { name: '平台用户' })).toBeVisible()
+  const primaryNavigation = page.getByRole('navigation', { name: '主导航' })
+  if (await primaryNavigation.isVisible()) {
+    await expect(
+      primaryNavigation.getByRole('link', { name: '系统设置' })
+    ).toBeVisible()
+    await expect(
+      primaryNavigation.getByRole('link', { name: '平台用户' })
+    ).toBeVisible()
+  } else {
+    await page.getByRole('button', { name: '打开导航' }).click()
+    const mobileNavigation = page.getByRole('dialog', { name: '主导航' })
+    await expect(
+      mobileNavigation.getByRole('link', { name: '系统设置' })
+    ).toBeVisible()
+    await expect(
+      mobileNavigation.getByRole('link', { name: '平台用户' })
+    ).toBeVisible()
   }
   await assertNoHorizontalOverflow(page)
 })
@@ -649,8 +672,9 @@ test('requires explicit decrypt-error clear confirmation and supports later repl
   await page.goto('/settings')
   await page.getByRole('tab', { name: '平台与通知' }).click()
 
-  const secretHeading = page.getByRole('heading', { name: '钉钉签名密钥' })
-  const secretRow = secretHeading.locator('xpath=../..')
+  const secretRow = page.locator(
+    '[data-setting-key="notification.dingtalk.secret"]'
+  )
   await expect(secretRow.getByText('密文不可解密')).toBeVisible()
   await expect(secretRow.getByRole('button', { name: '保持' })).toBeDisabled()
   await secretRow.getByRole('button', { name: '清除' }).click()

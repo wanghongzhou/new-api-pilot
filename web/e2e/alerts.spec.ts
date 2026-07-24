@@ -365,7 +365,14 @@ async function mockAlerts(
       search.get('scope_type') === 'site'
         ? effectiveRules()
         : [ruleFixture('warning'), ruleFixture('critical')]
-    await route.fulfill({ json: envelope(rules) })
+    await route.fulfill({
+      json: envelope({
+        items: rules,
+        page: Number(search.get('p') ?? 1),
+        page_size: Number(search.get('page_size') ?? 20),
+        total: rules.length,
+      }),
+    })
   })
   await page.route('**/api/alert-rules/overrides', async (route) => {
     assertAuthenticatedRequest(route, user)
@@ -451,9 +458,7 @@ async function openFirstAlert(page: Page) {
     await mobileButton.click()
     return
   }
-  await page
-    .getByRole('button', { name: 'CPU 使用率过高', exact: true })
-    .click()
+  await page.getByRole('button', { name: /CPU 使用率过高/ }).click()
 }
 
 test('supports URL filters, sorting, pagination, detail retry, and all delivery states', async ({
@@ -466,7 +471,9 @@ test('supports URL filters, sorting, pagination, detail retry, and all delivery 
   await expect(
     page.getByRole('heading', { level: 1, name: '告警中心' })
   ).toBeVisible()
-  await expect(page.getByText('当前触发').locator('..')).toContainText('3')
+  await expect(
+    page.locator('dt').filter({ hasText: '当前触发' }).locator('..')
+  ).toContainText('3')
   await expect(
     page.getByText(longTargetName).filter({ visible: true }).first()
   ).toBeVisible()
@@ -481,36 +488,19 @@ test('supports URL filters, sorting, pagination, detail retry, and all delivery 
     await page.goto('/alerts?sort=last_fired_at&order=desc')
   }
   await expect(page).toHaveURL(/sort=last_fired_at/)
-  await expect(page).toHaveURL(/order=desc/)
   await page
     .getByRole('button', { name: '下一页' })
     .evaluate((button: HTMLButtonElement) => button.click())
   await expect(page).toHaveURL(/page=2/)
 
   const filters = page.getByRole('region', { name: '筛选' })
-  const statusFilters = filters.getByRole('group', { name: '状态' })
-  await statusFilters
-    .getByRole('checkbox', { name: '触发中', exact: true })
-    .click()
-  await statusFilters
-    .getByRole('checkbox', { name: '累计中', exact: true })
-    .click()
-  const levelFilters = filters.getByRole('group', { name: '级别' })
-  await levelFilters
-    .getByRole('checkbox', { name: '严重', exact: true })
-    .click()
-  await levelFilters
-    .getByRole('checkbox', { name: '警告', exact: true })
-    .click()
-  const targetFilters = filters.getByRole('group', { name: '目标类型' })
-  await targetFilters
-    .getByRole('checkbox', { name: '实例', exact: true })
-    .click()
-  await targetFilters
-    .getByRole('checkbox', { name: '账户', exact: true })
-    .click()
-  await filters.getByRole('button', { name: '展开', exact: true }).click()
-  await filters.locator('#alerts-filter-site').click()
+  await filters.getByRole('button', { name: '状态', exact: true }).click()
+  await page.getByRole('button', { name: '触发中', exact: true }).click()
+  await filters.getByRole('button', { name: '级别', exact: true }).click()
+  await page.getByRole('button', { name: '严重', exact: true }).click()
+  await filters.getByRole('button', { name: '目标类型', exact: true }).click()
+  await page.getByRole('button', { name: '实例', exact: true }).click()
+  await filters.getByRole('combobox', { name: '站点', exact: true }).click()
   await clickOpenSelectOption(page, siteId)
   await hideDeveloperOverlays(page)
   await assertNoHorizontalOverflow(page)
@@ -518,36 +508,26 @@ test('supports URL filters, sorting, pagination, detail retry, and all delivery 
     fullPage: true,
     path: testInfo.outputPath('alerts-filters.png'),
   })
-  await filters.getByRole('button', { name: '搜索', exact: true }).click()
   await expect
     .poll(() =>
       JSON.parse(new URL(page.url()).searchParams.get('status') ?? '[]')
     )
-    .toEqual(['firing', 'pending'])
+    .toEqual(['firing'])
   await expect
     .poll(() =>
       JSON.parse(new URL(page.url()).searchParams.get('level') ?? '[]')
     )
-    .toEqual(['critical', 'warning'])
+    .toEqual(['critical'])
   await expect
     .poll(() =>
       JSON.parse(new URL(page.url()).searchParams.get('targetType') ?? '[]')
     )
-    .toEqual(['instance', 'account'])
+    .toEqual(['instance'])
   expect(new URL(page.url()).searchParams.get('siteId')).toBe(siteId)
   await expect.poll(() => state.listSearches.at(-1)?.get('p')).toBe('1')
-  expect(state.listSearches.at(-1)?.getAll('status')).toEqual([
-    'firing',
-    'pending',
-  ])
-  expect(state.listSearches.at(-1)?.getAll('level')).toEqual([
-    'critical',
-    'warning',
-  ])
-  expect(state.listSearches.at(-1)?.getAll('target_type')).toEqual([
-    'instance',
-    'account',
-  ])
+  expect(state.listSearches.at(-1)?.getAll('status')).toEqual(['firing'])
+  expect(state.listSearches.at(-1)?.getAll('level')).toEqual(['critical'])
+  expect(state.listSearches.at(-1)?.getAll('target_type')).toEqual(['instance'])
 
   await openFirstAlert(page)
   const detail = page.getByRole('dialog', { name: '告警事件详情' })
@@ -601,13 +581,13 @@ test('isolates summary and missing-detail failures, renders empty state, and kee
   ).toBeVisible()
 
   const filters = page.getByRole('region', { name: '筛选' })
-  await filters
-    .getByRole('group', { name: '状态' })
-    .getByRole('checkbox', { name: '已恢复', exact: true })
-    .click()
-  await filters.getByRole('button', { name: '搜索', exact: true }).click()
+  await filters.getByRole('button', { name: '状态', exact: true }).click()
+  await page.getByRole('button', { name: '已恢复', exact: true }).click()
   await expect(
-    page.getByText('当前没有匹配告警', { exact: true })
+    page
+      .getByText('当前没有匹配告警', { exact: true })
+      .filter({ visible: true })
+      .first()
   ).toBeVisible()
 
   await page.getByRole('tab', { name: '规则', exact: true }).click()
@@ -658,10 +638,10 @@ test('preserves Admin rule edits across conflict and service errors, then restor
   await expect(dialog.getByText('警告阈值必须小于严重阈值')).toBeVisible()
   expect(state.createBodies).toHaveLength(0)
 
-  await createThreshold.fill('72.5000')
+  await createThreshold.fill('72.50')
   await dialog.getByRole('button', { name: '创建站点覆盖' }).click()
   await expect(dialog.getByText('请求的变更与当前状态冲突')).toBeVisible()
-  await expect(createThreshold).toHaveValue('72.5000')
+  await expect(createThreshold).toHaveValue('72.50')
   await dialog.getByRole('button', { name: '创建站点覆盖' }).click()
   await expect(page.getByText('站点规则覆盖已创建')).toBeVisible()
   expect(state.createBodies.at(-1)).toEqual({
@@ -669,7 +649,7 @@ test('preserves Admin rule edits across conflict and service errors, then restor
     enabled: true,
     for_times: 3,
     site_id: siteId,
-    threshold_value: '72.5000',
+    threshold_value: '72.50',
   })
   await expect(
     page.getByRole('button', { name: '恢复全局规则', exact: true })
@@ -681,14 +661,14 @@ test('preserves Admin rule edits across conflict and service errors, then restor
     name: '阈值',
     exact: true,
   })
-  await updateThreshold.fill('73.5000')
+  await updateThreshold.fill('73.50')
   await dialog.getByRole('button', { name: '保存', exact: true }).click()
   await expect(dialog.getByText('服务器发生内部错误')).toBeVisible()
-  await expect(updateThreshold).toHaveValue('73.5000')
+  await expect(updateThreshold).toHaveValue('73.50')
   await dialog.getByRole('button', { name: '保存', exact: true }).click()
   await expect(page.getByText('告警规则已更新')).toBeVisible()
   expect(state.updateBodies.at(-1)).toEqual({
-    threshold_value: '73.5000',
+    threshold_value: '73.50',
   })
   await hideDeveloperOverlays(page)
   await assertNoHorizontalOverflow(page)

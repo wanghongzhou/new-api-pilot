@@ -179,14 +179,14 @@ test('A71 lets an admin submit only allowed global and site-override rule fields
   await expect(dialog.getByText('警告阈值必须小于严重阈值')).toBeVisible()
   expect(state.updateBodies).toHaveLength(0)
 
-  await threshold.fill('72.5000')
+  await threshold.fill('72.50')
   await dialog
     .getByRole('spinbutton', { name: '连续次数', exact: true })
     .fill('4')
   await dialog.getByRole('button', { name: '保存', exact: true }).click()
   await expect(page.getByText('告警规则已更新')).toBeVisible()
   expect(state.updateBodies).toEqual([
-    { for_times: 4, threshold_value: '72.5000' },
+    { for_times: 4, threshold_value: '72.50' },
   ])
 
   await page.goto(
@@ -197,9 +197,7 @@ test('A71 lets an admin submit only allowed global and site-override rule fields
     .first()
     .click()
   dialog = page.getByRole('dialog', { name: '创建站点覆盖' })
-  await dialog
-    .getByRole('textbox', { name: '阈值', exact: true })
-    .fill('72.5000')
+  await dialog.getByRole('textbox', { name: '阈值', exact: true }).fill('72.50')
   await dialog.getByRole('button', { name: '创建站点覆盖' }).click()
   await expect(page.getByText('站点规则覆盖已创建')).toBeVisible()
   expect(state.createBodies).toEqual([
@@ -208,7 +206,7 @@ test('A71 lets an admin submit only allowed global and site-override rule fields
       enabled: true,
       for_times: 3,
       site_id: siteId,
-      threshold_value: '72.5000',
+      threshold_value: '72.50',
     },
   ])
 

@@ -67,7 +67,9 @@ describe('model catalog information architecture', () => {
     expect(source).not.toContain('fillAvailableHeight={false}')
     expect(source).not.toContain('paginationInFooter={false}')
     expect(source).not.toContain('preserveHeaderWhenEmpty={false}')
-    expect(source).toContain("className='min-h-0 flex-1 overflow-y-auto'")
+    expect(source).toContain(
+      "className='min-h-0 flex-1 overflow-y-auto' tabIndex={0}"
+    )
   })
 
   test('uses a single border level for coverage analysis cards', async () => {
@@ -80,6 +82,17 @@ describe('model catalog information architecture', () => {
     )
     expect(source).not.toContain(
       "className='border-border bg-muted/20 grid gap-2 rounded-lg border p-3'"
+    )
+  })
+
+  test('uses a valid definition-list structure for summary metrics', async () => {
+    const source = await readFile(pagePath, 'utf8')
+    expect(source).toContain(
+      "<div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>"
+    )
+    expect(source).toContain("<dl className='min-w-0'>")
+    expect(source).not.toContain(
+      "<dl className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>"
     )
   })
 })

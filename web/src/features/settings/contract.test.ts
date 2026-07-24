@@ -7,6 +7,7 @@ import {
   buildSettingPatchItems,
   getMinuteRetentionDays,
   settingFieldDefinitions,
+  settingValueForDisplay,
   settingsSectionKeys,
   settingsSections,
   settingsToFormValues,
@@ -225,6 +226,38 @@ describe('settings frontend contract', () => {
     expect(values.fastTaskHistoryRetentionHours).toBe('24')
     expect(values.maxFileMegabytes).toBe('2048')
     expect(values.minFreeDiskMegabytes).toBe('5120')
+
+    const probeDefinition = settingFieldDefinitions.find(
+      (definition) => definition.key === 'collector.probe_interval_seconds'
+    )
+    const bytesDefinition = settingFieldDefinitions.find(
+      (definition) => definition.key === 'export.max_file_bytes'
+    )
+    expect(probeDefinition).toBeDefined()
+    expect(bytesDefinition).toBeDefined()
+    if (!probeDefinition || !bytesDefinition) {
+      throw new Error('required setting definitions are missing')
+    }
+    expect(
+      settingValueForDisplay(probeDefinition, {
+        configured: true,
+        constraints: {},
+        decrypt_error: false,
+        key: 'collector.probe_interval_seconds',
+        masked_value: '',
+        read_only: false,
+        secret: false,
+        updated_at: 1,
+        value: 120,
+        value_type: 'int',
+      })
+    ).toBe(2)
+    expect(
+      settingValueForDisplay(
+        bytesDefinition,
+        item('export.max_file_bytes', '2147483648')
+      )
+    ).toBe('2048')
   })
 
   test('maps indexed and final-state server errors to the edited controls', () => {

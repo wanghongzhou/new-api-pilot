@@ -256,7 +256,7 @@ export function DataTable<TData>({
           aria-label={ariaLabel}
           aria-busy={loading || fetching}
           className={cn(
-            'focus-visible:ring-ring overflow-x-auto focus-visible:ring-2 focus-visible:outline-none',
+            'focus-visible:ring-ring overflow-auto overscroll-contain focus-visible:ring-2 focus-visible:outline-none',
             fillAvailableHeight && 'h-full'
           )}
           role='region'
@@ -265,8 +265,10 @@ export function DataTable<TData>({
           <Table
             aria-label={ariaLabel}
             className='w-full border-collapse text-sm'
+            containerClassName='overflow-visible'
+            containerTabIndex={-1}
           >
-            <TableHeader className='bg-[var(--table-header)] text-left'>
+            <TableHeader className='sticky top-0 z-10 bg-[var(--table-header)] text-left'>
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id}>
                   {headerGroup.headers.map((header) => {
@@ -329,6 +331,7 @@ export function DataTable<TData>({
             'grid min-h-0 flex-1 gap-3 overflow-y-auto transition-opacity duration-150 min-[641px]:hidden',
             fetching && !loading && 'pointer-events-none opacity-60'
           )}
+          tabIndex={0}
         >
           {loading && data.length === 0 ? (
             Array.from({ length: 3 }, (_, index) => (

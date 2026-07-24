@@ -553,6 +553,41 @@ export function settingsSecretState(
   }
 }
 
+export function settingValueForDisplay(
+  definition: SettingFieldDefinition,
+  item: SettingItem | undefined
+): unknown {
+  if (!item || item.secret || item.value == null || item.value === '') {
+    return item?.value
+  }
+  if (
+    isCollectorIntervalKey(definition.key) &&
+    typeof item.value === 'number'
+  ) {
+    return item.value / 60
+  }
+  if (
+    definition.key === 'fast_task.history_retention_seconds' &&
+    typeof item.value === 'number'
+  ) {
+    return Number((item.value / 3600).toFixed(4))
+  }
+  if (
+    (definition.key === 'export.max_file_bytes' ||
+      definition.key === 'export.min_free_disk_bytes') &&
+    typeof item.value === 'string' &&
+    /^\d+$/.test(item.value)
+  ) {
+    const bytes = BigInt(item.value)
+    const bytesPerMegabyte = 1_048_576n
+    return ((bytes + bytesPerMegabyte - 1n) / bytesPerMegabyte).toString()
+  }
+  if (definition.kind === 'multiline' && typeof item.value === 'string') {
+    return item.value.split(',').filter(Boolean).join('\n')
+  }
+  return item.value
+}
+
 const settingKeyToFormName = Object.fromEntries(
   editableDefinitions.map((definition) => [definition.key, definition.formName])
 ) as Partial<Record<PlatformSettingKey, FieldPath<SettingsFormValues>>>

@@ -23,9 +23,14 @@ describe('pricing and groups information architecture', () => {
     expect(source).not.toContain('fillAvailableHeight={false}')
     expect(source).not.toContain('paginationInFooter={false}')
     expect(source).not.toContain('preserveHeaderWhenEmpty={false}')
-    expect(source).toContain("className='min-h-0 flex-1 overflow-y-auto'")
+    expect(source).toContain(
+      "className='min-h-0 flex-1 overflow-y-auto' tabIndex={0}"
+    )
     expect(source).toContain('isPricingAnalysisTab(search.tab)')
     expect(source).toContain('statisticsQuery.isError')
     expect(source).toContain('canonicalizedSearch.current')
+    expect(source).toContain("<div className='grid gap-3 sm:grid-cols-3'>")
+    expect(source).toContain('<dl>')
+    expect(source).not.toContain("<dl className='grid gap-3 sm:grid-cols-3'>")
   })
 })

@@ -396,7 +396,7 @@ function SummaryGrid({
     },
   ] as const
   return (
-    <dl className='grid gap-3 sm:grid-cols-3'>
+    <div className='grid gap-3 sm:grid-cols-3'>
       {items.map(({ icon, label, value }) => (
         <div
           className='bg-card text-card-foreground ring-foreground/10 flex items-center gap-3 rounded-xl p-4 ring-1'
@@ -405,15 +405,15 @@ function SummaryGrid({
           <span className='bg-muted text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-lg'>
             <HugeiconsIcon icon={icon} size={18} strokeWidth={2} />
           </span>
-          <div>
+          <dl>
             <dt className='text-muted-foreground text-xs'>{label}</dt>
             <dd className='mt-0.5 text-2xl font-semibold tracking-tight'>
               {value == null ? '-' : <MetricValue value={value} />}
             </dd>
-          </div>
+          </dl>
         </div>
       ))}
-    </dl>
+    </div>
   )
 }
 
@@ -879,7 +879,7 @@ export function PricingGroupsPage({
           />
         )}
         {isPricingAnalysisTab(search.tab) && (
-          <div className='min-h-0 flex-1 overflow-y-auto'>
+          <div className='min-h-0 flex-1 overflow-y-auto' tabIndex={0}>
             {search.tab === 'site-analysis' && (
               <div className='grid gap-5'>
                 {statistics && (

@@ -712,16 +712,28 @@ export function SiteInstancesPage({
             )}
           </div>
           {rangeError && (
-            <p
-              className={
-                retentionLoading
-                  ? 'text-muted-foreground text-sm'
-                  : 'text-destructive text-sm'
-              }
-              role={retentionLoading ? 'status' : 'alert'}
-            >
-              {rangeError}
-            </p>
+            <div className='flex flex-wrap items-center gap-2'>
+              <p
+                className={
+                  retentionLoading
+                    ? 'text-muted-foreground text-sm'
+                    : 'text-destructive text-sm'
+                }
+                role={retentionLoading ? 'status' : 'alert'}
+              >
+                {rangeError}
+              </p>
+              {settingsQuery.isError && (
+                <Button
+                  onClick={() => void settingsQuery.refetch()}
+                  size='sm'
+                  type='button'
+                  variant='outline'
+                >
+                  {t('Refresh')}
+                </Button>
+              )}
+            </div>
           )}
           <ResourceTrend
             error={

@@ -49,6 +49,17 @@ async function seedAuth(page: Page, testInfo: TestInfo) {
     assertAuthenticated(route)
     await route.fulfill({ json: envelope(viewer, 'req_catalog_self') })
   })
+  await page.route(/\/api\/sites(?:\?.*)?$/, async (route) => {
+    assertAuthenticated(route)
+    await route.fulfill({
+      json: envelope({
+        items: [{ id: '9007199254740997', name: '华东模型站点' }],
+        page: 1,
+        page_size: 100,
+        total: 1,
+      }),
+    })
+  })
 }
 
 const iconText = 'https://icons.example.invalid/model.svg'
@@ -268,7 +279,7 @@ test('A96 keeps model catalog exact, icon-text-only, private, exportable and res
 
   await page.goto('/model-catalog')
   await expect(
-    page.getByRole('heading', { exact: true, name: '模型目录' })
+    page.getByRole('heading', { exact: true, name: '模型审计' })
   ).toBeVisible()
   await expect(
     page.getByText(iconText, { exact: true }).filter({ visible: true }).first()
@@ -276,12 +287,7 @@ test('A96 keeps model catalog exact, icon-text-only, private, exportable and res
   expect(externalIconRequests).toBe(0)
   await expect(page.locator(`img[src="${iconText}"]`)).toHaveCount(0)
   await expect(page.locator(`a[href="${iconText}"]`)).toHaveCount(0)
-  for (const rule of [
-    'Exact 精确',
-    'Prefix 前缀',
-    'Contains 包含',
-    'Suffix 后缀',
-  ]) {
+  for (const rule of ['精确匹配', '前缀匹配', '包含匹配', '后缀匹配']) {
     await expect(
       page.getByText(rule, { exact: true }).filter({ visible: true }).first()
     ).toBeVisible()
@@ -290,17 +296,18 @@ test('A96 keeps model catalog exact, icon-text-only, private, exportable and res
   await page
     .getByRole('textbox', { exact: true, name: '模型关键词' })
     .fill('gpt')
+  await page.getByRole('button', { exact: true, name: '站点' }).click()
+  await page.getByRole('button', { exact: true, name: '华东模型站点' }).click()
+  await page.getByRole('textbox', { exact: true, name: '供应商 ID' }).fill('0')
+  await page.getByRole('button', { exact: true, name: '模型状态' }).click()
   await page
-    .getByRole('textbox', { exact: true, name: '站点 ID' })
-    .fill('9007199254740997')
-  await page.getByRole('textbox', { exact: true, name: 'Vendor ID' }).fill('0')
-  await page
-    .getByRole('group', { name: '模型状态' })
-    .getByRole('button', { name: '启用' })
+    .getByRole('button', { exact: true, name: '启用' })
+    .filter({ visible: true })
     .click()
+  await page.getByRole('button', { exact: true, name: '官方同步状态' }).click()
   await page
-    .getByRole('group', { name: '官方同步状态' })
-    .getByRole('button', { name: '禁用' })
+    .getByRole('button', { exact: true, name: '禁用' })
+    .filter({ visible: true })
     .click()
   await expect
     .poll(() => globalReads.at(-1)?.searchParams.get('vendor_id'))
@@ -312,23 +319,25 @@ test('A96 keeps model catalog exact, icon-text-only, private, exportable and res
   expect(catalogRead?.searchParams.getAll('statuses')).toEqual(['1'])
   expect(catalogRead?.searchParams.getAll('sync_official')).toEqual(['0'])
 
-  await page.getByRole('tab', { name: 'Coverage' }).click()
+  await page.getByRole('button', { name: '导出 XLSX' }).click()
+  await expect.poll(() => exportBody?.statistics_type).toBe('model_catalog')
+  expect(exportBody?.filters.model_vendor_id).toBe('0')
+  expect(exportBody?.filters.model_statuses).toEqual([1])
+  expect(exportBody?.filters.model_sync_official).toEqual([0])
+  await page.getByRole('button', { name: '关闭' }).click()
+
+  await page.getByRole('tab', { name: '覆盖分析' }).click()
   await expect(page.getByText('9007199254740993').first()).toBeVisible()
   await expect(page.getByText('Vendor 0')).toBeVisible()
   await expect(
     page.getByText('不可用').filter({ visible: true }).first()
   ).toBeVisible()
 
-  await page.getByRole('tab', { name: 'Missing' }).click()
+  await page.getByRole('tab', { name: '渠道未登记' }).click()
   await expect(
     page.getByText('gpt-prefix-child').filter({ visible: true }).first()
   ).toBeVisible()
-  await expect(page.getByText(/Prefix、Contains、Suffix/)).toBeVisible()
-  await page.getByRole('button', { name: '导出 XLSX' }).click()
-  await expect.poll(() => exportBody?.statistics_type).toBe('model_catalog')
-  expect(exportBody?.filters.model_vendor_id).toBe('0')
-  expect(exportBody?.filters.model_statuses).toEqual([1])
-  expect(exportBody?.filters.model_sync_official).toEqual([0])
+  await expect(page.getByText(/前缀、包含和后缀规则/)).toBeVisible()
   const serializedExport = JSON.stringify(exportBody).toLowerCase()
   for (const field of forbiddenFields()) {
     expect(serializedExport).not.toContain(field)
@@ -366,9 +375,11 @@ test('A96 keeps model catalog exact, icon-text-only, private, exportable and res
 
   await page.goto('/sites/9007199254740997/model-catalog?tab=coverage')
   await expect(
-    page.getByRole('heading', { exact: true, name: '站点模型目录' })
+    page.getByRole('heading', { exact: true, name: '站点模型审计' })
   ).toBeVisible()
-  await expect(page.getByText('站点覆盖拆分')).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: '站点覆盖情况' })
+  ).toBeVisible()
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth

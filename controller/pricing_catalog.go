@@ -41,6 +41,10 @@ func (c *PricingCatalogController) SiteGroups(g *gin.Context) {
 	}
 }
 func (c *PricingCatalogController) run(g *gin.Context, sites []int64, kind string) {
+	if c == nil || c.s == nil {
+		common.AbortInternalError(g)
+		return
+	}
 	allowed := map[string]bool{"p": true, "page_size": true, "states": true, "keyword": true, "group": true}
 	if sites == nil {
 		allowed["site_ids"] = true
@@ -62,6 +66,11 @@ func (c *PricingCatalogController) run(g *gin.Context, sites []int64, kind strin
 			return
 		}
 	}
+	q.Normalize()
+	if fields := q.Validate(); fields != nil {
+		common.AbortError(g, http.StatusBadRequest, constant.CodeValidationError, "Invalid pricing catalog query", fields)
+		return
+	}
 	var result any
 	var err error
 	switch kind {
@@ -73,7 +82,7 @@ func (c *PricingCatalogController) run(g *gin.Context, sites []int64, kind strin
 		result, err = c.s.List(g.Request.Context(), q)
 	}
 	if err != nil {
-		common.AbortError(g, http.StatusBadRequest, constant.CodeValidationError, "Invalid pricing catalog query", nil)
+		common.AbortInternalError(g)
 		return
 	}
 	common.WriteSuccess(g, http.StatusOK, result)

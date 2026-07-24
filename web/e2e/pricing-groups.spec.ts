@@ -60,6 +60,17 @@ async function seedAuth(page: Page, testInfo: TestInfo) {
   await page.route(/\/api\/user\/self(?:\?.*)?$/, async (route) => {
     await route.fulfill({ json: envelope(viewer, 'req_pricing_self') })
   })
+  await page.route(/\/api\/sites(?:\?.*)?$/, async (route) => {
+    assertAuthenticated(route)
+    await route.fulfill({
+      json: envelope({
+        items: [{ id: '9007199254740997', name: '华东定价站点' }],
+        page: 1,
+        page_size: 100,
+        total: 1,
+      }),
+    })
+  })
 }
 
 const pricingItem = {
@@ -214,7 +225,7 @@ test('A99 keeps pricing and configured groups exact, passive, private and respon
     '/pricing-groups?siteIds=9007199254740997&keyword=gpt&group=vip&states=normal'
   )
   await expect(
-    page.getByRole('heading', { exact: true, name: '定价与分组目录' })
+    page.getByRole('heading', { exact: true, name: '定价与分组' })
   ).toBeVisible()
   await expect(
     page.getByText('1.2500000000').filter({ visible: true }).first()
@@ -231,25 +242,38 @@ test('A99 keeps pricing and configured groups exact, passive, private and respon
   await expect(
     page.getByText('root 可见').filter({ visible: true }).first()
   ).toBeVisible()
-  await expect(
-    page.getByRole('heading', { name: 'Vendor 定价拆分' })
-  ).toBeVisible()
-  await expect(
-    page.getByRole('heading', { name: '可用分组模型拆分' })
-  ).toBeVisible()
-  await expect(
-    page.getByText('Ratio 可用').filter({ visible: true }).first()
-  ).toBeVisible()
   expect(
     reads
       .slice(0, 2)
       .map((url) => url.pathname)
       .sort()
   ).toEqual(['/api/pricing-catalog', '/api/pricing-catalog/statistics'])
-  for (const url of reads.slice(0, 2)) {
-    expect(url.searchParams.getAll('site_ids')).toEqual(['9007199254740997'])
-    expect(url.searchParams.get('group')).toBe('vip')
-  }
+  const pricingRead = reads.find(
+    (url) => url.pathname === '/api/pricing-catalog'
+  )
+  const pricingStatisticsRead = reads.find(
+    (url) => url.pathname === '/api/pricing-catalog/statistics'
+  )
+  expect(pricingRead?.searchParams.getAll('site_ids')).toEqual([
+    '9007199254740997',
+  ])
+  expect(pricingRead?.searchParams.get('group')).toBe('vip')
+  expect(pricingStatisticsRead?.search).toBe('?p=1&page_size=20')
+  await page.getByRole('tab', { name: '供应商定价' }).click()
+  await expect(
+    page.getByRole('heading', { name: '供应商定价情况' })
+  ).toBeVisible()
+  await page.getByRole('tab', { name: '分组模型' }).click()
+  await expect(
+    page.getByRole('heading', { name: '分组模型情况' })
+  ).toBeVisible()
+  await page.getByRole('tab', { name: '分组完整性' }).click()
+  await expect(
+    page.getByRole('heading', { name: '分组可见性与 Ratio 完整性' })
+  ).toBeVisible()
+  await expect(
+    page.getByText('Ratio 可用').filter({ visible: true }).first()
+  ).toBeVisible()
   await page.getByRole('tab', { name: '已配置分组' }).click()
   await expect(page).toHaveURL(/tab=groups/)
   await expect(
@@ -278,7 +302,7 @@ test('A99 keeps pricing and configured groups exact, passive, private and respon
     '/sites/9007199254740997/pricing-groups?tab=pricing&siteIds=9'
   )
   await expect(
-    page.getByRole('heading', { exact: true, name: '站点定价与分组目录' })
+    page.getByRole('heading', { exact: true, name: '站点定价与分组' })
   ).toBeVisible()
   await expect.poll(() => reads.length).toBeGreaterThanOrEqual(2)
   for (const url of reads) expect(url.searchParams.has('site_ids')).toBe(false)

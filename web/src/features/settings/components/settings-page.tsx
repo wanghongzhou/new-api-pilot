@@ -47,6 +47,7 @@ import {
   isCollectorIntervalKey,
   settingFieldDefinitions,
   settingItemsByKey,
+  settingValueForDisplay,
   settingsSecretState,
   settingsSections,
   settingsToFormValues,
@@ -105,6 +106,7 @@ function displayConstraint(
 }
 
 function displaySettingValue(
+  definition: SettingFieldDefinition,
   item: SettingItem | undefined,
   t: (key: string) => string
 ) {
@@ -120,7 +122,7 @@ function displaySettingValue(
       : t('settings.value.disabled')
   }
   if (item.value == null || item.value === '') return t('settings.value.notSet')
-  return String(item.value)
+  return String(settingValueForDisplay(definition, item))
 }
 
 function UpdatedAt({ item }: { item: SettingItem | undefined }) {
@@ -135,12 +137,18 @@ function UpdatedAt({ item }: { item: SettingItem | undefined }) {
   )
 }
 
-function ReadonlySetting({ item }: { item: SettingItem | undefined }) {
+function ReadonlySetting({
+  definition,
+  item,
+}: {
+  definition: SettingFieldDefinition
+  item: SettingItem | undefined
+}) {
   const { t } = useTranslation()
   return (
     <div className='grid gap-1.5'>
-      <output className='border-border bg-muted/35 flex min-h-10 items-center rounded-md border px-3 text-sm break-all'>
-        {displaySettingValue(item, t)}
+      <output className='border-border bg-muted/35 flex min-h-10 items-center rounded-md border px-3 text-sm break-all whitespace-pre-wrap'>
+        {displaySettingValue(definition, item, t)}
       </output>
       <UpdatedAt item={item} />
     </div>
@@ -157,7 +165,9 @@ function EditableSetting({
   item: SettingItem | undefined
 }) {
   const { t } = useTranslation()
-  if (!definition.formName) return <ReadonlySetting item={item} />
+  if (!definition.formName) {
+    return <ReadonlySetting definition={definition} item={item} />
+  }
   const error = validationMessage(form.formState.errors, definition.formName, t)
   if (definition.kind === 'boolean') {
     return (
@@ -225,13 +235,7 @@ function EditableSetting({
       max={displayConstraint(definition, item, 'maximum')}
       min={displayConstraint(definition, item, 'minimum')}
       step={definition.step}
-      type={
-        definition.kind === 'decimal' ||
-        definition.kind === 'integer' ||
-        definition.kind === 'bigint'
-          ? 'number'
-          : 'text'
-      }
+      type={definition.kind === 'integer' ? 'number' : 'text'}
       {...form.register(definition.formName)}
     />
   )
@@ -406,7 +410,7 @@ function SettingRow({
   const { t } = useTranslation()
   let control: ReactNode
   if (!isAdmin || definition.kind === 'readonly') {
-    control = <ReadonlySetting item={item} />
+    control = <ReadonlySetting definition={definition} item={item} />
   } else if (definition.key === 'notification.dingtalk.webhook') {
     control = (
       <SecretSetting
@@ -435,6 +439,7 @@ function SettingRow({
 
   return (
     <div
+      data-setting-key={definition.key}
       className={
         definition.kind === 'boolean' || definition.kind === 'multiline'
           ? 'grid min-w-0 gap-1.5 lg:col-span-2'
@@ -444,10 +449,10 @@ function SettingRow({
       <h3 className='text-sm font-medium'>
         {t(dynamicI18nKey('settings', definition.labelKey))}
       </h3>
-      <div className='min-w-0'>{control}</div>
       <p className='text-muted-foreground text-xs'>
         {t(dynamicI18nKey('settings', definition.descriptionKey))}
       </p>
+      <div className='min-w-0'>{control}</div>
     </div>
   )
 }
@@ -477,35 +482,48 @@ function NotificationTest({
   }
 
   return (
-    <Button
-      disabled={!canTest || mutation.isPending}
-      onClick={() => {
-        mutation.mutate(undefined, {
-          onError: (error) =>
-            toast.error(
-              t(dynamicI18nKey('api', getApiErrorTranslationKey(error)))
-            ),
-          onSuccess: (result) => {
-            onResult(result)
-            const message = translateMessageRef(result.message)
-            if (result.status === 'success') toast.success(message)
-            else if (result.message.code === 'DELIVERY_RETRY_SCHEDULED') {
-              toast.warning(message)
-            } else toast.error(message)
-          },
-        })
-      }}
-      title={disabledReason}
-      type='button'
-      variant='outline'
-    >
-      {mutation.isPending ? (
-        <Spinner />
-      ) : (
-        <HugeiconsIcon icon={Sent02Icon} strokeWidth={2} />
+    <div className='grid justify-items-end gap-1'>
+      <Button
+        aria-describedby={
+          disabledReason ? 'notification-test-reason' : undefined
+        }
+        disabled={!canTest || mutation.isPending}
+        onClick={() => {
+          mutation.mutate(undefined, {
+            onError: (error) =>
+              toast.error(
+                t(dynamicI18nKey('api', getApiErrorTranslationKey(error)))
+              ),
+            onSuccess: (result) => {
+              onResult(result)
+              const message = translateMessageRef(result.message)
+              if (result.status === 'success') toast.success(message)
+              else if (result.message.code === 'DELIVERY_RETRY_SCHEDULED') {
+                toast.warning(message)
+              } else toast.error(message)
+            },
+          })
+        }}
+        title={disabledReason}
+        type='button'
+        variant='outline'
+      >
+        {mutation.isPending ? (
+          <Spinner />
+        ) : (
+          <HugeiconsIcon icon={Sent02Icon} strokeWidth={2} />
+        )}
+        {t('settings.notification.test')}
+      </Button>
+      {disabledReason && (
+        <span
+          className='text-muted-foreground max-w-sm text-right text-xs'
+          id='notification-test-reason'
+        >
+          {disabledReason}
+        </span>
       )}
-      {t('settings.notification.test')}
-    </Button>
+    </div>
   )
 }
 

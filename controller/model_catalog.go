@@ -46,6 +46,24 @@ func (c *ModelCatalogController) run(g *gin.Context, sites []int64, kind string)
 		common.AbortInternalError(g)
 		return
 	}
+	allowed := map[string]bool{"p": true, "page_size": true}
+	if kind == "list" {
+		allowed["keyword"] = true
+		allowed["vendor_id"] = true
+		allowed["statuses"] = true
+		allowed["sync_official"] = true
+	} else if kind == "missing" {
+		allowed["keyword"] = true
+	}
+	if sites == nil && kind != "coverage" {
+		allowed["site_ids"] = true
+	}
+	for key := range g.Request.URL.Query() {
+		if !allowed[key] {
+			common.AbortError(g, http.StatusBadRequest, constant.CodeValidationError, "Invalid model catalog query", map[string]string{key: "unsupported"})
+			return
+		}
+	}
 	p, _ := strconv.Atoi(g.DefaultQuery("p", "1"))
 	size, _ := strconv.Atoi(g.DefaultQuery("page_size", "20"))
 	q := dto.ModelCatalogQuery{Page: p, PageSize: size, SiteIDs: sites, Keyword: g.Query("keyword")}
@@ -74,6 +92,11 @@ func (c *ModelCatalogController) run(g *gin.Context, sites []int64, kind string)
 		common.AbortError(g, http.StatusBadRequest, constant.CodeValidationError, "Invalid model catalog query", map[string]string{"sync_official": "invalid"})
 		return
 	}
+	q.Normalize()
+	if fields := q.Validate(); fields != nil {
+		common.AbortError(g, http.StatusBadRequest, constant.CodeValidationError, "Invalid model catalog query", fields)
+		return
+	}
 	var v any
 	var err error
 	if kind == "list" {
@@ -84,7 +107,7 @@ func (c *ModelCatalogController) run(g *gin.Context, sites []int64, kind string)
 		v, err = c.s.Coverage(g.Request.Context(), q)
 	}
 	if err != nil {
-		common.AbortError(g, http.StatusBadRequest, constant.CodeValidationError, "Invalid model catalog query", nil)
+		common.AbortInternalError(g)
 		return
 	}
 	common.WriteSuccess(g, http.StatusOK, v)

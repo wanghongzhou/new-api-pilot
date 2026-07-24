@@ -124,10 +124,16 @@ function UpdatedAtLine({
     timestamp == null
       ? null
       : fromUnixSeconds(timestamp).format('YYYY-MM-DD HH:mm:ss')
+  let freshnessDotClass = 'bg-success'
+  if (timestamp == null) freshnessDotClass = 'bg-muted-foreground'
+  else if (expired) freshnessDotClass = 'bg-destructive'
 
   return (
     <div className='text-muted-foreground flex min-w-0 items-center gap-2 text-xs'>
-      <span className='bg-success size-1.5 shrink-0 rounded-full' />
+      <span
+        aria-hidden='true'
+        className={cn('size-1.5 shrink-0 rounded-full', freshnessDotClass)}
+      />
       <span className='truncate'>
         {exact == null
           ? t('data.noUpdateTime')
@@ -281,15 +287,21 @@ export function SiteCard({
             label={t('site.performance.successRate')}
             tone={performanceAvailable ? 'success' : 'default'}
           >
-            {`${(site.performance.success_rate * 100).toFixed(2)}%`}
+            {performanceAvailable
+              ? `${(site.performance.success_rate * 100).toFixed(2)}%`
+              : t('site.performance.unavailable')}
           </MetricCell>
           <MetricCell label={t('site.performance.avgLatency')}>
-            {t('site.performance.latencyValue', {
-              value: formatLatencySeconds(site.performance.avg_latency_ms),
-            })}
+            {performanceAvailable
+              ? t('site.performance.latencyValue', {
+                  value: formatLatencySeconds(site.performance.avg_latency_ms),
+                })
+              : t('site.performance.unavailable')}
           </MetricCell>
           <MetricCell label={t('site.performance.avgTps')}>
-            {site.performance.avg_tps.toFixed(1)}
+            {performanceAvailable
+              ? site.performance.avg_tps.toFixed(1)
+              : t('site.performance.unavailable')}
           </MetricCell>
         </div>
         <CompletenessProgress

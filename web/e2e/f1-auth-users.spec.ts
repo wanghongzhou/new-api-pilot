@@ -183,6 +183,11 @@ async function mockDashboard(page: Page) {
 }
 
 async function followAppNavigation(page: Page, name: string) {
+  const mobileNavigation = page.getByRole('dialog', { name: '主导航' })
+  if (await mobileNavigation.isVisible()) {
+    await expect(mobileNavigation).toBeHidden()
+  }
+
   const directLink = page
     .getByRole('navigation', { name: '主导航' })
     .getByRole('link', { name, exact: true })
@@ -195,10 +200,9 @@ async function followAppNavigation(page: Page, name: string) {
     name: '打开导航',
   })
   await mobileNavigationButton.click()
-  await page
-    .getByRole('dialog', { name: '主导航' })
-    .getByRole('link', { name, exact: true })
-    .click()
+  await expect(mobileNavigation).toBeVisible()
+  await mobileNavigation.getByRole('link', { name, exact: true }).click()
+  await expect(mobileNavigation).toBeHidden()
 }
 
 test('signs in, enforces password change, and keeps passwords out of storage', async ({
@@ -658,8 +662,8 @@ test('restores auto-applied user filters through browser history', async ({
   }
 
   await page
-    .locator('summary')
-    .filter({ hasText: '角色', visible: true })
+    .getByRole('button', { name: '角色', exact: true })
+    .filter({ visible: true })
     .click()
   await page
     .getByRole('button', { name: '查看者', exact: true })
@@ -770,6 +774,12 @@ test('uses the new-api table breakpoint without page-level clipping', async ({
     await expect(
       page.locator('#main-content table').filter({ visible: true }).first()
     ).toBeVisible()
+    const tableRegion = page.getByRole('region', {
+      name: '平台用户',
+      exact: true,
+    })
+    await expect(tableRegion).toHaveCSS('overflow-y', 'auto')
+    await expect(tableRegion.locator('thead')).toHaveCSS('position', 'sticky')
     await expect(
       page.locator('#main-content article').filter({ visible: true })
     ).toHaveCount(0)
@@ -797,7 +807,9 @@ test('keeps the 375px workspace within the viewport and exposes mobile navigatio
   )
   expect(horizontalOverflow).toBe(false)
   await expect(
-    page.locator('summary').filter({ hasText: '角色', visible: true })
+    page
+      .getByRole('button', { name: '角色', exact: true })
+      .filter({ visible: true })
   ).toBeVisible()
 
   await page.getByRole('button', { name: '打开导航' }).click()

@@ -13,6 +13,8 @@ export function Main({ className, fluid = true, ...props }: MainProps) {
           '@7xl/content:mx-auto @7xl/content:w-full @7xl/content:max-w-7xl',
         className
       )}
+      id='main-content'
+      tabIndex={-1}
       {...props}
     />
   )

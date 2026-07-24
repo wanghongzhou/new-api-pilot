@@ -32,6 +32,10 @@ func (c *SubscriptionPlanController) SiteStatistics(g *gin.Context) {
 	}
 }
 func (c *SubscriptionPlanController) run(g *gin.Context, sites []int64, stats bool) {
+	if c == nil || c.s == nil {
+		common.AbortInternalError(g)
+		return
+	}
 	allowed := map[string]bool{"p": true, "page_size": true, "states": true, "enabled": true, "keyword": true}
 	if sites == nil {
 		allowed["site_ids"] = true
@@ -61,6 +65,11 @@ func (c *SubscriptionPlanController) run(g *gin.Context, sites []int64, stats bo
 			return
 		}
 	}
+	q.Normalize()
+	if fields := q.Validate(); fields != nil {
+		common.AbortError(g, http.StatusBadRequest, constant.CodeValidationError, "Invalid subscription plan query", fields)
+		return
+	}
 	var v any
 	var err error
 	if stats {
@@ -69,7 +78,7 @@ func (c *SubscriptionPlanController) run(g *gin.Context, sites []int64, stats bo
 		v, err = c.s.List(g.Request.Context(), q)
 	}
 	if err != nil {
-		common.AbortError(g, http.StatusBadRequest, constant.CodeValidationError, "Invalid subscription plan query", nil)
+		common.AbortInternalError(g)
 		return
 	}
 	common.WriteSuccess(g, http.StatusOK, v)

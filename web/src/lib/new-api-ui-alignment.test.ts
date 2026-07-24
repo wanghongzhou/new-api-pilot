@@ -426,7 +426,7 @@ test('the default theme keeps the new-api color tokens', async () => {
 
   expect(theme).toContain('--background: oklch(1 0 0)')
   expect(theme).toContain('--foreground: oklch(0.145 0 0)')
-  expect(theme).toContain('--primary: oklch(0.692 0.141 243.716)')
+  expect(theme).toContain('--primary: oklch(0.54 0.142 248.516)')
   expect(theme).toContain('--secondary: oklch(0.95 0 0)')
   expect(theme).toContain('--border: oklch(0.93 0 0)')
   expect(theme).toContain('--ring: oklch(0.708 0.16 249.003)')

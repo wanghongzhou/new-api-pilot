@@ -13,4 +13,7 @@ test('uses distinct semantic icons for site card destinations', async () => {
   expect(source).not.toContain('ArrowRight01Icon')
   expect(source).toContain("toast.success(t('site.toast.baseUrlCopied'))")
   expect(source).toContain("toast.error(t('site.toast.copyFailed'))")
+  expect(source).toContain("t('site.performance.unavailable')")
+  expect(source).toContain("freshnessDotClass = 'bg-muted-foreground'")
+  expect(source).toContain("freshnessDotClass = 'bg-destructive'")
 })

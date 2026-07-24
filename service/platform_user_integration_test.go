@@ -166,6 +166,52 @@ func TestUserMutationsEnforceUniquenessAndRotateSessions(t *testing.T) {
 	}
 }
 
+func TestPlatformUserSafetyInvariantsRejectSelfAndLastAdminMutations(t *testing.T) {
+	_, repository, users := newPlatformUserIntegrationHarness(t)
+	ctx := context.Background()
+	if _, err := users.EnsureBootstrapAdmin(ctx, "bootstrap-pass"); err != nil {
+		t.Fatalf("bootstrap admin: %v", err)
+	}
+	admin, err := repository.FindByUsername(ctx, "admin")
+	if err != nil {
+		t.Fatalf("find admin: %v", err)
+	}
+
+	if err := users.SetStatus(ctx, admin.ID, admin.ID, false); !errors.Is(err, service.ErrDisableSelf) {
+		t.Fatalf("self-disable error = %v", err)
+	}
+	if err := users.ResetPassword(ctx, admin.ID, admin.ID, "replacement-pass"); !errors.Is(err, service.ErrResetSelf) {
+		t.Fatalf("self-reset error = %v", err)
+	}
+	if _, err := users.Update(ctx, admin.ID, dto.UpdatePlatformUserRequest{
+		Username: admin.Username, DisplayName: admin.DisplayName, Role: constant.RoleViewer,
+	}); !errors.Is(err, service.ErrLastAdmin) {
+		t.Fatalf("last-admin downgrade error = %v", err)
+	}
+
+	unchanged := mustFindUser(t, repository, admin.ID)
+	if unchanged.Status != constant.UserStatusEnabled || unchanged.Role != constant.RoleAdmin || unchanged.SessionVersion != admin.SessionVersion {
+		t.Fatalf("rejected admin mutations changed user: before=%#v after=%#v", admin, unchanged)
+	}
+	if err := common.CheckPassword(unchanged.PasswordHash, "bootstrap-pass"); err != nil {
+		t.Fatalf("rejected self-reset changed password: %v", err)
+	}
+
+	viewer, err := users.Create(ctx, dto.CreatePlatformUserRequest{
+		Username: "safety-viewer", DisplayName: "Safety Viewer", Role: constant.RoleViewer, Password: "viewer-pass",
+	})
+	if err != nil {
+		t.Fatalf("create viewer: %v", err)
+	}
+	if err := users.SetStatus(ctx, viewer.ID, admin.ID, false); !errors.Is(err, service.ErrLastAdmin) {
+		t.Fatalf("last-admin disable error = %v", err)
+	}
+	afterDisable := mustFindUser(t, repository, admin.ID)
+	if afterDisable.Status != constant.UserStatusEnabled || afterDisable.SessionVersion != admin.SessionVersion {
+		t.Fatalf("rejected last-admin disable changed user: %#v", afterDisable)
+	}
+}
+
 func TestPlatformUserListTreatsLikeMetacharactersLiterally(t *testing.T) {
 	_, _, users := newPlatformUserIntegrationHarness(t)
 	ctx := context.Background()
