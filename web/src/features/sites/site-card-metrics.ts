@@ -10,6 +10,11 @@ function formatHue(value: number) {
   return String(Number(value.toFixed(2)))
 }
 
+export function formatLatencySeconds(valueMs: number): string {
+  if (!Number.isFinite(valueMs)) return '0'
+  return String(Number((valueMs / 1000).toFixed(2)))
+}
+
 export function siteResourceColor(value: number | null): string | undefined {
   if (value == null || !Number.isFinite(value)) return undefined
   const bounded = Math.max(0, Math.min(100, value))

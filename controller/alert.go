@@ -69,12 +69,12 @@ func (controller *AlertController) ListRules(c *gin.Context) {
 	if !requireEmptyBody(c) {
 		return
 	}
-	scopeType, scopeID, fields := parseAlertRuleScope(c)
+	query, fields := parseAlertRuleListQuery(c)
 	if fields != nil {
-		common.AbortError(c, http.StatusBadRequest, constant.CodeValidationError, "Invalid alert rule scope", fields)
+		common.AbortError(c, http.StatusBadRequest, constant.CodeValidationError, "Invalid alert rule list query", fields)
 		return
 	}
-	result, err := controller.alerts.ListRules(c.Request.Context(), scopeType, scopeID)
+	result, err := controller.alerts.ListRules(c.Request.Context(), query)
 	if err != nil {
 		writeAlertServiceError(c, err)
 		return
@@ -182,32 +182,63 @@ func parseAlertListQuery(c *gin.Context) (dto.AlertListQuery, map[string]string)
 	return query, nil
 }
 
-func parseAlertRuleScope(c *gin.Context) (string, int64, map[string]string) {
-	fields := validateQueryKeys(c, map[string]struct{}{"scope_type": {}, "scope_id": {}})
-	scopeType := dto.AlertScopeGlobal
+func parseAlertRuleListQuery(c *gin.Context) (dto.AlertRuleListQuery, map[string]string) {
+	allowed := map[string]struct{}{
+		"scope_type": {}, "scope_id": {}, "p": {}, "page_size": {}, "category": {}, "level": {},
+		"enabled": {}, "inherited": {}, "sort_by": {}, "sort_order": {},
+	}
+	fields := validateQueryKeysAllowRepeated(c, allowed, map[string]struct{}{"category": {}, "level": {}})
+	query := dto.AlertRuleListQuery{ScopeType: dto.AlertScopeGlobal, Page: 1, PageSize: 20, SortOrder: "asc"}
 	if value, exists := singletonQueryValue(c, "scope_type", fields); exists {
-		scopeType = strings.ToLower(value)
+		query.ScopeType = strings.ToLower(value)
 	}
 	rawScopeID, hasScopeID := singletonQueryValue(c, "scope_id", fields)
-	var scopeID int64
-	if scopeType == dto.AlertScopeGlobal {
+	if query.ScopeType == dto.AlertScopeGlobal {
 		if hasScopeID && rawScopeID != "0" {
 			fields["scope_id"] = "must be 0 for global scope"
 		}
-	} else if scopeType == dto.AlertScopeSite {
+	} else if query.ScopeType == dto.AlertScopeSite {
 		parsed, valid := parsePositiveID(rawScopeID)
 		if !hasScopeID || !valid || strconv.FormatInt(parsed, 10) != rawScopeID {
 			fields["scope_id"] = "must be a canonical positive decimal int64 for site scope"
 		} else {
-			scopeID = parsed
+			query.ScopeID = parsed
 		}
 	} else {
 		fields["scope_type"] = "must be global or site"
 	}
-	if len(fields) > 0 {
-		return "", 0, fields
+	parsePageQuery(c, &query.Page, &query.PageSize, fields)
+	query.Categories = parseRepeatedEnumQuery(c, "category", fields, func(value string) bool {
+		return value == dto.AlertRuleCategorySite || value == dto.AlertRuleCategoryCollection || value == dto.AlertRuleCategoryInstance || value == dto.AlertRuleCategoryAccount || value == dto.AlertRuleCategoryChannel
+	})
+	query.Levels = parseRepeatedEnumQuery(c, "level", fields, func(value string) bool {
+		return value == dto.AlertLevelInfo || value == dto.AlertLevelWarning || value == dto.AlertLevelCritical
+	})
+	query.Enabled = parseOptionalAlertBool(c, "enabled", fields)
+	query.Inherited = parseOptionalAlertBool(c, "inherited", fields)
+	query.SortBy, _ = singletonQueryValue(c, "sort_by", fields)
+	if value, exists := singletonQueryValue(c, "sort_order", fields); exists {
+		query.SortOrder = value
 	}
-	return scopeType, scopeID, nil
+	query.Normalize()
+	mergeFieldErrors(fields, query.Validate())
+	if len(fields) > 0 {
+		return dto.AlertRuleListQuery{}, fields
+	}
+	return query, nil
+}
+
+func parseOptionalAlertBool(c *gin.Context, key string, fields map[string]string) *bool {
+	raw, exists := singletonQueryValue(c, key, fields)
+	if !exists {
+		return nil
+	}
+	value, err := strconv.ParseBool(raw)
+	if err != nil || (raw != "true" && raw != "false") {
+		fields[key] = "must be true or false"
+		return nil
+	}
+	return &value
 }
 
 func parseOptionalAlertInt64(c *gin.Context, key string, positive bool, fields map[string]string) *int64 {

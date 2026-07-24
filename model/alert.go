@@ -496,10 +496,13 @@ func alertEventOrder(sortBy, sortOrder string) string {
 		direction = "ASC"
 	}
 	columns := map[string]string{
-		"status":         "FIELD(e.status, 'firing', 'pending', 'resolved')",
-		"level":          "FIELD(e.level, 'critical', 'warning', 'info')",
+		"rule_key":       "e.rule_key",
+		"status":         "CASE e.status WHEN 'firing' THEN 1 WHEN 'pending' THEN 2 WHEN 'resolved' THEN 3 ELSE 4 END",
+		"level":          "CASE e.level WHEN 'critical' THEN 1 WHEN 'warning' THEN 2 WHEN 'info' THEN 3 ELSE 4 END",
+		"site_name":      "CASE WHEN s.name IS NULL OR s.name = '' THEN 1 ELSE 0 END ASC, s.name",
 		"first_fired_at": "e.first_fired_at",
 		"last_fired_at":  "e.last_fired_at",
+		"resolved_at":    "e.resolved_at",
 	}
 	if column, exists := columns[sortBy]; exists {
 		return column + " " + direction + ", e.id DESC"

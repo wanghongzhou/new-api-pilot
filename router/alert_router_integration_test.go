@@ -56,17 +56,30 @@ VALUES (?, 'B6 HTTP', 1, 'warning', 'instance.cpu_percent', '>=', 85, 3, 'global
 		t.Fatalf("create HTTP alert event: %v", err)
 	}
 
-	readRules := performSiteRequest(viewer, http.MethodGet, "/api/alert-rules?scope_type=global", "")
+	readRules := performSiteRequest(viewer, http.MethodGet, "/api/alert-rules?scope_type=global&category=instance&level=warning&p=1&page_size=10&sort_by=rule_key&sort_order=asc", "")
 	readRulesEnvelope := decodeSiteEnvelope(t, readRules)
 	if readRules.Code != http.StatusOK || !readRulesEnvelope.Success {
 		t.Fatalf("viewer rules = %d %#v body=%s", readRules.Code, readRulesEnvelope, readRules.Body.String())
 	}
-	var rules []map[string]any
-	if err := json.Unmarshal(readRulesEnvelope.Data, &rules); err != nil {
+	var rulePage struct {
+		Page  int              `json:"page"`
+		Total int64            `json:"total"`
+		Items []map[string]any `json:"items"`
+	}
+	if err := json.Unmarshal(readRulesEnvelope.Data, &rulePage); err != nil {
 		t.Fatalf("decode rules: %v", err)
 	}
+	if rulePage.Page != 1 || rulePage.Total < int64(len(rulePage.Items)) || len(rulePage.Items) > 10 {
+		t.Fatalf("rule pagination = %#v", rulePage)
+	}
 	var foundRule bool
-	for _, rule := range rules {
+	for index, rule := range rulePage.Items {
+		if rule["category"] != "instance" || rule["level"] != "warning" {
+			t.Fatalf("unfiltered rule returned: %#v", rule)
+		}
+		if index > 0 && rulePage.Items[index-1]["rule_key"].(string) > rule["rule_key"].(string) {
+			t.Fatalf("rules are not sorted by rule_key: %#v", rulePage.Items)
+		}
 		if rule["id"] == strconv.FormatInt(ruleID, 10) {
 			foundRule = true
 			if _, ok := rule["threshold_value"].(string); !ok {
@@ -75,7 +88,18 @@ VALUES (?, 'B6 HTTP', 1, 'warning', 'instance.cpu_percent', '>=', 85, 3, 'global
 		}
 	}
 	if !foundRule {
-		t.Fatalf("HTTP rule not returned: %#v", rules)
+		t.Fatalf("HTTP rule not returned: %#v", rulePage)
+	}
+	metricRuleSort := performSiteRequest(viewer, http.MethodGet, "/api/alert-rules?sort_by=metric&sort_order=asc", "")
+	metricRuleSortEnvelope := decodeSiteEnvelope(t, metricRuleSort)
+	if metricRuleSort.Code != http.StatusOK || !metricRuleSortEnvelope.Success {
+		t.Fatalf("metric rule sort = %d %#v", metricRuleSort.Code, metricRuleSortEnvelope)
+	}
+
+	invalidRuleSort := performSiteRequest(viewer, http.MethodGet, "/api/alert-rules?sort_by=for_times", "")
+	invalidRuleSortEnvelope := decodeSiteEnvelope(t, invalidRuleSort)
+	if invalidRuleSort.Code != http.StatusBadRequest || invalidRuleSortEnvelope.FieldErrors["sort_by"] == "" {
+		t.Fatalf("invalid rule sort = %d %#v", invalidRuleSort.Code, invalidRuleSortEnvelope)
 	}
 
 	forbidden := performSiteRequest(viewer, http.MethodPut, "/api/alert-rules/"+strconv.FormatInt(ruleID, 10), `{"threshold_value":"90"}`)
@@ -90,7 +114,7 @@ VALUES (?, 'B6 HTTP', 1, 'warning', 'instance.cpu_percent', '>=', 85, 3, 'global
 		t.Fatalf("admin update = %d %#v body=%s", updated.Code, updatedEnvelope, updated.Body.String())
 	}
 	var updatedRule map[string]any
-	if err := json.Unmarshal(updatedEnvelope.Data, &updatedRule); err != nil || updatedRule["threshold_value"] != "90.0000000000" || updatedRule["for_times"] != float64(4) {
+	if err := json.Unmarshal(updatedEnvelope.Data, &updatedRule); err != nil || updatedRule["threshold_value"] != "90.00" || updatedRule["for_times"] != float64(4) {
 		t.Fatalf("updated rule = %#v, %v", updatedRule, err)
 	}
 
@@ -110,11 +134,18 @@ VALUES (?, 'B6 HTTP', 1, 'warning', 'instance.cpu_percent', '>=', 85, 3, 'global
 	if validSort.Code != http.StatusOK || !validSortEnvelope.Success {
 		t.Fatalf("documented alert sort = %d %#v", validSort.Code, validSortEnvelope)
 	}
-	for _, sortBy := range []string{"first_observed_at", "resolved_at", "updated_at"} {
+	for _, sortBy := range []string{"first_observed_at", "current_value", "target_name", "updated_at"} {
 		rejected := performSiteRequest(viewer, http.MethodGet, "/api/alerts?sort_by="+sortBy, "")
 		rejectedEnvelope := decodeSiteEnvelope(t, rejected)
 		if rejected.Code != http.StatusBadRequest || rejectedEnvelope.FieldErrors["sort_by"] == "" {
 			t.Errorf("undocumented alert sort %s = %d %#v", sortBy, rejected.Code, rejectedEnvelope)
+		}
+	}
+	for _, sortBy := range []string{"rule_key", "status", "level", "site_name", "first_fired_at", "last_fired_at", "resolved_at"} {
+		response := performSiteRequest(viewer, http.MethodGet, "/api/alerts?sort_by="+sortBy+"&sort_order=asc", "")
+		envelope := decodeSiteEnvelope(t, response)
+		if response.Code != http.StatusOK || !envelope.Success {
+			t.Errorf("documented alert sort %s = %d %#v", sortBy, response.Code, envelope)
 		}
 	}
 

@@ -1,9 +1,11 @@
 import type { IdString } from '@/lib/api-types'
 
+import { formatAlertThreshold } from './rule-text'
 import type {
   AlertListParams,
   AlertRuleFormValues,
   AlertRuleItem,
+  AlertRuleListParams,
   AlertRuleOverrideRequest,
   AlertRuleUpdateRequest,
   AlertSearch,
@@ -24,11 +26,28 @@ export function alertListParams(search: AlertSearch): AlertListParams {
   }
 }
 
+export function alertRuleListParams(search: AlertSearch): AlertRuleListParams {
+  return {
+    category: search.ruleCategory.length > 0 ? search.ruleCategory : undefined,
+    enabled: search.ruleEnabled,
+    inherited: search.ruleInherited,
+    level: search.ruleLevel.length > 0 ? search.ruleLevel : undefined,
+    p: search.rulePage,
+    page_size: search.rulePageSize,
+    scope_id: search.scope === 'site' ? search.ruleSiteId : undefined,
+    scope_type: search.scope,
+    sort_by: search.ruleSort,
+    sort_order: search.ruleOrder,
+  }
+}
+
 export function alertRuleFormValues(rule: AlertRuleItem): AlertRuleFormValues {
   return {
     enabled: rule.enabled,
     forTimes: String(rule.for_times),
-    thresholdValue: rule.threshold_value ?? '',
+    thresholdValue: rule.threshold_value
+      ? formatAlertThreshold(rule.threshold_value)
+      : '',
   }
 }
 

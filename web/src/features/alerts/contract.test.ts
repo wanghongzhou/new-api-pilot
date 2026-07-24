@@ -2,8 +2,10 @@ import { describe, expect, test } from 'bun:test'
 
 import { parseIdString } from '@/lib/api-types'
 
+import { alertRuleSortFields, alertSortFields } from './constants'
 import {
   alertListParams,
+  alertRuleListParams,
   alertRuleFormValues,
   alertRuleOverrideRequest,
   alertRuleUpdateRequest,
@@ -19,6 +21,7 @@ function ruleFixture(
   const id = parseIdString(level === 'warning' ? '21' : '22')
   return {
     base_rule_id: id,
+    category: 'instance',
     compare_operator: '>=',
     constraints: {
       for_times_editable: true,
@@ -52,6 +55,25 @@ function ruleFixture(
 }
 
 describe('alert frontend contract', () => {
+  test('exposes only business-comparable event sorts', () => {
+    expect(alertSortFields).toEqual([
+      'rule_key',
+      'status',
+      'level',
+      'site_name',
+      'first_fired_at',
+      'last_fired_at',
+      'resolved_at',
+    ])
+    expect(alertSortFields).not.toContain('current_value')
+    expect(alertSortFields).not.toContain('target_name')
+  })
+
+  test('does not expose compare operator or consecutive count as rule sorts', () => {
+    expect(alertRuleSortFields).not.toContain('compare_operator')
+    expect(alertRuleSortFields).not.toContain('for_times')
+  })
+
   test('maps URL state to the documented list query without coercing IDs', () => {
     const search: AlertSearch = {
       alertId: parseIdString('9007199254740993'),
@@ -60,7 +82,15 @@ describe('alert frontend contract', () => {
       order: 'desc',
       page: 2,
       pageSize: 20,
+      ruleCategory: ['instance'],
+      ruleEnabled: true,
+      ruleInherited: false,
+      ruleLevel: ['warning'],
+      ruleOrder: 'desc',
+      rulePage: 3,
+      rulePageSize: 10,
       ruleSiteId: parseIdString('9007199254740995'),
+      ruleSort: 'updated_at',
       scope: 'site',
       siteId: parseIdString('9007199254740997'),
       sort: 'last_fired_at',
@@ -80,6 +110,18 @@ describe('alert frontend contract', () => {
       start_timestamp: 1_783_900_000,
       status: ['firing', 'pending'],
       target_type: ['site', 'account'],
+    })
+    expect(alertRuleListParams(search)).toEqual({
+      category: ['instance'],
+      enabled: true,
+      inherited: false,
+      level: ['warning'],
+      p: 3,
+      page_size: 10,
+      scope_id: parseIdString('9007199254740995'),
+      scope_type: 'site',
+      sort_by: 'updated_at',
+      sort_order: 'desc',
     })
   })
 
@@ -105,19 +147,38 @@ describe('alert frontend contract', () => {
       thresholdValue: '70',
     })
     const request = alertRuleUpdateRequest(
-      { enabled: false, forTimes: '4', thresholdValue: '71.5000' },
+      { enabled: false, forTimes: '4', thresholdValue: '71.50' },
       initial,
       rule
     )
     expect(request).toEqual({
       enabled: false,
       for_times: 4,
-      threshold_value: '71.5000',
+      threshold_value: '71.50',
     })
     expect(hasAlertRuleChanges(request)).toBeTrue()
     expect(
       hasAlertRuleChanges(alertRuleUpdateRequest(initial, initial, rule))
     ).toBeFalse()
+  })
+
+  test('normalizes database scale without adding threshold precision', () => {
+    const rule = ruleFixture('warning', {
+      threshold_value: '70.10',
+    })
+    const values = alertRuleFormValues(rule)
+
+    expect(values.thresholdValue).toBe('70.1')
+    expect(alertRuleUpdateRequest(values, values, rule)).toEqual({})
+    expect(
+      alertRuleOverrideRequest(values, rule, parseIdString('9007199254740993'))
+    ).toEqual({
+      base_rule_id: parseIdString('21'),
+      enabled: true,
+      for_times: 3,
+      site_id: parseIdString('9007199254740993'),
+      threshold_value: '70.1',
+    })
   })
 
   test('omits fixed fields from updates and site overrides', () => {

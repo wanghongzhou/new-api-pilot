@@ -16,6 +16,12 @@ const (
 	AlertStatusPending  = "pending"
 	AlertStatusFiring   = "firing"
 	AlertStatusResolved = "resolved"
+
+	AlertRuleCategorySite       = "site"
+	AlertRuleCategoryCollection = "collection"
+	AlertRuleCategoryInstance   = "instance"
+	AlertRuleCategoryAccount    = "account"
+	AlertRuleCategoryChannel    = "channel"
 )
 
 type AlertRuleConstraints struct {
@@ -37,6 +43,7 @@ type AlertRuleItem struct {
 	BaseRuleID      string               `json:"base_rule_id"`
 	OverrideRuleID  *string              `json:"override_rule_id"`
 	RuleKey         string               `json:"rule_key"`
+	Category        string               `json:"category"`
 	Name            string               `json:"name"`
 	Enabled         bool                 `json:"enabled"`
 	Level           string               `json:"level"`
@@ -51,6 +58,75 @@ type AlertRuleItem struct {
 	Constraints     AlertRuleConstraints `json:"constraints"`
 	UpdatedAt       int64                `json:"updated_at"`
 }
+
+type AlertRuleListQuery struct {
+	ScopeType  string
+	ScopeID    int64
+	Page       int
+	PageSize   int
+	Categories []string
+	Levels     []string
+	Enabled    *bool
+	Inherited  *bool
+	SortBy     string
+	SortOrder  string
+}
+
+func (query *AlertRuleListQuery) Normalize() {
+	if query.Page == 0 {
+		query.Page = 1
+	}
+	if query.PageSize == 0 {
+		query.PageSize = 20
+	}
+	query.ScopeType = strings.ToLower(strings.TrimSpace(query.ScopeType))
+	if query.ScopeType == "" {
+		query.ScopeType = AlertScopeGlobal
+	}
+	query.Categories = normalizeEnumList(query.Categories)
+	query.Levels = normalizeEnumList(query.Levels)
+	query.SortBy = strings.ToLower(strings.TrimSpace(query.SortBy))
+	query.SortOrder = strings.ToLower(strings.TrimSpace(query.SortOrder))
+	if query.SortOrder == "" {
+		query.SortOrder = "asc"
+	}
+}
+
+func (query AlertRuleListQuery) Validate() map[string]string {
+	errors := map[string]string{}
+	if query.ScopeType == AlertScopeGlobal {
+		if query.ScopeID != 0 {
+			errors["scope_id"] = "must be 0 for global scope"
+		}
+	} else if query.ScopeType == AlertScopeSite {
+		if query.ScopeID <= 0 {
+			errors["scope_id"] = "must be positive for site scope"
+		}
+	} else {
+		errors["scope_type"] = "must be global or site"
+	}
+	if query.Page < 1 {
+		errors["page"] = "must be at least 1"
+	}
+	if query.PageSize < 1 || query.PageSize > 100 {
+		errors["page_size"] = "must be between 1 and 100"
+	}
+	if !validEnumList(query.Categories, AlertRuleCategorySite, AlertRuleCategoryCollection, AlertRuleCategoryInstance, AlertRuleCategoryAccount, AlertRuleCategoryChannel) {
+		errors["category"] = "contains an invalid value"
+	}
+	if !validEnumList(query.Levels, AlertLevelInfo, AlertLevelWarning, AlertLevelCritical) {
+		errors["level"] = "contains an invalid value"
+	}
+	if query.SortBy != "" && !alertOneOf(query.SortBy, "category", "rule_key", "level", "metric", "enabled", "updated_at") {
+		errors["sort_by"] = "is invalid"
+	}
+	if !alertOneOf(query.SortOrder, "asc", "desc") {
+		errors["sort_order"] = "is invalid"
+	}
+	return nilIfNoAlertErrors(errors)
+}
+
+func (query AlertRuleListQuery) Offset() int { return (query.Page - 1) * query.PageSize }
 
 type AlertRuleUpdateRequest struct {
 	Enabled        *bool   `json:"enabled"`
@@ -210,7 +286,7 @@ func (query AlertListQuery) Validate() map[string]string {
 	if query.StartTimestamp != nil && query.EndTimestamp != nil && *query.StartTimestamp >= *query.EndTimestamp {
 		errors["end_timestamp"] = "must be greater than start_timestamp"
 	}
-	if query.SortBy != "" && !alertOneOf(query.SortBy, "status", "level", "first_fired_at", "last_fired_at") {
+	if query.SortBy != "" && !alertOneOf(query.SortBy, "rule_key", "status", "level", "site_name", "first_fired_at", "last_fired_at", "resolved_at") {
 		errors["sort_by"] = "is invalid"
 	}
 	if !alertOneOf(query.SortOrder, "asc", "desc") {

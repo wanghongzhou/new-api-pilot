@@ -42,6 +42,7 @@ import {
   hasAlertRuleChanges,
   pairedAlertRule,
 } from '../contract'
+import { formatAlertThreshold } from '../rule-text'
 import { createAlertRuleFormSchema, type AlertRuleFormOutput } from '../schema'
 import type { AlertRuleFormValues, AlertRuleItem } from '../types'
 import {
@@ -156,7 +157,7 @@ export function AlertRuleFormDialog({
                 {t('alerts.table.rule')}
               </dt>
               <dd>
-                <p>{alertRuleName(t, rule.rule_key)}</p>
+                <p>{alertRuleName(t, rule.rule_key, rule.level)}</p>
                 <p className='text-muted-foreground mt-1 text-xs'>
                   {alertRuleDescription(t, rule.rule_key)}
                 </p>
@@ -221,12 +222,12 @@ export function AlertRuleFormDialog({
           {rule.constraints.threshold_editable ? (
             <FormField
               description={t('alerts.rules.thresholdDescription', {
-                maximum:
-                  rule.constraints.threshold_max ??
-                  t('alerts.value.unavailable'),
-                minimum:
-                  rule.constraints.threshold_min ??
-                  t('alerts.value.unavailable'),
+                maximum: rule.constraints.threshold_max
+                  ? formatAlertThreshold(rule.constraints.threshold_max)
+                  : t('alerts.value.unavailable'),
+                minimum: rule.constraints.threshold_min
+                  ? formatAlertThreshold(rule.constraints.threshold_min)
+                  : t('alerts.value.unavailable'),
               })}
               error={formError(errors.thresholdValue, t)}
               htmlFor='alert-rule-threshold'
@@ -334,7 +335,7 @@ export function AlertRuleResetDialog({
     <ConfirmDialog
       confirmLabel={t('alerts.rules.restoreGlobal')}
       description={t('alerts.rules.restoreGlobalDescription', {
-        name: alertRuleName(t, rule.rule_key),
+        name: alertRuleName(t, rule.rule_key, rule.level),
       })}
       onConfirm={() => mutation.mutate()}
       onOpenChange={(open) => !open && onClose()}

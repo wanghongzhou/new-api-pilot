@@ -5,7 +5,9 @@ import type {
   alertDeliveryEventTypes,
   alertDeliveryStatuses,
   alertLevels,
+  alertRuleCategories,
   alertRuleScopes,
+  alertRuleSortFields,
   alertSortFields,
   alertStatuses,
   alertTabs,
@@ -18,6 +20,8 @@ export type AlertLevel = (typeof alertLevels)[number]
 export type AlertTargetType = (typeof alertTargetTypes)[number]
 export type AlertSortField = (typeof alertSortFields)[number]
 export type AlertRuleScope = (typeof alertRuleScopes)[number]
+export type AlertRuleCategory = (typeof alertRuleCategories)[number]
+export type AlertRuleSortField = (typeof alertRuleSortFields)[number]
 export type AlertDeliveryStatus = (typeof alertDeliveryStatuses)[number]
 export type AlertDeliveryEventType = (typeof alertDeliveryEventTypes)[number]
 export type AlertResolutionReason =
@@ -33,7 +37,15 @@ export interface AlertSearch {
   order: 'asc' | 'desc'
   page: number
   pageSize: number
+  ruleCategory: AlertRuleCategory[]
+  ruleEnabled?: boolean
+  ruleInherited?: boolean
+  ruleLevel: AlertLevel[]
+  ruleOrder: 'asc' | 'desc'
+  rulePage: number
+  rulePageSize: number
   ruleSiteId?: IdString
+  ruleSort?: AlertRuleSortField
   scope: AlertRuleScope
   siteId?: IdString
   sort?: AlertSortField
@@ -132,6 +144,7 @@ export interface AlertRuleItem {
   base_rule_id: IdString
   override_rule_id: IdString | null
   rule_key: string
+  category: AlertRuleCategory
   name: string
   enabled: boolean
   level: AlertLevel
@@ -146,6 +159,21 @@ export interface AlertRuleItem {
   constraints: AlertRuleConstraints
   updated_at: Timestamp
 }
+
+export interface AlertRuleListParams {
+  p: number
+  page_size: number
+  scope_type: AlertRuleScope
+  scope_id?: IdString
+  category?: AlertRuleCategory[]
+  level?: AlertLevel[]
+  enabled?: boolean
+  inherited?: boolean
+  sort_by?: AlertRuleSortField
+  sort_order: 'asc' | 'desc'
+}
+
+export type AlertRulePage = PageData<AlertRuleItem>
 
 export interface AlertRuleUpdateRequest {
   enabled?: boolean

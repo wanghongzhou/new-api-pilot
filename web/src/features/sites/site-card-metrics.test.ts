@@ -1,6 +1,17 @@
 import { describe, expect, test } from 'bun:test'
 
-import { siteResourceColor } from './site-card-metrics'
+import { formatLatencySeconds, siteResourceColor } from './site-card-metrics'
+
+describe('site latency formatting', () => {
+  test.each([
+    [0, '0'],
+    [120, '0.12'],
+    [1234, '1.23'],
+    [10000, '10'],
+  ])('formats %s milliseconds as seconds', (value, expected) => {
+    expect(formatLatencySeconds(value)).toBe(expected)
+  })
+})
 
 describe('site card resource gradient', () => {
   test('uses capacity-oriented semantic anchors', () => {

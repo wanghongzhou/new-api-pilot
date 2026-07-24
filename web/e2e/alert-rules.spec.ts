@@ -37,6 +37,7 @@ function percentageRule(level: 'critical' | 'warning', inherited = false) {
   const id = warning ? '11' : '12'
   return {
     base_rule_id: id,
+    category: 'instance',
     compare_operator: '>=',
     constraints: {
       for_times_editable: true,
@@ -71,6 +72,7 @@ function percentageRule(level: 'critical' | 'warning', inherited = false) {
 function booleanRule() {
   return {
     base_rule_id: '13',
+    category: 'site',
     compare_operator: '==',
     constraints: {
       for_times_editable: false,
@@ -131,11 +133,16 @@ async function setup(page: Page, user: typeof admin | typeof viewer) {
     const scope = new URL(route.request().url()).searchParams.get('scope_type')
     const inherited = scope === 'site'
     await route.fulfill({
-      json: envelope([
-        percentageRule('warning', inherited),
-        percentageRule('critical', inherited),
-        booleanRule(),
-      ]),
+      json: envelope({
+        items: [
+          percentageRule('warning', inherited),
+          percentageRule('critical', inherited),
+          booleanRule(),
+        ],
+        page: 1,
+        page_size: 20,
+        total: 3,
+      }),
     })
   })
   await page.route('**/api/alert-rules/overrides', async (route) => {

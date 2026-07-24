@@ -1,5 +1,9 @@
 import {
+  Activity03Icon,
   Add01Icon,
+  Alert02Icon,
+  AlertCircleIcon,
+  CheckmarkCircle02Icon,
   Edit03Icon,
   Undo02Icon,
   ViewIcon,
@@ -14,27 +18,30 @@ import type { ColumnDef, SortingState } from '@tanstack/react-table'
 import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { FilterPanel } from '@/components/data/filter-panel'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
-import { SelectControl as Select } from '@/components/ui/select-control'
 import { Spinner } from '@/components/ui/spinner'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { dashboardKeys } from '@/features/dashboard/query-keys'
 import { listSites } from '@/features/sites/api'
 import { siteKeys } from '@/features/sites/query-keys'
-import type { SiteListItem } from '@/features/sites/types'
-import { isIdString } from '@/lib/api-types'
 import { fromUnixSeconds } from '@/lib/dayjs'
 import { translateMessageRef } from '@/lib/message-ref'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { getAlertSummary, listAlertRules, listAlerts } from '../api'
-import { alertSortFields } from '../constants'
-import { alertListParams } from '../contract'
+import { alertRuleSortFields, alertSortFields } from '../constants'
+import { alertListParams, alertRuleListParams } from '../contract'
+import { alertEventTargetLabel, alertEventTargetName } from '../event-text'
 import { alertKeys } from '../query-keys'
+import {
+  alertMessageForDisplay,
+  alertRuleCategoryText,
+  formatAlertCurrentValue,
+  formatAlertThreshold,
+} from '../rule-text'
 import type {
   AlertEventItem,
   AlertRuleItem,
@@ -44,13 +51,13 @@ import type {
 import { AlertEventDetailSheet } from './alert-event-detail-sheet'
 import { AlertFilters } from './alert-filters'
 import { AlertRuleFormDialog, AlertRuleResetDialog } from './alert-rule-dialogs'
+import { AlertRuleFilters } from './alert-rule-filters'
 import {
   AlertLevelBadge,
   AlertStatusBadge,
   AlertTime,
   alertRuleDescription,
   alertRuleName,
-  alertTargetTypeText,
   RuleScopeBadge,
 } from './alert-ui'
 
@@ -63,33 +70,55 @@ function SummaryStrip({ summary }: { summary?: AlertSummary }) {
   const { t } = useTranslation()
   const items = [
     {
+      icon: Activity03Icon,
+      iconClassName: 'bg-primary/10 text-primary',
       key: 'firing',
       label: t('alerts.summary.firing'),
       value: summary?.firing_count,
     },
     {
+      icon: AlertCircleIcon,
+      iconClassName: 'bg-destructive/10 text-destructive',
       key: 'critical',
       label: t('alerts.summary.critical'),
       value: summary?.critical_count,
     },
     {
+      icon: Alert02Icon,
+      iconClassName: 'bg-warning/10 text-warning',
       key: 'warning',
       label: t('alerts.summary.warning'),
       value: summary?.warning_count,
     },
     {
+      icon: CheckmarkCircle02Icon,
+      iconClassName: 'bg-success/10 text-success',
       key: 'resolved-today',
       label: t('alerts.summary.resolvedToday'),
       value: summary?.resolved_today_count,
     },
   ]
   return (
-    <section aria-label={t('alerts.summary.title')}>
-      <dl className='border-border divide-border grid divide-y border-y sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4'>
+    <section
+      aria-label={t('alerts.summary.title')}
+      className='bg-card border-border rounded-2xl border px-2 py-2 shadow-xs sm:px-3'
+    >
+      <dl className='divide-border grid divide-y sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4'>
         {items.map((item) => (
-          <div className='min-w-0 px-4 py-3' key={item.key}>
-            <dt className='text-muted-foreground text-xs'>{item.label}</dt>
-            <dd className='mt-1 text-xl font-semibold tabular-nums'>
+          <div
+            className='flex min-w-0 flex-col items-center justify-center px-4 py-4 text-center'
+            key={item.key}
+          >
+            <dt className='text-muted-foreground flex items-center justify-center gap-2 text-sm font-medium'>
+              <span
+                aria-hidden='true'
+                className={`flex size-7 items-center justify-center rounded-full ${item.iconClassName}`}
+              >
+                <HugeiconsIcon icon={item.icon} size={16} strokeWidth={2} />
+              </span>
+              <span>{item.label}</span>
+            </dt>
+            <dd className='mt-2 text-2xl leading-none font-bold tracking-tight tabular-nums sm:text-3xl'>
               {item.value == null ? (
                 <Spinner />
               ) : (
@@ -99,15 +128,6 @@ function SummaryStrip({ summary }: { summary?: AlertSummary }) {
           </div>
         ))}
       </dl>
-      {summary && (
-        <p className='text-muted-foreground mt-2 text-right text-xs'>
-          {t('alerts.summary.updatedAt', {
-            time: fromUnixSeconds(summary.updated_at).format(
-              'YYYY-MM-DD HH:mm:ss'
-            ),
-          })}
-        </p>
-      )}
     </section>
   )
 }
@@ -125,10 +145,10 @@ function AlertEventCard({
       <div className='flex min-w-0 items-start justify-between gap-2'>
         <div className='min-w-0'>
           <h2 className='font-semibold break-words'>
-            {alertRuleName(t, alert.rule_key)}
+            {alertRuleName(t, alert.rule_key, alert.level)}
           </h2>
           <p className='text-muted-foreground mt-1 text-xs break-words'>
-            {translateMessageRef(alert.message)}
+            {translateMessageRef(alertMessageForDisplay(alert.message))}
           </p>
         </div>
         <Button
@@ -156,9 +176,9 @@ function AlertEventCard({
         </div>
         <div>
           <dt className='text-muted-foreground text-xs'>
-            {alertTargetTypeText(t, alert.target_type)}
+            {alertEventTargetLabel(t, alert)}
           </dt>
-          <dd className='break-words'>{alert.target_name}</dd>
+          <dd className='break-words'>{alertEventTargetName(t, alert)}</dd>
         </div>
         <div>
           <dt className='text-muted-foreground text-xs'>
@@ -166,8 +186,12 @@ function AlertEventCard({
           </dt>
           <dd>
             {t('alerts.value.currentThreshold', {
-              current: alert.current_value ?? t('alerts.value.unavailable'),
-              threshold: alert.threshold_value ?? t('alerts.value.unavailable'),
+              current: alert.current_value
+                ? formatAlertCurrentValue(alert.current_value)
+                : t('alerts.value.unavailable'),
+              threshold: alert.threshold_value
+                ? formatAlertThreshold(alert.threshold_value)
+                : t('alerts.value.unavailable'),
             })}
           </dd>
         </div>
@@ -235,7 +259,7 @@ function AlertRuleCard({
     <article className='bg-card text-card-foreground ring-foreground/10 grid gap-4 rounded-xl p-4 ring-1'>
       <div className='min-w-0'>
         <h2 className='font-semibold break-words'>
-          {alertRuleName(t, rule.rule_key)}
+          {alertRuleName(t, rule.rule_key, rule.level)}
         </h2>
         <p className='text-muted-foreground mt-1 font-mono text-xs break-all'>
           {rule.rule_key}
@@ -245,6 +269,9 @@ function AlertRuleCard({
         </p>
       </div>
       <div className='flex flex-wrap gap-2'>
+        <Badge variant='neutral'>
+          {alertRuleCategoryText(t, rule.category)}
+        </Badge>
         <AlertLevelBadge level={rule.level} />
         <Badge variant={rule.enabled ? 'success' : 'neutral'}>
           {rule.enabled
@@ -270,7 +297,11 @@ function AlertRuleCard({
           <dt className='text-muted-foreground text-xs'>
             {t('alerts.rules.threshold')}
           </dt>
-          <dd>{rule.threshold_value ?? t('alerts.rules.fixedBySystem')}</dd>
+          <dd>
+            {rule.threshold_value
+              ? formatAlertThreshold(rule.threshold_value)
+              : t('alerts.rules.fixedBySystem')}
+          </dd>
         </div>
         <div>
           <dt className='text-muted-foreground text-xs'>
@@ -298,6 +329,7 @@ export function AlertsPage({
   const isAdmin = useAuthStore((state) => state.user?.role === 'admin')
   const [ruleDialog, setRuleDialog] = useState<RuleDialogState>(null)
   const params = useMemo(() => alertListParams(search), [search])
+  const ruleParams = useMemo(() => alertRuleListParams(search), [search])
   const sitesParams = useMemo(
     () => ({
       p: 1,
@@ -335,12 +367,13 @@ export function AlertsPage({
     (search.scope === 'global' || Boolean(search.ruleSiteId))
   const rulesQuery = useQuery({
     enabled: rulesEnabled,
-    queryFn: () => listAlertRules(search.scope, search.ruleSiteId),
-    queryKey: alertKeys.rules(search.scope, search.ruleSiteId),
+    placeholderData: keepPreviousData,
+    queryFn: () => listAlertRules(ruleParams),
+    queryKey: alertKeys.rules(ruleParams),
     staleTime: 30_000,
   })
   const alerts = alertsQuery.data?.items ?? []
-  const rules = rulesQuery.data ?? []
+  const rules = rulesQuery.data?.items ?? []
   const sites = sitesQuery.data?.items ?? []
   const openAlert = useCallback(
     (alertId: AlertEventItem['id']) => onSearchChange({ alertId }),
@@ -364,22 +397,26 @@ export function AlertsPage({
       sort: first.id as AlertSearch['sort'],
     })
   }
+  const updateRuleSorting = (
+    updater: SortingState | ((old: SortingState) => SortingState)
+  ) => {
+    const current = search.ruleSort
+      ? [{ desc: search.ruleOrder === 'desc', id: search.ruleSort }]
+      : []
+    const next = typeof updater === 'function' ? updater(current) : updater
+    const first = next[0]
+    if (!first || !alertRuleSortFields.includes(first.id as never)) {
+      onSearchChange({ rulePage: 1, ruleSort: undefined })
+      return
+    }
+    onSearchChange({
+      ruleOrder: first.desc ? 'desc' : 'asc',
+      rulePage: 1,
+      ruleSort: first.id as AlertSearch['ruleSort'],
+    })
+  }
   const eventColumns = useMemo<ColumnDef<AlertEventItem, unknown>[]>(
     () => [
-      {
-        cell: ({ row }) => <AlertLevelBadge level={row.original.level} />,
-        enableSorting: true,
-        header: t('alerts.table.level'),
-        id: 'level',
-        sortDescFirst: true,
-      },
-      {
-        cell: ({ row }) => <AlertStatusBadge status={row.original.status} />,
-        enableSorting: true,
-        header: t('alerts.table.status'),
-        id: 'status',
-        sortDescFirst: true,
-      },
       {
         cell: ({ row }) => (
           <button
@@ -387,23 +424,42 @@ export function AlertsPage({
             onClick={() => openAlert(row.original.id)}
             type='button'
           >
-            {alertRuleName(t, row.original.rule_key)}
+            {alertRuleName(t, row.original.rule_key, row.original.level)}
           </button>
         ),
+        enableSorting: true,
         header: t('alerts.table.rule'),
-        id: 'rule',
+        id: 'rule_key',
+      },
+      {
+        cell: ({ row }) => <AlertLevelBadge level={row.original.level} />,
+        enableSorting: true,
+        header: t('alerts.table.level'),
+        id: 'level',
+        sortDescFirst: false,
+      },
+      {
+        cell: ({ row }) => <AlertStatusBadge status={row.original.status} />,
+        enableSorting: true,
+        header: t('alerts.table.status'),
+        id: 'status',
       },
       {
         accessorKey: 'site_name',
+        enableSorting: true,
         header: t('alerts.table.site'),
+        id: 'site_name',
+        sortDescFirst: false,
       },
       {
         cell: ({ row }) => (
           <div className='min-w-32'>
             <span className='text-muted-foreground text-xs'>
-              {alertTargetTypeText(t, row.original.target_type)}
+              {alertEventTargetLabel(t, row.original)}
             </span>
-            <p className='break-words'>{row.original.target_name}</p>
+            <p className='break-words'>
+              {alertEventTargetName(t, row.original)}
+            </p>
           </div>
         ),
         header: t('alerts.table.target'),
@@ -412,10 +468,12 @@ export function AlertsPage({
       {
         cell: ({ row }) =>
           t('alerts.value.currentThreshold', {
-            current:
-              row.original.current_value ?? t('alerts.value.unavailable'),
-            threshold:
-              row.original.threshold_value ?? t('alerts.value.unavailable'),
+            current: row.original.current_value
+              ? formatAlertCurrentValue(row.original.current_value)
+              : t('alerts.value.unavailable'),
+            threshold: row.original.threshold_value
+              ? formatAlertThreshold(row.original.threshold_value)
+              : t('alerts.value.unavailable'),
           }),
         header: t('alerts.table.value'),
         id: 'value',
@@ -438,8 +496,10 @@ export function AlertsPage({
       },
       {
         cell: ({ row }) => <AlertTime timestamp={row.original.resolved_at} />,
+        enableSorting: true,
         header: t('alerts.table.resolvedAt'),
         id: 'resolved_at',
+        sortDescFirst: true,
       },
     ],
     [openAlert, t]
@@ -447,10 +507,11 @@ export function AlertsPage({
   const ruleColumns = useMemo<ColumnDef<AlertRuleItem, unknown>[]>(
     () => [
       {
+        accessorKey: 'rule_key',
         cell: ({ row }) => (
           <div className='min-w-48'>
             <p className='font-medium'>
-              {alertRuleName(t, row.original.rule_key)}
+              {alertRuleName(t, row.original.rule_key, row.original.level)}
             </p>
             <p className='text-muted-foreground font-mono text-xs break-all'>
               {row.original.rule_key}
@@ -460,50 +521,72 @@ export function AlertsPage({
             </p>
           </div>
         ),
+        enableSorting: true,
         header: t('alerts.table.rule'),
-        id: 'rule',
       },
       {
+        accessorKey: 'category',
+        cell: ({ row }) => (
+          <Badge variant='neutral'>
+            {alertRuleCategoryText(t, row.original.category)}
+          </Badge>
+        ),
+        enableSorting: true,
+        header: t('alerts.rules.category'),
+      },
+      {
+        accessorKey: 'level',
         cell: ({ row }) => <AlertLevelBadge level={row.original.level} />,
+        enableSorting: true,
         header: t('alerts.rules.level'),
-        id: 'level',
+        sortDescFirst: true,
       },
       {
         accessorKey: 'metric',
+        enableSorting: true,
         header: t('alerts.rules.metric'),
       },
       {
         accessorKey: 'compare_operator',
+        enableSorting: false,
         header: t('alerts.rules.compareOperator'),
       },
       {
         cell: ({ row }) =>
-          row.original.threshold_value ?? t('alerts.rules.fixedBySystem'),
+          row.original.threshold_value
+            ? formatAlertThreshold(row.original.threshold_value)
+            : t('alerts.rules.fixedBySystem'),
         header: t('alerts.rules.threshold'),
         id: 'threshold',
       },
       {
         accessorKey: 'for_times',
+        enableSorting: false,
         header: t('alerts.rules.forTimes'),
       },
       {
-        cell: ({ row }) => (
-          <div className='grid gap-1'>
-            <RuleScopeBadge rule={row.original} />
-            <Badge variant={row.original.enabled ? 'success' : 'neutral'}>
-              {row.original.enabled
-                ? t('alerts.rules.enabledValue')
-                : t('alerts.rules.disabledValue')}
-            </Badge>
-          </div>
-        ),
+        cell: ({ row }) => <RuleScopeBadge rule={row.original} />,
         header: t('alerts.rules.scope'),
         id: 'scope',
       },
       {
+        accessorKey: 'enabled',
+        cell: ({ row }) => (
+          <Badge variant={row.original.enabled ? 'success' : 'neutral'}>
+            {row.original.enabled
+              ? t('alerts.rules.enabledValue')
+              : t('alerts.rules.disabledValue')}
+          </Badge>
+        ),
+        enableSorting: true,
+        header: t('alerts.rules.enabled'),
+      },
+      {
+        accessorKey: 'updated_at',
         cell: ({ row }) => <AlertTime timestamp={row.original.updated_at} />,
+        enableSorting: true,
         header: t('alerts.rules.updatedAt'),
-        id: 'updatedAt',
+        sortDescFirst: true,
       },
       ...(isAdmin
         ? ([
@@ -536,20 +619,33 @@ export function AlertsPage({
       title={t('alerts.title')}
     >
       <div className='flex h-full min-h-0 min-w-0 flex-col gap-4'>
-        <Tabs
-          onValueChange={(tab) =>
-            onSearchChange({
-              alertId: undefined,
-              tab: tab as AlertSearch['tab'],
-            })
-          }
-          value={search.tab}
-        >
-          <TabsList aria-label={t('alerts.tabs.label')}>
-            <TabsTrigger value='events'>{t('alerts.tabs.events')}</TabsTrigger>
-            <TabsTrigger value='rules'>{t('alerts.tabs.rules')}</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className='flex min-w-0 items-center justify-between gap-2'>
+          <Tabs
+            onValueChange={(tab) =>
+              onSearchChange({
+                alertId: undefined,
+                tab: tab as AlertSearch['tab'],
+              })
+            }
+            value={search.tab}
+          >
+            <TabsList aria-label={t('alerts.tabs.label')}>
+              <TabsTrigger value='events'>
+                {t('alerts.tabs.events')}
+              </TabsTrigger>
+              <TabsTrigger value='rules'>{t('alerts.tabs.rules')}</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          {summaryQuery.data && (
+            <p className='text-muted-foreground shrink-0 text-right text-xs tabular-nums'>
+              {t('alerts.summary.updatedAt', {
+                time: fromUnixSeconds(summaryQuery.data.updated_at).format(
+                  'YYYY-MM-DD HH:mm:ss'
+                ),
+              })}
+            </p>
+          )}
+        </div>
 
         {search.tab === 'events' ? (
           <div
@@ -622,63 +718,18 @@ export function AlertsPage({
             id='alerts-rules-panel'
             role='tabpanel'
           >
-            <FilterPanel
-              description={t('alerts.rules.scopeControls')}
-              hasActiveFilters={
-                search.scope !== 'global' || search.ruleSiteId != null
-              }
-              onReset={() =>
-                onSearchChange({ ruleSiteId: undefined, scope: 'global' })
-              }
-              title={t('alerts.rules.scopeControls')}
-            >
-              <div className='grid min-w-0 flex-1 gap-3 sm:grid-cols-2'>
-                <label className='grid gap-1.5 text-sm'>
-                  <span className='font-medium'>{t('alerts.rules.scope')}</span>
-                  <Select
-                    onChange={(event) =>
-                      onSearchChange({
-                        ruleSiteId:
-                          event.target.value === 'site'
-                            ? search.ruleSiteId
-                            : undefined,
-                        scope: event.target.value as AlertSearch['scope'],
-                      })
-                    }
-                    value={search.scope}
-                  >
-                    <option value='global'>
-                      {t('alerts.rules.scope.global')}
-                    </option>
-                    <option value='site'>{t('alerts.rules.scope.site')}</option>
-                  </Select>
-                </label>
-                {search.scope === 'site' && (
-                  <label className='grid gap-1.5 text-sm'>
-                    <span className='font-medium'>
-                      {t('alerts.rules.site')}
-                    </span>
-                    <Select
-                      onChange={(event) =>
-                        onSearchChange({
-                          ruleSiteId: isIdString(event.target.value)
-                            ? event.target.value
-                            : undefined,
-                        })
-                      }
-                      value={search.ruleSiteId ?? ''}
-                    >
-                      <option value=''>{t('alerts.rules.selectSite')}</option>
-                      {sites.map((site: SiteListItem) => (
-                        <option key={site.id} value={site.id}>
-                          {site.name}
-                        </option>
-                      ))}
-                    </Select>
-                  </label>
-                )}
-              </div>
-            </FilterPanel>
+            <AlertRuleFilters
+              onApply={(filters) => onSearchChange({ ...filters, rulePage: 1 })}
+              sites={sites}
+              value={{
+                ruleCategory: search.ruleCategory,
+                ruleEnabled: search.ruleEnabled,
+                ruleInherited: search.ruleInherited,
+                ruleLevel: search.ruleLevel,
+                ruleSiteId: search.ruleSiteId,
+                scope: search.scope,
+              }}
+            />
             {search.scope === 'site' && !search.ruleSiteId ? (
               <section className='border-border border-y py-10 text-center'>
                 <h2 className='font-medium'>
@@ -698,7 +749,14 @@ export function AlertsPage({
                 error={rulesQuery.isError || sitesQuery.isError}
                 fetching={rulesQuery.isFetching}
                 loading={rulesQuery.isPending}
+                onPageChange={(rulePage) => onSearchChange({ rulePage })}
+                onPageSizeChange={(rulePageSize) =>
+                  onSearchChange({ rulePage: 1, rulePageSize })
+                }
                 onRetry={() => void rulesQuery.refetch()}
+                onSortingChange={updateRuleSorting}
+                page={search.rulePage}
+                pageSize={search.rulePageSize}
                 renderMobileCard={(rule) => (
                   <AlertRuleCard
                     isAdmin={Boolean(isAdmin)}
@@ -711,6 +769,17 @@ export function AlertsPage({
                     rule={rule}
                   />
                 )}
+                sorting={
+                  search.ruleSort
+                    ? [
+                        {
+                          desc: search.ruleOrder === 'desc',
+                          id: search.ruleSort,
+                        },
+                      ]
+                    : []
+                }
+                total={rulesQuery.data?.total ?? 0}
               />
             )}
           </div>

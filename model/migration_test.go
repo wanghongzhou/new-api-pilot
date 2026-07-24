@@ -103,6 +103,7 @@ func TestMySQLMigrationAndSeeds(t *testing.T) {
 	if schemaSummary.Tables != 69 || schemaSummary.ForeignKeys != 63 {
 		t.Fatalf("authoritative schema summary = %#v", schemaSummary)
 	}
+	assertAlertThresholdPrecision(t, ctx, database.SQL)
 	assertChecksumMismatchIsRejected(t, ctx, database.SQL, runner)
 
 	seeder := NewSeeder(database.SQL)
@@ -113,6 +114,80 @@ func TestMySQLMigrationAndSeeds(t *testing.T) {
 		t.Fatalf("idempotent seed run: %v", err)
 	}
 	assertExactDefaultSeeds(t, ctx, database.SQL)
+}
+
+func TestMySQLAlertThresholdPrecisionMigration(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_DSN") == "" {
+		t.Skip("TEST_DATABASE_DSN is not configured")
+	}
+	database := openIsolatedMigrationSourceDatabase(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	initial, err := migrations.Files.ReadFile("0001_initial_schema.sql")
+	if err != nil {
+		t.Fatalf("read initial migration: %v", err)
+	}
+	prefixRunner := NewMigrationRunner(database.SQL)
+	prefixRunner.FS = fstest.MapFS{
+		"0001_initial_schema.sql": &fstest.MapFile{Data: initial, Mode: 0o444},
+	}
+	if err := prefixRunner.Run(ctx); err != nil {
+		t.Fatalf("apply initial migration: %v", err)
+	}
+	result, err := database.SQL.ExecContext(ctx, `INSERT INTO alert_rule
+(rule_key, name, enabled, level, metric, compare_operator, threshold_value, for_times,
+ scope_type, scope_id, created_at, updated_at)
+VALUES ('precision_test', 'Precision Test', 1, 'warning', 'test.metric', '>=', 70.126, 1,
+ 'global', 0, 1, 1)`)
+	if err != nil {
+		t.Fatalf("insert precise alert rule: %v", err)
+	}
+	ruleID, err := result.LastInsertId()
+	if err != nil {
+		t.Fatalf("read precise alert rule id: %v", err)
+	}
+	if _, err := database.SQL.ExecContext(ctx, `INSERT INTO alert_event
+(rule_id, rule_key, target_type, target_key, level, status, consecutive_count,
+ current_value, threshold_value, message_code, message, first_observed_at, created_at, updated_at)
+VALUES (?, 'precision_test', 'site', '1', 'warning', 'resolved', 1,
+ 70.126789, 70.126, 'TEST', 'precision', 1, 1, 1)`, ruleID); err != nil {
+		t.Fatalf("insert precise alert event: %v", err)
+	}
+	if _, err := database.SQL.ExecContext(ctx, `INSERT INTO alert_rule
+(rule_key, name, enabled, level, metric, compare_operator, threshold_value, for_times,
+ scope_type, scope_id, created_at, updated_at)
+VALUES
+ ('channel_availability_low', 'Availability Warning', 1, 'warning', 'channel.availability_rate', '<=', 0.99, 3, 'global', 0, 1, 1),
+ ('channel_availability_low', 'Availability Critical', 1, 'critical', 'channel.availability_rate', '<=', 0.90, 1, 'global', 0, 1, 1),
+ ('channel_availability_low', 'Site Availability Warning', 1, 'warning', 'channel.availability_rate', '<=', 0.77, 3, 'site', 7, 1, 1)`); err != nil {
+		t.Fatalf("insert channel availability rules: %v", err)
+	}
+	if err := NewMigrationRunner(database.SQL).Run(ctx); err != nil {
+		t.Fatalf("apply alert threshold precision migration: %v", err)
+	}
+	assertAlertThresholdPrecision(t, ctx, database.SQL)
+	var ruleThreshold, eventThreshold, currentValue string
+	if err := database.SQL.QueryRowContext(ctx, `SELECT
+  CAST(r.threshold_value AS CHAR), CAST(e.threshold_value AS CHAR), CAST(e.current_value AS CHAR)
+FROM alert_rule r JOIN alert_event e ON e.rule_id = r.id WHERE r.id = ?`, ruleID).
+		Scan(&ruleThreshold, &eventThreshold, &currentValue); err != nil {
+		t.Fatalf("read migrated alert precision: %v", err)
+	}
+	if ruleThreshold != "70.13" || eventThreshold != "70.13" || currentValue != "70.1267890000" {
+		t.Fatalf("migrated values rule=%q event=%q current=%q", ruleThreshold, eventThreshold, currentValue)
+	}
+	var warningThreshold, criticalThreshold, siteThreshold string
+	if err := database.SQL.QueryRowContext(ctx, `SELECT
+  MAX(CASE WHEN scope_type = 'global' AND level = 'warning' THEN CAST(threshold_value AS CHAR) END),
+  MAX(CASE WHEN scope_type = 'global' AND level = 'critical' THEN CAST(threshold_value AS CHAR) END),
+  MAX(CASE WHEN scope_type = 'site' AND level = 'warning' THEN CAST(threshold_value AS CHAR) END)
+FROM alert_rule WHERE rule_key = 'channel_availability_low'`).
+		Scan(&warningThreshold, &criticalThreshold, &siteThreshold); err != nil {
+		t.Fatalf("read migrated availability thresholds: %v", err)
+	}
+	if warningThreshold != "0.90" || criticalThreshold != "0.80" || siteThreshold != "0.77" {
+		t.Fatalf("availability thresholds warning=%q critical=%q site=%q", warningThreshold, criticalThreshold, siteThreshold)
+	}
 }
 
 func TestMySQLMigrationRecoversDDLAndDMLCommitGaps(t *testing.T) {
@@ -526,8 +601,8 @@ func TestMySQLMigrationSourceGate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load repository migrations: %v", err)
 	}
-	if len(repository) != 1 {
-		t.Fatalf("repository migration count = %d, want 1", len(repository))
+	if len(repository) != 3 {
+		t.Fatalf("repository migration count = %d, want 3", len(repository))
 	}
 
 	t.Run("current and idempotent rerun", func(t *testing.T) {
@@ -1232,7 +1307,7 @@ WHERE setting_key = ? AND setting_value = ? AND value_type = ? AND is_secret = ?
 		if err := db.QueryRowContext(ctx, `SELECT COUNT(*)
 FROM alert_rule
 WHERE rule_key = ? AND name = ? AND enabled = 1 AND level = ? AND metric = ?
-  AND compare_operator = ? AND threshold_value = CAST(? AS DECIMAL(30,10))
+  AND compare_operator = ? AND threshold_value = CAST(? AS DECIMAL(30,2))
   AND for_times = ? AND scope_type = 'global' AND scope_id = 0`,
 			rule.Key, rule.Name, rule.Level, rule.Metric, rule.Operator, rule.Threshold, rule.ForTimes,
 		).Scan(&matches); err != nil {
@@ -1240,6 +1315,23 @@ WHERE rule_key = ? AND name = ? AND enabled = 1 AND level = ? AND metric = ?
 		}
 		if matches != 1 {
 			t.Errorf("default alert rule %s exact match count = %d", identity, matches)
+		}
+	}
+}
+
+func assertAlertThresholdPrecision(t *testing.T, ctx context.Context, db *sql.DB) {
+	t.Helper()
+	for _, table := range []string{"alert_rule", "alert_event"} {
+		var dataType string
+		var precision, scale int
+		if err := db.QueryRowContext(ctx, `SELECT data_type, numeric_precision, numeric_scale
+FROM information_schema.columns
+WHERE table_schema = DATABASE() AND table_name = ? AND column_name = 'threshold_value'`, table).
+			Scan(&dataType, &precision, &scale); err != nil {
+			t.Fatalf("read %s.threshold_value schema: %v", table, err)
+		}
+		if dataType != "decimal" || precision != 30 || scale != 2 {
+			t.Fatalf("%s.threshold_value = %s(%d,%d), want decimal(30,2)", table, dataType, precision, scale)
 		}
 	}
 }

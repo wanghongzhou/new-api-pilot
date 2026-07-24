@@ -6,13 +6,16 @@ import type {
   AlertEventPage,
   AlertListParams,
   AlertRuleItem,
+  AlertRuleListParams,
   AlertRuleOverrideRequest,
-  AlertRuleScope,
+  AlertRulePage,
   AlertRuleUpdateRequest,
   AlertSummary,
 } from './types'
 
-function alertSearchParams(values: AlertListParams): URLSearchParams {
+function alertSearchParams(
+  values: AlertListParams | AlertRuleListParams
+): URLSearchParams {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(values)) {
     if (value === undefined || value === '') continue
@@ -48,15 +51,11 @@ export function getAlert(id: IdString): Promise<AlertEventDetail> {
 }
 
 export function listAlertRules(
-  scopeType: AlertRuleScope,
-  scopeId?: IdString
-): Promise<AlertRuleItem[]> {
-  return requestApiData<AlertRuleItem[]>({
+  params: AlertRuleListParams
+): Promise<AlertRulePage> {
+  return requestApiData<AlertRulePage>({
     method: 'get',
-    params:
-      scopeType === 'site'
-        ? { scope_id: scopeId, scope_type: scopeType }
-        : { scope_type: scopeType },
+    params: alertSearchParams(params),
     url: '/api/alert-rules',
   })
 }

@@ -2,7 +2,11 @@ import { describe, expect, test } from 'bun:test'
 
 import { parseIdString } from '@/lib/api-types'
 
-import { alertsSearchSchema, createAlertRuleFormSchema } from './schema'
+import {
+  alertSearchMiddlewares,
+  alertsSearchSchema,
+  createAlertRuleFormSchema,
+} from './schema'
 import type { AlertRuleItem } from './types'
 
 function ruleFixture(
@@ -13,6 +17,7 @@ function ruleFixture(
   const id = parseIdString(level === 'warning' ? '11' : '12')
   return {
     base_rule_id: id,
+    category: 'instance',
     compare_operator: '>=',
     constraints: {
       for_times_editable: true,
@@ -46,11 +51,46 @@ function ruleFixture(
 }
 
 describe('alert schemas', () => {
+  test('strips inactive filters and other defaults from the browser URL', () => {
+    const search = alertsSearchSchema.parse({
+      level: [],
+      order: 'desc',
+      page: 1,
+      pageSize: 20,
+      ruleCategory: [],
+      ruleLevel: [],
+      ruleOrder: 'asc',
+      rulePage: 1,
+      rulePageSize: 20,
+      scope: 'global',
+      status: [],
+      tab: 'rules',
+      targetType: [],
+    })
+    const normalized = alertSearchMiddlewares[0]({
+      next: (nextSearch) => nextSearch,
+      search,
+    })
+
+    expect(normalized as Record<string, unknown>).toEqual({ tab: 'rules' })
+  })
+
+  test('accepts metric rule sorting and drops removed consecutive-count sorting', () => {
+    expect(alertsSearchSchema.parse({ ruleSort: 'metric' }).ruleSort).toBe(
+      'metric'
+    )
+    expect(
+      alertsSearchSchema.parse({ ruleSort: 'for_times' }).ruleSort
+    ).toBeUndefined()
+  })
+
   test('keeps bigint URL IDs as strings and drops invalid deep-link values', () => {
     const valid = alertsSearchSchema.parse({
       alertId: '9007199254740993',
       page: '2',
       pageSize: '100',
+      rulePage: '3',
+      rulePageSize: '50',
       ruleSiteId: '9007199254740995',
       siteId: '9007199254740997',
       start: '1783900000',
@@ -59,6 +99,8 @@ describe('alert schemas', () => {
       alertId: '9007199254740993',
       page: 2,
       pageSize: 100,
+      rulePage: 3,
+      rulePageSize: 50,
       ruleSiteId: '9007199254740995',
       siteId: '9007199254740997',
       start: 1_783_900_000,
@@ -77,6 +119,11 @@ describe('alert schemas', () => {
       level: [],
       page: undefined,
       pageSize: undefined,
+      ruleCategory: [],
+      ruleLevel: [],
+      rulePage: undefined,
+      rulePageSize: undefined,
+      ruleSort: undefined,
       sort: undefined,
       status: [],
       targetType: [],
@@ -97,6 +144,18 @@ describe('alert schemas', () => {
     })
   })
 
+  test('keeps rule category and level filters single-select', () => {
+    expect(
+      alertsSearchSchema.parse({
+        ruleCategory: ['channel', 'instance'],
+        ruleLevel: ['warning', 'critical'],
+      })
+    ).toMatchObject({
+      ruleCategory: ['instance'],
+      ruleLevel: ['critical'],
+    })
+  })
+
   test.each(['0', '01', '1.0', '61'])(
     'rejects invalid for_times value %s',
     (value) => {
@@ -114,7 +173,7 @@ describe('alert schemas', () => {
     }
   )
 
-  test.each(['', '+70', '070', '7e1', '70.12345678901'])(
+  test.each(['', '+70', '070', '7e1', '70.123'])(
     'rejects non-canonical threshold %s',
     (value) => {
       const rule = ruleFixture('warning', '70')
@@ -133,7 +192,7 @@ describe('alert schemas', () => {
 
   test('uses exact decimals and enforces Warning below Critical in both directions', () => {
     const warning = ruleFixture('warning', '0.3')
-    const critical = ruleFixture('critical', '0.3000000001')
+    const critical = ruleFixture('critical', '0.31')
     const values = { enabled: true, forTimes: '1' }
 
     expect(
@@ -145,7 +204,7 @@ describe('alert schemas', () => {
     expect(
       createAlertRuleFormSchema(warning, critical).safeParse({
         ...values,
-        thresholdValue: '0.3000000001',
+        thresholdValue: '0.31',
       }).success
     ).toBeFalse()
     expect(

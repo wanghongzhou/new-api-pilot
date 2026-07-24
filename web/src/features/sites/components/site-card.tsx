@@ -19,7 +19,7 @@ import { buildStatisticsSearch } from '@/features/statistics/search'
 import { fromUnixSeconds } from '@/lib/dayjs'
 import { cn } from '@/lib/utils'
 
-import { siteResourceColor } from '../site-card-metrics'
+import { formatLatencySeconds, siteResourceColor } from '../site-card-metrics'
 import type { SiteListItem } from '../types'
 import { SiteActions, type SiteAction } from './site-actions'
 
@@ -274,7 +274,7 @@ export function SiteCard({
           </MetricCell>
           <MetricCell label={t('site.performance.avgLatency')}>
             {t('site.performance.latencyValue', {
-              value: site.performance.avg_latency_ms.toFixed(0),
+              value: formatLatencySeconds(site.performance.avg_latency_ms),
             })}
           </MetricCell>
           <MetricCell label={t('site.performance.avgTps')}>

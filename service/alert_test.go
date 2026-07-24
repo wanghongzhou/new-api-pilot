@@ -7,6 +7,7 @@ import (
 	"errors"
 	"math/big"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,6 +21,39 @@ import (
 	"new-api-pilot/model"
 	testsupport "new-api-pilot/tests/support"
 )
+
+func TestSortAlertRuleItemsUsesBusinessSortFields(t *testing.T) {
+	items := []dto.AlertRuleItem{
+		{ID: "1", RuleKey: "cpu_high", Level: dto.AlertLevelWarning, Metric: "instance.cpu_percent", UpdatedAt: 20},
+		{ID: "2", RuleKey: "site_offline", Level: dto.AlertLevelInfo, Metric: "site.online", UpdatedAt: 30},
+		{ID: "3", RuleKey: "memory_high", Level: dto.AlertLevelCritical, Metric: "instance.memory_percent", UpdatedAt: 10},
+	}
+
+	tests := []struct {
+		name      string
+		sortBy    string
+		sortOrder string
+		wantIDs   []string
+	}{
+		{name: "level descending", sortBy: "level", sortOrder: "desc", wantIDs: []string{"3", "1", "2"}},
+		{name: "metric ascending", sortBy: "metric", sortOrder: "asc", wantIDs: []string{"1", "3", "2"}},
+		{name: "updated descending", sortBy: "updated_at", sortOrder: "desc", wantIDs: []string{"2", "1", "3"}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			actual := append([]dto.AlertRuleItem(nil), items...)
+			sortAlertRuleItems(actual, test.sortBy, test.sortOrder)
+			ids := make([]string, len(actual))
+			for index, item := range actual {
+				ids[index] = item.ID
+			}
+			if !reflect.DeepEqual(ids, test.wantIDs) {
+				t.Fatalf("sorted IDs = %#v, want %#v", ids, test.wantIDs)
+			}
+		})
+	}
+}
 
 func TestAlertEvaluationStateMachineAndLevelSwitch(t *testing.T) {
 	tx := openAlertTestTransaction(t)
@@ -100,7 +134,7 @@ FROM alert_event WHERE id = ?`, critical.EventID).Scan(&evidence).Error; err != 
 	if err := json.Unmarshal([]byte(evidence.MessageParams), &params); err != nil {
 		t.Fatalf("decode critical message params: %v", err)
 	}
-	if evidence.CurrentValue != "96.0000000000" || evidence.ThresholdValue != "95.0000000000" ||
+	if evidence.CurrentValue != "96.0000000000" || evidence.ThresholdValue != "95.00" ||
 		evidence.Level != dto.AlertLevelCritical || evidence.MessageCode != string(constant.MessageAlertCPUHigh) ||
 		params["value"] != evidence.CurrentValue || params["threshold"] != evidence.ThresholdValue ||
 		params["target_type"] != "instance" || params["site_id"] != strconv.FormatInt(site.ID, 10) ||
@@ -115,14 +149,14 @@ FROM alert_event WHERE id = ?`, critical.EventID).Scan(&evidence).Error; err != 
 		t.Fatalf("critical downgrade = %#v", warningAgain)
 	}
 	assertAlertEventState(t, tx, critical.EventID, dto.AlertStatusResolved, dto.AlertLevelCritical, 1)
-	assertAlertEventEvidence(t, tx, critical.EventID, dto.AlertStatusResolved, "90.0000000000", "95.0000000000", dto.AlertLevelCritical)
-	assertAlertEventEvidence(t, tx, warningAgain.EventID, dto.AlertStatusPending, "90.0000000000", "85.0000000000", dto.AlertLevelWarning)
+	assertAlertEventEvidence(t, tx, critical.EventID, dto.AlertStatusResolved, "90.0000000000", "95.00", dto.AlertLevelCritical)
+	assertAlertEventEvidence(t, tx, warningAgain.EventID, dto.AlertStatusPending, "90.0000000000", "85.00", dto.AlertLevelWarning)
 
 	healthy := evaluate(AlertSampleKnown, "10")
 	if healthy.EventID != warningAgain.EventID || healthy.Status != dto.AlertStatusResolved {
 		t.Fatalf("healthy recovery = %#v", healthy)
 	}
-	assertAlertEventEvidence(t, tx, warningAgain.EventID, dto.AlertStatusResolved, "10.0000000000", "85.0000000000", dto.AlertLevelWarning)
+	assertAlertEventEvidence(t, tx, warningAgain.EventID, dto.AlertStatusResolved, "10.0000000000", "85.00", dto.AlertLevelWarning)
 	reopened := evaluate(AlertSampleKnown, "90")
 	if reopened.EventID == warningAgain.EventID || reopened.Status != dto.AlertStatusPending {
 		t.Fatalf("reopened event = %#v", reopened)
@@ -143,7 +177,7 @@ FROM alert_event WHERE id = ?`, critical.EventID).Scan(&evidence).Error; err != 
 	if directHealthy.EventID != directCritical.EventID || directHealthy.Status != dto.AlertStatusResolved {
 		t.Fatalf("direct critical recovery = %#v", directHealthy)
 	}
-	assertAlertEventEvidence(t, tx, directCritical.EventID, dto.AlertStatusResolved, "10.0000000000", "95.0000000000", dto.AlertLevelCritical)
+	assertAlertEventEvidence(t, tx, directCritical.EventID, dto.AlertStatusResolved, "10.0000000000", "95.00", dto.AlertLevelCritical)
 
 	var activeCount int64
 	if err := tx.Raw("SELECT COUNT(*) FROM alert_event WHERE rule_key = ? AND target_key = ? AND active_key IS NOT NULL", ruleKey, targetKey).Scan(&activeCount).Error; err != nil || activeCount != 0 {
@@ -174,14 +208,15 @@ func TestAlertRuleOverrideInheritanceValidationAndHistoryPreservation(t *testing
 	if err != nil {
 		t.Fatalf("create override: %v", err)
 	}
-	if created.Inherited || created.OverrideRuleID == nil || created.ThresholdValue == nil || *created.ThresholdValue != "90.0000000000" {
+	if created.Inherited || created.OverrideRuleID == nil || created.ThresholdValue == nil || *created.ThresholdValue != "90.00" {
 		t.Fatalf("created override = %#v", created)
 	}
 
-	rules, err := alerts.ListRules(context.Background(), dto.AlertScopeSite, site.ID)
+	rulePage, err := alerts.ListRules(context.Background(), dto.AlertRuleListQuery{ScopeType: dto.AlertScopeSite, ScopeID: site.ID, PageSize: 100})
 	if err != nil {
 		t.Fatalf("list effective rules: %v", err)
 	}
+	rules := rulePage.Items
 	var inheritedCritical bool
 	for _, rule := range rules {
 		if rule.RuleKey == ruleKey && rule.Level == dto.AlertLevelCritical {
@@ -215,10 +250,11 @@ func TestAlertRuleOverrideInheritanceValidationAndHistoryPreservation(t *testing
 		t.Fatalf("delete override: %v", err)
 	}
 
-	rules, err = alerts.ListRules(context.Background(), dto.AlertScopeSite, site.ID)
+	rulePage, err = alerts.ListRules(context.Background(), dto.AlertRuleListQuery{ScopeType: dto.AlertScopeSite, ScopeID: site.ID, PageSize: 100})
 	if err != nil {
 		t.Fatalf("list inherited rules after delete: %v", err)
 	}
+	rules = rulePage.Items
 	var fallback dto.AlertRuleItem
 	for _, rule := range rules {
 		if rule.RuleKey == ruleKey && rule.Level == dto.AlertLevelWarning {
@@ -239,6 +275,23 @@ func TestAlertRuleOverrideInheritanceValidationAndHistoryPreservation(t *testing
 	var historyCount int64
 	if err := tx.Raw("SELECT COUNT(*) FROM alert_event WHERE id = ? AND rule_id = ?", historical.ID, overrideID).Scan(&historyCount).Error; err != nil || historyCount != 1 {
 		t.Fatalf("historical FK count = %d, %v", historyCount, err)
+	}
+}
+
+func TestAlertRulePatchRejectsMoreThanTwoThresholdDecimals(t *testing.T) {
+	threshold := "70.123"
+	_, fields := alertRulePatch(model.AlertRule{Metric: "cpu_percent"}, nil, &threshold, nil, 1)
+	if fields["threshold_value"] == "" {
+		t.Fatalf("three-decimal threshold fields = %#v", fields)
+	}
+}
+
+func TestAlertDecimalPrecisionKeepsCurrentValuesSeparateFromThresholds(t *testing.T) {
+	if _, _, valid := parseAlertDecimal("96.1234567890", true); !valid {
+		t.Fatal("ten-decimal current value was rejected")
+	}
+	if _, _, valid := parseAlertThreshold("96.1234567890", true); valid {
+		t.Fatal("ten-decimal threshold was accepted")
 	}
 }
 
@@ -308,16 +361,17 @@ func TestAlertConcurrentGlobalAndSiteUpdatesPreserveEffectivePair(t *testing.T) 
 	if succeeded != 1 || rejected != 1 {
 		t.Fatalf("concurrent pair updates succeeded=%d rejected=%d", succeeded, rejected)
 	}
-	effective, err := alerts.ListRules(context.Background(), dto.AlertScopeSite, site.ID)
+	effectivePage, err := alerts.ListRules(context.Background(), dto.AlertRuleListQuery{ScopeType: dto.AlertScopeSite, ScopeID: site.ID, PageSize: 100})
 	if err != nil {
 		t.Fatalf("list pair-validation rules: %v", err)
 	}
+	effective := effectivePage.Items
 	var warning, critical *big.Rat
 	for _, rule := range effective {
 		if rule.RuleKey != ruleKey || rule.ThresholdValue == nil {
 			continue
 		}
-		value, _, valid := parseAlertDecimal(*rule.ThresholdValue, true)
+		value, _, valid := parseAlertThreshold(*rule.ThresholdValue, true)
 		if !valid {
 			t.Fatalf("invalid persisted pair threshold %q", *rule.ThresholdValue)
 		}

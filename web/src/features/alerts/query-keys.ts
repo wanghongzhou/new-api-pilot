@@ -1,8 +1,8 @@
 import type { IdString } from '@/lib/api-types'
 
-import type { AlertListParams, AlertRuleScope } from './types'
+import type { AlertListParams, AlertRuleListParams } from './types'
 
-function stableAlertParams(params: AlertListParams) {
+function stableAlertParams(params: AlertListParams | AlertRuleListParams) {
   return Object.fromEntries(
     Object.entries(params)
       .filter(([, value]) => value !== undefined)
@@ -21,6 +21,6 @@ export const alertKeys = {
   list: (params: AlertListParams) =>
     ['alerts', 'list', stableAlertParams(params)] as const,
   detail: (id: IdString) => ['alerts', 'detail', id] as const,
-  rules: (scope: AlertRuleScope, siteId?: IdString) =>
-    ['alerts', 'rules', scope, siteId ?? '0'] as const,
+  rules: (params: AlertRuleListParams) =>
+    ['alerts', 'rules', stableAlertParams(params)] as const,
 }

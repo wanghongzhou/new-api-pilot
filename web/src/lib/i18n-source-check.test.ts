@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
+import { MESSAGE_CODES } from '@/lib/message-codes'
 
 import {
   findBootstrapHtmlViolations,
@@ -150,6 +151,12 @@ describe('i18n source checks', () => {
     expect(() => dynamicI18nKey('api', 'missing.dynamic.key')).toThrow(
       'Unregistered dynamic i18n key'
     )
+  })
+
+  test('registers every message code used by MessageRef translation', () => {
+    for (const code of MESSAGE_CODES) {
+      expect(dynamicI18nKey('api', code)).toBe(code)
+    }
   })
 
   test('parses only static named registries', () => {

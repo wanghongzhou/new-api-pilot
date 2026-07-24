@@ -174,7 +174,7 @@ func TestA25MigrationAcceptance(t *testing.T) {
 	mariaProbe := probeA25UnsupportedServer(t, ctx, mariaDBDSN, true)
 
 	repository, err := model.LoadMigrationVersions(migrations.Files)
-	if err != nil || len(repository) != 1 {
+	if err != nil || len(repository) != 3 {
 		t.Fatalf("load A25 repository migrations count=%d err=%v", len(repository), err)
 	}
 	now := time.Unix(fixture.Clock.NowUnix, 0)

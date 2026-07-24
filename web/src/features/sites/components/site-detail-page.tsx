@@ -63,6 +63,7 @@ import {
   listSiteInstances,
 } from '../api'
 import { siteKeys } from '../query-keys'
+import { formatLatencySeconds } from '../site-card-metrics'
 import type {
   CollectionRunItem,
   CollectionRunWindowItem,
@@ -250,7 +251,7 @@ function PerformanceHealth({
           <MetricCell label={t('site.performance.avgLatency')}>
             <span>
               {t('site.performance.latencyValue', {
-                value: (performance?.avg_latency_ms ?? 0).toFixed(0),
+                value: formatLatencySeconds(performance?.avg_latency_ms ?? 0),
               })}
             </span>
           </MetricCell>

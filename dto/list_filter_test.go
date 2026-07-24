@@ -42,3 +42,40 @@ func TestAlertAndExportListQueriesRejectInvalidEnums(t *testing.T) {
 		t.Fatalf("invalid export status fields = %#v", fields)
 	}
 }
+
+func TestAlertListQueryAcceptsOnlyDocumentedBusinessSorts(t *testing.T) {
+	for _, sortBy := range []string{"rule_key", "status", "level", "site_name", "first_fired_at", "last_fired_at", "resolved_at"} {
+		query := AlertListQuery{Page: 1, PageSize: 20, SortBy: sortBy, SortOrder: "asc"}
+		if fields := query.Validate(); fields != nil {
+			t.Errorf("documented sort %s rejected: %#v", sortBy, fields)
+		}
+	}
+	for _, sortBy := range []string{"current_value", "target_name", "updated_at"} {
+		query := AlertListQuery{Page: 1, PageSize: 20, SortBy: sortBy, SortOrder: "asc"}
+		if fields := query.Validate(); fields == nil || fields["sort_by"] == "" {
+			t.Errorf("invalid sort %s accepted: %#v", sortBy, fields)
+		}
+	}
+}
+
+func TestAlertRuleListQueryNormalizesAndValidatesContract(t *testing.T) {
+	enabled, inherited := true, false
+	query := AlertRuleListQuery{
+		ScopeType: " SITE ", ScopeID: 42, Page: 1, PageSize: 20,
+		Categories: []string{" INSTANCE ", "channel", "instance"},
+		Levels:     []string{"WARNING", "critical", "warning"},
+		Enabled:    &enabled, Inherited: &inherited, SortBy: " METRIC ", SortOrder: " DESC ",
+	}
+	query.Normalize()
+	if fields := query.Validate(); fields != nil ||
+		!reflect.DeepEqual(query.Categories, []string{"instance", "channel"}) ||
+		!reflect.DeepEqual(query.Levels, []string{"warning", "critical"}) ||
+		query.SortBy != "metric" || query.SortOrder != "desc" {
+		t.Fatalf("normalized alert rule query = %#v errors=%#v", query, fields)
+	}
+
+	query.SortBy = "for_times"
+	if fields := query.Validate(); fields == nil || fields["sort_by"] == "" {
+		t.Fatalf("invalid alert rule sort fields = %#v", fields)
+	}
+}

@@ -23,50 +23,88 @@ import type {
 
 export function alertRuleName(
   t: (key: string, params?: Record<string, unknown>) => string,
-  ruleKey: string
+  ruleKey: string,
+  level?: AlertLevel
 ): string {
+  let name: string
   switch (ruleKey) {
     case 'site_offline':
-      return t('alerts.rule.site_offline')
+      name = t('alerts.rule.site_offline')
+      break
     case 'site_auth_expired':
-      return t('alerts.rule.site_auth_expired')
+      name = t('alerts.rule.site_auth_expired')
+      break
     case 'site_export_disabled':
-      return t('alerts.rule.site_export_disabled')
+      name = t('alerts.rule.site_export_disabled')
+      break
     case 'collection_missing':
-      return t('alerts.rule.collection_missing')
+      name = t('alerts.rule.collection_missing')
+      break
     case 'backfill_failed':
-      return t('alerts.rule.backfill_failed')
+      name = t('alerts.rule.backfill_failed')
+      break
     case 'validation_failed':
-      return t('alerts.rule.validation_failed')
+      name = t('alerts.rule.validation_failed')
+      break
     case 'instance_stale':
-      return t('alerts.rule.instance_stale')
+      name = t('alerts.rule.instance_stale')
+      break
     case 'instance_offline':
-      return t('alerts.rule.instance_offline')
+      name = t('alerts.rule.instance_offline')
+      break
     case 'site_no_instance':
-      return t('alerts.rule.site_no_instance')
+      name = t('alerts.rule.site_no_instance')
+      break
     case 'cpu_high':
-      return t('alerts.rule.cpu_high')
+      name = t('alerts.rule.cpu_high')
+      break
     case 'memory_high':
-      return t('alerts.rule.memory_high')
+      name = t('alerts.rule.memory_high')
+      break
     case 'disk_high':
-      return t('alerts.rule.disk_high')
+      name = t('alerts.rule.disk_high')
+      break
     case 'account_missing':
-      return t('alerts.rule.account_missing')
+      name = t('alerts.rule.account_missing')
+      break
     case 'account_identity_mismatch':
-      return t('alerts.rule.account_identity_mismatch')
+      name = t('alerts.rule.account_identity_mismatch')
+      break
     case 'account_disabled':
-      return t('alerts.rule.account_disabled')
+      name = t('alerts.rule.account_disabled')
+      break
     case 'account_quota_empty':
-      return t('alerts.rule.account_quota_empty')
+      name = t('alerts.rule.account_quota_empty')
+      break
     case 'channel_balance_low':
-      return t('alerts.rule.channel_balance_low')
+      name = t('alerts.rule.channel_balance_low')
+      break
     case 'channel_response_time_high':
-      return t('alerts.rule.channel_response_time_high')
+      name = t('alerts.rule.channel_response_time_high')
+      break
     case 'channel_availability_low':
-      return t('alerts.rule.channel_availability_low')
+      name = t('alerts.rule.channel_availability_low')
+      break
     default:
       return t('alerts.rule.unknown', { key: ruleKey })
   }
+  if (
+    level &&
+    [
+      'cpu_high',
+      'memory_high',
+      'disk_high',
+      'channel_balance_low',
+      'channel_response_time_high',
+      'channel_availability_low',
+    ].includes(ruleKey)
+  ) {
+    return t('alerts.rule.withLevel', {
+      level: alertLevelText(t, level),
+      name,
+    })
+  }
+  return name
 }
 
 export function alertRuleDescription(

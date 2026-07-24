@@ -1,9 +1,12 @@
+import { stripSearchParams } from '@tanstack/react-router'
 import Decimal from 'decimal.js'
 import { z } from 'zod'
 
 import {
   alertLevels,
+  alertRuleCategories,
   alertRuleScopes,
+  alertRuleSortFields,
   alertSortFields,
   alertStatuses,
   alertTabs,
@@ -45,6 +48,20 @@ function searchArray<T extends readonly [string, ...string[]]>(values: T) {
     .catch([])
 }
 
+function singleSearchArray<T extends readonly [string, ...string[]]>(
+  values: T
+) {
+  return searchArray(values).transform((selected) => selected.slice(0, 1))
+}
+
+const optionalBoolean = z
+  .preprocess((value) => {
+    if (value === 'true') return true
+    if (value === 'false') return false
+    return value
+  }, z.boolean().optional())
+  .catch(undefined)
+
 export const alertsSearchSchema = z.object({
   alertId: optionalId,
   end: optionalTimestamp,
@@ -52,7 +69,21 @@ export const alertsSearchSchema = z.object({
   order: z.enum(['asc', 'desc']).optional().catch(undefined),
   page: z.coerce.number().int().min(1).optional().catch(undefined),
   pageSize: z.coerce.number().int().min(1).max(100).optional().catch(undefined),
+  ruleCategory: singleSearchArray(alertRuleCategories),
+  ruleEnabled: optionalBoolean,
+  ruleInherited: optionalBoolean,
+  ruleLevel: singleSearchArray(alertLevels),
+  ruleOrder: z.enum(['asc', 'desc']).optional().catch(undefined),
+  rulePage: z.coerce.number().int().min(1).optional().catch(undefined),
+  rulePageSize: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .optional()
+    .catch(undefined),
   ruleSiteId: optionalId,
+  ruleSort: z.enum(alertRuleSortFields).optional().catch(undefined),
   scope: z.enum(alertRuleScopes).optional().catch(undefined),
   siteId: optionalId,
   sort: z.enum(alertSortFields).optional().catch(undefined),
@@ -62,7 +93,27 @@ export const alertsSearchSchema = z.object({
   targetType: searchArray(alertTargetTypes),
 })
 
-const canonicalDecimal = /^(?:0|[1-9]\d*)(?:\.[0-9]{1,10})?$/
+type AlertsSearchParams = z.output<typeof alertsSearchSchema>
+
+export const alertSearchMiddlewares = [
+  stripSearchParams<AlertsSearchParams>({
+    level: [],
+    order: 'desc',
+    page: 1,
+    pageSize: 20,
+    ruleCategory: [],
+    ruleLevel: [],
+    ruleOrder: 'asc',
+    rulePage: 1,
+    rulePageSize: 20,
+    scope: 'global',
+    status: [],
+    tab: 'events',
+    targetType: [],
+  }),
+]
+
+const canonicalDecimal = /^(?:0|[1-9]\d*)(?:\.[0-9]{1,2})?$/
 const canonicalForTimes = /^(?:[1-9]|[1-5][0-9]|60)$/
 
 function decimalValue(value: string): Decimal | null {

@@ -121,7 +121,24 @@ func (service *AlertService) Get(ctx context.Context, id int64) (dto.AlertEventD
 	return dto.AlertEventDetail{AlertEventItem: alertEventItem(event), ConsecutiveCount: event.ConsecutiveCount, Deliveries: items}, nil
 }
 
-func (service *AlertService) ListRules(ctx context.Context, scopeType string, siteID int64) ([]dto.AlertRuleItem, error) {
+func (service *AlertService) ListRules(ctx context.Context, query dto.AlertRuleListQuery) (common.PageData[dto.AlertRuleItem], error) {
+	query.Normalize()
+	if fields := query.Validate(); fields != nil {
+		return common.PageData[dto.AlertRuleItem]{}, &AlertValidationError{Fields: fields}
+	}
+	items, err := service.listRuleItems(ctx, query.ScopeType, query.ScopeID)
+	if err != nil {
+		return common.PageData[dto.AlertRuleItem]{}, err
+	}
+	items = filterAlertRuleItems(items, query)
+	sortAlertRuleItems(items, query.SortBy, query.SortOrder)
+	total := int64(len(items))
+	start := min(query.Offset(), len(items))
+	end := min(start+query.PageSize, len(items))
+	return common.NewPageData(query.Page, query.PageSize, total, items[start:end]), nil
+}
+
+func (service *AlertService) listRuleItems(ctx context.Context, scopeType string, siteID int64) ([]dto.AlertRuleItem, error) {
 	if scopeType == dto.AlertScopeSite {
 		exists, err := service.repository.SiteExists(ctx, siteID)
 		if err != nil {
@@ -175,7 +192,7 @@ func (service *AlertService) UpdateRule(ctx context.Context, id int64, request d
 	if err != nil {
 		return dto.AlertRuleItem{}, err
 	}
-	items, err := service.ListRules(ctx, updated.ScopeType, updated.ScopeID)
+	items, err := service.listRuleItems(ctx, updated.ScopeType, updated.ScopeID)
 	if err != nil {
 		return dto.AlertRuleItem{}, err
 	}
@@ -242,7 +259,7 @@ func (service *AlertService) CreateOverride(ctx context.Context, request dto.Ale
 	if err != nil {
 		return dto.AlertRuleItem{}, err
 	}
-	items, err := service.ListRules(ctx, dto.AlertScopeSite, siteID)
+	items, err := service.listRuleItems(ctx, dto.AlertScopeSite, siteID)
 	if err != nil {
 		return dto.AlertRuleItem{}, err
 	}
@@ -468,11 +485,11 @@ func (service *AlertService) Evaluate(ctx context.Context, evaluation AlertEvalu
 				result = evaluationResult(active, "resolved")
 				return nil
 			}
-			threshold, _, valid := parseAlertDecimal(*candidate.ThresholdValue, true)
+			threshold, _, valid := parseAlertThreshold(*candidate.ThresholdValue, true)
 			if !valid {
 				return errors.New("effective alert threshold is invalid")
 			}
-			canonicalThreshold := threshold.FloatString(10)
+			canonicalThreshold := threshold.FloatString(2)
 			candidate.ThresholdValue = &canonicalThreshold
 			message, params, err := buildAlertMessage(evaluation, contract, target, *candidate, canonical)
 			if err != nil {
@@ -630,13 +647,145 @@ func alertRuleItems(rules []model.EffectiveAlertRule) []dto.AlertRuleItem {
 		}
 		items[index] = dto.AlertRuleItem{
 			ID: id, EffectiveRuleID: id, BaseRuleID: baseID, OverrideRuleID: overrideID,
-			RuleKey: rule.RuleKey, Name: rule.Name, Enabled: rule.Enabled, Level: rule.Level,
+			RuleKey: rule.RuleKey, Category: alertRuleCategory(rule.AlertRule), Name: rule.Name, Enabled: rule.Enabled, Level: rule.Level,
 			Metric: rule.Metric, CompareOperator: rule.CompareOperator, ThresholdValue: rule.ThresholdValue,
 			ForTimes: rule.ForTimes, ScopeType: rule.ScopeType, ScopeID: strconv.FormatInt(rule.ScopeID, 10),
 			Inherited: rule.Inherited, EditableFields: editable, Constraints: constraints, UpdatedAt: rule.UpdatedAt,
 		}
 	}
 	return items
+}
+
+func alertRuleCategory(rule model.AlertRule) string {
+	if strings.HasPrefix(rule.RuleKey, "channel_") {
+		return dto.AlertRuleCategoryChannel
+	}
+	if contract, exists := alertRuleContracts[rule.RuleKey]; exists {
+		switch contract.TargetType {
+		case dto.AlertRuleCategoryCollection, dto.AlertRuleCategoryInstance, dto.AlertRuleCategoryAccount:
+			return contract.TargetType
+		default:
+			return dto.AlertRuleCategorySite
+		}
+	}
+	prefix, _, _ := strings.Cut(rule.Metric, ".")
+	switch prefix {
+	case dto.AlertRuleCategoryCollection, dto.AlertRuleCategoryInstance, dto.AlertRuleCategoryAccount, dto.AlertRuleCategoryChannel:
+		return prefix
+	default:
+		return dto.AlertRuleCategorySite
+	}
+}
+
+func filterAlertRuleItems(items []dto.AlertRuleItem, query dto.AlertRuleListQuery) []dto.AlertRuleItem {
+	filtered := make([]dto.AlertRuleItem, 0, len(items))
+	for _, item := range items {
+		if len(query.Categories) > 0 && !alertRuleStringIn(item.Category, query.Categories) {
+			continue
+		}
+		if len(query.Levels) > 0 && !alertRuleStringIn(item.Level, query.Levels) {
+			continue
+		}
+		if query.Enabled != nil && item.Enabled != *query.Enabled {
+			continue
+		}
+		if query.Inherited != nil && item.Inherited != *query.Inherited {
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	return filtered
+}
+
+func alertRuleStringIn(value string, choices []string) bool {
+	for _, choice := range choices {
+		if value == choice {
+			return true
+		}
+	}
+	return false
+}
+
+func sortAlertRuleItems(items []dto.AlertRuleItem, sortBy, sortOrder string) {
+	descending := sortOrder == "desc"
+	sort.SliceStable(items, func(left, right int) bool {
+		a, b := items[left], items[right]
+		comparison := compareAlertRuleField(a, b, sortBy)
+		if comparison != 0 {
+			if descending {
+				return comparison > 0
+			}
+			return comparison < 0
+		}
+		if sortBy == "" {
+			if comparison = strings.Compare(a.Category, b.Category); comparison != 0 {
+				return comparison < 0
+			}
+		}
+		if comparison = strings.Compare(a.RuleKey, b.RuleKey); comparison != 0 {
+			return comparison < 0
+		}
+		if comparison = compareAlertRuleLevelDefault(a.Level, b.Level); comparison != 0 {
+			return comparison < 0
+		}
+		return a.ID < b.ID
+	})
+}
+
+func compareAlertRuleField(left, right dto.AlertRuleItem, sortBy string) int {
+	switch sortBy {
+	case "category":
+		return strings.Compare(left.Category, right.Category)
+	case "rule_key":
+		return strings.Compare(left.RuleKey, right.RuleKey)
+	case "level":
+		return alertRuleLevelRank(left.Level) - alertRuleLevelRank(right.Level)
+	case "metric":
+		return strings.Compare(left.Metric, right.Metric)
+	case "enabled":
+		return compareAlertRuleBool(left.Enabled, right.Enabled)
+	case "updated_at":
+		return compareAlertRuleInt64(left.UpdatedAt, right.UpdatedAt)
+	default:
+		return 0
+	}
+}
+
+func alertRuleLevelRank(level string) int {
+	switch level {
+	case dto.AlertLevelInfo:
+		return 0
+	case dto.AlertLevelWarning:
+		return 1
+	case dto.AlertLevelCritical:
+		return 2
+	default:
+		return 3
+	}
+}
+
+func compareAlertRuleLevelDefault(left, right string) int {
+	return alertRuleLevelRank(right) - alertRuleLevelRank(left)
+}
+
+func compareAlertRuleBool(left, right bool) int {
+	if left == right {
+		return 0
+	}
+	if left {
+		return 1
+	}
+	return -1
+}
+
+func compareAlertRuleInt64(left, right int64) int {
+	if left < right {
+		return -1
+	}
+	if left > right {
+		return 1
+	}
+	return 0
 }
 
 func alertRuleConstraints(rule model.AlertRule) (dto.AlertRuleConstraints, []string) {
@@ -709,9 +858,9 @@ func alertRulePatch(rule model.AlertRule, enabled *bool, threshold *string, forT
 		return patch, nilIfNoAlertServiceErrors(errors)
 	}
 	if threshold != nil {
-		value, canonical, valid := parseAlertDecimal(*threshold, false)
+		value, canonical, valid := parseAlertThreshold(*threshold, false)
 		if !valid {
-			errors["threshold_value"] = "must be a non-negative decimal with at most 10 fractional digits"
+			errors["threshold_value"] = "must be a non-negative decimal with at most 2 fractional digits"
 		} else {
 			if kind == "percentage" && (value.Cmp(big.NewRat(1, 1)) < 0 || value.Cmp(big.NewRat(100, 1)) > 0) {
 				errors["threshold_value"] = "must be between 1 and 100"
@@ -765,8 +914,8 @@ func validEffectiveAlertPair(effective map[string]model.AlertRule) bool {
 	if !warningOK || !criticalOK || warning.ThresholdValue == nil || critical.ThresholdValue == nil {
 		return true
 	}
-	warningValue, _, warningValid := parseAlertDecimal(*warning.ThresholdValue, true)
-	criticalValue, _, criticalValid := parseAlertDecimal(*critical.ThresholdValue, true)
+	warningValue, _, warningValid := parseAlertThreshold(*warning.ThresholdValue, true)
+	criticalValue, _, criticalValid := parseAlertThreshold(*critical.ThresholdValue, true)
 	if !warningValid || !criticalValid || warning.CompareOperator != critical.CompareOperator {
 		return false
 	}
@@ -818,7 +967,7 @@ func matchingAlertRule(rules map[string]model.AlertRule, value *big.Rat) *model.
 		if !exists || !rule.Enabled || rule.ThresholdValue == nil {
 			continue
 		}
-		threshold, _, valid := parseAlertDecimal(*rule.ThresholdValue, true)
+		threshold, _, valid := parseAlertThreshold(*rule.ThresholdValue, true)
 		if !valid {
 			continue
 		}
@@ -832,7 +981,17 @@ func matchingAlertRule(rules map[string]model.AlertRule, value *big.Rat) *model.
 	return nil
 }
 
-var alertDecimalPattern = regexp.MustCompile(`^-?(0|[1-9][0-9]*)(\.[0-9]{1,10})?$`)
+var (
+	alertDecimalPattern   = regexp.MustCompile(`^-?(0|[1-9][0-9]*)(\.[0-9]{1,10})?$`)
+	alertThresholdPattern = regexp.MustCompile(`^-?(0|[1-9][0-9]*)(\.[0-9]{1,2})?$`)
+)
+
+func parseAlertThreshold(raw string, allowNegative bool) (*big.Rat, string, bool) {
+	if raw != strings.TrimSpace(raw) || !alertThresholdPattern.MatchString(raw) {
+		return nil, "", false
+	}
+	return parseAlertDecimal(raw, allowNegative)
+}
 
 func parseAlertDecimal(raw string, allowNegative bool) (*big.Rat, string, bool) {
 	if raw != strings.TrimSpace(raw) || !alertDecimalPattern.MatchString(raw) {

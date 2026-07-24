@@ -251,3 +251,9 @@ func dingTalkHTTPResponse(status int, body string, headers map[string]string) *h
 		StatusCode: status, Header: header, Body: io.NopCloser(strings.NewReader(body)),
 	}
 }
+
+func TestAlertChineseNameUsesRemoteAccountBalanceWording(t *testing.T) {
+	if got := alertChineseName("account_quota_empty"); got != "远程账户余额为空" {
+		t.Fatalf("alertChineseName(account_quota_empty) = %q", got)
+	}
+}

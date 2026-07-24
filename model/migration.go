@@ -413,13 +413,37 @@ func isMigrationDDL(statement string) bool {
 }
 
 func verifyMigrationDDLPostcondition(ctx context.Context, connection *sql.Conn, version string, index int) (bool, error) {
-	if version != "0001_initial_schema" {
+	switch version {
+	case "0001_initial_schema":
+		if index < 0 || index >= len(initialMigrationTableOrder) {
+			return false, fmt.Errorf("no postcondition for DDL statement %d", index+1)
+		}
+		return verifyMigrationTable(ctx, connection, initialMigrationTableOrder[index])
+	case "0002_alert_threshold_precision":
+		tables := []string{"alert_rule", "alert_event"}
+		if index < 0 || index >= len(tables) {
+			return false, fmt.Errorf("no postcondition for DDL statement %d", index+1)
+		}
+		return verifyMigrationDecimalColumn(ctx, connection, tables[index], "threshold_value", 30, 2)
+	default:
 		return false, fmt.Errorf("migration %s has no registered DDL postconditions", version)
 	}
-	if index < 0 || index >= len(initialMigrationTableOrder) {
-		return false, fmt.Errorf("no postcondition for DDL statement %d", index+1)
-	}
-	return verifyMigrationTable(ctx, connection, initialMigrationTableOrder[index])
+}
+
+func verifyMigrationDecimalColumn(
+	ctx context.Context,
+	connection *sql.Conn,
+	table string,
+	column string,
+	precision int,
+	scale int,
+) (bool, error) {
+	var count int
+	err := connection.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.columns
+WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?
+  AND data_type = 'decimal' AND numeric_precision = ? AND numeric_scale = ?`,
+		table, column, precision, scale).Scan(&count)
+	return count == 1, err
 }
 
 func verifyMigrationTable(ctx context.Context, connection *sql.Conn, table string) (bool, error) {

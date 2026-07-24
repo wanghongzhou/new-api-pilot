@@ -32,6 +32,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { listSites, refreshSites } from '../api'
 import { siteListParams } from '../list-contract'
 import { siteKeys } from '../query-keys'
+import { formatLatencySeconds } from '../site-card-metrics'
 import type { SiteListItem, SiteSearch } from '../types'
 import { SiteActions, type SiteAction } from './site-actions'
 import { SiteCard } from './site-card'
@@ -293,7 +294,7 @@ export function SitesPage({
               </span>
               <span>
                 {t('site.performance.latencyValue', {
-                  value: performance.avg_latency_ms.toFixed(0),
+                  value: formatLatencySeconds(performance.avg_latency_ms),
                 })}
               </span>
               <span>

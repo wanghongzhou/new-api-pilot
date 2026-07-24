@@ -78,7 +78,39 @@ func AuthoritativeSchemaContracts() (map[string]TableContract, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parseCreateTableContracts(statements)
+	contracts, err := parseCreateTableContracts(statements)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := readMigrationStatements("0002_alert_threshold_precision.sql"); err != nil {
+		return nil, err
+	}
+	for _, table := range []string{"alert_rule", "alert_event"} {
+		if err := replaceSchemaColumnType(contracts, table, "threshold_value", "decimal(30,2)"); err != nil {
+			return nil, err
+		}
+	}
+	return contracts, nil
+}
+
+func replaceSchemaColumnType(
+	contracts map[string]TableContract,
+	table string,
+	column string,
+	columnType string,
+) error {
+	contract, exists := contracts[table]
+	if !exists {
+		return fmt.Errorf("schema contract table %s is missing", table)
+	}
+	for index := range contract.Columns {
+		if contract.Columns[index].Name == column {
+			contract.Columns[index].ColumnType = columnType
+			contracts[table] = contract
+			return nil
+		}
+	}
+	return fmt.Errorf("schema contract column %s.%s is missing", table, column)
 }
 
 func VerifyAuthoritativeSchema(

@@ -18,7 +18,13 @@ import { isIdString } from '@/lib/api-types'
 import { translateMessageRef } from '@/lib/message-ref'
 
 import { getAlert } from '../api'
+import { alertEventTargetLabel, alertEventTargetName } from '../event-text'
 import { alertKeys } from '../query-keys'
+import {
+  alertMessageForDisplay,
+  formatAlertCurrentValue,
+  formatAlertThreshold,
+} from '../rule-text'
 import type { AlertDeliveryItem, AlertEventDetail } from '../types'
 import {
   alertDeliveryErrorText,
@@ -26,7 +32,6 @@ import {
   AlertStatusBadge,
   AlertTime,
   alertRuleName,
-  alertTargetTypeText,
   DeliveryStatusBadge,
   deliveryEventTypeText,
 } from './alert-ui'
@@ -168,7 +173,7 @@ function DetailContent({ detail }: { detail: AlertEventDetail }) {
             {t('alerts.detail.evidence')}
           </h3>
           <p className='mt-1 text-sm break-words'>
-            {translateMessageRef(detail.message)}
+            {translateMessageRef(alertMessageForDisplay(detail.message))}
           </p>
         </div>
         {resolutionReasonText && (
@@ -198,7 +203,7 @@ function DetailContent({ detail }: { detail: AlertEventDetail }) {
         <dl className='border-border divide-border mt-2 grid divide-y border-y text-sm'>
           <div className='grid gap-1 py-3 sm:grid-cols-[10rem_1fr]'>
             <dt className='text-muted-foreground'>{t('alerts.table.rule')}</dt>
-            <dd>{alertRuleName(t, detail.rule_key)}</dd>
+            <dd>{alertRuleName(t, detail.rule_key, detail.level)}</dd>
           </div>
           <div className='grid gap-1 py-3 sm:grid-cols-[10rem_1fr]'>
             <dt className='text-muted-foreground'>{t('alerts.table.site')}</dt>
@@ -206,17 +211,20 @@ function DetailContent({ detail }: { detail: AlertEventDetail }) {
           </div>
           <div className='grid gap-1 py-3 sm:grid-cols-[10rem_1fr]'>
             <dt className='text-muted-foreground'>
-              {alertTargetTypeText(t, detail.target_type)}
+              {alertEventTargetLabel(t, detail)}
             </dt>
-            <dd className='break-words'>{detail.target_name}</dd>
+            <dd className='break-words'>{alertEventTargetName(t, detail)}</dd>
           </div>
           <div className='grid gap-1 py-3 sm:grid-cols-[10rem_1fr]'>
             <dt className='text-muted-foreground'>{t('alerts.table.value')}</dt>
             <dd>
               {t('alerts.value.currentThreshold', {
-                current: detail.current_value ?? t('alerts.value.unavailable'),
-                threshold:
-                  detail.threshold_value ?? t('alerts.value.unavailable'),
+                current: detail.current_value
+                  ? formatAlertCurrentValue(detail.current_value)
+                  : t('alerts.value.unavailable'),
+                threshold: detail.threshold_value
+                  ? formatAlertThreshold(detail.threshold_value)
+                  : t('alerts.value.unavailable'),
               })}
             </dd>
           </div>

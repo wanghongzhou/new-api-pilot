@@ -863,7 +863,7 @@ func alertChineseName(ruleKey string) string {
 		"instance_offline": "实例离线", "site_no_instance": "站点无可用实例",
 		"cpu_high": "CPU 使用率过高", "memory_high": "内存使用率过高", "disk_high": "磁盘使用率过高",
 		"account_missing": "纳管账户不存在", "account_identity_mismatch": "纳管账户身份不匹配",
-		"account_disabled": "纳管账户已禁用", "account_quota_empty": "纳管账户额度为空",
+		"account_disabled": "纳管账户已禁用", "account_quota_empty": "远程账户余额为空",
 		"channel_balance_low": "渠道余额过低", "channel_response_time_high": "渠道响应时间过高",
 		"channel_availability_low": "渠道可用率过低",
 	}

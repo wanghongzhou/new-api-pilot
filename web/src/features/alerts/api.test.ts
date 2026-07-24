@@ -30,7 +30,10 @@ describe('alert API contract', () => {
         config,
         data: {
           code: '',
-          data: config.url === '/api/alert-rules' ? [] : {},
+          data:
+            config.url === '/api/alert-rules'
+              ? { items: [], page: 1, page_size: 20, total: 0 }
+              : {},
           message: '',
           request_id: 'req_alerts',
           success: true,
@@ -56,8 +59,25 @@ describe('alert API contract', () => {
       target_type: ['site', 'account'],
     })
     await getAlert(bigintId)
-    await listAlertRules('global')
-    await listAlertRules('site', bigintId)
+    await listAlertRules({
+      category: ['instance', 'channel'],
+      enabled: true,
+      level: ['critical', 'warning'],
+      p: 1,
+      page_size: 20,
+      scope_type: 'global',
+      sort_by: 'category',
+      sort_order: 'asc',
+    })
+    await listAlertRules({
+      inherited: false,
+      p: 2,
+      page_size: 10,
+      scope_id: bigintId,
+      scope_type: 'site',
+      sort_by: 'updated_at',
+      sort_order: 'desc',
+    })
 
     expect(requests.map(({ method, url }) => [method, url])).toEqual([
       ['get', '/api/alerts/summary'],
@@ -82,10 +102,27 @@ describe('alert API contract', () => {
     expect(alertParams.getAll('level')).toEqual(['critical', 'warning'])
     expect(alertParams.getAll('status')).toEqual(['firing', 'pending'])
     expect(alertParams.getAll('target_type')).toEqual(['site', 'account'])
-    expect(requests[3]?.params).toEqual({ scope_type: 'global' })
-    expect(requests[4]?.params).toEqual({
+    const globalRuleParams = requests[3]?.params as URLSearchParams
+    expect(globalRuleParams.getAll('category')).toEqual(['instance', 'channel'])
+    expect(globalRuleParams.getAll('level')).toEqual(['critical', 'warning'])
+    expect(Object.fromEntries(globalRuleParams)).toEqual({
+      category: 'channel',
+      enabled: 'true',
+      level: 'warning',
+      p: '1',
+      page_size: '20',
+      scope_type: 'global',
+      sort_by: 'category',
+      sort_order: 'asc',
+    })
+    expect(Object.fromEntries(requests[4]?.params as URLSearchParams)).toEqual({
+      inherited: 'false',
+      p: '2',
+      page_size: '10',
       scope_id: '9007199254740993',
       scope_type: 'site',
+      sort_by: 'updated_at',
+      sort_order: 'desc',
     })
   })
 
@@ -113,14 +150,14 @@ describe('alert API contract', () => {
     await updateAlertRule(ruleId, {
       enabled: false,
       for_times: 3,
-      threshold_value: '79.5000',
+      threshold_value: '79.50',
     })
     await createAlertRuleOverride({
       base_rule_id: ruleId,
       enabled: true,
       for_times: 4,
       site_id: siteId,
-      threshold_value: '81.2500',
+      threshold_value: '81.25',
     })
     await deleteAlertRuleOverride(ruleId)
 
@@ -132,14 +169,14 @@ describe('alert API contract', () => {
     expect(JSON.parse(String(requests[0]?.data))).toEqual({
       enabled: false,
       for_times: 3,
-      threshold_value: '79.5000',
+      threshold_value: '79.50',
     })
     expect(JSON.parse(String(requests[1]?.data))).toEqual({
       base_rule_id: '9007199254740993',
       enabled: true,
       for_times: 4,
       site_id: '9007199254740995',
-      threshold_value: '81.2500',
+      threshold_value: '81.25',
     })
     expect(requests[2]?.data).toBeUndefined()
   })
