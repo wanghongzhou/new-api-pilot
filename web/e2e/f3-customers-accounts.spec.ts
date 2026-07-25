@@ -45,6 +45,14 @@ function envelope<T>(data: T, requestId = 'req_f3') {
   }
 }
 
+async function assertNoHorizontalOverflow(page: Page) {
+  const sizes = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }))
+  expect(sizes.scrollWidth).toBeLessThanOrEqual(sizes.clientWidth)
+}
+
 function errorEnvelope(
   code: string,
   requestId = 'req_f3_error',
@@ -491,6 +499,7 @@ async function expectReferenceEmptyTableRow(page: Page) {
 }
 
 test('uses the refreshed new-api list chrome for account and customer pages', async ({
+  isMobile,
   page,
 }) => {
   await seedAuth(page, admin)
@@ -523,7 +532,13 @@ test('uses the refreshed new-api list chrome for account and customer pages', as
   })
 
   await page.goto('/accounts')
-  await expectReferenceEmptyTableRow(page)
+  if (isMobile) {
+    await expect(
+      page.getByText('当前筛选下没有纳管账户').filter({ visible: true }).first()
+    ).toBeVisible()
+  } else {
+    await expectReferenceEmptyTableRow(page)
+  }
   await expect(page.getByRole('button', { name: '添加账户' })).toHaveCount(1)
   await expect(page.getByRole('button', { name: '重置' })).toHaveCount(0)
 
@@ -543,13 +558,26 @@ test('uses the refreshed new-api list chrome for account and customer pages', as
 
   accounts = [accountFixture()]
   await page.reload()
-  const usernameSort = page.getByRole('button', { name: '用户名' })
-  await usernameSort.click()
-  await expect(page.getByRole('menuitem', { name: '升序' })).toBeVisible()
-  await expect(page.getByRole('menuitem', { name: '降序' })).toBeVisible()
+  if (isMobile) {
+    await expect(
+      page.getByText('customer_prod').filter({ visible: true }).first()
+    ).toBeVisible()
+    await assertNoHorizontalOverflow(page)
+  } else {
+    const usernameSort = page.getByRole('button', { name: '用户名' })
+    await usernameSort.click()
+    await expect(page.getByRole('menuitem', { name: '升序' })).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: '降序' })).toBeVisible()
+  }
 
   await page.goto('/customers')
-  await expectReferenceEmptyTableRow(page)
+  if (isMobile) {
+    await expect(
+      page.getByText('尚未创建客户').filter({ visible: true }).first()
+    ).toBeVisible()
+  } else {
+    await expectReferenceEmptyTableRow(page)
+  }
   await expect(page.getByRole('button', { name: '新建客户' })).toHaveCount(1)
 })
 
@@ -633,7 +661,7 @@ test('localizes customer and account 400 field errors without exposing server te
     .filter({ visible: true })
     .first()
     .click()
-  await page.getByRole('button', { name: '编辑客户' }).click()
+  await page.getByRole('menuitem', { name: '编辑客户' }).click()
   let dialog = page.getByRole('dialog')
   await dialog.locator('#customer-name').fill('重复客户')
   await dialog.getByRole('button', { name: '保存' }).click()
@@ -651,7 +679,7 @@ test('localizes customer and account 400 field errors without exposing server te
     .filter({ visible: true })
     .first()
     .click()
-  await page.getByRole('button', { name: '编辑备注' }).click()
+  await page.getByRole('menuitem', { name: '编辑备注' }).click()
   dialog = page.getByRole('dialog')
   await dialog.locator('#account-remark').fill('服务端拒绝')
   await dialog.getByRole('button', { name: '保存' }).click()
@@ -800,6 +828,7 @@ test('blocks account creation when the final precise review drifts', async ({
 })
 
 test('keeps authoritative statistics exact, exportable, accessible, and responsive', async ({
+  isMobile,
   page,
 }) => {
   test.setTimeout(45_000)
@@ -1021,39 +1050,37 @@ test('keeps authoritative statistics exact, exportable, accessible, and responsi
   await expect(exactValues).toContainText('9223372036854775806')
   await expect(exactValues).toContainText('9223372036854775807')
   await expect(exactValues).toContainText('原始指标值 -')
-  const chart = page.getByRole('img', { name: '统计趋势图' })
-  const chartCanvas = chart.locator('canvas').last()
-  await expect(chartCanvas).toBeVisible()
-  await chartCanvas.scrollIntoViewIfNeeded()
-  const chartBox = await chartCanvas.boundingBox()
-  expect(chartBox).not.toBeNull()
-  if (chartBox) {
-    await page.mouse.move(chartBox.x + chartBox.width / 2, chartBox.y + 30)
+  if (!isMobile) {
+    const chart = page.getByRole('img', { name: '统计趋势图' })
+    const chartCanvas = chart.locator('canvas').last()
+    await expect(chartCanvas).toBeVisible()
+    await chartCanvas.scrollIntoViewIfNeeded()
+    const chartBox = await chartCanvas.boundingBox()
+    expect(chartBox).not.toBeNull()
+    if (chartBox) {
+      await page.mouse.move(chartBox.x + chartBox.width / 2, chartBox.y + 30)
+    }
+    await expect(
+      page.getByText('原始指标值', { exact: true }).filter({ visible: true })
+    ).toBeVisible()
+    await expect(
+      page.getByText('数据状态', { exact: true }).filter({ visible: true })
+    ).toBeVisible()
+    await expect(
+      page
+        .getByText('9223372036854775807', { exact: true })
+        .filter({ visible: true })
+        .first()
+    ).toBeVisible()
+    await expect(
+      page
+        .getByText(
+          /华东站点（ID 1）：完整，quota 9223372036854775807，quota_per_unit 500000，汇率 7\.3（站点当前汇率，2026-07-13 00:00:00），USD/
+        )
+        .filter({ visible: true })
+        .first()
+    ).toBeVisible()
   }
-  await expect(
-    page.getByText('原始指标值', { exact: true }).filter({ visible: true })
-  ).toBeVisible()
-  await expect(
-    page.getByText('数据状态', { exact: true }).filter({ visible: true })
-  ).toBeVisible()
-  await expect(
-    page
-      .getByText('9223372036854775807', { exact: true })
-      .filter({
-        visible: true,
-      })
-      .first()
-  ).toBeVisible()
-  await expect(
-    page
-      .getByText(
-        /华东站点（ID 1）：完整，quota 9223372036854775807，quota_per_unit 500000，汇率 7\.3（站点当前汇率，2026-07-13 00:00:00），USD/
-      )
-      .filter({
-        visible: true,
-      })
-      .first()
-  ).toBeVisible()
   const chartAccessibility = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa'])
     .analyze()
@@ -1064,7 +1091,11 @@ test('keeps authoritative statistics exact, exportable, accessible, and responsi
   await expect(
     page.getByRole('heading', { name: 'customer_prod 的账户统计' })
   ).toBeVisible()
-  await expect(page.getByText('—').first()).toBeVisible()
+  await expect(
+    page
+      .getByRole('region', { name: '范围汇总' })
+      .getByText('-', { exact: true })
+  ).toBeVisible()
   await expect(
     page.getByText('站点 / ID').filter({ visible: true }).first()
   ).toBeVisible()
@@ -1204,10 +1235,10 @@ test('allows a disabled customer to recover only through the enable run', async 
     .filter({ visible: true })
     .first()
     .click()
-  await expect(page.getByRole('button', { name: '编辑客户' })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: '删除客户' })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: '停用客户' })).toHaveCount(0)
-  await page.getByRole('button', { name: '恢复客户' }).click()
+  await expect(page.getByRole('menuitem', { name: '编辑客户' })).toHaveCount(0)
+  await expect(page.getByRole('menuitem', { name: '删除客户' })).toHaveCount(0)
+  await expect(page.getByRole('menuitem', { name: '停用客户' })).toHaveCount(0)
+  await page.getByRole('menuitem', { name: '恢复客户' }).click()
   await page.getByRole('button', { name: '恢复并补齐' }).click()
   await expect(
     page.getByRole('heading', { name: '恢复与回填进度' })
@@ -1242,7 +1273,7 @@ test('enforces admin state-action bodies and redirects F3 401 responses', async 
 
   await page.goto('/customers')
   await page.getByLabel('打开客户操作').click()
-  await page.getByRole('button', { name: '停用客户' }).click()
+  await page.getByRole('menuitem', { name: '停用客户' }).click()
   const confirmAccessibility = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa'])
     .analyze()
@@ -1256,7 +1287,7 @@ test('enforces admin state-action bodies and redirects F3 401 responses', async 
     .filter({ visible: true })
     .first()
     .click()
-  await page.getByRole('button', { name: '归档账户' }).click()
+  await page.getByRole('menuitem', { name: '归档账户' }).click()
   await page.getByRole('button', { name: '确认归档' }).click()
   await expect.poll(() => archived).toBe(1)
 

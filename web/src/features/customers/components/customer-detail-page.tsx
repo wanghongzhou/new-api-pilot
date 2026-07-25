@@ -64,10 +64,10 @@ function MetricCell({
   label: string
 }) {
   return (
-    <div className='min-w-0 px-4 py-3'>
+    <dl className='min-w-0 px-4 py-3'>
       <dt className='text-muted-foreground text-xs'>{label}</dt>
       <dd className='mt-1 text-lg font-semibold'>{children}</dd>
-    </div>
+    </dl>
   )
 }
 
@@ -220,64 +220,64 @@ export function CustomerDetailPage({
             </h2>
             <CustomerStatusBadge status={customer.status} />
           </div>
-          <dl className='grid gap-x-6 gap-y-3 border-t pt-4 sm:grid-cols-2 lg:grid-cols-3'>
-            <div>
+          <div className='grid gap-x-6 gap-y-3 border-t pt-4 sm:grid-cols-2 lg:grid-cols-3'>
+            <dl>
               <dt className='text-muted-foreground text-xs'>
                 {t('customer.contractAmount')}
               </dt>
               <dd className='mt-1 text-sm font-medium break-words'>
                 {customer.contract_amount}
               </dd>
-            </div>
-            <div>
+            </dl>
+            <dl>
               <dt className='text-muted-foreground text-xs'>
                 {t('customer.paymentAmount')}
               </dt>
               <dd className='mt-1 text-sm font-medium break-words'>
                 {customer.payment_amount}
               </dd>
-            </div>
-            <div>
+            </dl>
+            <dl>
               <dt className='text-muted-foreground text-xs'>
                 {t('customer.contact')}
               </dt>
               <dd className='mt-1 text-sm font-medium break-words'>
                 {formatDisplayValue(customer.contact)}
               </dd>
-            </div>
-            <div>
+            </dl>
+            <dl>
               <dt className='text-muted-foreground text-xs'>
                 {t('customer.remark')}
               </dt>
               <dd className='mt-1 text-sm font-medium break-words'>
                 {formatDisplayValue(customer.remark)}
               </dd>
-            </div>
-            <div>
+            </dl>
+            <dl>
               <dt className='text-muted-foreground text-xs'>
                 {t('customer.statisticsPausedAt')}
               </dt>
               <dd className='mt-1 text-sm font-medium'>
                 <Timestamp value={customer.statistics_paused_at} />
               </dd>
-            </div>
-            <div>
+            </dl>
+            <dl>
               <dt className='text-muted-foreground text-xs'>
                 {t('common.createdAt')}
               </dt>
               <dd className='mt-1 text-sm font-medium'>
                 <Timestamp value={customer.created_at} />
               </dd>
-            </div>
-            <div>
+            </dl>
+            <dl>
               <dt className='text-muted-foreground text-xs'>
                 {t('common.updatedAt')}
               </dt>
               <dd className='mt-1 text-sm font-medium'>
                 <Timestamp value={customer.updated_at} />
               </dd>
-            </div>
-          </dl>
+            </dl>
+          </div>
         </section>
 
         <section
@@ -293,7 +293,7 @@ export function CustomerDetailPage({
               timestamp={customer.today.as_of}
             />
           </div>
-          <dl className='border-border grid overflow-hidden rounded-lg border sm:grid-cols-2 lg:grid-cols-4 [&>div]:border-r [&>div]:border-b'>
+          <div className='border-border grid overflow-hidden rounded-lg border sm:grid-cols-2 lg:grid-cols-4 [&>dl]:border-r [&>dl]:border-b'>
             <MetricCell label={t('customer.accounts')}>
               {customer.active_account_count}/{customer.account_count}
             </MetricCell>
@@ -306,7 +306,7 @@ export function CustomerDetailPage({
             <MetricCell label={t('customer.activeAccounts')}>
               <MetricValue value={customer.today.active_users} />
             </MetricCell>
-          </dl>
+          </div>
           <div className='flex flex-wrap items-start justify-between gap-3 border-b pb-4'>
             <CustomerQuotaAmount customer={customer} />
             <DataStatusBadge status={customer.today.data_status} />

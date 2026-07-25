@@ -566,7 +566,7 @@ export function PerformanceHistoryPage({
           loading={listQuery.isPending}
           onPageChange={(page) => onSearchChange({ page })}
           onPageSizeChange={(pageSize) => onSearchChange({ page: 1, pageSize })}
-          onRetry={() => void listQuery.refetch()}
+          onRetry={validSiteId ? () => void listQuery.refetch() : undefined}
           page={search.page}
           pageSize={search.pageSize}
           renderMobileCard={(item) => (

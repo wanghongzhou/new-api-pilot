@@ -2248,6 +2248,8 @@
   "systemTasks.truncation.title": "上游任务列表已截断",
   "systemTasks.truncation.source_limit": "本轮观察 {{count}} 条，达到上游固定上限 {{limit}}；已有事实继续展示，但不能解释为完整库存。",
   "systemTasks.truncation.id_gap": "本轮观察 {{count}} 条且检测到 ID gap；已有事实继续展示，但不能解释为完整库存。",
+  "systemTasks.truncation.source_limit_and_id_gap": "本轮观察 {{count}} 条，既达到上游固定上限 {{limit}} 又检测到 ID gap；已有事实继续展示，但不能解释为完整库存。",
+  "systemTasks.statisticsError": "系统任务统计读取失败；任务列表仍可独立使用。",
   "systemTasks.table": "系统维护任务列表",
   "systemTasks.empty": "当前筛选下没有系统维护任务",
   "systemTasks.emptyDescription": "请结合完整性与截断状态判断；非 complete 状态不能解释为站点真实零任务。",

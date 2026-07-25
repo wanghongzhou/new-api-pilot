@@ -54,10 +54,10 @@ function MetricCell({
   label: string
 }) {
   return (
-    <div className='min-w-0 px-4 py-3'>
+    <dl className='min-w-0 px-4 py-3'>
       <dt className='text-muted-foreground text-xs'>{label}</dt>
       <dd className='mt-1 text-lg font-semibold'>{children}</dd>
-    </div>
+    </dl>
   )
 }
 
@@ -162,8 +162,8 @@ export function AccountDetailPage({
               {t('account.detail.bindingImmutable')}
             </Badge>
           </div>
-          <dl className='grid gap-x-6 gap-y-3 border-t pt-4 sm:grid-cols-2 lg:grid-cols-3'>
-            <div>
+          <div className='grid gap-x-6 gap-y-3 border-t pt-4 sm:grid-cols-2 lg:grid-cols-3'>
+            <dl>
               <dt className='text-muted-foreground text-xs'>
                 {t('account.site')}
               </dt>
@@ -176,8 +176,8 @@ export function AccountDetailPage({
                   {account.site_name}
                 </Link>
               </dd>
-            </div>
-            <div>
+            </dl>
+            <dl>
               <dt className='text-muted-foreground text-xs'>
                 {t('account.customer')}
               </dt>
@@ -190,40 +190,40 @@ export function AccountDetailPage({
                   {account.customer_name}
                 </Link>
               </dd>
-            </div>
-            <div>
+            </dl>
+            <dl>
               <dt className='text-muted-foreground text-xs'>
                 {t('account.remoteUserId')}
               </dt>
               <dd className='mt-1 text-sm font-medium'>
                 {account.remote_user_id}
               </dd>
-            </div>
-            <div>
+            </dl>
+            <dl>
               <dt className='text-muted-foreground text-xs'>
                 {t('account.remoteCreatedAt')}
               </dt>
               <dd className='mt-1 text-sm font-medium'>
                 <Timestamp value={account.remote_created_at} />
               </dd>
-            </div>
-            <div>
+            </dl>
+            <dl>
               <dt className='text-muted-foreground text-xs'>
                 {t('account.remark')}
               </dt>
               <dd className='mt-1 text-sm font-medium break-words'>
                 {formatDisplayValue(account.remark)}
               </dd>
-            </div>
-            <div>
+            </dl>
+            <dl>
               <dt className='text-muted-foreground text-xs'>
                 {t('common.createdAt')}
               </dt>
               <dd className='mt-1 text-sm font-medium'>
                 <Timestamp value={account.created_at} />
               </dd>
-            </div>
-          </dl>
+            </dl>
+          </div>
         </section>
 
         <section aria-labelledby='account-remote-title' className='grid gap-3'>
@@ -241,54 +241,54 @@ export function AccountDetailPage({
             <RemoteStateBadge state={account.remote_state} />
             <ManagedStatusBadge status={account.managed_status} />
           </div>
-          <dl className='grid gap-x-6 gap-y-3 border-t pt-4 sm:grid-cols-2 lg:grid-cols-4'>
-            <div>
+          <div className='grid gap-x-6 gap-y-3 border-t pt-4 sm:grid-cols-2 lg:grid-cols-4'>
+            <dl>
               <dt className='text-muted-foreground text-xs'>
                 {t('account.username')}
               </dt>
               <dd className='mt-1 text-sm font-medium'>{account.username}</dd>
-            </div>
-            <div>
+            </dl>
+            <dl>
               <dt className='text-muted-foreground text-xs'>
                 {t('account.displayName')}
               </dt>
               <dd className='mt-1 text-sm font-medium'>
                 {formatDisplayValue(account.display_name)}
               </dd>
-            </div>
-            <div>
+            </dl>
+            <dl>
               <dt className='text-muted-foreground text-xs'>
                 {t('account.remoteGroup')}
               </dt>
               <dd className='mt-1 text-sm font-medium'>
                 {formatDisplayValue(account.remote_group)}
               </dd>
-            </div>
-            <div>
+            </dl>
+            <dl>
               <dt className='text-muted-foreground text-xs'>
                 {t('account.lastRemoteSeenAt')}
               </dt>
               <dd className='mt-1 text-sm font-medium'>
                 <Timestamp value={account.last_remote_seen_at} />
               </dd>
-            </div>
-            <div>
+            </dl>
+            <dl>
               <dt className='text-muted-foreground text-xs'>
                 {t('account.statisticsPausedAt')}
               </dt>
               <dd className='mt-1 text-sm font-medium'>
                 <Timestamp value={account.statistics_paused_at} />
               </dd>
-            </div>
-            <div>
+            </dl>
+            <dl>
               <dt className='text-muted-foreground text-xs'>
                 {t('common.updatedAt')}
               </dt>
               <dd className='mt-1 text-sm font-medium'>
                 <Timestamp value={account.updated_at} />
               </dd>
-            </div>
-          </dl>
+            </dl>
+          </div>
         </section>
 
         <section aria-labelledby='account-summary-title' className='grid gap-3'>
@@ -301,7 +301,7 @@ export function AccountDetailPage({
               timestamp={account.today.as_of}
             />
           </div>
-          <dl className='border-border grid overflow-hidden rounded-lg border sm:grid-cols-2 lg:grid-cols-4 [&>div]:border-r [&>div]:border-b'>
+          <div className='border-border grid overflow-hidden rounded-lg border sm:grid-cols-2 lg:grid-cols-4 [&>dl]:border-r [&>dl]:border-b'>
             <MetricCell label={t('account.currentQuota')}>
               <MetricValue value={account.quota} />
             </MetricCell>
@@ -314,7 +314,7 @@ export function AccountDetailPage({
             <MetricCell label={t('metric.token')}>
               <MetricValue value={account.today.token_used} />
             </MetricCell>
-          </dl>
+          </div>
           <div className='flex flex-wrap items-start justify-between gap-3 border-b pb-4'>
             <QuotaAmount quota={account.today.quota} rate={account.rate} />
             <DataStatusBadge status={account.today.data_status} />

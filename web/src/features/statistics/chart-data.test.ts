@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import { parseMetricString } from '@/lib/api-types'
 
-import { buildTrendChartModel } from './chart-data'
+import { buildTrendChartModel, cloneTrendChartValues } from './chart-data'
 import type { TrendPoint } from './types'
 
 function point(
@@ -92,6 +92,19 @@ describe('statistics trend chart model', () => {
       'hour'
     )
     expect(model.values[0]).toMatchObject({ partial: true, chartValue: 1 })
+    expect(model.values[1]).toMatchObject({
+      chartValue: null,
+      exactValue: null,
+      rawValue: null,
+    })
+
+    const chartValues = cloneTrendChartValues(model.values)
+    const renderedPoint = chartValues[1]
+    if (renderedPoint) {
+      renderedPoint.chartValue = 0
+      renderedPoint.exactValue = '0'
+      renderedPoint.rawValue = '0' as never
+    }
     expect(model.values[1]).toMatchObject({
       chartValue: null,
       exactValue: null,

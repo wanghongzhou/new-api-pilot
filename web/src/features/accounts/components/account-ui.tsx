@@ -106,6 +106,7 @@ export function AccountActions({
         render={
           <Button
             aria-label={t('account.actions.open')}
+            className='size-10 sm:size-8'
             size='icon'
             title={t('account.actions.open')}
             variant='ghost'
@@ -172,32 +173,32 @@ export function AccountCard({
         <ManagedStatusBadge status={account.managed_status} />
         <RemoteStatusBadge status={account.remote_status} />
       </div>
-      <dl className='grid grid-cols-2 gap-3 text-sm'>
-        <div>
+      <div className='grid grid-cols-2 gap-3 text-sm'>
+        <dl>
           <dt className='text-muted-foreground text-xs'>{t('account.site')}</dt>
           <dd className='truncate'>{account.site_name}</dd>
-        </div>
-        <div>
+        </dl>
+        <dl>
           <dt className='text-muted-foreground text-xs'>
             {t('account.customer')}
           </dt>
           <dd className='truncate'>{account.customer_name}</dd>
-        </div>
-        <div>
+        </dl>
+        <dl>
           <dt className='text-muted-foreground text-xs'>
             {t('account.remoteGroup')}
           </dt>
           <dd>{account.remote_group || '-'}</dd>
-        </div>
-        <div>
+        </dl>
+        <dl>
           <dt className='text-muted-foreground text-xs'>
             {t('account.todayRequests')}
           </dt>
           <dd>
             <MetricValue compact value={account.today.request_count} />
           </dd>
-        </div>
-      </dl>
+        </dl>
+      </div>
       <QuotaAmount quota={account.today.quota} rate={account.rate} />
       <div className='flex flex-wrap items-center justify-between gap-2'>
         <DataStatusBadge status={account.today.data_status} />

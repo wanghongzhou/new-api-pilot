@@ -13,16 +13,10 @@ import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey, normalizeApiError } from '@/lib/api'
 
 import { login } from '../api'
+import { safeRedirect } from '../safe-redirect'
 import { loginSchema, type LoginFormValues } from '../schema'
 import { markSessionVerified } from '../session'
 import { AuthLayout } from './auth-layout'
-
-function safeRedirect(redirect: string | undefined): string {
-  if (!redirect || !redirect.startsWith('/') || redirect.startsWith('//')) {
-    return '/dashboard'
-  }
-  return redirect
-}
 
 export function SignInPage({ redirect }: { redirect?: string }) {
   const { t } = useTranslation()
@@ -67,7 +61,7 @@ export function SignInPage({ redirect }: { redirect?: string }) {
   })
 
   return (
-    <AuthLayout>
+    <AuthLayout standalone>
       <section className='w-full space-y-8'>
         <div className='space-y-2'>
           <h1 className='text-center text-2xl font-semibold tracking-tight sm:text-left'>

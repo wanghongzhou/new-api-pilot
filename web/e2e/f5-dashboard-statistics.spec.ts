@@ -407,6 +407,9 @@ test('Dashboard renders the complete fixture across all five sections', async ({
   await expect(
     health.getByText('CPU 使用率连续超过阈值的超长实例名称')
   ).toBeVisible()
+  await expect(
+    health.locator('a[href*="/alerts?alertId=9007199254740998"]')
+  ).toBeVisible()
   await expect(page.getByText('该区块加载失败')).toHaveCount(0)
   await expect(page.getByText('暂无可展示数据')).toHaveCount(0)
 })

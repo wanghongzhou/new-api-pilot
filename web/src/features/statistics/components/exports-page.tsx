@@ -135,6 +135,7 @@ function ExportJobCard({
         </div>
         <Button
           aria-label={t('exports.action.view')}
+          className='size-10'
           onClick={() => onOpen(job)}
           size='icon'
           title={t('exports.action.view')}
@@ -144,40 +145,40 @@ function ExportJobCard({
         </Button>
       </div>
       <ExportJobStatus job={job} />
-      <dl className='grid grid-cols-2 gap-3 text-sm'>
-        <div>
+      <div className='grid grid-cols-2 gap-3 text-sm'>
+        <dl>
           <dt className='text-muted-foreground text-xs'>
             {t('statistics.export.scope')}
           </dt>
           <dd>{exportScopeText(t, job.statistics_type)}</dd>
-        </div>
-        <div>
+        </dl>
+        <dl>
           <dt className='text-muted-foreground text-xs'>
             {t('statistics.export.format')}
           </dt>
           <dd>{exportFormatText(t, job.format)}</dd>
-        </div>
-        <div>
+        </dl>
+        <dl>
           <dt className='text-muted-foreground text-xs'>
             {t('statistics.export.task.rows')}
           </dt>
           <dd className='break-all'>{job.row_count}</dd>
-        </div>
-        <div>
+        </dl>
+        <dl>
           <dt className='text-muted-foreground text-xs'>
             {t('statistics.export.task.size')}
           </dt>
           <dd className='break-all'>{job.file_size}</dd>
-        </div>
-        <div className='col-span-2'>
+        </dl>
+        <dl className='col-span-2'>
           <dt className='text-muted-foreground text-xs'>
             {t('statistics.export.task.createdAt')}
           </dt>
           <dd>
             <ExportTimestamp value={job.created_at} />
           </dd>
-        </div>
-      </dl>
+        </dl>
+      </div>
       <Button onClick={() => onOpen(job)} variant='outline'>
         <HugeiconsIcon icon={ViewIcon} strokeWidth={2} />
         {t('exports.action.view')}

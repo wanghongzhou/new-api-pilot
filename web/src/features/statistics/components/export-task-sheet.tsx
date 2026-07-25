@@ -173,80 +173,80 @@ export function ExportTaskSheet({
                   />
                 </div>
               )}
-              <dl className='grid gap-3 text-sm sm:grid-cols-2'>
-                <div>
+              <div className='grid gap-3 text-sm sm:grid-cols-2'>
+                <dl>
                   <dt className='text-muted-foreground text-xs'>
                     {t('statistics.export.format')}
                   </dt>
                   <dd>{exportFormatText(t, job.format)}</dd>
-                </div>
-                <div>
+                </dl>
+                <dl>
                   <dt className='text-muted-foreground text-xs'>
                     {t('statistics.export.scope')}
                   </dt>
                   <dd>{exportScopeText(t, job.statistics_type)}</dd>
-                </div>
-                <div>
+                </dl>
+                <dl>
                   <dt className='text-muted-foreground text-xs'>
                     {t('statistics.export.task.createdAt')}
                   </dt>
                   <dd>
                     <ExportTimestamp value={job.created_at} />
                   </dd>
-                </div>
-                <div>
+                </dl>
+                <dl>
                   <dt className='text-muted-foreground text-xs'>
                     {t('statistics.export.task.startedAt')}
                   </dt>
                   <dd>
                     <ExportTimestamp value={job.started_at} />
                   </dd>
-                </div>
-                <div>
+                </dl>
+                <dl>
                   <dt className='text-muted-foreground text-xs'>
                     {t('statistics.export.task.finishedAt')}
                   </dt>
                   <dd>
                     <ExportTimestamp value={job.finished_at} />
                   </dd>
-                </div>
-                <div>
+                </dl>
+                <dl>
                   <dt className='text-muted-foreground text-xs'>
                     {t('statistics.export.task.rows')}
                   </dt>
                   <dd>{job.row_count}</dd>
-                </div>
-                <div>
+                </dl>
+                <dl>
                   <dt className='text-muted-foreground text-xs'>
                     {t('statistics.export.task.size')}
                   </dt>
                   <dd>{job.file_size}</dd>
-                </div>
-                <div>
+                </dl>
+                <dl>
                   <dt className='text-muted-foreground text-xs'>
                     {t('statistics.export.task.snapshotAt')}
                   </dt>
                   <dd>
                     <ExportTimestamp value={job.data_snapshot_at} />
                   </dd>
-                </div>
-                <div>
+                </dl>
+                <dl>
                   <dt className='text-muted-foreground text-xs'>
                     {t('statistics.export.task.expiresAt')}
                   </dt>
                   <dd>
                     <ExportTimestamp value={job.expires_at} />
                   </dd>
-                </div>
-                <div className='sm:col-span-2'>
+                </dl>
+                <dl className='sm:col-span-2'>
                   <dt className='text-muted-foreground text-xs'>
                     {t('statistics.export.task.fileName')}
                   </dt>
                   <dd className='break-words'>
                     {job.file_name || t('exports.value.notGenerated')}
                   </dd>
-                </div>
-                <div className='sm:col-span-2'>
+                </dl>
+                <dl className='sm:col-span-2'>
                   <dt className='text-muted-foreground text-xs'>
                     {t('statistics.export.range')}
                   </dt>
@@ -261,8 +261,8 @@ export function ExportTaskSheet({
                       job.filters.granularity
                     )}
                   </dd>
-                </div>
-              </dl>
+                </dl>
+              </div>
             </section>
             {job.status === 'expired' && (
               <p

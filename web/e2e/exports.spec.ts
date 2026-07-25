@@ -497,6 +497,7 @@ test('polls active jobs, preserves URL list controls, shows two failures, recrea
   })
   if (await fileSizeSort.isVisible()) {
     await fileSizeSort.click()
+    await page.getByRole('menuitem', { name: '升序', exact: true }).click()
   } else {
     await page.goto('/exports?status=failed&sort=file_size&order=asc')
   }

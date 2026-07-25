@@ -203,6 +203,7 @@ export function RankingsPage({
     <SectionPageLayout
       actions={(['xlsx', 'csv'] as const).map((format) => (
         <Button
+          disabled={exportMutation.isPending || !validSite}
           key={format}
           onClick={() => exportMutation.mutate(format)}
           variant='outline'
@@ -289,46 +290,48 @@ export function RankingsPage({
           )}
         </FilterPanel>
         {data && (
-          <>
-            <div className='flex flex-wrap items-center gap-2' role='status'>
-              <DataStatusBadge status={data.data_status} />
+          <div className='flex flex-wrap items-center gap-2' role='status'>
+            <DataStatusBadge status={data.data_status} />
+            <span>
+              {t('rankings.range', {
+                end: time(data.end_timestamp),
+                start: time(data.start_timestamp),
+              })}
+            </span>
+            <span>{t('rankings.asOf', { time: time(data.as_of) })}</span>
+          </div>
+        )}
+        <DataTable
+          ariaLabel={t('rankings.table')}
+          columns={columns}
+          data={data?.items ?? []}
+          emptyTitle={t('rankings.empty')}
+          error={!validSite || rankingQuery.isError}
+          loading={rankingQuery.isPending}
+          onRetry={validSite ? () => void rankingQuery.refetch() : undefined}
+          renderMobileCard={(item) => (
+            <article className='border-border grid gap-2 rounded-lg border p-4'>
+              <div className='flex justify-between gap-2'>
+                <span className='font-medium'>
+                  #{item.rank} {name(item, vendors, t)}
+                </span>
+                <MetricValue value={item.growth} />
+              </div>
               <span>
-                {t('rankings.range', {
-                  end: time(data.end_timestamp),
-                  start: time(data.start_timestamp),
+                {t('rankings.tokensValue', { value: item.token_used })}
+              </span>
+              <span>
+                {t('rankings.requestsValue', {
+                  value: item.request_count,
                 })}
               </span>
-              <span>{t('rankings.asOf', { time: time(data.as_of) })}</span>
-            </div>
-            <DataTable
-              ariaLabel={t('rankings.table')}
-              columns={columns}
-              data={data.items}
-              emptyTitle={t('rankings.empty')}
-              error={rankingQuery.isError}
-              loading={rankingQuery.isPending}
-              onRetry={() => void rankingQuery.refetch()}
-              renderMobileCard={(item) => (
-                <article className='border-border grid gap-2 rounded-lg border p-4'>
-                  <div className='flex justify-between gap-2'>
-                    <span className='font-medium'>
-                      #{item.rank} {name(item, vendors, t)}
-                    </span>
-                    <MetricValue value={item.growth} />
-                  </div>
-                  <span>
-                    {t('rankings.tokensValue', { value: item.token_used })}
-                  </span>
-                  <span>
-                    {t('rankings.requestsValue', {
-                      value: item.request_count,
-                    })}
-                  </span>
-                  <span>{t('rankings.quotaValue', { value: item.quota })}</span>
-                  <span>{t('rankings.shareValue', { value: item.share })}</span>
-                </article>
-              )}
-            />
+              <span>{t('rankings.quotaValue', { value: item.quota })}</span>
+              <span>{t('rankings.shareValue', { value: item.share })}</span>
+            </article>
+          )}
+        />
+        {data && (
+          <>
             <div className='grid gap-6 xl:grid-cols-2'>
               <RankingList
                 items={data.movers}

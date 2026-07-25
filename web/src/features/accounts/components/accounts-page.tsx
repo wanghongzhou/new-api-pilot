@@ -29,6 +29,7 @@ import { useAuthStore } from '@/stores/auth-store'
 
 import { listAccounts, refreshAccount } from '../api'
 import { accountKeys } from '../query-keys'
+import { refreshAccountsBounded } from '../refresh-batch'
 import type {
   AccountDetail,
   AccountListItem,
@@ -137,12 +138,10 @@ export function AccountsPage({
     if (accounts.length === 0) return
     setRefreshing(true)
     try {
-      const results = await Promise.allSettled(
-        accounts.map((account) => refreshAccount(account.id))
+      const { failed } = await refreshAccountsBounded(
+        accounts.map((account) => account.id),
+        refreshAccount
       )
-      const failed = results.filter(
-        (result) => result.status === 'rejected'
-      ).length
       if (failed > 0) toast.error(t('accounts.refreshPartial', { failed }))
       else toast.success(t('accounts.refreshSuccess'))
       invalidate()

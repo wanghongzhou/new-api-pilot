@@ -42,6 +42,16 @@ export interface TrendChartModel {
   values: TrendChartDatum[]
 }
 
+export function cloneTrendChartValues(
+  values: readonly TrendChartDatum[]
+): TrendChartDatum[] {
+  return values.map((point) => ({
+    ...point,
+    siteAmounts: point.siteAmounts.map((site) => ({ ...site })),
+    site_breakdown: point.site_breakdown.map((site) => ({ ...site })),
+  }))
+}
+
 function crossSiteAmount(
   siteBreakdown: SiteQuotaBreakdown[]
 ): CrossSiteQuotaAmount {

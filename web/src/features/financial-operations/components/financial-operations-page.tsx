@@ -402,7 +402,7 @@ function TopupTable({
   loading: boolean
   onPageChange: (page: number) => void
   onPageSizeChange: (pageSize: number) => void
-  onRetry: () => void
+  onRetry?: () => void
   page: number
   pageSize: number
 }) {
@@ -527,7 +527,7 @@ function RedemptionTable(props: {
   loading: boolean
   onPageChange: (page: number) => void
   onPageSizeChange: (pageSize: number) => void
-  onRetry: () => void
+  onRetry?: () => void
   page: number
   pageSize: number
 }) {
@@ -859,7 +859,9 @@ export function FinancialOperationsPage({
             onPageSizeChange={(pageSize) =>
               onSearchChange({ page: 1, pageSize })
             }
-            onRetry={() => void activeListQuery.refetch()}
+            onRetry={
+              validSiteId ? () => void activeListQuery.refetch() : undefined
+            }
             page={search.page}
             pageSize={search.pageSize}
           />
@@ -873,7 +875,9 @@ export function FinancialOperationsPage({
             onPageSizeChange={(pageSize) =>
               onSearchChange({ page: 1, pageSize })
             }
-            onRetry={() => void activeListQuery.refetch()}
+            onRetry={
+              validSiteId ? () => void activeListQuery.refetch() : undefined
+            }
             page={search.page}
             pageSize={search.pageSize}
           />

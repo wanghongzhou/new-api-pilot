@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 import { DataStatusBadge } from '@/components/data/data-status'
 import { FilterPanel } from '@/components/data/filter-panel'
 import { MetricValue } from '@/components/data/metric-value'
+import { ErrorState } from '@/components/error-state'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Badge } from '@/components/ui/badge'
@@ -44,7 +45,9 @@ import {
   type SystemTaskBreakdown,
   type SystemTaskItem,
   type SystemTaskMetric,
+  type SystemTaskPage,
   type SystemTaskQueryParams,
+  type SystemTaskStatistics,
   type SystemTaskStatus,
   type SystemTaskType,
 } from '../types'
@@ -530,6 +533,25 @@ export function SystemTasksPage({
       : (search.page - 1) * search.pageSize + data.items.length
   }
   const stats = statisticsQuery.data
+  let truncation: SystemTaskPage | SystemTaskStatistics | undefined
+  if (data?.truncated) truncation = data
+  else if (!data && stats?.truncated) truncation = stats
+  let truncationMessage: string | undefined
+  if (truncation?.truncation_reason === 'id_gap') {
+    truncationMessage = t('systemTasks.truncation.id_gap', {
+      count: truncation.observed_count,
+    })
+  } else if (truncation?.truncation_reason === 'source_limit_and_id_gap') {
+    truncationMessage = t('systemTasks.truncation.source_limit_and_id_gap', {
+      count: truncation.observed_count,
+      limit: truncation.source_limit,
+    })
+  } else if (truncation) {
+    truncationMessage = t('systemTasks.truncation.source_limit', {
+      count: truncation.observed_count,
+      limit: truncation.source_limit,
+    })
+  }
   return (
     <SectionPageLayout
       actions={(['xlsx', 'csv'] as const).map((format) => (
@@ -598,22 +620,22 @@ export function SystemTasksPage({
             </div>
           </div>
         )}
-        {data?.truncated && (
+        {statisticsQuery.isError && !stats && (
+          <ErrorState
+            className='min-h-40'
+            onRetry={
+              validSiteId ? () => void statisticsQuery.refetch() : undefined
+            }
+            title={t('systemTasks.statisticsError')}
+          />
+        )}
+        {truncation && (
           <section
             className='border-warning/40 bg-warning/10 rounded-lg border p-4'
             role='alert'
           >
             <p className='font-medium'>{t('systemTasks.truncation.title')}</p>
-            <p className='text-sm'>
-              {data.truncation_reason === 'id_gap'
-                ? t('systemTasks.truncation.id_gap', {
-                    count: data.observed_count,
-                  })
-                : t('systemTasks.truncation.source_limit', {
-                    count: data.observed_count,
-                    limit: data.source_limit,
-                  })}
-            </p>
+            <p className='text-sm'>{truncationMessage}</p>
           </section>
         )}
         <div className='flex flex-wrap items-center gap-2' role='status'>
@@ -637,7 +659,7 @@ export function SystemTasksPage({
           loading={listQuery.isPending}
           onPageChange={(page) => onSearchChange({ page })}
           onPageSizeChange={(pageSize) => onSearchChange({ page: 1, pageSize })}
-          onRetry={() => void listQuery.refetch()}
+          onRetry={validSiteId ? () => void listQuery.refetch() : undefined}
           page={search.page}
           pageSize={search.pageSize}
           renderMobileCard={(item) => (

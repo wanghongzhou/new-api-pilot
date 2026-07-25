@@ -21,6 +21,13 @@ export const systemTaskStatuses = [
 
 export type SystemTaskType = (typeof systemTaskTypes)[number]
 export type SystemTaskStatus = (typeof systemTaskStatuses)[number]
+export const systemTaskTruncationReasons = [
+  'source_limit',
+  'id_gap',
+  'source_limit_and_id_gap',
+] as const
+export type SystemTaskTruncationReason =
+  (typeof systemTaskTruncationReasons)[number]
 export type SystemTaskErrorCode =
   | 'UPSTREAM_SYSTEM_TASK_FAILED'
   | 'UPSTREAM_SYSTEM_TASK_LEASE_EXPIRED'
@@ -95,7 +102,7 @@ export interface SystemTaskPage {
   data_status: DataStatus
   as_of: Timestamp | null
   truncated: boolean
-  truncation_reason: 'source_limit' | 'id_gap' | null
+  truncation_reason: SystemTaskTruncationReason | null
   source_limit: MetricString
   observed_count: MetricString
 }
@@ -124,6 +131,10 @@ export interface SystemTaskStatistics {
   site_breakdown: SystemTaskBreakdown[]
   data_status: DataStatus
   as_of: Timestamp | null
+  truncated: boolean
+  truncation_reason: SystemTaskTruncationReason | null
+  source_limit: MetricString
+  observed_count: MetricString
 }
 
 export interface SystemTaskQueryParams {

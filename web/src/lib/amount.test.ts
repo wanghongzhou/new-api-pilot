@@ -41,6 +41,15 @@ describe('quota amount calculations', () => {
     expect(result.sites[0]?.amount.amountUsd?.toFixed(0)).toBe('1')
   })
 
+  test('keeps an empty cross-site aggregate unavailable instead of zero', () => {
+    const result = calculateCrossSiteQuotaAmount([])
+    expect(result.status).toBe('quota_unavailable')
+    expect(result.quota).toBeNull()
+    expect(result.amountUsd).toBeNull()
+    expect(result.amountCny).toBeNull()
+    expect(result.sites).toEqual([])
+  })
+
   test('allows zero-quota sites to have an unavailable rate', () => {
     const result = calculateCrossSiteQuotaAmount([
       {

@@ -100,6 +100,17 @@ export function calculateCrossSiteQuotaAmount(
     amount: calculateQuotaAmount(input.quota, input.rate),
   }))
 
+  if (sites.length === 0) {
+    return {
+      quota: null,
+      amountUsd: null,
+      amountCny: null,
+      rateSource: 'unavailable',
+      status: 'quota_unavailable',
+      sites,
+    }
+  }
+
   let quota = new Decimal(0)
   let amountUsd = new Decimal(0)
   let amountCny = new Decimal(0)

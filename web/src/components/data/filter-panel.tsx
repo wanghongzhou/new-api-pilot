@@ -63,6 +63,7 @@ function compactFilterFields(children: ReactNode): ReactNode {
         ) {
           return cloneElement(element, {
             'aria-label': element.props['aria-label'] ?? fieldName,
+            className: cn(element.props.className, 'min-h-10 sm:min-h-8'),
             placeholder: element.props.placeholder || fieldName,
           })
         }
@@ -83,6 +84,7 @@ function compactFilterFields(children: ReactNode): ReactNode {
           return cloneElement(element, {
             'aria-label': element.props['aria-label'] ?? fieldName,
             children: options,
+            className: cn(element.props.className, 'min-h-10 sm:min-h-8'),
           })
         }
 
@@ -143,10 +145,10 @@ export function FilterPanel({
     <section aria-label={title} className='flex min-w-0 flex-col gap-2'>
       <span className='sr-only'>{description}</span>
       <div className='flex flex-wrap items-center gap-2 sm:gap-3'>
-        <div className='flex w-full min-w-0 flex-1 flex-wrap items-center gap-2 sm:w-auto sm:gap-3'>
+        <div className='flex w-full min-w-0 flex-1 flex-wrap items-center gap-2 sm:w-auto sm:gap-3 [&_[data-slot=button]]:min-h-10 sm:[&_[data-slot=button]]:min-h-8'>
           {compactFilterFields(children)}
         </div>
-        <div className='ms-auto flex shrink-0 items-center gap-1.5 sm:gap-2'>
+        <div className='ms-auto flex shrink-0 items-center gap-1.5 sm:gap-2 [&_[data-slot=button]]:min-h-10 sm:[&_[data-slot=button]]:min-h-8'>
           {onReset && (hasActiveFilters ?? true) && (
             <Button
               className={
@@ -197,7 +199,7 @@ export function FilterPanel({
         </div>
       </div>
       {advancedVisible && advanced && (
-        <div className='flex flex-wrap items-center gap-2 sm:gap-3'>
+        <div className='flex flex-wrap items-center gap-2 sm:gap-3 [&_[data-slot=button]]:min-h-10 sm:[&_[data-slot=button]]:min-h-8'>
           {compactFilterFields(advanced)}
         </div>
       )}

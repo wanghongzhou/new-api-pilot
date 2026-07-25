@@ -33,11 +33,14 @@ import {
   formatBeijingTimestamp,
   fromUnixSeconds,
 } from '@/lib/dayjs'
-import { formatNumericDisplayValue } from '@/lib/display-value'
 import { translateMessageRef } from '@/lib/message-ref'
 
 import { createStatisticsExport } from '../api'
-import { buildTrendChartModel, type TrendChartDatum } from '../chart-data'
+import {
+  buildTrendChartModel,
+  cloneTrendChartValues,
+  type TrendChartDatum,
+} from '../chart-data'
 import { buildEntityExportRequest } from '../export-request'
 import { statisticsKeys } from '../query-keys'
 import { defaultStatisticsRange } from '../search'
@@ -227,6 +230,7 @@ export function StatisticsToolbar({
         <label className='grid gap-1 text-sm'>
           <span>{t('statistics.start')}</span>
           <Input
+            className='min-h-10 sm:min-h-8'
             max={inputValue(search.end, search.granularity)}
             onChange={(event) => {
               const start = parseInput(event.target.value, search.granularity)
@@ -241,6 +245,7 @@ export function StatisticsToolbar({
         <label className='grid gap-1 text-sm'>
           <span>{t('statistics.end')}</span>
           <Input
+            className='min-h-10 sm:min-h-8'
             min={inputValue(search.start, search.granularity)}
             onChange={(event) => {
               const end = parseInput(event.target.value, search.granularity)
@@ -255,6 +260,7 @@ export function StatisticsToolbar({
         <label className='grid gap-1 text-sm'>
           <span>{t('statistics.metric')}</span>
           <Select
+            className='min-h-10 sm:min-h-8'
             onChange={(event) =>
               onSearchChange({
                 metric: event.target.value as StatisticsMetric,
@@ -275,6 +281,7 @@ export function StatisticsToolbar({
         <label className='grid gap-1 text-sm'>
           <span>{t('statistics.amountDisplay')}</span>
           <Select
+            className='min-h-10 sm:min-h-8'
             disabled={search.metric !== 'quota'}
             onChange={(event) =>
               onSearchChange({
@@ -302,6 +309,7 @@ export function StatisticsToolbar({
             <Button
               aria-label={t('statistics.chartView')}
               aria-pressed={search.view === 'chart'}
+              className='size-10 sm:size-8'
               onClick={() => onSearchChange({ view: 'chart' })}
               size='icon'
               title={t('statistics.chartView')}
@@ -312,6 +320,7 @@ export function StatisticsToolbar({
             <Button
               aria-label={t('statistics.tableView')}
               aria-pressed={search.view === 'table'}
+              className='size-10 sm:size-8'
               onClick={() => onSearchChange({ view: 'table' })}
               size='icon'
               title={t('statistics.tableView')}
@@ -355,13 +364,17 @@ export function MetricTrendChart({
     [data, search.display, search.granularity, search.metric]
   )
   const valueOf = (datum: unknown) => datum as TrendChartDatum | undefined
+  const exactValues = useMemo(
+    () => cloneTrendChartValues(model.values),
+    [model.values]
+  )
   const spec = useMemo<ILineChartSpec>(
     () => ({
       axes: [
         { orient: 'bottom', type: 'band' },
         { orient: 'left', type: 'linear' },
       ],
-      data: [{ id: 'trend', values: model.values }],
+      data: [{ id: 'trend', values: cloneTrendChartValues(model.values) }],
       invalidType: 'break',
       line: {
         style: {
@@ -522,12 +535,12 @@ export function MetricTrendChart({
         className='sr-only'
         data-testid='statistics-chart-exact-values'
       >
-        {model.values.map((point) => (
+        {exactValues.map((point) => (
           <li key={point.bucket_start}>
             {point.label}: {t('statistics.tooltip.raw')}{' '}
-            {formatNumericDisplayValue(point.rawValue)};
+            {point.rawValue ?? t('data.unavailableValue')};
             {t('statistics.tooltip.displayValue')}{' '}
-            {formatNumericDisplayValue(point.exactValue)};
+            {point.exactValue ?? t('data.unavailableValue')};
             {point.complete_site_count}/{point.expected_site_count};
             {point.is_final ? t('common.yes') : t('common.no')}
           </li>
@@ -573,24 +586,30 @@ export function StatisticsSummary({
           <DataStatusBadge status={data.summary.data_status} />
         </div>
       )}
-      <dl className='border-border grid overflow-hidden rounded-lg border sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5 [&_dd]:leading-tight [&_dd]:break-all [&_dd]:tabular-nums [&>div]:min-w-0 [&>div]:border-r [&>div]:border-b'>
-        <div className='p-4'>
+      <div className='border-border grid overflow-hidden rounded-lg border sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5 [&_dd]:leading-tight [&_dd]:break-all [&_dd]:tabular-nums [&>dl]:min-w-0 [&>dl]:border-r [&>dl]:border-b'>
+        <dl className='p-4'>
           <dt className='text-muted-foreground text-xs'>
             {t('statistics.metric.request_count')}
           </dt>
           <dd className='mt-1 text-xl font-semibold'>
-            <MetricValue value={data.summary.request_count} />
+            <MetricValue
+              nullLabel={t('data.unavailable')}
+              value={data.summary.request_count}
+            />
           </dd>
-        </div>
-        <div className='p-4'>
+        </dl>
+        <dl className='p-4'>
           <dt className='text-muted-foreground text-xs'>
             {t('statistics.metric.quota')}
           </dt>
           <dd className='mt-1 text-xl font-semibold'>
-            <MetricValue value={data.summary.quota} />
+            <MetricValue
+              nullLabel={t('data.unavailable')}
+              value={data.summary.quota}
+            />
           </dd>
-        </div>
-        <div className='p-4'>
+        </dl>
+        <dl className='p-4'>
           <dt className='text-muted-foreground text-xs'>
             {t(
               dynamicI18nKey(
@@ -605,16 +624,19 @@ export function StatisticsSummary({
               siteBreakdown={data.site_breakdown}
             />
           </dd>
-        </div>
-        <div className='p-4'>
+        </dl>
+        <dl className='p-4'>
           <dt className='text-muted-foreground text-xs'>
             {t('statistics.metric.token_used')}
           </dt>
           <dd className='mt-1 text-xl font-semibold'>
-            <MetricValue value={data.summary.token_used} />
+            <MetricValue
+              nullLabel={t('data.unavailable')}
+              value={data.summary.token_used}
+            />
           </dd>
-        </div>
-        <div className='p-4'>
+        </dl>
+        <dl className='p-4'>
           <dt className='text-muted-foreground text-xs'>
             {t('statistics.metric.active_users')}
           </dt>
@@ -624,8 +646,8 @@ export function StatisticsSummary({
               value={data.summary.active_users}
             />
           </dd>
-        </div>
-      </dl>
+        </dl>
+      </div>
     </section>
   )
 }
@@ -705,28 +727,28 @@ export function SiteBreakdownList({ sites }: { sites: SiteQuotaBreakdown[] }) {
                 })}
               </span>
             </div>
-            <dl className='grid grid-cols-2 gap-x-3 gap-y-1'>
-              <div>
+            <div className='grid grid-cols-2 gap-x-3 gap-y-1'>
+              <dl>
                 <dt className='text-muted-foreground'>
                   {t('statistics.metric.quota')}
                 </dt>
                 <dd>
                   <MetricValue compact value={site.quota} />
                 </dd>
-              </div>
-              <div>
+              </dl>
+              <dl>
                 <dt className='text-muted-foreground'>
                   {t('statistics.siteBreakdown.quotaPerUnit')}
                 </dt>
                 <dd>{site.quota_per_unit ?? t('data.unavailableValue')}</dd>
-              </div>
-              <div>
+              </dl>
+              <dl>
                 <dt className='text-muted-foreground'>
                   {t('statistics.siteBreakdown.exchangeRate')}
                 </dt>
                 <dd>{site.usd_exchange_rate ?? t('data.unavailableValue')}</dd>
-              </div>
-              <div>
+              </dl>
+              <dl>
                 <dt className='text-muted-foreground'>
                   {t('statistics.display.usd')}
                 </dt>
@@ -734,8 +756,8 @@ export function SiteBreakdownList({ sites }: { sites: SiteQuotaBreakdown[] }) {
                   {formatDecimal(amount.amountUsd, 6) ??
                     t('data.unavailableValue')}
                 </dd>
-              </div>
-              <div>
+              </dl>
+              <dl>
                 <dt className='text-muted-foreground'>
                   {t('statistics.display.cny')}
                 </dt>
@@ -743,8 +765,8 @@ export function SiteBreakdownList({ sites }: { sites: SiteQuotaBreakdown[] }) {
                   {formatDecimal(amount.amountCny, 6) ??
                     t('data.unavailableValue')}
                 </dd>
-              </div>
-            </dl>
+              </dl>
+            </div>
           </li>
         )
       })}
@@ -779,8 +801,8 @@ function BreakdownMobileCard({
         <DataStatusBadge status={item.data_status} />
       </header>
       {account && (
-        <dl className='grid grid-cols-2 gap-3 text-sm'>
-          <div>
+        <div className='grid grid-cols-2 gap-3 text-sm'>
+          <dl>
             <dt className='text-muted-foreground text-xs'>
               {t('statistics.account.siteIdentity')}
             </dt>
@@ -790,8 +812,8 @@ function BreakdownMobileCard({
                 name: account.site_name,
               })}
             </dd>
-          </div>
-          <div>
+          </dl>
+          <dl>
             <dt className='text-muted-foreground text-xs'>
               {t('statistics.account.customerIdentity')}
             </dt>
@@ -801,52 +823,52 @@ function BreakdownMobileCard({
                 name: account.customer_name,
               })}
             </dd>
-          </div>
-          <div className='col-span-2'>
+          </dl>
+          <dl className='col-span-2'>
             <dt className='text-muted-foreground text-xs'>
               {t('statistics.account.remoteUserId')}
             </dt>
             <dd className='break-all'>{account.remote_user_id}</dd>
-          </div>
-        </dl>
+          </dl>
+        </div>
       )}
       <section aria-label={t('statistics.siteBreakdown.title')}>
         <SiteBreakdownList sites={item.site_breakdown} />
       </section>
-      <dl className='grid grid-cols-2 gap-3 text-sm'>
-        <div>
+      <div className='grid grid-cols-2 gap-3 text-sm'>
+        <dl>
           <dt className='text-muted-foreground text-xs'>
             {t('statistics.metric.request_count')}
           </dt>
           <dd>
             <MetricValue compact value={item.request_count} />
           </dd>
-        </div>
-        <div>
+        </dl>
+        <dl>
           <dt className='text-muted-foreground text-xs'>
             {t('statistics.metric.quota')}
           </dt>
           <dd>
             <MetricValue compact value={item.quota} />
           </dd>
-        </div>
-        <div>
+        </dl>
+        <dl>
           <dt className='text-muted-foreground text-xs'>
             {t('statistics.metric.token_used')}
           </dt>
           <dd>
             <MetricValue compact value={item.token_used} />
           </dd>
-        </div>
-        <div>
+        </dl>
+        <dl>
           <dt className='text-muted-foreground text-xs'>
             {t('statistics.metric.active_users')}
           </dt>
           <dd>
             <ActiveUsersValue compact scope={scope} value={item.active_users} />
           </dd>
-        </div>
-      </dl>
+        </dl>
+      </div>
       <footer className='border-border grid gap-1 border-t pt-3'>
         <span className='text-sm'>
           {t('statistics.rowCompleteness', {

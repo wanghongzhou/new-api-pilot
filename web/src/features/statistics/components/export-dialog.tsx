@@ -65,14 +65,14 @@ export function ExportDialog({
             {t('statistics.export.dialog.description')}
           </DialogDescription>
         </DialogHeader>
-        <dl className='border-border grid gap-3 border-y py-4 text-sm sm:grid-cols-2'>
-          <div>
+        <div className='border-border grid gap-3 border-y py-4 text-sm sm:grid-cols-2'>
+          <dl>
             <dt className='text-muted-foreground text-xs'>
               {t('statistics.export.scope')}
             </dt>
             <dd className='mt-1 font-medium'>{scopeLabel}</dd>
-          </div>
-          <div>
+          </dl>
+          <dl>
             <dt className='text-muted-foreground text-xs'>
               {t('statistics.export.granularity')}
             </dt>
@@ -84,8 +84,8 @@ export function ExportDialog({
                 )
               )}
             </dd>
-          </div>
-          <div className='sm:col-span-2'>
+          </dl>
+          <dl className='sm:col-span-2'>
             <dt className='text-muted-foreground text-xs'>
               {t('statistics.export.range')}
             </dt>
@@ -93,8 +93,8 @@ export function ExportDialog({
               {formatBeijingTimestamp(search.start, search.granularity)} -{' '}
               {formatBeijingTimestamp(search.end, search.granularity)}
             </dd>
-          </div>
-          <div>
+          </dl>
+          <dl>
             <dt className='text-muted-foreground text-xs'>
               {t('statistics.export.sort')}
             </dt>
@@ -107,8 +107,8 @@ export function ExportDialog({
                 dynamicI18nKey('statistics', `statistics.order.${search.order}`)
               )}
             </dd>
-          </div>
-          <div>
+          </dl>
+          <dl>
             <dt className='text-muted-foreground text-xs'>
               {t('statistics.export.completeness')}
             </dt>
@@ -119,8 +119,8 @@ export function ExportDialog({
                 {completeness.expected_site_count}
               </span>
             </dd>
-          </div>
-        </dl>
+          </dl>
+        </div>
         <fieldset className='grid gap-2'>
           <legend className='text-sm font-medium'>
             {t('statistics.export.format')}
@@ -129,6 +129,7 @@ export function ExportDialog({
             {(['xlsx', 'csv'] as const).map((value) => (
               <Button
                 aria-pressed={format === value}
+                className='min-h-10 sm:min-h-8'
                 key={value}
                 onClick={() => setFormat(value)}
                 type='button'

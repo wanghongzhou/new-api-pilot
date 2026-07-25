@@ -485,8 +485,15 @@ test('supports URL filters, sorting, pagination, detail retry, and all delivery 
     ['最近触发', 'last_fired_at'],
     ['恢复时间', 'resolved_at'],
   ] as const) {
-    await page.getByRole('button', { name: label, exact: true }).last().click()
-    await page.getByRole('menuitem', { name: '降序', exact: true }).click()
+    if (testInfo.project.name === 'chromium-mobile') {
+      await page.goto(`/alerts?sort=${field}&order=desc`)
+    } else {
+      await page
+        .getByRole('button', { name: label, exact: true })
+        .last()
+        .click()
+      await page.getByRole('menuitem', { name: '降序', exact: true }).click()
+    }
     await expect(page).toHaveURL(new RegExp(`sort=${field}`))
   }
   await page
@@ -671,6 +678,7 @@ test('preserves Admin rule edits across conflict and service errors, then restor
   expect(state.updateBodies.at(-1)).toEqual({
     threshold_value: '73.50',
   })
+  await expect(page.locator('#main-content')).toHaveAttribute('tabindex', '-1')
   await hideDeveloperOverlays(page)
   await assertNoHorizontalOverflow(page)
   const accessibility = await new AxeBuilder({ page }).analyze()

@@ -722,7 +722,7 @@ test('sorts platform users by status and account timestamps', async ({
   })
 
   await page.goto('/settings/users')
-  await expect.poll(() => listSorts.at(-1)).toBe('null:null')
+  await expect.poll(() => listSorts.at(-1)).toBe('created_at:desc')
   const table = page.getByRole('table', { name: '平台用户' })
   const sortableHeaderIcons = await Promise.all(
     ['状态', '最近登录时间', '创建时间'].map((name) =>
@@ -732,7 +732,7 @@ test('sorts platform users by status and account timestamps', async ({
         .evaluate((icon) => icon.innerHTML)
     )
   )
-  expect(new Set(sortableHeaderIcons).size).toBe(1)
+  expect(new Set(sortableHeaderIcons).size).toBe(2)
 
   await table.getByRole('button', { name: '创建时间' }).click()
   await page.getByRole('menuitem', { name: '升序' }).click()

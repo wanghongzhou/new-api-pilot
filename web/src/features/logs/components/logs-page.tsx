@@ -331,32 +331,34 @@ function LogDetailDialog({
   ] as const
   return (
     <Dialog onOpenChange={(open) => !open && onClose()} open>
-      <DialogContent className='max-w-3xl'>
+      <DialogContent className='max-h-[calc(100dvh-2rem)] max-w-3xl grid-rows-[auto_minmax(0,1fr)_auto]'>
         <DialogHeader>
           <DialogTitle>{t('logs.detail.title')}</DialogTitle>
           <DialogDescription>{t('logs.detail.description')}</DialogDescription>
         </DialogHeader>
-        <div className='flex items-center gap-2'>
-          <LogTypeBadge type={item.type} />
-          <code className='text-muted-foreground text-xs'>{item.id}</code>
+        <div className='grid min-h-0 gap-4 overflow-y-auto pr-1'>
+          <div className='flex items-center gap-2'>
+            <LogTypeBadge type={item.type} />
+            <code className='text-muted-foreground text-xs'>{item.id}</code>
+          </div>
+          <dl className='grid gap-3 text-sm sm:grid-cols-2'>
+            {values.map(([label, value]) => (
+              <div className='min-w-0' key={label}>
+                <dt className='text-muted-foreground text-xs'>{label}</dt>
+                <dd className='mt-1 break-all'>{value}</dd>
+              </div>
+            ))}
+          </dl>
+          <section className='grid gap-2'>
+            <h3 className='text-sm font-medium'>{t('logs.fields.content')}</h3>
+            <p className='text-muted-foreground text-xs'>
+              {t('logs.contentRedacted')}
+            </p>
+            <pre className='border-border bg-muted/40 max-h-64 overflow-auto rounded-md border p-3 text-xs break-words whitespace-pre-wrap'>
+              {formatDisplayValue(item.content)}
+            </pre>
+          </section>
         </div>
-        <dl className='grid gap-3 text-sm sm:grid-cols-2'>
-          {values.map(([label, value]) => (
-            <div className='min-w-0' key={label}>
-              <dt className='text-muted-foreground text-xs'>{label}</dt>
-              <dd className='mt-1 break-all'>{value}</dd>
-            </div>
-          ))}
-        </dl>
-        <section className='grid gap-2'>
-          <h3 className='text-sm font-medium'>{t('logs.fields.content')}</h3>
-          <p className='text-muted-foreground text-xs'>
-            {t('logs.contentRedacted')}
-          </p>
-          <pre className='border-border bg-muted/40 max-h-64 overflow-auto rounded-md border p-3 text-xs break-words whitespace-pre-wrap'>
-            {formatDisplayValue(item.content)}
-          </pre>
-        </section>
         <DialogFooter>
           <Button onClick={onClose} variant='outline'>
             {t('common.close')}
@@ -582,7 +584,7 @@ export function LogsPage({
           loading={logsQuery.isPending}
           onPageChange={(page) => onSearchChange({ page })}
           onPageSizeChange={(pageSize) => onSearchChange({ page: 1, pageSize })}
-          onRetry={() => void logsQuery.refetch()}
+          onRetry={validSiteId ? () => void logsQuery.refetch() : undefined}
           page={search.page}
           pageSize={search.pageSize}
           renderMobileCard={(item) => (

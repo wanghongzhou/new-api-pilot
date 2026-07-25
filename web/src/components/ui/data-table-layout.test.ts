@@ -40,6 +40,9 @@ describe('fixed-height data table layout', () => {
     expect(dataTableSource).toContain(
       "<TableHeader className='sticky top-0 z-10 bg-[var(--table-header)] text-left'>"
     )
+    expect(dataTableSource).toContain(
+      'overflow-y-auto pb-16 transition-opacity duration-150 min-[641px]:hidden'
+    )
     expect(tableSource).toContain('containerClassName?: string')
     expect(tableSource).toContain('containerTabIndex?: number')
   })

@@ -57,24 +57,24 @@ const steps = ['customer', 'remoteUser', 'review', 'binding'] as const
 function RemoteUserSummary({ user }: { user: RemoteUserItem }) {
   const { t } = useTranslation()
   return (
-    <dl className='grid gap-3 text-sm sm:grid-cols-2'>
-      <div>
+    <div className='grid gap-3 text-sm sm:grid-cols-2'>
+      <dl>
         <dt className='text-muted-foreground'>{t('account.remoteUserId')}</dt>
         <dd>{user.id}</dd>
-      </div>
-      <div>
+      </dl>
+      <dl>
         <dt className='text-muted-foreground'>{t('account.username')}</dt>
         <dd>{user.username}</dd>
-      </div>
-      <div>
+      </dl>
+      <dl>
         <dt className='text-muted-foreground'>{t('account.displayName')}</dt>
         <dd>{user.display_name || '-'}</dd>
-      </div>
-      <div>
+      </dl>
+      <dl>
         <dt className='text-muted-foreground'>{t('account.remoteGroup')}</dt>
         <dd>{user.group || '-'}</dd>
-      </div>
-      <div>
+      </dl>
+      <dl>
         <dt className='text-muted-foreground'>
           {t('account.remoteStatusLabel')}
         </dt>
@@ -88,16 +88,16 @@ function RemoteUserSummary({ user }: { user: RemoteUserItem }) {
             )
           )}
         </dd>
-      </div>
-      <div>
+      </dl>
+      <dl>
         <dt className='text-muted-foreground'>
           {t('account.remoteCreatedAt')}
         </dt>
         <dd>
           {fromUnixSeconds(user.created_at).format('YYYY-MM-DD HH:mm:ss')}
         </dd>
-      </div>
-    </dl>
+      </dl>
+    </div>
   )
 }
 
@@ -602,8 +602,8 @@ export function AccountOnboardingDrawer({
                     {t('account.onboarding.bindingTitle')}
                   </h2>
                 </div>
-                <dl className='grid gap-2 text-sm sm:grid-cols-3'>
-                  <div>
+                <div className='grid gap-2 text-sm sm:grid-cols-3'>
+                  <dl>
                     <dt className='text-muted-foreground'>
                       {t('account.customer')}
                     </dt>
@@ -614,22 +614,22 @@ export function AccountOnboardingDrawer({
                         )?.name
                       }
                     </dd>
-                  </div>
-                  <div>
+                  </dl>
+                  <dl>
                     <dt className='text-muted-foreground'>
                       {t('account.site')}
                     </dt>
                     <dd>
                       {eligibleSites.find((item) => item.id === siteId)?.name}
                     </dd>
-                  </div>
-                  <div>
+                  </dl>
+                  <dl>
                     <dt className='text-muted-foreground'>
                       {t('account.remoteUserId')}
                     </dt>
                     <dd>{reviewedUser.id}</dd>
-                  </div>
-                </dl>
+                  </dl>
+                </div>
                 <p className='text-sm'>
                   {t('account.onboarding.bindingImmutable')}
                 </p>

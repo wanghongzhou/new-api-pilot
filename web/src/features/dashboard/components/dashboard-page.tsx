@@ -167,11 +167,21 @@ function TodayOperations({ data }: { data: DashboardSummary }) {
       <dl className='border-border grid overflow-hidden rounded-md border sm:grid-cols-2 xl:grid-cols-5 [&>div]:border-r [&>div]:border-b'>
         <MetricCell
           label={t('dashboard.today.requests')}
-          value={<MetricValue value={data.today.request_count} />}
+          value={
+            <MetricValue
+              nullLabel={t('data.unavailable')}
+              value={data.today.request_count}
+            />
+          }
         />
         <MetricCell
           label={t('dashboard.today.quota')}
-          value={<MetricValue value={data.today.quota} />}
+          value={
+            <MetricValue
+              nullLabel={t('data.unavailable')}
+              value={data.today.quota}
+            />
+          }
         />
         <MetricCell
           label={t('dashboard.today.amount')}
@@ -184,11 +194,21 @@ function TodayOperations({ data }: { data: DashboardSummary }) {
         />
         <MetricCell
           label={t('dashboard.today.tokens')}
-          value={<MetricValue value={data.today.token_used} />}
+          value={
+            <MetricValue
+              nullLabel={t('data.unavailable')}
+              value={data.today.token_used}
+            />
+          }
         />
         <MetricCell
           label={t('dashboard.today.activeAccounts')}
-          value={<MetricValue value={data.active_accounts_today} />}
+          value={
+            <MetricValue
+              nullLabel={t('data.unavailable')}
+              value={data.active_accounts_today}
+            />
+          }
         />
       </dl>
       <dl className='grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 xl:grid-cols-4'>
@@ -294,11 +314,15 @@ function RealtimeThroughput({ data }: { data: DashboardSummary }) {
       <dl className='border-border grid overflow-hidden rounded-md border sm:grid-cols-2 [&>div]:border-r'>
         <MetricCell
           label={t('dashboard.realtime.rpm')}
-          value={<MetricValue value={data.rpm} />}
+          value={
+            <MetricValue nullLabel={t('data.unavailable')} value={data.rpm} />
+          }
         />
         <MetricCell
           label={t('dashboard.realtime.tpm')}
-          value={<MetricValue value={data.tpm} />}
+          value={
+            <MetricValue nullLabel={t('data.unavailable')} value={data.tpm} />
+          }
         />
       </dl>
       {data.realtime_reason && (
@@ -663,9 +687,21 @@ function HealthAndCompleteness({ data }: { data: DashboardHealth }) {
                       ? t('dashboard.health.critical')
                       : t('dashboard.health.warning')}
                   </Badge>
-                  <span className='font-medium break-words'>
+                  <Link
+                    aria-label={t('alerts.detail.open')}
+                    className='font-medium break-words hover:underline'
+                    search={{
+                      alertId: alert.id,
+                      level: [],
+                      ruleCategory: [],
+                      ruleLevel: [],
+                      status: [],
+                      targetType: [],
+                    }}
+                    to='/alerts'
+                  >
                     {alert.target_name}
-                  </span>
+                  </Link>
                 </div>
                 <p className='text-muted-foreground text-sm break-words'>
                   {translateMessageRef(alert.message)}

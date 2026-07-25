@@ -118,6 +118,7 @@ export function CustomerActions({
         render={
           <Button
             aria-label={t('customer.actions.open')}
+            className='size-10 sm:size-8'
             size='icon'
             title={t('customer.actions.open')}
             variant='ghost'
@@ -185,50 +186,50 @@ export function CustomerCard({
         <CustomerStatusBadge status={customer.status} />
         <DataStatusBadge status={customer.today.data_status} />
       </div>
-      <dl className='grid grid-cols-2 gap-3 text-sm'>
-        <div>
+      <div className='grid grid-cols-2 gap-3 text-sm'>
+        <dl>
           <dt className='text-muted-foreground text-xs'>
             {t('customer.contractAmount')}
           </dt>
           <dd>{customer.contract_amount}</dd>
-        </div>
-        <div>
+        </dl>
+        <dl>
           <dt className='text-muted-foreground text-xs'>
             {t('customer.paymentAmount')}
           </dt>
           <dd>{customer.payment_amount}</dd>
-        </div>
-        <div>
+        </dl>
+        <dl>
           <dt className='text-muted-foreground text-xs'>
             {t('customer.accounts')}
           </dt>
           <dd>
             {customer.active_account_count}/{customer.account_count}
           </dd>
-        </div>
-        <div>
+        </dl>
+        <dl>
           <dt className='text-muted-foreground text-xs'>
             {t('customer.sites')}
           </dt>
           <dd>{customer.site_count}</dd>
-        </div>
-        <div>
+        </dl>
+        <dl>
           <dt className='text-muted-foreground text-xs'>
             {t('customer.todayRequests')}
           </dt>
           <dd>
             <MetricValue compact value={customer.today.request_count} />
           </dd>
-        </div>
-        <div>
+        </dl>
+        <dl>
           <dt className='text-muted-foreground text-xs'>
             {t('customer.activeAccounts')}
           </dt>
           <dd>
             <MetricValue compact value={customer.today.active_users} />
           </dd>
-        </div>
-      </dl>
+        </dl>
+      </div>
       <CustomerQuotaAmount customer={customer} />
       <DataFreshness
         labelKey='customer.asOf'

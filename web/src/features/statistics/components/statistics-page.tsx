@@ -310,40 +310,40 @@ function BreakdownMobileCard({
         <DataStatusBadge status={item.data_status} />
       </header>
       <ScopeDetails item={item} scope={scope} />
-      <dl className='grid grid-cols-2 gap-3 text-sm'>
-        <div>
+      <div className='grid grid-cols-2 gap-3 text-sm'>
+        <dl>
           <dt className='text-muted-foreground text-xs'>
             {t('statistics.metric.request_count')}
           </dt>
           <dd>
             <MetricValue compact value={item.request_count} />
           </dd>
-        </div>
-        <div>
+        </dl>
+        <dl>
           <dt className='text-muted-foreground text-xs'>
             {t('statistics.metric.quota')}
           </dt>
           <dd>
             <MetricValue compact value={item.quota} />
           </dd>
-        </div>
-        <div>
+        </dl>
+        <dl>
           <dt className='text-muted-foreground text-xs'>
             {t('statistics.metric.token_used')}
           </dt>
           <dd>
             <MetricValue compact value={item.token_used} />
           </dd>
-        </div>
-        <div>
+        </dl>
+        <dl>
           <dt className='text-muted-foreground text-xs'>
             {t('statistics.metric.active_users')}
           </dt>
           <dd>
             <ActiveUsersValue compact scope={scope} value={item.active_users} />
           </dd>
-        </div>
-      </dl>
+        </dl>
+      </div>
       <SiteBreakdownList sites={item.site_breakdown} />
       <footer className='border-border grid gap-1 border-t pt-3'>
         <span className='text-sm'>

@@ -328,7 +328,7 @@ export function DataTable<TData>({
         <div
           aria-busy={loading || fetching}
           className={cn(
-            'grid min-h-0 flex-1 gap-3 overflow-y-auto transition-opacity duration-150 min-[641px]:hidden',
+            'grid min-h-0 flex-1 gap-3 overflow-y-auto pb-16 transition-opacity duration-150 min-[641px]:hidden',
             fetching && !loading && 'pointer-events-none opacity-60'
           )}
           tabIndex={0}
