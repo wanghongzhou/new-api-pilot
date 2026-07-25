@@ -24,4 +24,7 @@ func TestAlertEventOrderUsesDocumentedColumnsAndStableTieBreak(t *testing.T) {
 	if order := alertEventOrder("current_value", "asc"); strings.Contains(order, "current_value") {
 		t.Fatalf("invalid numeric cross-metric sort leaked into order: %q", order)
 	}
+	if order := alertEventOrder("", ""); order != "e.last_fired_at DESC, e.id DESC" {
+		t.Fatalf("default alert event order = %q", order)
+	}
 }

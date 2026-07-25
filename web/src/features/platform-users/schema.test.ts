@@ -70,5 +70,7 @@ describe('platform user form schemas', () => {
     expect(search.pageSize).toBeUndefined()
     expect(search.role).toBeUndefined()
     expect(search.status).toBeUndefined()
+    expect(search.order).toBeUndefined()
+    expect(search.sort).toBeUndefined()
   })
 })

@@ -94,9 +94,15 @@ test('keeps event filters flat and summary in shared metric cards', async () => 
   expect(page).toContain("<dt className='text-muted-foreground col-span-2")
   expect(page).not.toContain("<div className='min-w-0'>\n              <dt")
   expect(page).toContain("id: 'site_name'")
-  expect(page).toContain("id: 'level'")
-  expect(page).toContain("id: 'last_fired_at'")
-  expect(page).toContain("id: 'resolved_at'")
+  for (const field of [
+    'level',
+    'status',
+    'first_fired_at',
+    'last_fired_at',
+    'resolved_at',
+  ]) {
+    expect(page).toContain(`accessorKey: '${field}'`)
+  }
   expect(page.indexOf("header: t('alerts.table.rule')")).toBeLessThan(
     page.indexOf("header: t('alerts.table.level')")
   )

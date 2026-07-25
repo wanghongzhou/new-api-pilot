@@ -16,7 +16,8 @@ func TestAlertAndExportListQueriesNormalizeStableUniqueEnums(t *testing.T) {
 	if alerts.Validate() != nil ||
 		!reflect.DeepEqual(alerts.Statuses, []string{"firing", "pending"}) ||
 		!reflect.DeepEqual(alerts.Levels, []string{"warning", "critical"}) ||
-		!reflect.DeepEqual(alerts.TargetTypes, []string{"site", "account"}) {
+		!reflect.DeepEqual(alerts.TargetTypes, []string{"site", "account"}) ||
+		alerts.SortBy != "last_fired_at" || alerts.SortOrder != "desc" {
 		t.Fatalf("normalized alert filters = %#v errors=%#v", alerts, alerts.Validate())
 	}
 

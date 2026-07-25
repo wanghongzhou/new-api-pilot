@@ -507,7 +507,5 @@ func alertEventOrder(sortBy, sortOrder string) string {
 	if column, exists := columns[sortBy]; exists {
 		return column + " " + direction + ", e.id DESC"
 	}
-	return "FIELD(e.status, 'firing', 'pending', 'resolved'), " +
-		"FIELD(e.level, 'critical', 'warning', 'info'), " +
-		"COALESCE(e.last_fired_at, e.first_observed_at) DESC, e.id DESC"
+	return "e.last_fired_at DESC, e.id DESC"
 }

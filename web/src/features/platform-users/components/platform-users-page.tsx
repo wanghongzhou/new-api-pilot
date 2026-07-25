@@ -87,8 +87,8 @@ export function PlatformUsersPage({
       p: search.page,
       page_size: search.pageSize,
       role: search.role,
-      sort_by: search.sort,
-      sort_order: search.order,
+      sort_by: search.sort ?? 'created_at',
+      sort_order: search.order ?? 'desc',
       status: search.status,
     }),
     [search]
@@ -121,14 +121,16 @@ export function PlatformUsersPage({
   const updateSorting = (
     updater: SortingState | ((old: SortingState) => SortingState)
   ) => {
-    const current =
-      search.sort && search.order
-        ? [{ desc: search.order === 'desc', id: search.sort }]
-        : []
+    const current = [
+      {
+        desc: (search.order ?? 'desc') === 'desc',
+        id: search.sort ?? 'created_at',
+      },
+    ]
     const next = typeof updater === 'function' ? updater(current) : updater
     const first = next[0]
     if (!first) {
-      onSearchChange({ order: undefined, page: 1, sort: undefined })
+      onSearchChange({ order: 'desc', page: 1, sort: 'created_at' })
       return
     }
     onSearchChange({
@@ -279,11 +281,12 @@ export function PlatformUsersPage({
                 user={user}
               />
             )}
-            sorting={
-              search.sort && search.order
-                ? [{ desc: search.order === 'desc', id: search.sort }]
-                : []
-            }
+            sorting={[
+              {
+                desc: (search.order ?? 'desc') === 'desc',
+                id: search.sort ?? 'created_at',
+              },
+            ]}
           />
         </div>
       </div>

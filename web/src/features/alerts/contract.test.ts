@@ -123,6 +123,10 @@ describe('alert frontend contract', () => {
       sort_by: 'updated_at',
       sort_order: 'desc',
     })
+    expect(alertListParams({ ...search, sort: undefined })).toMatchObject({
+      sort_by: 'last_fired_at',
+      sort_order: 'desc',
+    })
   })
 
   test('finds only the matching opposite-level rule', () => {

@@ -20,7 +20,8 @@ func TestAlertListQueryAcceptsSingleRepeatedCommaAndJSONEnumArrays(t *testing.T)
 	query, fields := parseAlertListQuery(context)
 	if fields != nil || !reflect.DeepEqual(query.Statuses, []string{"firing", "pending", "resolved"}) ||
 		!reflect.DeepEqual(query.Levels, []string{"critical", "warning"}) ||
-		!reflect.DeepEqual(query.TargetTypes, []string{"site", "account"}) {
+		!reflect.DeepEqual(query.TargetTypes, []string{"site", "account"}) ||
+		query.SortBy != "last_fired_at" || query.SortOrder != "desc" {
 		t.Fatalf("parsed alert filters = %#v fields=%#v", query, fields)
 	}
 

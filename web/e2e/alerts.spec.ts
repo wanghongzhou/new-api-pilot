@@ -478,16 +478,17 @@ test('supports URL filters, sorting, pagination, detail retry, and all delivery 
     page.getByText(longTargetName).filter({ visible: true }).first()
   ).toBeVisible()
 
-  const sortButton = page.getByRole('button', {
-    name: '最近触发',
-    exact: true,
-  })
-  if (await sortButton.isVisible()) {
-    await sortButton.click()
-  } else {
-    await page.goto('/alerts?sort=last_fired_at&order=desc')
+  for (const [label, field] of [
+    ['级别', 'level'],
+    ['状态', 'status'],
+    ['首次触发', 'first_fired_at'],
+    ['最近触发', 'last_fired_at'],
+    ['恢复时间', 'resolved_at'],
+  ] as const) {
+    await page.getByRole('button', { name: label, exact: true }).last().click()
+    await page.getByRole('menuitem', { name: '降序', exact: true }).click()
+    await expect(page).toHaveURL(new RegExp(`sort=${field}`))
   }
-  await expect(page).toHaveURL(/sort=last_fired_at/)
   await page
     .getByRole('button', { name: '下一页' })
     .evaluate((button: HTMLButtonElement) => button.click())

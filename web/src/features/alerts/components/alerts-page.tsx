@@ -379,13 +379,16 @@ export function AlertsPage({
   const updateSorting = (
     updater: SortingState | ((old: SortingState) => SortingState)
   ) => {
-    const current = search.sort
-      ? [{ desc: search.order === 'desc', id: search.sort }]
-      : []
+    const current = [
+      {
+        desc: search.order === 'desc',
+        id: search.sort ?? 'last_fired_at',
+      },
+    ]
     const next = typeof updater === 'function' ? updater(current) : updater
     const first = next[0]
     if (!first || !alertSortFields.includes(first.id as never)) {
-      onSearchChange({ page: 1, sort: undefined })
+      onSearchChange({ order: 'desc', page: 1, sort: 'last_fired_at' })
       return
     }
     onSearchChange({
@@ -415,6 +418,7 @@ export function AlertsPage({
   const eventColumns = useMemo<ColumnDef<AlertEventItem, unknown>[]>(
     () => [
       {
+        accessorKey: 'rule_key',
         cell: ({ row }) => (
           <button
             className='max-w-64 text-left font-medium break-words hover:underline'
@@ -426,20 +430,19 @@ export function AlertsPage({
         ),
         enableSorting: true,
         header: t('alerts.table.rule'),
-        id: 'rule_key',
       },
       {
+        accessorKey: 'level',
         cell: ({ row }) => <AlertLevelBadge level={row.original.level} />,
         enableSorting: true,
         header: t('alerts.table.level'),
-        id: 'level',
         sortDescFirst: false,
       },
       {
+        accessorKey: 'status',
         cell: ({ row }) => <AlertStatusBadge status={row.original.status} />,
         enableSorting: true,
         header: t('alerts.table.status'),
-        id: 'status',
       },
       {
         accessorKey: 'site_name',
@@ -476,26 +479,26 @@ export function AlertsPage({
         id: 'value',
       },
       {
+        accessorKey: 'first_fired_at',
         cell: ({ row }) => (
           <AlertTime timestamp={row.original.first_fired_at} />
         ),
         enableSorting: true,
         header: t('alerts.table.firstFiredAt'),
-        id: 'first_fired_at',
         sortDescFirst: true,
       },
       {
+        accessorKey: 'last_fired_at',
         cell: ({ row }) => <AlertTime timestamp={row.original.last_fired_at} />,
         enableSorting: true,
         header: t('alerts.table.lastFiredAt'),
-        id: 'last_fired_at',
         sortDescFirst: true,
       },
       {
+        accessorKey: 'resolved_at',
         cell: ({ row }) => <AlertTime timestamp={row.original.resolved_at} />,
         enableSorting: true,
         header: t('alerts.table.resolvedAt'),
-        id: 'resolved_at',
         sortDescFirst: true,
       },
     ],
@@ -701,11 +704,12 @@ export function AlertsPage({
               renderMobileCard={(alert) => (
                 <AlertEventCard alert={alert} onOpen={openAlert} />
               )}
-              sorting={
-                search.sort
-                  ? [{ desc: search.order === 'desc', id: search.sort }]
-                  : []
-              }
+              sorting={[
+                {
+                  desc: search.order === 'desc',
+                  id: search.sort ?? 'last_fired_at',
+                },
+              ]}
               total={alertsQuery.data?.total ?? 0}
             />
           </div>

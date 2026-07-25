@@ -252,6 +252,9 @@ func (query *AlertListQuery) Normalize() {
 	query.TargetTypes = normalizeEnumList(query.TargetTypes)
 	query.SortBy = strings.ToLower(strings.TrimSpace(query.SortBy))
 	query.SortOrder = strings.ToLower(strings.TrimSpace(query.SortOrder))
+	if query.SortBy == "" {
+		query.SortBy = "last_fired_at"
+	}
 	if query.SortOrder == "" {
 		query.SortOrder = "desc"
 	}
@@ -286,7 +289,7 @@ func (query AlertListQuery) Validate() map[string]string {
 	if query.StartTimestamp != nil && query.EndTimestamp != nil && *query.StartTimestamp >= *query.EndTimestamp {
 		errors["end_timestamp"] = "must be greater than start_timestamp"
 	}
-	if query.SortBy != "" && !alertOneOf(query.SortBy, "rule_key", "status", "level", "site_name", "first_fired_at", "last_fired_at", "resolved_at") {
+	if !alertOneOf(query.SortBy, "rule_key", "status", "level", "site_name", "first_fired_at", "last_fired_at", "resolved_at") {
 		errors["sort_by"] = "is invalid"
 	}
 	if !alertOneOf(query.SortOrder, "asc", "desc") {

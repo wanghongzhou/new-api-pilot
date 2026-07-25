@@ -13,11 +13,11 @@ function PlatformUsersRoute() {
   const navigate = Route.useNavigate()
   const search = {
     filter: rawSearch.filter ?? '',
-    order: rawSearch.order,
+    order: rawSearch.order ?? 'desc',
     page: rawSearch.page ?? 1,
     pageSize: rawSearch.pageSize ?? 20,
     role: rawSearch.role,
-    sort: rawSearch.sort,
+    sort: rawSearch.sort ?? 'created_at',
     status: rawSearch.status,
   }
 

@@ -42,7 +42,7 @@ function AlertsRoute() {
     ruleSort: rawSearch.ruleSort,
     scope: rawSearch.scope ?? 'global',
     siteId: isIdString(rawSearch.siteId) ? rawSearch.siteId : undefined,
-    sort: rawSearch.sort,
+    sort: rawSearch.sort ?? 'last_fired_at',
     start: rawSearch.start,
     status: rawSearch.status,
     tab: rawSearch.tab ?? 'events',
