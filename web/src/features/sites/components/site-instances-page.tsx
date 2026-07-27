@@ -28,6 +28,7 @@ import { BEIJING_TIMEZONE, dayjs, fromUnixSeconds } from '@/lib/dayjs'
 
 import { getSite, getSiteResource, listSiteInstances } from '../api'
 import { siteKeys } from '../query-keys'
+import { formatPercentValue } from '../site-card-metrics'
 import type {
   ResourcePoint,
   SiteHealthStatus,
@@ -94,7 +95,8 @@ function InstanceStatusBadge({
 }
 
 function PercentValue({ value }: { value: number | null }) {
-  return <span>{`${(value ?? 0).toFixed(1)}%`}</span>
+  const { t } = useTranslation()
+  return <span>{formatPercentValue(value, t('data.unavailableValue'))}</span>
 }
 
 function TimestampValue({ timestamp }: { timestamp: number | null }) {
@@ -151,28 +153,28 @@ function InstanceCard({ instance }: { instance: SiteInstanceItem }) {
         </div>
         <InstanceStatusBadge status={instance.current_status} />
       </div>
-      <dl className='grid grid-cols-3 gap-3 text-sm'>
-        <div>
+      <div className='grid grid-cols-3 gap-3 text-sm'>
+        <dl>
           <dt className='text-muted-foreground text-xs'>{t('metric.cpu')}</dt>
           <dd>
             <PercentValue value={instance.cpu_percent} />
           </dd>
-        </div>
-        <div>
+        </dl>
+        <dl>
           <dt className='text-muted-foreground text-xs'>
             {t('metric.memory')}
           </dt>
           <dd>
             <PercentValue value={instance.memory_percent} />
           </dd>
-        </div>
-        <div>
+        </dl>
+        <dl>
           <dt className='text-muted-foreground text-xs'>{t('metric.disk')}</dt>
           <dd>
             <PercentValue value={instance.disk_used_percent} />
           </dd>
-        </div>
-      </dl>
+        </dl>
+      </div>
       <div className='flex flex-wrap items-center justify-between gap-2'>
         <DataStatusBadge status={instance.data_status} />
         <DataFreshness
@@ -184,8 +186,8 @@ function InstanceCard({ instance }: { instance: SiteInstanceItem }) {
         <summary className='text-muted-foreground cursor-pointer py-1'>
           {t('instance.technicalDetails')}
         </summary>
-        <dl className='mt-2 grid grid-cols-2 gap-2'>
-          <div>
+        <div className='mt-2 grid grid-cols-2 gap-2'>
+          <dl>
             <dt className='text-muted-foreground'>
               {t('instance.upstreamStatus')}
             </dt>
@@ -197,12 +199,12 @@ function InstanceCard({ instance }: { instance: SiteInstanceItem }) {
                 )
               )}
             </dd>
-          </div>
-          <div>
+          </dl>
+          <dl>
             <dt className='text-muted-foreground'>{t('instance.runtime')}</dt>
             <dd>{instance.runtime_version || '-'}</dd>
-          </div>
-        </dl>
+          </dl>
+        </div>
       </details>
     </article>
   )

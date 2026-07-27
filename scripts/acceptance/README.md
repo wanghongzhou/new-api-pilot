@@ -2,7 +2,16 @@
 
 The harness writes one immutable run directory per command. Every directory
 contains `evidence.json`, `stdout.log`, and `stderr.log`; case-specific commands
-may add structured reports to the same directory.
+may add structured reports to the same directory. Generic runs are finalized
+with `run-manifest.json` and `checksums.sha256`, which inventory and bind every
+other file in the run directory after the wrapper record and logs are closed.
+Specialized closed-contract runners keep their validator-defined exact file
+sets instead.
+
+An unavailable controlled environment or external approval must be attempted
+and recorded as a failed wrapper run with a structured `blocked-report.json`.
+Such a run is audit evidence of the blocker, not passing evidence: its manifest
+entry must retain the `planned:` prefix until a later formal run passes.
 
 Run a case from the repository root:
 

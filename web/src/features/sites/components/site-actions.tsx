@@ -79,6 +79,7 @@ export function SiteActions({
         render={
           <Button
             aria-label={t('site.actions.open')}
+            className='size-10 sm:size-8'
             size='icon'
             title={t('site.actions.open')}
             variant='ghost'

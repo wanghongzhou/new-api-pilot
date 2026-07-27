@@ -11,6 +11,12 @@ import {
   listSiteSystemTasks,
   listSystemTasks,
 } from './api'
+import type { SystemTaskBreakdown, SystemTaskProgress } from './types'
+
+type SystemTaskBreakdownSiteIDIsBounded =
+  string extends SystemTaskBreakdown['site_id'] ? false : true
+
+const systemTaskBreakdownSiteIDIsBounded: SystemTaskBreakdownSiteIDIsBounded = true
 
 const originalAdapter = api.defaults.adapter
 afterEach(() => {
@@ -18,6 +24,17 @@ afterEach(() => {
 })
 
 describe('system task read-only API contract', () => {
+  test('keeps progress percentage numeric while counters remain bigint strings', () => {
+    expect(systemTaskBreakdownSiteIDIsBounded).toBe(true)
+    const progress: SystemTaskProgress = {
+      processed: null,
+      progress: 50,
+      remaining: null,
+      total: null,
+    }
+    expect(progress.progress).toBe(50)
+  })
+
   test('uses only global GET list/statistics routes and frozen filters', async () => {
     const requests: Parameters<AxiosAdapter>[0][] = []
     api.defaults.adapter = (async (config) => {

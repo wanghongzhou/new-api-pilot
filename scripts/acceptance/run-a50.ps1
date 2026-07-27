@@ -9,8 +9,8 @@ $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Net.Http -ErrorAction Stop
 
 $acceptanceID = 'A50'
-$approvedSpecSHA = '38b71931dbce622dc82dbf9323836aa8ffcaf5aa475b8c87319864c3f750a40c'
-$approvedPackageSHA = '1a7799fb3dd87e6897536e4d33539c866a8d6a471add2799fd27cde4b8873683'
+$approvedSpecSHA = '376333476f5094ddbbdf87a763c699da6741d6c1a65fedfb745082bfb17fc63c'
+$approvedPackageSHA = '47217944ab20bc6875515bbce5fffdbf5110030c48220e294bafd272aeaec19e'
 $approvedPlaywrightConfigSHA = '16c060617c14eefd3e70d3dc2bf15139ae7c8d389a3c43a1e022f6c06151f155'
 $fixturePath = 'testdata/design/f03-statistics.sql'
 $fixtureSHA256 = 'bcceaaf7d6b171014258b9d935fbb1e7cab4585b49403d760a6db373e5aabe94'

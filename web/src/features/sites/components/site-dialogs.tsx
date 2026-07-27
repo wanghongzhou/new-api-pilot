@@ -435,8 +435,8 @@ function EditSiteDialog({
                     )}
                   </Badge>
                 </div>
-                <dl className='mt-3 grid gap-2 sm:grid-cols-3'>
-                  <div>
+                <div className='mt-3 grid gap-2 sm:grid-cols-3'>
+                  <dl>
                     <dt className='text-muted-foreground'>
                       {t('site.preflight.changeType')}
                     </dt>
@@ -448,8 +448,8 @@ function EditSiteDialog({
                         )
                       )}
                     </dd>
-                  </div>
-                  <div>
+                  </dl>
+                  <dl>
                     <dt className='text-muted-foreground'>
                       {t('site.preflight.expiresAt')}
                     </dt>
@@ -458,8 +458,8 @@ function EditSiteDialog({
                         'YYYY-MM-DD HH:mm:ss'
                       )}
                     </dd>
-                  </div>
-                </dl>
+                  </dl>
+                </div>
                 <div className='mt-3 overflow-x-auto'>
                   <table className='w-full min-w-136 border-collapse text-left text-xs'>
                     <thead>

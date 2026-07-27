@@ -79,7 +79,7 @@ const (
 	fixtureF01Path   = "testdata/design/f01-auth.json"
 	fixtureF01SHA256 = "d232dc1a6b83ba80f49995dadbd8afe11d7b73120f7474a2abcece7e1b46e1da"
 	fixtureF02Path   = "testdata/design/f02-upstream/manifest.json"
-	fixtureF02SHA256 = "f1a12b434ab24c01bf53d12bc65ccd86c90cd3e8f620c94f865e67f14b210f2f"
+	fixtureF02SHA256 = "044c7037cd875740a5a07fe131bab7b74389b61b4c48982bec5c23266459b1c6"
 	fixtureManifest  = "testdata/design/manifest.sha256"
 )
 

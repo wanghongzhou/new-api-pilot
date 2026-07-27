@@ -107,6 +107,7 @@ type environmentReport struct {
 	Images        struct {
 		Go    imageIdentity `json:"go"`
 		MySQL imageIdentity `json:"mysql"`
+		Redis imageIdentity `json:"redis"`
 		Tools imageIdentity `json:"tools"`
 	} `json:"images"`
 	Network struct {
@@ -641,6 +642,7 @@ func validEnvironment(value environmentReport, class string) bool {
 		value.EvidenceClass == class && value.Network.Internal && len(value.Network.HostPorts) == 0 &&
 		(value.Commit == "unborn" || regexp.MustCompile(`^[0-9a-f]{40,64}$`).MatchString(value.Commit)) &&
 		validImage(value.Images.Go, "golang:1.25.1", false) && validImage(value.Images.MySQL, "mysql:8.4", false) &&
+		validImage(value.Images.Redis, "redis:7-alpine", false) &&
 		validImage(value.Images.Tools, value.Images.Tools.Reference, true) &&
 		validSide(value.Source) && validSide(value.Target) && value.Source.UUIDFingerprint != value.Target.UUIDFingerprint &&
 		!value.ProductionReleaseAuthorized

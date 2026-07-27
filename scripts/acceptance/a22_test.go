@@ -29,6 +29,15 @@ func TestA22WrapperRejectsArbitraryExitZeroCommand(t *testing.T) {
 	}
 }
 
+func TestSchemaVersionPreflightDeclaresA22RedisImage(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	exitCode := run([]string{"schema-version"}, &stdout, &stderr)
+	if exitCode != 0 || stderr.Len() != 0 || !strings.Contains(stdout.String(), `"schema_version":1`) ||
+		!strings.Contains(stdout.String(), `"a22_environment_images":["go","mysql","redis","tools"]`) {
+		t.Fatalf("schema preflight exit=%d stdout=%q stderr=%q", exitCode, stdout.String(), stderr.String())
+	}
+}
+
 func TestA22RunnerUsesIsolatedBoundedResourcesAndFinalInventory(t *testing.T) {
 	payload, err := os.ReadFile("run-a22.ps1")
 	if err != nil {
@@ -41,7 +50,8 @@ func TestA22RunnerUsesIsolatedBoundedResourcesAndFinalInventory(t *testing.T) {
 		t.Fatalf("A22 cleanup/inventory order is invalid: cleanup=%d inventory=%d", cleanupWrite, inventoryWrite)
 	}
 	for _, required := range []string{
-		"mysql:8.4", "golang:1.25.1", "--internal", "target=/workspace,readonly", "target=/evidence",
+		"mysql:8.4", "redis:7-alpine", "golang:1.25.1", "--internal", "target=/workspace,readonly", "target=/evidence",
+		"--network-alias', 'a22-redis'", "REDIS_DSN=$RedisDSN", "Wait-A22HealthyContainer -Container $redisName",
 		"a22-negative-manifest.json", "a22-negative-target-mismatch.json", "a22-verify-restore.json",
 		"a22-app-smoke.json", "a22-rpo-rto.json", "a22-secret-scan.json", "a22-cleanup.json",
 		"Get-OpsResidualSweep", "A22_DEVELOPMENT", "production_release_authorized = $false",

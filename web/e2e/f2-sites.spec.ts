@@ -676,6 +676,58 @@ test('uses the single-border new-api data-table card boundary', async ({
   expect(boundary.paddingRight).toBe('12px')
 })
 
+test('keeps unavailable resources distinct from zero and mobile pagination usable', async ({
+  page,
+}) => {
+  await seedAuth(page, admin)
+  await mockSelf(page, admin)
+  const baseSite = siteFixture()
+  const unavailableSite = {
+    ...baseSite,
+    resource: {
+      ...baseSite.resource,
+      cpu_max_percent: null,
+      disk_max_used_percent: null,
+      instance_count: null,
+      memory_max_percent: null,
+      online_instance_count: null,
+    },
+  }
+  await page.route(/\/api\/sites(?:\?.*)?$/, async (route) => {
+    assertAuthenticatedRequest(route, admin)
+    await route.fulfill({
+      json: envelope({
+        items: [unavailableSite],
+        page: 1,
+        page_size: 20,
+        total: 500,
+      }),
+    })
+  })
+
+  await page.goto('/sites?view=card')
+  const card = page.locator('[data-slot="site-card"]')
+  await expect(card).toBeVisible()
+  await expect(card.getByText('0/0', { exact: true })).toHaveCount(0)
+  await expect(card.getByText('0.0%', { exact: true })).toHaveCount(0)
+  await expect(card.getByText('-', { exact: true })).toHaveCount(4)
+
+  if ((page.viewportSize()?.width ?? 0) <= 640) {
+    const previous = page.getByRole('button', { name: '上一页' })
+    const next = page.getByRole('button', { name: '下一页' })
+    const pageSize = page.getByRole('combobox', { name: '每页行数' })
+    const heights = await Promise.all(
+      [previous, next, pageSize].map(async (control) =>
+        Math.round((await control.boundingBox())?.height ?? 0)
+      )
+    )
+    expect(heights).toEqual([40, 40, 40])
+    await expect(
+      page.getByRole('button', { name: /转到第/ }).filter({ visible: true })
+    ).toHaveCount(0)
+  }
+})
+
 test('completes four-step onboarding without persisting site secrets', async ({
   page,
 }) => {

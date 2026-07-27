@@ -386,6 +386,7 @@ func writeCanonicalInnerEvidence(t *testing.T, class string) string {
 	environment.Commit = "unborn"
 	environment.Images.Go = imageIdentity{Reference: "golang:1.25.1", ID: imageID, Digest: imageID}
 	environment.Images.MySQL = imageIdentity{Reference: "mysql:8.4", ID: imageID, Digest: imageID}
+	environment.Images.Redis = imageIdentity{Reference: "redis:7-alpine", ID: imageID, Digest: imageID}
 	environment.Images.Tools = imageIdentity{Reference: "new-api-pilot-a22-tools:test", ID: imageID, Digest: imageID}
 	environment.Network.Internal = true
 	environment.Source = canonicalEnvironmentSide(source.ServerUUIDFingerprint, source.MySQLVersion)

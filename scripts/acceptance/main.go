@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -26,7 +27,7 @@ import (
 
 const evidenceSchemaVersion = 1
 
-var acceptanceIDPattern = regexp.MustCompile(`^A\d{2}$`)
+var acceptanceIDPattern = regexp.MustCompile(`^A(?:0[1-9]|[1-9]\d|10[0-2])$`)
 
 type evidenceRecord struct {
 	SchemaVersion        int      `json:"schema_version"`
@@ -48,16 +49,32 @@ type evidenceRecord struct {
 	RequiredNoSkip       bool     `json:"required_no_skip"`
 }
 
+type genericRunManifest struct {
+	SchemaVersion      int                   `json:"schema_version"`
+	AcceptanceID       string                `json:"acceptance_id"`
+	EvidenceClass      string                `json:"evidence_class"`
+	FixtureManifestSHA string                `json:"fixture_manifest_sha256"`
+	Files              []genericRunFileEntry `json:"files"`
+}
+
+type genericRunFileEntry struct {
+	Path      string `json:"path"`
+	SizeBytes int64  `json:"size_bytes"`
+	SHA256    string `json:"sha256"`
+}
+
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
 
 func run(arguments []string, stdout io.Writer, stderr io.Writer) int {
 	if len(arguments) == 0 {
-		fmt.Fprintln(stderr, "usage: acceptance <run|docs-negative|a49-seed|a49-load|a49-report|a51-preflight|a51-seed|a51-verify|a51-report> [arguments]")
+		fmt.Fprintln(stderr, "usage: acceptance <schema-version|run|docs-negative|a49-seed|a49-load|a49-report|a51-preflight|a51-seed|a51-verify|a51-report> [arguments]")
 		return 2
 	}
 	switch arguments[0] {
+	case "schema-version":
+		return runSchemaVersion(arguments[1:], stdout, stderr)
 	case "run":
 		return runCase(arguments[1:], stdout, stderr)
 	case "docs-negative":
@@ -80,6 +97,25 @@ func run(arguments []string, stdout io.Writer, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "unknown acceptance command %q\n", arguments[0])
 		return 2
 	}
+}
+
+func runSchemaVersion(arguments []string, stdout io.Writer, stderr io.Writer) int {
+	if len(arguments) != 0 {
+		fmt.Fprintln(stderr, "schema-version does not accept arguments")
+		return 2
+	}
+	payload := struct {
+		SchemaVersion        int      `json:"schema_version"`
+		A22EnvironmentImages []string `json:"a22_environment_images"`
+	}{
+		SchemaVersion:        evidenceSchemaVersion,
+		A22EnvironmentImages: []string{"go", "mysql", "redis", "tools"},
+	}
+	if err := json.NewEncoder(stdout).Encode(payload); err != nil {
+		fmt.Fprintf(stderr, "encode schema version: %v\n", err)
+		return 1
+	}
+	return 0
 }
 
 func runCase(arguments []string, stdout io.Writer, stderr io.Writer) int {
@@ -351,8 +387,69 @@ func runCase(arguments []string, stdout io.Writer, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "write evidence metadata: %v\n", err)
 		return 2
 	}
+	if a22EvidenceClass == "" && a25EvidenceClass == "" && a45EvidenceClass == "" &&
+		a49EvidenceClass == "" && a50EvidenceClass == "" && opsEvidenceClass == "" && a62EvidenceClass == "" {
+		if err := finalizeGenericEvidence(runDirectory, *acceptanceID, evidenceClass, fixtureSHA); err != nil {
+			fmt.Fprintf(stderr, "finalize generic evidence: %v\n", err)
+			return 2
+		}
+	}
 	fmt.Fprintf(stdout, "acceptance evidence: %s\n", filepath.ToSlash(runDirectory))
 	return exitCode
+}
+
+func finalizeGenericEvidence(runDirectory, acceptanceID, evidenceClass, fixtureSHA string) error {
+	entries, err := collectGenericRunFiles(runDirectory, map[string]struct{}{
+		"run-manifest.json": {},
+		"checksums.sha256":  {},
+	})
+	if err != nil {
+		return err
+	}
+	manifest := genericRunManifest{
+		SchemaVersion: 1, AcceptanceID: acceptanceID, EvidenceClass: evidenceClass,
+		FixtureManifestSHA: fixtureSHA, Files: entries,
+	}
+	if err := writeJSONAtomic(filepath.Join(runDirectory, "run-manifest.json"), manifest); err != nil {
+		return fmt.Errorf("write run manifest: %w", err)
+	}
+	checksumEntries, err := collectGenericRunFiles(runDirectory, map[string]struct{}{"checksums.sha256": {}})
+	if err != nil {
+		return err
+	}
+	var payload strings.Builder
+	for _, entry := range checksumEntries {
+		fmt.Fprintf(&payload, "%s  %s\n", entry.SHA256, entry.Path)
+	}
+	checksumPath := filepath.Join(runDirectory, "checksums.sha256")
+	return os.WriteFile(checksumPath, []byte(payload.String()), 0o640)
+}
+
+func collectGenericRunFiles(runDirectory string, excluded map[string]struct{}) ([]genericRunFileEntry, error) {
+	directoryEntries, err := os.ReadDir(runDirectory)
+	if err != nil {
+		return nil, fmt.Errorf("read run directory: %w", err)
+	}
+	files := make([]genericRunFileEntry, 0, len(directoryEntries))
+	for _, entry := range directoryEntries {
+		if _, skip := excluded[entry.Name()]; skip {
+			continue
+		}
+		if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
+			return nil, fmt.Errorf("generic evidence contains unsupported non-file %q", entry.Name())
+		}
+		info, err := entry.Info()
+		if err != nil || !info.Mode().IsRegular() {
+			return nil, fmt.Errorf("inspect generic evidence file %q: %w", entry.Name(), err)
+		}
+		digest, err := fileSHA256(filepath.Join(runDirectory, entry.Name()))
+		if err != nil {
+			return nil, fmt.Errorf("hash generic evidence file %q: %w", entry.Name(), err)
+		}
+		files = append(files, genericRunFileEntry{Path: entry.Name(), SizeBytes: info.Size(), SHA256: digest})
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
+	return files, nil
 }
 
 func appendAcceptanceLog(path, message string) error {

@@ -33,6 +33,7 @@ type environmentArtifact struct {
 	Images        struct {
 		Go    imageArtifact `json:"go"`
 		MySQL imageArtifact `json:"mysql"`
+		Redis imageArtifact `json:"redis"`
 		Tools imageArtifact `json:"tools"`
 	} `json:"images"`
 	Network struct {
@@ -355,6 +356,7 @@ func validEnvironment(value environmentArtifact, class string) bool {
 		value.EvidenceClass == class && value.Network.Internal && len(value.Network.HostPorts) == 0 &&
 		(value.Commit == "unborn" || regexp.MustCompile(`^[0-9a-f]{40,64}$`).MatchString(value.Commit)) &&
 		validImage(value.Images.Go, "golang:1.25.1", false) && validImage(value.Images.MySQL, "mysql:8.4", false) &&
+		validImage(value.Images.Redis, "redis:7-alpine", false) &&
 		validImage(value.Images.Tools, value.Images.Tools.Reference, true) &&
 		validSide(value.Source.Database, value.Source.UUIDFingerprint, value.Source.Version,
 			value.Source.TransactionIsolation, value.Source.CharacterSetServer, value.Source.CollationServer,

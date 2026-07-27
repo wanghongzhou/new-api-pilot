@@ -20,12 +20,18 @@ import { buildStatisticsSearch } from '@/features/statistics/search'
 import { fromUnixSeconds } from '@/lib/dayjs'
 import { cn } from '@/lib/utils'
 
-import { formatLatencySeconds, siteResourceColor } from '../site-card-metrics'
+import {
+  formatInstanceAvailability,
+  formatLatencySeconds,
+  formatPercentValue,
+  siteResourceColor,
+} from '../site-card-metrics'
 import type { SiteListItem } from '../types'
 import { SiteActions, type SiteAction } from './site-actions'
 
 function PercentValue({ value }: { value: number | null }) {
-  return <span>{`${(value ?? 0).toFixed(1)}%`}</span>
+  const { t } = useTranslation()
+  return <span>{formatPercentValue(value, t('data.unavailableValue'))}</span>
 }
 
 function ResourceChip({
@@ -217,9 +223,11 @@ export function SiteCard({
           <ResourceChip
             icon={ServerStack01Icon}
             label={t('site.instances')}
-            value={`${site.resource.online_instance_count ?? 0}/${
-              site.resource.instance_count ?? 0
-            }`}
+            value={formatInstanceAvailability(
+              site.resource.online_instance_count,
+              site.resource.instance_count,
+              t('data.unavailableValue')
+            )}
           />
           <ResourceChip
             color={siteResourceColor(site.resource.cpu_max_percent)}
@@ -318,7 +326,7 @@ export function SiteCard({
         <div className='flex shrink-0 items-center justify-end gap-1'>
           <Link
             aria-label={t('site.actions.stats')}
-            className='text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring flex size-8 items-center justify-center rounded-md transition-colors outline-none focus-visible:ring-2'
+            className='text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring flex size-10 items-center justify-center rounded-md transition-colors outline-none focus-visible:ring-2 sm:size-8'
             params={{ siteId: site.id }}
             search={buildStatisticsSearch({})}
             title={t('site.actions.stats')}
@@ -328,7 +336,7 @@ export function SiteCard({
           </Link>
           <Link
             aria-label={t('site.instanceStatus')}
-            className='text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring flex size-8 items-center justify-center rounded-md transition-colors outline-none focus-visible:ring-2'
+            className='text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring flex size-10 items-center justify-center rounded-md transition-colors outline-none focus-visible:ring-2 sm:size-8'
             params={{ siteId: site.id }}
             title={t('site.instanceStatus')}
             to='/sites/$siteId/status'
@@ -337,7 +345,7 @@ export function SiteCard({
           </Link>
           <Link
             aria-label={t('site.viewDetails')}
-            className='text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring flex size-8 items-center justify-center rounded-md transition-colors outline-none focus-visible:ring-2'
+            className='text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring flex size-10 items-center justify-center rounded-md transition-colors outline-none focus-visible:ring-2 sm:size-8'
             params={{ siteId: site.id }}
             title={t('site.viewDetails')}
             to='/sites/$siteId'

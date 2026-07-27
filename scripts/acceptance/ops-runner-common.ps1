@@ -36,7 +36,8 @@ function Invoke-OpsProcess {
         [Parameter(Mandatory = $true)][string]$FileName,
         [Parameter(Mandatory = $true)][string[]]$Arguments,
         [Parameter(Mandatory = $true)][ValidateRange(1, 20000)][int]$TimeoutSeconds,
-        [hashtable]$Environment
+        [hashtable]$Environment,
+        [string]$WorkingDirectory
     )
 
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
@@ -46,6 +47,9 @@ function Invoke-OpsProcess {
     $startInfo.CreateNoWindow = $true
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
+    if (-not [string]::IsNullOrWhiteSpace($WorkingDirectory)) {
+        $startInfo.WorkingDirectory = $WorkingDirectory
+    }
     if ($null -ne $Environment) {
         foreach ($name in $Environment.Keys) {
             $startInfo.EnvironmentVariables[[string]$name] = [string]$Environment[$name]

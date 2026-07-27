@@ -266,7 +266,10 @@ try {
         '--workdir', '/workspace', '--mount', $repositoryMount,
         '--mount', "type=volume,source=$moduleVolumeName,target=/go/pkg/mod",
         '--mount', "type=volume,source=$buildVolumeName,target=/root/.cache/go-build",
-        $goImage, 'go', 'mod', 'download'
+        '--env', 'GOPROXY=https://goproxy.cn,https://mirrors.aliyun.com/goproxy/,direct',
+        '--env', 'GOSUMDB=sum.golang.google.cn',
+        $goImage, 'bash', '-c',
+        'for attempt in 1 2 3; do go mod download && exit 0; if [ "$attempt" -lt 3 ]; then sleep 5; fi; done; exit 1'
     ) -TimeoutSeconds 60)
     $containersCreated = $true
     [void](Invoke-OpsDocker -Arguments @('start', $warmContainerName) -TimeoutSeconds 30)

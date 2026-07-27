@@ -13,7 +13,7 @@ export function Brand({ variant = 'auth' }: { variant?: 'auth' | 'inline' }) {
       <Link
         aria-label={t('Go to home')}
         className={cn(
-          'text-foreground inline-flex h-7 items-center gap-1.5 rounded-md px-1.5 text-sm font-medium transition-colors outline-none select-none',
+          'text-foreground inline-flex min-h-10 items-center gap-1.5 rounded-md px-1.5 text-sm font-medium transition-colors outline-none select-none sm:min-h-7',
           'hover:bg-accent focus-visible:ring-ring/40 focus-visible:ring-2'
         )}
         to='/dashboard'

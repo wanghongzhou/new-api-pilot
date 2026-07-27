@@ -20,7 +20,9 @@ export function Header({
       {...props}
     >
       <div className='flex h-full items-center gap-1.5 px-2 sm:gap-2 sm:px-3'>
-        {showTrigger && <SidebarTrigger className='size-8' variant='ghost' />}
+        {showTrigger && (
+          <SidebarTrigger className='size-10 sm:size-8' variant='ghost' />
+        )}
         {children}
       </div>
     </header>

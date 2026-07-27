@@ -695,11 +695,11 @@ SiteListItem {
     expired: boolean
   }
   resource: {
-    instance_count: number
-    online_instance_count: number
-    cpu_max_percent: number
-    memory_max_percent: number
-    disk_max_used_percent: number
+    instance_count: number | null
+    online_instance_count: number | null
+    cpu_max_percent: number | null
+    memory_max_percent: number | null
+    disk_max_used_percent: number | null
     updated_at: Timestamp | null
     data_status: DataStatus
   }
@@ -1460,6 +1460,6 @@ Scheduler 按设置周期 enqueue `pricing_group_sync`，授权通过后立即�
 
 列表和统计顶层必须显式返回 `truncated:boolean`、`truncation_reason:null|source_limit|id_gap|source_limit_and_id_gap`、`source_limit:"100"`、`observed_count` bigint string；这些字段与 `data_status/as_of` 一起构成 typed completeness，禁止仅返回无法解释原因的 `partial`。
 
-`SystemTaskItem` 固定为 `id/site_id/site_name/remote_id/task_id/type/status/created_at/updated_at/progress/result/error_present/error_code/data_status/as_of`。progress 是 nullable `{total,processed,progress,remaining}`；result 是按五个 type 的判别联合。ID 和全部计数为 JSON decimal string，progress 为 0..100 integer。statistics 返回精确 summary、type/status/site breakdown 和 completeness；API、日志、错误 params 均不得出现 active_key、locked_by、raw JSON 或 raw error。
+`SystemTaskItem` 固定为 `id/site_id/site_name/remote_id/task_id/type/status/remote_created_at/remote_updated_at/collected_at/progress/result/error_present/error_code/data_status`；列表页顶层持有 `as_of`。progress 是 nullable `{total,processed,progress,remaining}`；result 是按五个 type 的判别联合。ID 和全部计数为 JSON decimal string，progress 为 0..100 integer。statistics 返回精确的 `total/active/succeeded/failed/error_present` summary、type/status/site breakdown，以及与列表相同的顶层完整性字段；API、日志、错误 params 均不得出现 active_key、locked_by、raw JSON 或 raw error。
 
 Worker 注册 `system_task_sync` required metadata queue task，独立 lease、active_key、resource concurrency、max attempts=3、site/config fence 和持久 failure state。平台设置 `system_task_terminal_retention_days` 为正整数，变更在下一次清理生效；清理只作用终态。export runtime 接受 `statistics_type=system_tasks` 和同名安全筛选，不接受 raw 字段或远端 mutation 参数。

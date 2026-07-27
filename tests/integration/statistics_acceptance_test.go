@@ -17,6 +17,11 @@ import (
 func TestA27A38A39A40A65StatisticsMaterializationAndChannelIdentity(t *testing.T) {
 	database := openCoreAcceptanceTransaction(t)
 	const now = int64(1_768_622_400)
+	seedCoreAcceptanceSettings(t, database, now,
+		model.PlatformSetting{Key: "rate.fallback_quota_per_unit", Value: "500000", ValueType: "decimal"},
+		model.PlatformSetting{Key: "rate.fallback_usd_exchange_rate", Value: "6.8", ValueType: "decimal"},
+		model.PlatformSetting{Key: "collector.usage_delay_minutes", Value: "5", ValueType: "int"},
+	)
 	hour := coreFloorHour(now - 3600)
 	clock := testsupport.NewFakeClock(time.Unix(now, 0))
 	cipher := newCoreCipher(t)
@@ -135,6 +140,11 @@ func TestA27A38A39A40A65StatisticsMaterializationAndChannelIdentity(t *testing.T
 func TestA29A68StatisticsMissingDerivationAndPausedRecovery(t *testing.T) {
 	database := openCoreAcceptanceTransaction(t)
 	const now = int64(1_768_622_400)
+	seedCoreAcceptanceSettings(t, database, now,
+		model.PlatformSetting{Key: "rate.fallback_quota_per_unit", Value: "500000", ValueType: "decimal"},
+		model.PlatformSetting{Key: "rate.fallback_usd_exchange_rate", Value: "6.8", ValueType: "decimal"},
+		model.PlatformSetting{Key: "collector.usage_delay_minutes", Value: "5", ValueType: "int"},
+	)
 	hour := coreFloorHour(now - 3600)
 	clock := testsupport.NewFakeClock(time.Unix(now, 0))
 	cipher := newCoreCipher(t)

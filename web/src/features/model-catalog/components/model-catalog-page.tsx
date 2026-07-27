@@ -151,7 +151,7 @@ function Filters({
         />
         <Input
           aria-label={t('modelCatalog.filters.keyword')}
-          className='h-8 pl-8'
+          className='h-10 pl-8 sm:h-8'
           onChange={(event) =>
             onChange({ keyword: event.target.value, page: 1 })
           }
@@ -198,7 +198,7 @@ function Filters({
             </span>
             <Input
               aria-label={t('modelCatalog.filters.vendorId')}
-              className='h-8 w-32'
+              className='h-10 w-32 sm:h-8'
               inputMode='numeric'
               onChange={(event) => {
                 const value = event.target.value
@@ -769,32 +769,32 @@ export function ModelCatalogPage({
                 <code className='border-border bg-muted/50 rounded border p-2 text-xs break-all'>
                   {item.icon || '-'}
                 </code>
-                <dl className='grid grid-cols-2 gap-3 text-sm'>
-                  <div>
+                <div className='grid grid-cols-2 gap-3 text-sm'>
+                  <dl>
                     <dt className='text-muted-foreground text-xs'>
                       {t('modelCatalog.vendor')}
                     </dt>
                     <dd>{item.vendor_id}</dd>
-                  </div>
-                  <div>
+                  </dl>
+                  <dl>
                     <dt className='text-muted-foreground text-xs'>
                       {t('modelCatalog.rule')}
                     </dt>
                     <dd>{ruleText(item.name_rule, t)}</dd>
-                  </div>
-                  <div>
+                  </dl>
+                  <dl>
                     <dt className='text-muted-foreground text-xs'>
                       {t('modelCatalog.channels')}
                     </dt>
                     <dd>{item.covered_channels}</dd>
-                  </div>
-                  <div>
+                  </dl>
+                  <dl>
                     <dt className='text-muted-foreground text-xs'>
                       {t('modelCatalog.groups')}
                     </dt>
                     <dd>{item.covered_groups}</dd>
-                  </div>
-                </dl>
+                  </dl>
+                </div>
               </article>
             )}
             total={catalogQuery.data?.total ?? 0}

@@ -9,15 +9,15 @@ export function AuthLayout({
   children: ReactNode
   standalone?: boolean
 }) {
-  const Root = standalone ? 'main' : 'div'
   return (
-    <Root
+    <main
       className={
         standalone
           ? 'relative grid h-svh max-w-none'
           : 'relative grid min-h-full max-w-none'
       }
-      {...(standalone ? { id: 'main-content', tabIndex: -1 } : {})}
+      id='main-content'
+      tabIndex={-1}
     >
       <div className='absolute top-4 left-4 z-10 transition-opacity hover:opacity-80 sm:top-8 sm:left-8'>
         <Brand />
@@ -27,6 +27,6 @@ export function AuthLayout({
           {children}
         </div>
       </div>
-    </Root>
+    </main>
   )
 }

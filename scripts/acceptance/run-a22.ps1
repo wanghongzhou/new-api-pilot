@@ -10,6 +10,7 @@ $acceptanceID = 'A22'
 $databaseName = 'pilot_a22'
 $goImage = 'golang:1.25.1'
 $mysqlImage = 'mysql:8.4'
+$redisImage = 'redis:7-alpine'
 $canonicalCommand = @(
     'powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'scripts/acceptance/run-a22.ps1'
 )
@@ -204,10 +205,13 @@ function Invoke-A22Task {
 }
 
 function Get-A22ApplicationEnvironment {
-    param([Parameter(Mandatory = $true)][string]$DatabaseDSN)
+    param(
+        [Parameter(Mandatory = $true)][string]$DatabaseDSN,
+        [Parameter(Mandatory = $true)][string]$RedisDSN
+    )
 
     return @(
-        'APP_ENV=test', 'PORT=3000', "DATABASE_DSN=$DatabaseDSN",
+		'APP_ENV=test', 'PORT=3000', "DATABASE_DSN=$DatabaseDSN", "REDIS_DSN=$RedisDSN",
 		"SESSION_SECRET=$sessionSecret", "ENCRYPTION_KEY=$encryptionKey",
 		"PLATFORM_BOOTSTRAP_ADMIN_PASSWORD=$adminPassword", 'SESSION_COOKIE_SECURE=false',
 		'EXPORT_DIR=/work/exports', 'PUBLIC_ORIGIN=http://a22.invalid', 'TRUSTED_PROXIES=',
@@ -395,6 +399,7 @@ try {
     $toolsImageName = "new-api-pilot-a22-tools:$runToken"
     $sourceName = "new-api-pilot-a22-$runToken-source"
     $targetName = "new-api-pilot-a22-$runToken-target"
+    $redisName = "new-api-pilot-a22-$runToken-redis"
     $appName = "new-api-pilot-a22-$runToken-app"
 
     $encryptionKey = New-OpsBase64Key
@@ -404,10 +409,12 @@ try {
     $secretSetting = 'https://oapi.dingtalk.com/robot/send?access_token=a22-never-log'
     $sourceDSN = "root:@tcp(a22-source:3306)/${databaseName}?charset=utf8mb4&parseTime=True&loc=Asia%2FShanghai"
     $targetDSN = "root:@tcp(a22-target:3306)/${databaseName}?charset=utf8mb4&parseTime=True&loc=Asia%2FShanghai"
+    $redisDSN = 'redis://a22-redis:6379/0'
 
     [void](Invoke-OpsDocker -Arguments @('version', '--format', '{{.Client.Version}}|{{.Server.Version}}') -TimeoutSeconds 60)
     $goIdentity = Get-A22ImageIdentity -Reference $goImage
     $mysqlIdentity = Get-A22ImageIdentity -Reference $mysqlImage
+    $redisIdentity = Get-A22ImageIdentity -Reference $redisImage
     $gitState = Get-OpsGitState -RepositoryRoot $repositoryRoot
 
     $repositoryMount = "type=bind,source=$repositoryRoot,target=/workspace,readonly"
@@ -430,6 +437,19 @@ try {
     ) -TimeoutSeconds 30)
     $networkCreated = $true
 
+    $createdContainers[$redisName] = $false
+    [void](Invoke-OpsDocker -Arguments @(
+        'run', '--detach', '--name', $redisName, '--network', $networkName,
+        '--network-alias', 'a22-redis',
+        '--label', 'new-api-pilot.acceptance=A22', '--label', $runLabel,
+        '--memory', '256m', '--cpus', '1',
+        '--health-cmd', 'redis-cli ping', '--health-interval', '2s', '--health-timeout', '2s',
+        '--health-retries', '30', '--health-start-period', '2s',
+        $redisImage
+    ) -TimeoutSeconds 60)
+    $createdContainers[$redisName] = $true
+    $containerResourcesCreated = $true
+
     foreach ($databaseContainer in @(
         [pscustomobject]@{ Name = $sourceName; Alias = 'a22-source'; Volume = $sourceVolumeName; ServerID = '2201' },
         [pscustomobject]@{ Name = $targetName; Alias = 'a22-target'; Volume = $targetVolumeName; ServerID = '2202' }
@@ -450,6 +470,7 @@ try {
         $createdContainers[$databaseContainer.Name] = $true
         $containerResourcesCreated = $true
     }
+    Wait-A22HealthyContainer -Container $redisName -TimeoutSeconds 120
     Wait-A22HealthyContainer -Container $sourceName -TimeoutSeconds 180
     Wait-A22HealthyContainer -Container $targetName -TimeoutSeconds 180
 
@@ -521,7 +542,7 @@ SELECT VERSION(), @@server_uuid, DATABASE(), @@transaction_isolation,
         evidence_class = $evidenceClass
         commit = $gitState.Commit
         worktree_dirty = $gitState.WorktreeDirty
-        images = [ordered]@{ go = $goIdentity; mysql = $mysqlIdentity; tools = $toolsIdentity }
+        images = [ordered]@{ go = $goIdentity; mysql = $mysqlIdentity; redis = $redisIdentity; tools = $toolsIdentity }
         network = [ordered]@{ internal = $true; host_ports = @() }
         source = [ordered]@{
             database = $sourceFields[2]; server_uuid_fingerprint = $sourceUUIDFingerprint; version = $sourceFields[0]
@@ -546,7 +567,7 @@ SELECT VERSION(), @@server_uuid, DATABASE(), @@transaction_isolation,
     Write-OpsUtf8NoBom -Path (Join-Path $evidenceDirectory 'a22-fixture.json') -Payload ($fixtureReport | ConvertTo-Json -Depth 4)
 
     [void](Invoke-A22Task -Suffix 'migrate' -Image $toolsImageName -TimeoutSeconds 180 `
-        -Environment (Get-A22ApplicationEnvironment -DatabaseDSN $sourceDSN) `
+        -Environment (Get-A22ApplicationEnvironment -DatabaseDSN $sourceDSN -RedisDSN $redisDSN) `
         -Command @('/work/new-api-pilot', 'migrate') -LogPath (Join-Path $evidenceDirectory 'a22-migration.log'))
     [void](Invoke-A22Task -Suffix 'seed' -Image $toolsImageName -TimeoutSeconds 180 `
         -Environment (Get-A22SecretEnvironment -DatabaseDSN $sourceDSN) `
@@ -675,7 +696,7 @@ sha256sum manifest.json | awk '{print $1 "  manifest.json"}' > manifest.json.sha
         '--memory', '2g', '--cpus', '2', '--workdir', '/workspace',
         '--mount', $repositoryMount, '--mount', $evidenceMount, '--mount', $workMount
     )
-    $appEnvironment = @(Get-A22ApplicationEnvironment -DatabaseDSN $targetDSN) + @(
+    $appEnvironment = @(Get-A22ApplicationEnvironment -DatabaseDSN $targetDSN -RedisDSN $redisDSN) + @(
         "A22_ADMIN_PASSWORD=$adminPassword", "A22_EXPECTED_DATABASE=$databaseName",
         "A22_SOURCE_UUID_FINGERPRINT=$sourceUUIDFingerprint", "A22_TARGET_UUID_FINGERPRINT=$targetUUIDFingerprint",
         "A22_RELEASE_GATE=$releaseDirectory/release.json"

@@ -78,7 +78,7 @@ export interface FinanceMetric {
 export interface FinanceBreakdown extends FinanceMetric {
   dimension_id: string
   dimension_name: string
-  site_id: IdString | ''
+  site_id: NonNegativeIdString
   site_name: string
   data_status: DataStatus
   as_of: Timestamp | null

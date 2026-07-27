@@ -42,6 +42,7 @@ func TestA25RunnerUsesUniqueBoundedResourcesAndFinalInventory(t *testing.T) {
 	}
 	for _, required := range []string{
 		"mysql:8.4", "mysql:5.7", "mariadb:10.11", "--internal", "GOPROXY=off", "GOSUMDB=off",
+		"for attempt in 1 2 3", "go mod download", "sleep 5",
 		"$runToken-gomod", "$runToken-gobuild", "target=/workspace,readonly", "target=/evidence",
 		"a25-test.jsonl", "a25-test.stderr.log", "a25-test-summary.json", "a25-command.json",
 		"a25-environment.json", "a25-fixture.json", "a25-report.json", "a25-cleanup.json",

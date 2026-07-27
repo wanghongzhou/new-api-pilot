@@ -10,6 +10,8 @@
 - `planned:` 路径：实现尚未开始时允许不存在。实现对应功能的同一开发任务必须创建该路径并移除 `planned:` 前缀，不能把它留到发布前处理。
 - F01～F13 及 `testdata/design/manifest.sha256` 是固定的实施契约路径，不表示当前文件已经存在；首批基础设施任务必须将它们版本化落盘。fixture 不存在或 checksum 不匹配时，任何引用它的用例都不可执行、不可判定通过。
 - 运行手册文件当前只是模板；只有完成执行、复核并将完整记录写入对应 `evidence_path` 后，相关 A 用例才算通过。
+- 通用 harness 的正式 run 除 `evidence.json`、`stdout.log`、`stderr.log` 外，必须包含 `run-manifest.json` 与 `checksums.sha256`，在日志关闭和 wrapper 元数据写入后逐文件固化大小与 SHA-256；采用封闭文件集的专用 runner 继续遵守各自 validator 契约。
+- 受控环境、真实生产资料或独立审批不可用时，必须实际尝试并保存 `blocked-report.json` 与失败 wrapper 记录；这只证明阻断真实存在，不是通过证据，`evidence_path` 必须保留 `planned:`，直至后续正式 run 通过。
 
 ## 首批开发基础设施
 

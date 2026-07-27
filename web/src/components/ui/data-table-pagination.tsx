@@ -81,7 +81,7 @@ export function DataTablePagination({
             >
               <SelectTrigger
                 aria-label={t('table.rowsPerPage')}
-                className='text-foreground h-8 w-[64px] font-medium tabular-nums sm:w-[70px]'
+                className='text-foreground w-[64px] font-medium tabular-nums data-[size=default]:h-10 sm:w-[70px] sm:data-[size=default]:h-8'
               >
                 <SelectValue placeholder={pageSize} />
               </SelectTrigger>
@@ -100,7 +100,7 @@ export function DataTablePagination({
 
         <div className='flex min-w-0 shrink-0 items-center gap-1 @lg/pagination:gap-1.5 @xl/pagination:gap-2'>
           <Button
-            className='text-muted-foreground hover:text-foreground disabled:text-muted-foreground/50 size-8 p-0 @max-lg/pagination:hidden'
+            className='text-muted-foreground hover:text-foreground disabled:text-muted-foreground/50 size-10 p-0 sm:size-8 @max-lg/pagination:hidden'
             disabled={!canGoPrevious}
             onClick={() => onPageChange(1)}
             variant='outline'
@@ -113,7 +113,7 @@ export function DataTablePagination({
             />
           </Button>
           <Button
-            className='text-muted-foreground hover:text-foreground disabled:text-muted-foreground/50 size-8 p-0'
+            className='text-muted-foreground hover:text-foreground disabled:text-muted-foreground/50 size-10 p-0 sm:size-8'
             disabled={!canGoPrevious}
             onClick={() => onPageChange(currentPage - 1)}
             variant='outline'
@@ -122,33 +122,35 @@ export function DataTablePagination({
             <HugeiconsIcon icon={ArrowLeft01Icon} size={16} strokeWidth={2} />
           </Button>
 
-          {pageNumbers.map((pageNumber, index) => (
-            <div className='flex items-center' key={`${pageNumber}-${index}`}>
-              {pageNumber === '...' ? (
-                <span className='text-muted-foreground px-0.5 text-sm @lg/pagination:px-1'>
-                  ...
-                </span>
-              ) : (
-                <Button
-                  className={`h-8 min-w-8 px-2 tabular-nums ${
-                    currentPage === pageNumber
-                      ? 'font-semibold'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                  onClick={() => onPageChange(pageNumber as number)}
-                  variant={currentPage === pageNumber ? 'default' : 'outline'}
-                >
-                  <span className='sr-only'>
-                    {t('table.goToPage', { page: pageNumber })}
+          <div className='hidden items-center gap-1 @lg/pagination:flex @xl/pagination:gap-2'>
+            {pageNumbers.map((pageNumber, index) => (
+              <div className='flex items-center' key={`${pageNumber}-${index}`}>
+                {pageNumber === '...' ? (
+                  <span className='text-muted-foreground px-0.5 text-sm @lg/pagination:px-1'>
+                    ...
                   </span>
-                  {pageNumber}
-                </Button>
-              )}
-            </div>
-          ))}
+                ) : (
+                  <Button
+                    className={`h-8 min-w-8 px-2 tabular-nums ${
+                      currentPage === pageNumber
+                        ? 'font-semibold'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                    onClick={() => onPageChange(pageNumber as number)}
+                    variant={currentPage === pageNumber ? 'default' : 'outline'}
+                  >
+                    <span className='sr-only'>
+                      {t('table.goToPage', { page: pageNumber })}
+                    </span>
+                    {pageNumber}
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
 
           <Button
-            className='text-muted-foreground hover:text-foreground disabled:text-muted-foreground/50 size-8 p-0'
+            className='text-muted-foreground hover:text-foreground disabled:text-muted-foreground/50 size-10 p-0 sm:size-8'
             disabled={!canGoNext}
             onClick={() => onPageChange(currentPage + 1)}
             variant='outline'
@@ -157,7 +159,7 @@ export function DataTablePagination({
             <HugeiconsIcon icon={ArrowRight01Icon} size={16} strokeWidth={2} />
           </Button>
           <Button
-            className='text-muted-foreground hover:text-foreground disabled:text-muted-foreground/50 size-8 p-0 @max-lg/pagination:hidden'
+            className='text-muted-foreground hover:text-foreground disabled:text-muted-foreground/50 size-10 p-0 sm:size-8 @max-lg/pagination:hidden'
             disabled={!canGoNext}
             onClick={() => onPageChange(totalPages)}
             variant='outline'

@@ -498,6 +498,19 @@ func parsePageQuery(c *gin.Context, page, pageSize *int, fieldErrors map[string]
 			*pageSize = value
 		}
 	}
+	if _, pageInvalid := fieldErrors["p"]; !pageInvalid {
+		if _, sizeInvalid := fieldErrors["page_size"]; !sizeInvalid && !paginationOffsetValid(*page, *pageSize) {
+			fieldErrors["p"] = "is too large"
+		}
+	}
+}
+
+func paginationOffsetValid(page, pageSize int) bool {
+	if page < 1 || pageSize < 1 {
+		return false
+	}
+	maximum := int(^uint(0) >> 1)
+	return page == 1 || page-1 <= maximum/pageSize
 }
 
 func validateQueryKeys(c *gin.Context, allowed map[string]struct{}) map[string]string {

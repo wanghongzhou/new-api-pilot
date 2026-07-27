@@ -93,7 +93,12 @@ func New(options Options) (*gin.Engine, error) {
 	RegisterSettingRoutes(engine, options.SettingController, options.IdentityResolver)
 	RegisterNotificationRoutes(engine, options.NotificationController, options.IdentityResolver)
 	if options.FastTaskController != nil {
-		engine.GET("/api/fast-tasks", middleware.UserAuth(options.IdentityResolver), options.FastTaskController.List)
+		engine.GET(
+			"/api/fast-tasks",
+			middleware.UserAuth(options.IdentityResolver),
+			middleware.ForcePasswordChange(),
+			options.FastTaskController.List,
+		)
 	}
 
 	engine.GET("/healthz", func(c *gin.Context) {

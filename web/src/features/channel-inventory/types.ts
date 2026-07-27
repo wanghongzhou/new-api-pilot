@@ -3,6 +3,7 @@ import type {
   DecimalString,
   IdString,
   MetricString,
+  NonNegativeIdString,
   Timestamp,
 } from '@/lib/api-types'
 
@@ -58,7 +59,7 @@ export interface ChannelInventoryTrendPoint extends ChannelInventoryMetric {
 export interface ChannelInventoryBreakdown extends ChannelInventoryMetric {
   dimension_id: string
   dimension_name: string
-  site_id: string
+  site_id: NonNegativeIdString
   site_name: string
   data_status: DataStatus
   as_of: Timestamp | null

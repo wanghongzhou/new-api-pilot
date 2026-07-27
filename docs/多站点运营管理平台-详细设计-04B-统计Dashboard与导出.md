@@ -289,7 +289,7 @@ CSV/XLSX 使用 `statistics_type=pricing_catalog|group_catalog`，冻结除分�
 
 # D139 system-task 统计、完整性与导出
 
-列表支持 `site_ids`（仅全局）、`types`、`statuses`、`created_start`、`created_end`、`error_present` 和服务端分页；默认不设置时间边界，避免隐藏长期未终态任务。统计返回 summary=`total/pending/running/succeeded/failed/error_present_count/success_rate`，以及 type/status/site breakdown、`data_status/as_of/completeness`。成功率只以精确 `succeeded/(succeeded+failed)` 重算，分母为零时为 null；所有计数为 bigint string。站点 breakdown 必须保留 partial/unavailable 站点及已有事实。
+列表支持 `site_ids`（仅全局）、`types`、`statuses`、`created_start`、`created_end`、`error_present` 和服务端分页；默认不设置时间边界，避免隐藏长期未终态任务。统计返回 summary=`total/active/succeeded/failed/error_present`，以及 type/status/site breakdown；`active` 是 pending 与 running 的精确合计。列表和统计都在顶层返回 `data_status/as_of/truncated/truncation_reason/source_limit/observed_count`，由这些字段共同表达完整性，不另造与列表契约不一致的 completeness 对象。所有计数为 bigint string，站点 breakdown 必须保留 partial/unavailable 站点及已有事实。
 
 CSV/XLSX 固定 `statistics_type=system_tasks`，冻结 `site_ids/types/statuses/created_start/created_end/error_present`，排除分页；强制站点 scope 不接受或记录 `site_ids`。导出列只允许列表安全字段和 typed progress/result、`error_present/error_code`、completeness；不得包含 `active_key`、`locked_by`、payload/state/result 原始 JSON、error 原文、远端详情地址或 mutation 参数。导出沿用统一 export owner/轮询/失败/过期/下载闭环，terminal retention 截止点和 `system_task_terminal_retention_days` 作为元数据说明，不把已删除终态补造为空记录。
 

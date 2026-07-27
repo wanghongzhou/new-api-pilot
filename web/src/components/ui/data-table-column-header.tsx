@@ -41,7 +41,7 @@ export function DataTableColumnHeader<TData>({
         <DropdownMenuTrigger
           render={
             <Button
-              className='data-popup-open:bg-accent -ms-3 h-8'
+              className='data-popup-open:bg-accent -ms-3 h-10 sm:h-8'
               size='sm'
               variant='ghost'
             />

@@ -14,6 +14,20 @@ import (
 func TestA30A84SchedulerCadenceAndRealtimePriority(t *testing.T) {
 	database := openCoreAcceptanceTransaction(t)
 	const now = int64(1_768_622_400) // 2026-01-17T12:00:00+08:00
+	seedCoreAcceptanceSettings(t, database, now,
+		model.PlatformSetting{Key: "collector.probe_interval_seconds", Value: "60", ValueType: "int"},
+		model.PlatformSetting{Key: "collector.realtime_interval_seconds", Value: "60", ValueType: "int"},
+		model.PlatformSetting{Key: "collector.resource_interval_seconds", Value: "60", ValueType: "int"},
+		model.PlatformSetting{Key: "collector.usage_delay_minutes", Value: "5", ValueType: "int"},
+		model.PlatformSetting{Key: "collector.minute_retention_days", Value: "90", ValueType: "int"},
+		model.PlatformSetting{Key: "collector.probe_concurrency", Value: "20", ValueType: "int"},
+		model.PlatformSetting{Key: "collector.realtime_concurrency", Value: "10", ValueType: "int"},
+		model.PlatformSetting{Key: "collector.resource_concurrency", Value: "10", ValueType: "int"},
+		model.PlatformSetting{Key: "collector.metadata_concurrency", Value: "5", ValueType: "int"},
+		model.PlatformSetting{Key: "collector.usage_concurrency", Value: "5", ValueType: "int"},
+		model.PlatformSetting{Key: "collector.backfill_concurrency", Value: "2", ValueType: "int"},
+		model.PlatformSetting{Key: "collector.manual_backfill_max_days", Value: "366", ValueType: "int"},
+	)
 	clock := testsupport.NewFakeClock(time.Unix(now, 0))
 	site := createCoreAuthorizedSite(t, database, newCoreCipher(t), now)
 	repository := model.NewCollectionTaskRepository(database)

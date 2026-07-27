@@ -38,7 +38,7 @@ export function DataViewModeToggle({
     <div
       aria-label={ariaLabel}
       className={cn(
-        'bg-muted/60 inline-flex h-8 items-center rounded-lg border p-0.5',
+        'bg-muted/60 inline-flex h-12 items-center rounded-lg border p-0.5 sm:h-8',
         className
       )}
       role='group'
@@ -53,7 +53,7 @@ export function DataViewModeToggle({
                   aria-label={segment.label}
                   aria-pressed={active}
                   className={cn(
-                    'inline-flex h-full w-7 items-center justify-center rounded-md text-xs font-medium transition-all',
+                    'inline-flex h-10 w-10 items-center justify-center rounded-md text-xs font-medium transition-all sm:h-full sm:w-7',
                     active
                       ? 'bg-primary text-primary-foreground shadow-sm'
                       : 'text-muted-foreground hover:text-foreground'

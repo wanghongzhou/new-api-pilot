@@ -15,6 +15,25 @@ export function formatLatencySeconds(valueMs: number): string {
   return String(Number((valueMs / 1000).toFixed(2)))
 }
 
+export function formatPercentValue(
+  value: number | null,
+  unavailableLabel: string
+): string {
+  return value == null || !Number.isFinite(value)
+    ? unavailableLabel
+    : `${value.toFixed(1)}%`
+}
+
+export function formatInstanceAvailability(
+  online: number | null,
+  total: number | null,
+  unavailableLabel: string
+): string {
+  return online == null || total == null
+    ? unavailableLabel
+    : `${online}/${total}`
+}
+
 export function siteResourceColor(value: number | null): string | undefined {
   if (value == null || !Number.isFinite(value)) return undefined
   const bounded = Math.max(0, Math.min(100, value))

@@ -18,6 +18,17 @@ import {
   listTokenOptions,
 } from './api'
 import { buildEntityExportRequest } from './export-request'
+import type { ChannelOption, StatisticsResponse } from './types'
+
+type StatisticsRangeAsOfIsRequired =
+  null extends StatisticsResponse['range']['as_of'] ? false : true
+
+const statisticsRangeAsOfIsRequired: StatisticsRangeAsOfIsRequired = true
+
+type ChannelOptionIDIsBranded =
+  string extends ChannelOption['remote_channel_id'] ? false : true
+
+const channelOptionIDIsBranded: ChannelOptionIDIsBranded = true
 
 const originalAdapter = api.defaults.adapter
 
@@ -26,6 +37,11 @@ afterEach(() => {
 })
 
 describe('statistics export API', () => {
+  test('keeps the range snapshot timestamp required', () => {
+    expect(statisticsRangeAsOfIsRequired).toBe(true)
+    expect(channelOptionIDIsBranded).toBe(true)
+  })
+
   test('posts a frozen customer filter set using the 05C export contract', async () => {
     api.defaults.adapter = (async (config) => {
       expect(config.url).toBe('/api/statistics/export')

@@ -396,18 +396,18 @@ export function SiteOnboardingDrawer({
             )}
           </Badge>
         </div>
-        <dl className='mt-4 grid gap-3 text-sm sm:grid-cols-2'>
-          <div>
+        <div className='mt-4 grid gap-3 text-sm sm:grid-cols-2'>
+          <dl>
             <dt className='text-muted-foreground'>{t('collection.range')}</dt>
             <dd>{range}</dd>
-          </div>
-          <div>
+          </dl>
+          <dl>
             <dt className='text-muted-foreground'>
               {t('collection.progress')}
             </dt>
             <dd>{Math.round(backfillRun.progress * 100)}%</dd>
-          </div>
-        </dl>
+          </dl>
+        </div>
         {backfillRun.error && (
           <div className='mt-4'>
             <p className='text-destructive text-sm'>
@@ -588,28 +588,28 @@ export function SiteOnboardingDrawer({
                       )
                     )}
                   </div>
-                  <dl className='mt-3 grid gap-2 text-sm sm:grid-cols-2'>
-                    <div>
+                  <div className='mt-3 grid gap-2 text-sm sm:grid-cols-2'>
+                    <dl>
                       <dt className='text-muted-foreground'>
                         {t('site.normalizedUrl')}
                       </dt>
                       <dd className='break-all'>
                         {preflight.normalized_base_url}
                       </dd>
-                    </div>
-                    <div>
+                    </dl>
+                    <dl>
                       <dt className='text-muted-foreground'>
                         {t('site.systemName')}
                       </dt>
                       <dd>{preflight.candidate_public.system_name}</dd>
-                    </div>
-                    <div>
+                    </dl>
+                    <dl>
                       <dt className='text-muted-foreground'>
                         {t('site.version')}
                       </dt>
                       <dd>{preflight.candidate_public.version}</dd>
-                    </div>
-                  </dl>
+                    </dl>
+                  </div>
                 </section>
               )}
               <SiteAuthorizationForm
@@ -632,20 +632,20 @@ export function SiteOnboardingDrawer({
                   <HugeiconsIcon icon={CheckmarkCircle02Icon} strokeWidth={2} />
                   {t('site.proof.passed')}
                 </h2>
-                <dl className='mt-3 grid gap-3 text-sm sm:grid-cols-3'>
-                  <div>
+                <div className='mt-3 grid gap-3 text-sm sm:grid-cols-3'>
+                  <dl>
                     <dt className='text-muted-foreground'>
                       {t('site.proof.snapshotTotal')}
                     </dt>
                     <dd>{authorization.first_user_proof.snapshot_total}</dd>
-                  </div>
-                  <div>
+                  </dl>
+                  <dl>
                     <dt className='text-muted-foreground'>
                       {t('site.proof.minUserId')}
                     </dt>
                     <dd>{authorization.first_user_proof.min_user_id}</dd>
-                  </div>
-                  <div>
+                  </dl>
+                  <dl>
                     <dt className='text-muted-foreground'>
                       {t('site.proof.earliestCreated')}
                     </dt>
@@ -654,8 +654,8 @@ export function SiteOnboardingDrawer({
                         authorization.first_user_proof.earliest_created_at
                       ).format('YYYY-MM-DD HH:mm:ss')}
                     </dd>
-                  </div>
-                </dl>
+                  </dl>
+                </div>
               </section>
               <section>
                 <h2 className='font-medium'>{t('site.capabilities.title')}</h2>
@@ -695,8 +695,8 @@ export function SiteOnboardingDrawer({
                 <h2 className='font-medium'>
                   {t('site.history.immutableTitle')}
                 </h2>
-                <dl className='mt-3 grid gap-3 text-sm sm:grid-cols-2'>
-                  <div>
+                <div className='mt-3 grid gap-3 text-sm sm:grid-cols-2'>
+                  <dl>
                     <dt className='text-muted-foreground'>
                       {t('site.rootCreatedAt')}
                     </dt>
@@ -705,8 +705,8 @@ export function SiteOnboardingDrawer({
                         'YYYY-MM-DD HH:mm:ss'
                       )}
                     </dd>
-                  </div>
-                  <div>
+                  </dl>
+                  <dl>
                     <dt className='text-muted-foreground'>
                       {t('site.statisticsStartAt')}
                     </dt>
@@ -715,8 +715,8 @@ export function SiteOnboardingDrawer({
                         authorization.statistics_start_at
                       ).format('YYYY-MM-DD HH:00')}
                     </dd>
-                  </div>
-                </dl>
+                  </dl>
+                </div>
                 <p className='text-muted-foreground mt-3 text-sm'>
                   {t('site.history.immutableDescription')}
                 </p>

@@ -7,6 +7,7 @@ import {
   parseDecimalString,
   parseIdString,
   parseMetricString,
+  parseNonNegativeIdString,
 } from '@/lib/api-types'
 
 import {
@@ -15,11 +16,26 @@ import {
   listChannelInventory,
   listSiteChannelInventory,
 } from './api'
+import type { ChannelInventoryBreakdown } from './types'
+
+type ChannelInventoryBreakdownSiteIDIsNonNegative =
+  ChannelInventoryBreakdown['site_id'] extends ReturnType<
+    typeof parseNonNegativeIdString
+  >
+    ? true
+    : false
+
+const channelInventoryBreakdownSiteIDIsNonNegative: ChannelInventoryBreakdownSiteIDIsNonNegative = true
 
 const originalAdapter = api.defaults.adapter
 
 afterEach(() => {
   api.defaults.adapter = originalAdapter
+})
+
+test('accepts the zero site sentinel used by aggregate breakdown rows', () => {
+  expect(channelInventoryBreakdownSiteIDIsNonNegative).toBe(true)
+  expect(String(parseNonNegativeIdString('0'))).toBe('0')
 })
 
 function response(config: Parameters<AxiosAdapter>[0]) {

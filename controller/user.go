@@ -166,6 +166,11 @@ func parsePlatformUserListQuery(c *gin.Context) (dto.PlatformUserListQuery, map[
 			query.PageSize = value
 		}
 	}
+	if _, pageInvalid := errors["p"]; !pageInvalid {
+		if _, sizeInvalid := errors["page_size"]; !sizeInvalid && !paginationOffsetValid(query.Page, query.PageSize) {
+			errors["p"] = "is too large"
+		}
+	}
 	query.Keyword = strings.TrimSpace(c.Query("keyword"))
 	if !utf8.ValidString(query.Keyword) || utf8.RuneCountInString(query.Keyword) > 128 {
 		errors["keyword"] = "must not exceed 128 Unicode characters"

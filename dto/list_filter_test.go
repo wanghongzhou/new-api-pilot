@@ -80,3 +80,19 @@ func TestAlertRuleListQueryNormalizesAndValidatesContract(t *testing.T) {
 		t.Fatalf("invalid alert rule sort fields = %#v", fields)
 	}
 }
+
+func TestListQueriesRejectPaginationOffsetOverflow(t *testing.T) {
+	overflowPage := int(^uint(0)>>1)/100 + 2
+	queries := map[string]map[string]string{
+		"customer": (CustomerListQuery{Page: overflowPage, PageSize: 100, SortBy: "updated_at", SortOrder: "desc"}).Validate(),
+		"account":  (AccountListQuery{Page: overflowPage, PageSize: 100, SortBy: "updated_at", SortOrder: "desc"}).Validate(),
+		"remote":   (RemoteUserListQuery{Page: overflowPage, PageSize: 100}).Validate(),
+		"alert":    (AlertListQuery{Page: overflowPage, PageSize: 100, SortBy: "last_fired_at", SortOrder: "desc"}).Validate(),
+		"rule":     (AlertRuleListQuery{ScopeType: AlertScopeGlobal, Page: overflowPage, PageSize: 100, SortOrder: "asc"}).Validate(),
+	}
+	for name, fields := range queries {
+		if fields == nil {
+			t.Fatalf("%s query accepted overflowing pagination", name)
+		}
+	}
+}

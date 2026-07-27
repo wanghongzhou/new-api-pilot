@@ -111,6 +111,9 @@ func (query AlertRuleListQuery) Validate() map[string]string {
 	if query.PageSize < 1 || query.PageSize > 100 {
 		errors["page_size"] = "must be between 1 and 100"
 	}
+	if query.Page >= 1 && query.PageSize >= 1 && query.PageSize <= 100 && !statisticsPaginationValid(query.Page, query.PageSize) {
+		errors["page"] = "is too large"
+	}
 	if !validEnumList(query.Categories, AlertRuleCategorySite, AlertRuleCategoryCollection, AlertRuleCategoryInstance, AlertRuleCategoryAccount, AlertRuleCategoryChannel) {
 		errors["category"] = "contains an invalid value"
 	}
@@ -126,7 +129,10 @@ func (query AlertRuleListQuery) Validate() map[string]string {
 	return nilIfNoAlertErrors(errors)
 }
 
-func (query AlertRuleListQuery) Offset() int { return (query.Page - 1) * query.PageSize }
+func (query AlertRuleListQuery) Offset() int {
+	offset, _ := statisticsPaginationOffset(query.Page, query.PageSize)
+	return offset
+}
 
 type AlertRuleUpdateRequest struct {
 	Enabled        *bool   `json:"enabled"`
@@ -268,6 +274,9 @@ func (query AlertListQuery) Validate() map[string]string {
 	if query.PageSize < 1 || query.PageSize > 100 {
 		errors["page_size"] = "must be between 1 and 100"
 	}
+	if query.Page >= 1 && query.PageSize >= 1 && query.PageSize <= 100 && !statisticsPaginationValid(query.Page, query.PageSize) {
+		errors["page"] = "is too large"
+	}
 	if !validEnumList(query.Statuses, AlertStatusPending, AlertStatusFiring, AlertStatusResolved) {
 		errors["status"] = "contains an invalid value"
 	}
@@ -298,7 +307,10 @@ func (query AlertListQuery) Validate() map[string]string {
 	return nilIfNoAlertErrors(errors)
 }
 
-func (query AlertListQuery) Offset() int { return (query.Page - 1) * query.PageSize }
+func (query AlertListQuery) Offset() int {
+	offset, _ := statisticsPaginationOffset(query.Page, query.PageSize)
+	return offset
+}
 
 func validAlertID(value string) bool {
 	parsed, err := strconv.ParseInt(value, 10, 64)

@@ -63,7 +63,7 @@ import {
   listSiteInstances,
 } from '../api'
 import { siteKeys } from '../query-keys'
-import { formatLatencySeconds } from '../site-card-metrics'
+import { formatLatencySeconds, formatPercentValue } from '../site-card-metrics'
 import type {
   CollectionRunItem,
   CollectionRunWindowItem,
@@ -98,7 +98,8 @@ function TimestampValue({ timestamp }: { timestamp: number | null }) {
 }
 
 function PercentValue({ value }: { value: number | null }) {
-  return <span>{`${(value ?? 0).toFixed(1)}%`}</span>
+  const { t } = useTranslation()
+  return <span>{formatPercentValue(value, t('data.unavailableValue'))}</span>
 }
 
 function InstanceStatusBadge({
@@ -250,16 +251,20 @@ function PerformanceHealth({
           </MetricCell>
           <MetricCell label={t('site.performance.avgLatency')}>
             <span>
-              {t('site.performance.latencyValue', {
-                value: formatLatencySeconds(performance?.avg_latency_ms ?? 0),
-              })}
+              {performance == null
+                ? t('data.unavailableValue')
+                : t('site.performance.latencyValue', {
+                    value: formatLatencySeconds(performance.avg_latency_ms),
+                  })}
             </span>
           </MetricCell>
           <MetricCell label={t('site.performance.avgTps')}>
             <span>
-              {t('site.performance.tpsValue', {
-                value: (performance?.avg_tps ?? 0).toFixed(1),
-              })}
+              {performance == null
+                ? t('data.unavailableValue')
+                : t('site.performance.tpsValue', {
+                    value: performance.avg_tps.toFixed(1),
+                  })}
             </span>
           </MetricCell>
         </dl>
@@ -316,7 +321,7 @@ function PerformanceHealth({
           {performanceRanges.map((hours) => (
             <Button
               aria-pressed={range === hours}
-              className='min-h-8 px-2.5'
+              className='min-h-10 px-2.5 sm:min-h-8'
               key={hours}
               onClick={() => onRangeChange(hours)}
               size='sm'

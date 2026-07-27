@@ -11,6 +11,16 @@ import {
   listRedemptions,
   listSiteTopups,
 } from './api'
+import type { FinanceBreakdown } from './types'
+
+type FinanceBreakdownSiteIDIsNonNegative =
+  FinanceBreakdown['site_id'] extends ReturnType<
+    typeof parseNonNegativeIdString
+  >
+    ? true
+    : false
+
+const financeBreakdownSiteIDIsNonNegative: FinanceBreakdownSiteIDIsNonNegative = true
 
 const originalAdapter = api.defaults.adapter
 
@@ -35,6 +45,11 @@ function response(config: Parameters<AxiosAdapter>[0]) {
 }
 
 describe('financial operations API contract', () => {
+  test('accepts the documented zero site sentinel for non-site breakdowns', () => {
+    expect(financeBreakdownSiteIDIsNonNegative).toBe(true)
+    expect(String(parseNonNegativeIdString('0'))).toBe('0')
+  })
+
   test('serializes all safe repeated filters and preserves zero user ids', async () => {
     api.defaults.adapter = (async (config) => {
       const params = config.params as URLSearchParams

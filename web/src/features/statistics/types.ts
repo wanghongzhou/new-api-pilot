@@ -188,7 +188,7 @@ export interface StatisticsResponse<
     start_timestamp: Timestamp
     end_timestamp: Timestamp
     timezone: 'Asia/Shanghai'
-    as_of: Timestamp | null
+    as_of: Timestamp
   }
   summary: {
     request_count: MetricString | null
@@ -265,7 +265,7 @@ export interface ChannelOption {
   key: string
   site_id: IdString
   site_name: string
-  remote_channel_id: string
+  remote_channel_id: NonNegativeIdString
   name: string
   remote_missing: boolean
 }

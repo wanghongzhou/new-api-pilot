@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"new-api-pilot/common"
 	"new-api-pilot/constant"
 	"new-api-pilot/model"
+	"new-api-pilot/service"
 )
 
 const (
@@ -217,7 +219,7 @@ func (scheduler *Scheduler) executeFastTask(task scheduledFastTask) {
 			finished := scheduler.clock.Now()
 			_ = scheduler.fastTaskHistory.Add(context.Background(), common.FastTaskHistoryRecord{
 				SiteID: task.site.ID, TaskType: task.taskType, StartedAt: started.Unix(), FinishedAt: finished.Unix(),
-				Status: status, DurationMS: finished.Sub(started).Milliseconds(), Error: errorString(executionErr), RequestID: task.requestID,
+				Status: status, DurationMS: finished.Sub(started).Milliseconds(), Error: fastTaskHistoryError(executionErr), RequestID: task.requestID,
 			})
 		}
 	}()
@@ -247,11 +249,39 @@ func (scheduler *Scheduler) executeFastTask(task scheduledFastTask) {
 	})
 }
 
-func errorString(err error) string {
+func fastTaskHistoryError(err error) string {
 	if err == nil {
 		return ""
 	}
-	return err.Error()
+	if errors.Is(err, context.Canceled) {
+		return "task canceled"
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "task timed out"
+	}
+	if errors.Is(err, model.ErrSiteRunConfigChanged) {
+		return "site configuration changed"
+	}
+	for _, safe := range []error{
+		service.ErrUpstreamAddressForbidden,
+		service.ErrUpstreamUnavailable,
+		service.ErrUpstreamAuthExpired,
+		service.ErrUpstreamPermissionDenied,
+		service.ErrUpstreamRateLimited,
+		service.ErrUpstreamRemote,
+		service.ErrUpstreamResponseInvalid,
+		service.ErrUpstreamEnvelopeInvalid,
+		service.ErrUpstreamResponseTooLarge,
+		service.ErrUpstreamExportDisabled,
+		service.ErrUpstreamCredentialOriginMismatch,
+		service.ErrUpstreamTokenRotationResultUnknown,
+		service.ErrUpstreamDataMismatch,
+	} {
+		if errors.Is(err, safe) {
+			return safe.Error()
+		}
+	}
+	return "task failed"
 }
 
 func fastTaskConcurrency(taskType string, settings model.CollectorSettings) int {

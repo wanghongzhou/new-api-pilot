@@ -24,7 +24,7 @@ $innerCommand = @(
 $fixtureF01Path = 'testdata/design/f01-auth.json'
 $fixtureF01SHA256 = 'd232dc1a6b83ba80f49995dadbd8afe11d7b73120f7474a2abcece7e1b46e1da'
 $fixtureF02Path = 'testdata/design/f02-upstream/manifest.json'
-$fixtureF02SHA256 = 'f1a12b434ab24c01bf53d12bc65ccd86c90cd3e8f620c94f865e67f14b210f2f'
+$fixtureF02SHA256 = '044c7037cd875740a5a07fe131bab7b74389b61b4c48982bec5c23266459b1c6'
 $fixtureManifestPath = 'testdata/design/manifest.sha256'
 $secretScanTargets = @(
     'a45-test.jsonl',
@@ -337,6 +337,8 @@ try {
         '--mount', "type=volume,source=$moduleVolumeName,target=/go/pkg/mod",
         '--mount', "type=volume,source=$buildVolumeName,target=/go-build",
         '--env', 'GOCACHE=/go-build', '--env', 'GOTELEMETRY=off',
+        '--env', 'GOPROXY=https://goproxy.cn,https://mirrors.aliyun.com/goproxy/,direct',
+        '--env', 'GOSUMDB=sum.golang.google.cn',
         $goImage, 'go', 'mod', 'download'
     ) -TimeoutSeconds 60)
     $containersCreated = $true

@@ -1,9 +1,11 @@
 package controller
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -88,6 +90,48 @@ func TestEnumArrayQueriesRejectMalformedValues(t *testing.T) {
 		}
 		if len(fields) == 0 {
 			t.Fatalf("malformed enum query accepted: %s", target)
+		}
+	}
+}
+
+func TestParsePageQueryRejectsOffsetOverflow(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	page := int(^uint(0)>>1)/100 + 2
+	context.Request = httptest.NewRequest(http.MethodGet, "/?p="+strconv.Itoa(page)+"&page_size=100", nil)
+	parsedPage, pageSize := 1, 20
+	fields := map[string]string{}
+	parsePageQuery(context, &parsedPage, &pageSize, fields)
+	if fields["p"] != "is too large" {
+		t.Fatalf("overflow pagination fields = %#v", fields)
+	}
+}
+
+func TestParseFastTaskListQueryEnforcesDocumentedContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Request = httptest.NewRequest(http.MethodGet, "/api/fast-tasks?site_id=42&task_type=site_probe&status=failed&offset=10&limit=25", nil)
+	query, fields := parseFastTaskListQuery(context)
+	if fields != nil || query.SiteID != 42 || query.TaskType != "site_probe" || query.Status != "failed" || query.Offset != 10 || query.Limit != 25 {
+		t.Fatalf("parsed fast task query = %#v fields=%#v", query, fields)
+	}
+
+	for _, target := range []string{
+		"/api/fast-tasks?task_type=site_probe",
+		"/api/fast-tasks?site_id=+42&task_type=site_probe",
+		"/api/fast-tasks?site_id=42&task_type=unknown",
+		"/api/fast-tasks?site_id=42&task_type=site_probe&status=running",
+		"/api/fast-tasks?site_id=42&task_type=site_probe&offset=not-a-number",
+		"/api/fast-tasks?site_id=42&task_type=site_probe&offset=-1",
+		"/api/fast-tasks?site_id=42&task_type=site_probe&limit=0",
+		"/api/fast-tasks?site_id=42&task_type=site_probe&limit=101",
+		"/api/fast-tasks?site_id=42&site_id=43&task_type=site_probe",
+		"/api/fast-tasks?site_id=42&task_type=site_probe&unknown=value",
+	} {
+		context, _ = gin.CreateTestContext(httptest.NewRecorder())
+		context.Request = httptest.NewRequest(http.MethodGet, target, nil)
+		if _, fields = parseFastTaskListQuery(context); len(fields) == 0 {
+			t.Fatalf("invalid fast task query accepted: %s", target)
 		}
 	}
 }

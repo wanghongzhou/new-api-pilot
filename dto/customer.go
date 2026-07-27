@@ -152,6 +152,9 @@ func validateListQuery(page, pageSize int, keyword, sortOrder string) map[string
 	if pageSize < 1 || pageSize > 100 {
 		errors["page_size"] = "must be between 1 and 100"
 	}
+	if page >= 1 && pageSize >= 1 && pageSize <= 100 && !statisticsPaginationValid(page, pageSize) {
+		errors["p"] = "is too large"
+	}
 	if !validSiteString(keyword, 0, 128) {
 		errors["keyword"] = "must not exceed 128 Unicode characters"
 	}

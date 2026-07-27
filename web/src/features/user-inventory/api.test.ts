@@ -11,11 +11,21 @@ import {
   listSiteUserInventory,
   listUserInventory,
 } from './api'
+import type { UserInventoryBreakdown } from './types'
+
+type UserInventoryAggregateSiteIDIsEmpty =
+  UserInventoryBreakdown['site_id'] extends '' ? true : false
+
+const userInventoryAggregateSiteIDIsEmpty: UserInventoryAggregateSiteIDIsEmpty = true
 
 const originalAdapter = api.defaults.adapter
 
 afterEach(() => {
   api.defaults.adapter = originalAdapter
+})
+
+test('keeps non-site breakdown rows distinct from site breakdown rows', () => {
+  expect(userInventoryAggregateSiteIDIsEmpty).toBe(true)
 })
 
 function response(config: Parameters<AxiosAdapter>[0]) {

@@ -42,6 +42,24 @@ func TestRequestIDPreservesValidAndReplacesInvalidValues(t *testing.T) {
 	}
 }
 
+func TestRequestIDFallsBackWhenEntropyIsUnavailable(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	previous := requestIDEntropy
+	requestIDEntropy = func([]byte) (int, error) { return 0, errors.New("entropy unavailable") }
+	t.Cleanup(func() { requestIDEntropy = previous })
+
+	engine := gin.New()
+	engine.Use(RequestID())
+	engine.GET("/", func(c *gin.Context) { common.WriteSuccess(c, http.StatusOK, nil) })
+	response := httptest.NewRecorder()
+	engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	requestID := response.Header().Get(RequestIDHeader)
+	if response.Code != http.StatusOK || !requestIDPattern.MatchString(requestID) || !strings.HasPrefix(requestID, "req_fallback_") {
+		t.Fatalf("fallback response status=%d request_id=%q body=%s", response.Code, requestID, response.Body.String())
+	}
+}
+
 func TestProductionOriginGuard(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()

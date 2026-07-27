@@ -47,7 +47,11 @@ export function FacetedFilter({
     <Popover onOpenChange={setOpen} open={open}>
       <PopoverTrigger
         render={
-          <Button variant='outline' size='sm' className='h-8 border-dashed' />
+          <Button
+            variant='outline'
+            size='sm'
+            className='h-10 border-dashed sm:h-8'
+          />
         }
       >
         <HugeiconsIcon icon={Add01Icon} size={14} strokeWidth={2} />
@@ -67,7 +71,7 @@ export function FacetedFilter({
       >
         <Input
           aria-label={title}
-          className='border-input/30 bg-input/30 h-8 shadow-none'
+          className='border-input/30 bg-input/30 h-10 shadow-none sm:h-8'
           onChange={(event) => setQuery(event.target.value)}
           placeholder={title}
           value={query}
@@ -77,7 +81,7 @@ export function FacetedFilter({
             const active = option.value === value
             return (
               <button
-                className='data-[active=true]:bg-muted flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-hidden'
+                className='data-[active=true]:bg-muted flex min-h-10 w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-hidden sm:min-h-8'
                 data-active={active}
                 key={option.value}
                 onClick={() => {
@@ -115,7 +119,7 @@ export function FacetedFilter({
             <>
               <Separator className='my-1' />
               <button
-                className='hover:bg-muted w-full rounded-sm px-2 py-1.5 text-center text-sm'
+                className='hover:bg-muted min-h-10 w-full rounded-sm px-2 py-1.5 text-center text-sm sm:min-h-8'
                 onClick={() => {
                   onChange('')
                   setOpen(false)

@@ -14,15 +14,16 @@ describe('authentication page boundaries', () => {
     expect(safeRedirect(undefined)).toBe('/dashboard')
   })
 
-  test('uses one standalone main landmark without forcing nested viewport height', async () => {
+  test('uses one main landmark without forcing nested viewport height', async () => {
     const [layout, signIn, changePassword] = await Promise.all([
       readFile(new URL('./auth-layout.tsx', import.meta.url), 'utf8'),
       readFile(new URL('./sign-in-page.tsx', import.meta.url), 'utf8'),
       readFile(new URL('./change-password-page.tsx', import.meta.url), 'utf8'),
     ])
 
-    expect(layout).toContain("const Root = standalone ? 'main' : 'div'")
-    expect(layout).toContain("id: 'main-content'")
+    expect(layout).toContain('<main')
+    expect(layout).toContain("id='main-content'")
+    expect(layout).not.toContain("const Root = standalone ? 'main' : 'div'")
     expect(layout).toContain("'relative grid min-h-full max-w-none'")
     expect(signIn).toContain('<AuthLayout standalone>')
     expect(changePassword).toContain('<AuthLayout>')

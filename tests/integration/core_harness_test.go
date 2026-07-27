@@ -89,6 +89,16 @@ func coreAcceptanceName(prefix string) string {
 	return fmt.Sprintf("%s-%d", prefix, coreAcceptanceSequence.Add(1))
 }
 
+func seedCoreAcceptanceSettings(t *testing.T, database *gorm.DB, now int64, settings ...model.PlatformSetting) {
+	t.Helper()
+	for index := range settings {
+		settings[index].UpdatedAt = now
+		if err := database.Create(&settings[index]).Error; err != nil {
+			t.Fatalf("seed core acceptance setting %s: %v", settings[index].Key, err)
+		}
+	}
+}
+
 func newCoreCipher(t *testing.T) *common.Cipher {
 	t.Helper()
 	cipher, err := common.NewCipher([]byte("core-acceptance-0123456789abcdef"))

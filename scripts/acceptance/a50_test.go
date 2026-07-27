@@ -54,7 +54,7 @@ func TestA50RunnerUsesIndependentPortExactMatrixAndFinalInventory(t *testing.T) 
 		"a50-cleanup.json", "a50-secret-scan.json", "a50-artifacts.json",
 		"$htmlSecretAllowlist.Count -ne 14", "[regex]::Matches($payload, $pattern)",
 		"[System.StringComparer]::Ordinal", "$rawDSNPattern", "$urlCredentialPattern",
-		"if ($files.Count -ne 15)", "38b71931dbce622dc82dbf9323836aa8ffcaf5aa475b8c87319864c3f750a40c",
+		"if ($files.Count -ne 15)", "376333476f5094ddbbdf87a763c699da6741d6c1a65fedfb745082bfb17fc63c",
 		"bcceaaf7d6b171014258b9d935fbb1e7cab4585b49403d760a6db373e5aabe94",
 	} {
 		if !strings.Contains(text, required) {

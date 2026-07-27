@@ -441,8 +441,8 @@ function UserCard(props: UserActionsProps) {
         </div>
         <UserStatusBadge user={user} />
       </div>
-      <dl className='mt-4 grid grid-cols-2 gap-3 text-sm'>
-        <div>
+      <div className='mt-4 grid grid-cols-2 gap-3 text-sm'>
+        <dl>
           <dt className='text-muted-foreground'>{t('Role')}</dt>
           <dd>
             {t(
@@ -452,22 +452,22 @@ function UserCard(props: UserActionsProps) {
               )
             )}
           </dd>
-        </div>
-        <div>
+        </dl>
+        <dl>
           <dt className='text-muted-foreground'>{t('Password change')}</dt>
           <dd>
             {user.must_change_password ? t('Required') : t('Not required')}
           </dd>
-        </div>
-        <div className='col-span-2'>
+        </dl>
+        <dl className='col-span-2'>
           <dt className='text-muted-foreground'>{t('Last signed in')}</dt>
           <dd>{lastLogin ?? t('Never')}</dd>
-        </div>
-        <div className='col-span-2'>
+        </dl>
+        <dl className='col-span-2'>
           <dt className='text-muted-foreground'>{t('Created at')}</dt>
           <dd>{createdAt}</dd>
-        </div>
-      </dl>
+        </dl>
+      </div>
       {props.isAdmin && (
         <div className='mt-3 border-t pt-2'>
           <UserActions {...props} />

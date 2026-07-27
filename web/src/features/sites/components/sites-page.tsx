@@ -32,7 +32,11 @@ import { useAuthStore } from '@/stores/auth-store'
 import { listSites, refreshSites } from '../api'
 import { siteListParams } from '../list-contract'
 import { siteKeys } from '../query-keys'
-import { formatLatencySeconds } from '../site-card-metrics'
+import {
+  formatInstanceAvailability,
+  formatLatencySeconds,
+  formatPercentValue,
+} from '../site-card-metrics'
 import type { SiteListItem, SiteSearch } from '../types'
 import { SiteActions, type SiteAction } from './site-actions'
 import { SiteCard } from './site-card'
@@ -46,13 +50,15 @@ interface SitesPageProps {
   search: SiteSearch
 }
 
-function resourceSummary(site: SiteListItem): string {
+function resourceSummary(site: SiteListItem, unavailableLabel: string): string {
   const values = [
     site.resource.cpu_max_percent,
     site.resource.memory_max_percent,
     site.resource.disk_max_used_percent,
   ]
-  return values.map((value) => `${(value ?? 0).toFixed(1)}%`).join(' / ')
+  return values
+    .map((value) => formatPercentValue(value, unavailableLabel))
+    .join(' / ')
 }
 
 function CardGridState({
@@ -218,8 +224,11 @@ export function SitesPage({
       {
         cell: ({ row }) => (
           <span>
-            {row.original.resource.online_instance_count ?? 0}/
-            {row.original.resource.instance_count ?? 0}
+            {formatInstanceAvailability(
+              row.original.resource.online_instance_count,
+              row.original.resource.instance_count,
+              t('data.unavailableValue')
+            )}
           </span>
         ),
         header: t('site.instances'),
@@ -228,7 +237,7 @@ export function SitesPage({
       {
         cell: ({ row }) => (
           <span className='whitespace-nowrap' title={t('site.resourceOrder')}>
-            {resourceSummary(row.original)}
+            {resourceSummary(row.original, t('data.unavailableValue'))}
           </span>
         ),
         header: t('site.resources'),

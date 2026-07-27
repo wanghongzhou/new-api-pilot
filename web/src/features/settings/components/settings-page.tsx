@@ -619,6 +619,7 @@ export function SettingsPage({
       <>
         <Button
           aria-label={t('settings.reset')}
+          className='size-10 sm:size-8'
           disabled={!form.formState.isDirty || updateMutation.isPending}
           onClick={() => {
             form.reset(initialValues)

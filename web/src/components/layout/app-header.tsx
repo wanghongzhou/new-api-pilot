@@ -53,7 +53,7 @@ export function AppHeader({
           <DropdownMenuTrigger
             aria-label={user.display_name}
             className={buttonVariants({
-              className: 'relative size-6 p-0',
+              className: 'relative size-10 p-0 sm:size-6',
               variant: 'ghost',
             })}
             title={user.display_name}

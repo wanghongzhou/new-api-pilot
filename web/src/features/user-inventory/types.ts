@@ -61,7 +61,7 @@ export interface UserInventoryTrendPoint extends UserInventoryMetric {
 export interface UserInventoryBreakdown extends UserInventoryMetric {
   dimension_id: string
   dimension_name: string
-  site_id: string
+  site_id: ''
 }
 
 export interface UserInventorySiteBreakdown extends UserInventoryMetric {

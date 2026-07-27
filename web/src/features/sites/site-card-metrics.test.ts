@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 
-import { formatLatencySeconds, siteResourceColor } from './site-card-metrics'
+import {
+  formatInstanceAvailability,
+  formatLatencySeconds,
+  formatPercentValue,
+  siteResourceColor,
+} from './site-card-metrics'
 
 describe('site latency formatting', () => {
   test.each([
@@ -33,5 +38,19 @@ describe('site card resource gradient', () => {
   test('clamps out-of-range percentages to the endpoints', () => {
     expect(siteResourceColor(-1)).toContain(' 145)')
     expect(siteResourceColor(101)).toContain(' 25)')
+  })
+})
+
+describe('nullable site resource presentation', () => {
+  test('keeps unavailable percentages distinct from a measured zero', () => {
+    expect(formatPercentValue(null, '-')).toBe('-')
+    expect(formatPercentValue(Number.NaN, '-')).toBe('-')
+    expect(formatPercentValue(0, '-')).toBe('0.0%')
+  })
+
+  test('does not fabricate a partial instance ratio', () => {
+    expect(formatInstanceAvailability(null, null, '-')).toBe('-')
+    expect(formatInstanceAvailability(0, null, '-')).toBe('-')
+    expect(formatInstanceAvailability(0, 0, '-')).toBe('0/0')
   })
 })

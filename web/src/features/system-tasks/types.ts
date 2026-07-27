@@ -36,7 +36,7 @@ export type SystemTaskErrorCode =
 export interface SystemTaskProgress {
   total: MetricString | null
   processed: MetricString | null
-  progress: MetricString | null
+  progress: number | null
   remaining: MetricString | null
 }
 
@@ -118,7 +118,7 @@ export interface SystemTaskMetric {
 export interface SystemTaskBreakdown extends SystemTaskMetric {
   dimension_id: string
   dimension_name: string
-  site_id: string
+  site_id: IdString | ''
   site_name: string
   data_status: DataStatus
   as_of: Timestamp | null

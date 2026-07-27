@@ -2,6 +2,19 @@ package main
 
 import "testing"
 
+func TestAcceptanceIDPatternCoversManifestRange(t *testing.T) {
+	for _, value := range []string{"A01", "A99", "A100", "A101", "A102"} {
+		if !acceptanceIDPattern.MatchString(value) {
+			t.Fatalf("acceptanceIDPattern rejected %s", value)
+		}
+	}
+	for _, value := range []string{"A00", "A1", "A103", "A999"} {
+		if acceptanceIDPattern.MatchString(value) {
+			t.Fatalf("acceptanceIDPattern accepted %s", value)
+		}
+	}
+}
+
 func TestClassifyGenericEvidence(t *testing.T) {
 	tests := []struct {
 		root  string

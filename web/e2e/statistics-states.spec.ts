@@ -642,7 +642,9 @@ async function expectState(page: Page, state: A50State) {
   await page.getByRole('button', { name: '表格视图' }).click()
   if (state === 'missing' || state === 'unavailable') {
     await expect(
-      page.getByText(stateCopy[state].emptyTitle ?? '', { exact: true })
+      page
+        .getByText(stateCopy[state].emptyTitle ?? '', { exact: true })
+        .filter({ visible: true })
     ).toBeVisible()
     await expect(page.getByText('范围内无流量', { exact: true })).toHaveCount(0)
   } else {

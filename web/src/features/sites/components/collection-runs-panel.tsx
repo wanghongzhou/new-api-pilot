@@ -142,36 +142,36 @@ function RunCard({
         </div>
         <RunStatusBadge status={run.status} />
       </div>
-      <dl className='mt-3 grid grid-cols-2 gap-3 text-sm'>
-        <div>
+      <div className='mt-3 grid grid-cols-2 gap-3 text-sm'>
+        <dl>
           <dt className='text-muted-foreground'>{t('collection.trigger')}</dt>
           <dd>
             {t(
               dynamicI18nKey('site', `collection.trigger.${run.trigger_type}`)
             )}
           </dd>
-        </div>
-        <div>
+        </dl>
+        <dl>
           <dt className='text-muted-foreground'>{t('collection.progress')}</dt>
           <dd>{Math.round(run.progress * 100)}%</dd>
-        </div>
-        <div>
+        </dl>
+        <dl>
           <dt className='text-muted-foreground'>
             {t('collection.fetchedRows')}
           </dt>
           <dd>
             <MetricValue value={run.fetched_rows} />
           </dd>
-        </div>
-        <div>
+        </dl>
+        <dl>
           <dt className='text-muted-foreground'>
             {t('collection.writtenRows')}
           </dt>
           <dd>
             <MetricValue value={run.written_rows} />
           </dd>
-        </div>
-      </dl>
+        </dl>
+      </div>
       <Button className='mt-3 w-full' onClick={onOpen} variant='outline'>
         <HugeiconsIcon icon={ViewIcon} strokeWidth={2} />
         {t('collection.viewWindows')}
@@ -190,20 +190,20 @@ function WindowCard({ window }: { window: CollectionRunWindowItem }) {
         </h3>
         <WindowStatusBadge status={window.status} />
       </div>
-      <dl className='mt-3 grid grid-cols-2 gap-3 text-sm'>
-        <div>
+      <div className='mt-3 grid grid-cols-2 gap-3 text-sm'>
+        <dl>
           <dt className='text-muted-foreground'>
             {t('collection.factStatus')}
           </dt>
           <dd>
             <DataStatusBadge status={window.fact_status} />
           </dd>
-        </div>
-        <div>
+        </dl>
+        <dl>
           <dt className='text-muted-foreground'>{t('collection.attempts')}</dt>
           <dd>{window.attempt_count}</dd>
-        </div>
-      </dl>
+        </dl>
+      </div>
       {window.error && (
         <p className='text-destructive mt-3 text-sm'>
           {translateMessageRef(window.error)}
@@ -583,6 +583,7 @@ export function CollectionRunsPanel({
         cell: ({ row }) => (
           <Button
             aria-label={t('collection.viewWindows')}
+            className='size-10 sm:size-8'
             onClick={() =>
               onSearchChange({ runId: row.original.id, windowPage: 1 })
             }

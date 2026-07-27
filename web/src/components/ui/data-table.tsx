@@ -326,11 +326,13 @@ export function DataTable<TData>({
       </div>
       {renderMobileCard && (
         <div
+          aria-label={ariaLabel}
           aria-busy={loading || fetching}
           className={cn(
             'grid min-h-0 flex-1 gap-3 overflow-y-auto pb-16 transition-opacity duration-150 min-[641px]:hidden',
             fetching && !loading && 'pointer-events-none opacity-60'
           )}
+          role='region'
           tabIndex={0}
         >
           {loading && data.length === 0 ? (

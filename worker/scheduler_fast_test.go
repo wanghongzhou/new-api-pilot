@@ -2,14 +2,29 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"new-api-pilot/constant"
 	"new-api-pilot/model"
+	"new-api-pilot/service"
 	testsupport "new-api-pilot/tests/support"
 )
+
+func TestFastTaskHistoryErrorDoesNotExposeTechnicalDetails(t *testing.T) {
+	secret := "mysql dsn password=never-expose"
+	if value := fastTaskHistoryError(errors.New(secret)); value != "task failed" {
+		t.Fatalf("technical fast task error = %q", value)
+	}
+	if value := fastTaskHistoryError(service.ErrUpstreamRateLimited); value != service.ErrUpstreamRateLimited.Error() {
+		t.Fatalf("classified fast task error = %q", value)
+	}
+	if value := fastTaskHistoryError(context.DeadlineExceeded); value != "task timed out" {
+		t.Fatalf("timeout fast task error = %q", value)
+	}
+}
 
 func TestSchedulerDefaultTickIsOneMinute(t *testing.T) {
 	scheduler, err := NewScheduler(SchedulerOptions{

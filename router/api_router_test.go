@@ -163,10 +163,43 @@ func TestNewRegistersStableFeatureRoutesWithAuthenticationAndRoles(t *testing.T)
 	}
 }
 
+func TestFastTaskRouteEnforcesForcedPasswordChange(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine, err := New(Options{
+		Config:             config.Config{AppEnv: config.EnvironmentTest},
+		FastTaskController: controller.NewFastTaskController(&common.RedisStore{}),
+		IdentityResolver:   forcedPasswordChangeResolver{},
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	response := performAuthenticatedRequest(
+		engine,
+		http.MethodGet,
+		"/api/fast-tasks?site_id=1&task_type=site_probe",
+		"1",
+	)
+	var envelope common.APIResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode fast task envelope: %v", err)
+	}
+	if response.Code != http.StatusForbidden || envelope.Code != constant.CodePasswordChangeRequired {
+		t.Fatalf("forced password fast task response = %d %#v", response.Code, envelope)
+	}
+}
+
 type fixedRouterIdentityResolver struct{}
 
 func (fixedRouterIdentityResolver) ResolveIdentity(*gin.Context) (middleware.Identity, error) {
 	return middleware.Identity{}, middleware.ErrIdentityMissing
+}
+
+type forcedPasswordChangeResolver struct{}
+
+func (forcedPasswordChangeResolver) ResolveIdentity(*gin.Context) (middleware.Identity, error) {
+	return middleware.Identity{
+		ID: "1", Role: constant.RoleViewer, Status: constant.UserStatusEnabled, MustChangePassword: true,
+	}, nil
 }
 
 func performRequest(handler http.Handler, method, target, remoteAddress string) *httptest.ResponseRecorder {

@@ -167,7 +167,7 @@ function Filters({
         />
         <Input
           aria-label={t('pricingGroups.filters.keyword')}
-          className='h-8 pl-8'
+          className='h-10 pl-8 sm:h-8'
           onChange={(event) =>
             onChange({ keyword: event.target.value, page: 1 })
           }
@@ -182,7 +182,7 @@ function Filters({
       {search.tab === 'pricing' && (
         <Input
           aria-label={t('pricingGroups.filters.group')}
-          className='h-8 w-36'
+          className='h-10 w-36 sm:h-8'
           onChange={(event) => onChange({ group: event.target.value, page: 1 })}
           placeholder={t('pricingGroups.filters.group')}
           value={search.group}
@@ -530,28 +530,28 @@ export function PricingGroupsPage({
       },
       {
         cell: ({ row }) => (
-          <dl className='grid min-w-44 gap-1 text-xs'>
-            <div>
+          <div className='grid min-w-44 gap-1 text-xs'>
+            <dl>
               <dt className='inline'>{t('pricingGroups.ratio.model')}：</dt>
               <dd className='inline'>{row.original.model_ratio}</dd>
-            </div>
-            <div>
+            </dl>
+            <dl>
               <dt className='inline'>{t('pricingGroups.ratio.price')}：</dt>
               <dd className='inline'>{row.original.model_price}</dd>
-            </div>
-            <div>
+            </dl>
+            <dl>
               <dt className='inline'>
                 {t('pricingGroups.ratio.completion')}：
               </dt>
               <dd className='inline'>{row.original.completion_ratio}</dd>
-            </div>
-            <div>
+            </dl>
+            <dl>
               <dt className='inline'>{t('pricingGroups.ratio.cache')}：</dt>
               <dd className='inline'>
                 {formatNumericDisplayValue(row.original.cache_ratio)}
               </dd>
-            </div>
-          </dl>
+            </dl>
+          </div>
         ),
         header: t('pricingGroups.pricing.ratios'),
         id: 'ratios',
