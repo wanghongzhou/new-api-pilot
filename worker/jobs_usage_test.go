@@ -656,6 +656,45 @@ func createUsageWorkerClaim(
 	return claim
 }
 
+func TestExecutorReleasesClaimAfterParentCancellation(t *testing.T) {
+	database := openWorkerTestDatabase(t)
+	now := time.Unix(1_752_400_800, 0)
+	hour := now.Unix() - 3600
+	repository := model.NewCollectionTaskRepository(database.GORM)
+	fixture := createUsageWorkerSite(t, database, hour, now.Unix(), "finalization-cancel")
+	claim := createUsageWorkerClaim(
+		t, database, repository, fixture.site, constant.TaskTypeUsageHour, hour, now.Unix(), "finalization-cancel",
+	)
+	executor, err := NewExecutor(ExecutorOptions{
+		Repository: repository,
+		Settings:   model.NewCollectorSettingRepository(database.GORM),
+		Clock:      testsupport.NewFakeClock(now),
+		Handlers: map[string]JobHandler{
+			constant.TaskTypeUsageHour: JobHandlerFunc(func(context.Context, JobExecution) (JobOutcome, error) {
+				t.Fatal("canceled claim handler was called")
+				return JobOutcome{}, nil
+			}),
+		},
+	})
+	if err != nil {
+		t.Fatalf("create canceled executor: %v", err)
+	}
+	parent, cancelParent := context.WithCancel(context.Background())
+	cancelParent()
+	executor.executeClaim(parent, claim)
+
+	var releasedRun model.CollectionRun
+	if err := database.GORM.First(&releasedRun, claim.Run.ID).Error; err != nil ||
+		releasedRun.Status != model.CollectionTaskStatusPending || releasedRun.HeartbeatAt != nil {
+		t.Fatalf("released run = %#v, %v", releasedRun, err)
+	}
+	var releasedWindow model.CollectionRunWindow
+	if err := database.GORM.First(&releasedWindow, claim.Windows[0].ID).Error; err != nil ||
+		releasedWindow.Status != model.CollectionTaskStatusPending || releasedWindow.NextRetryAt == nil {
+		t.Fatalf("released window = %#v, %v", releasedWindow, err)
+	}
+}
+
 func executeUsageWorkerClaim(
 	t *testing.T,
 	database *model.Database,

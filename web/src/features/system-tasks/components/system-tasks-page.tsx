@@ -1,4 +1,10 @@
-import { ArrowLeft01Icon, FileExportIcon } from '@hugeicons/core-free-icons'
+import {
+  Alert02Icon,
+  ArrowLeft01Icon,
+  Chart01Icon,
+  Database01Icon,
+  FileExportIcon,
+} from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
@@ -8,7 +14,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { DataStatusBadge } from '@/components/data/data-status'
-import { FilterPanel } from '@/components/data/filter-panel'
+import { FacetedFilter } from '@/components/data/faceted-filter'
 import { MetricValue } from '@/components/data/metric-value'
 import { ErrorState } from '@/components/error-state'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
@@ -17,6 +23,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
 import { Input } from '@/components/ui/input'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { listSites } from '@/features/sites/api'
+import { siteKeys } from '@/features/sites/query-keys'
+import type { SiteListItem } from '@/features/sites/types'
 import { createStatisticsExport } from '@/features/statistics/api'
 import { ExportTaskSheet } from '@/features/statistics/components/export-task-sheet'
 import type {
@@ -38,7 +48,11 @@ import {
 } from '../api'
 import { buildSystemTaskExportRequest } from '../export-request'
 import { systemTaskKeys } from '../query-keys'
-import { buildSystemTaskSearch, type SystemTaskSearch } from '../search'
+import {
+  buildSystemTaskSearch,
+  changeSystemTaskTab,
+  type SystemTaskSearch,
+} from '../search'
 import {
   systemTaskStatuses,
   systemTaskTypes,
@@ -81,6 +95,9 @@ function parseDateTime(value: string) {
 
 function taskTypeText(t: (key: string) => string, type: SystemTaskType) {
   if (type === 'log_cleanup') return t('systemTasks.type.log_cleanup')
+  if (type === 'log_detail_cleanup') {
+    return t('systemTasks.type.log_detail_cleanup')
+  }
   if (type === 'channel_test') return t('systemTasks.type.channel_test')
   if (type === 'model_update') return t('systemTasks.type.model_update')
   if (type === 'midjourney_poll') return t('systemTasks.type.midjourney_poll')
@@ -127,23 +144,51 @@ function errorFilterText(
 function MetricGrid({ metric }: { metric: SystemTaskMetric }) {
   const { t } = useTranslation()
   const values = [
-    [t('systemTasks.metric.total'), metric.total],
-    [t('systemTasks.metric.active'), metric.active],
-    [t('systemTasks.metric.succeeded'), metric.succeeded],
-    [t('systemTasks.metric.failed'), metric.failed],
-    [t('systemTasks.metric.errorPresent'), metric.error_present],
+    {
+      icon: Database01Icon,
+      label: t('systemTasks.metric.total'),
+      value: metric.total,
+    },
+    {
+      icon: Chart01Icon,
+      label: t('systemTasks.metric.active'),
+      value: metric.active,
+    },
+    {
+      icon: Chart01Icon,
+      label: t('systemTasks.metric.succeeded'),
+      value: metric.succeeded,
+    },
+    {
+      icon: Alert02Icon,
+      label: t('systemTasks.metric.failed'),
+      value: metric.failed,
+    },
+    {
+      icon: Alert02Icon,
+      label: t('systemTasks.metric.errorPresent'),
+      value: metric.error_present,
+    },
   ] as const
   return (
-    <dl className='border-border grid overflow-hidden rounded-lg border sm:grid-cols-5'>
-      {values.map(([label, value]) => (
-        <div className='border-border p-3 sm:border-r' key={label}>
-          <dt className='text-muted-foreground text-xs'>{label}</dt>
-          <dd className='mt-1 text-lg font-semibold'>
-            <MetricValue value={value} />
-          </dd>
+    <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-5'>
+      {values.map(({ icon, label, value }) => (
+        <div
+          className='bg-card text-card-foreground ring-foreground/10 flex items-center gap-3 rounded-xl p-4 ring-1'
+          key={label}
+        >
+          <span className='bg-muted text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-lg'>
+            <HugeiconsIcon icon={icon} size={18} strokeWidth={2} />
+          </span>
+          <dl className='min-w-0'>
+            <dt className='text-muted-foreground truncate text-xs'>{label}</dt>
+            <dd className='mt-0.5 text-2xl font-semibold tracking-tight'>
+              <MetricValue value={value} />
+            </dd>
+          </dl>
         </div>
       ))}
-    </dl>
+    </div>
   )
 }
 
@@ -154,31 +199,120 @@ function Breakdown({
   items: SystemTaskBreakdown[]
   title: string
 }) {
+  const { t } = useTranslation()
   return (
     <section className='grid content-start gap-2'>
       <h2 className='font-semibold'>{title}</h2>
-      {items.map((item) => (
-        <article
-          className='border-border grid gap-2 rounded-lg border p-3'
-          key={`${item.dimension_id}:${item.site_id}`}
-        >
-          <div className='flex items-start justify-between gap-2'>
-            <div>
-              <p className='font-medium'>
-                {item.dimension_name || item.site_name}
-              </p>
-              <code className='text-muted-foreground text-xs'>
-                {item.dimension_id || item.site_id}
-              </code>
-            </div>
-            <DataStatusBadge status={item.data_status} />
-          </div>
-          <MetricGrid metric={item} />
-          <span className='text-muted-foreground text-xs'>
-            {timestamp(item.as_of)}
+      {items.length === 0 ? (
+        <p className='text-muted-foreground text-sm'>{t('common.none')}</p>
+      ) : (
+        <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-3'>
+          {items.map((item) => (
+            <article
+              className='border-border grid gap-3 rounded-lg border p-3'
+              key={`${item.dimension_id}:${item.site_id}`}
+            >
+              <div className='flex items-start justify-between gap-2'>
+                <div className='min-w-0'>
+                  <p className='truncate font-medium'>
+                    {item.dimension_name || item.site_name}
+                  </p>
+                  <code className='text-muted-foreground text-xs'>
+                    {item.dimension_id || item.site_id}
+                  </code>
+                </div>
+                <DataStatusBadge status={item.data_status} />
+              </div>
+              <dl className='grid grid-cols-2 gap-x-4 gap-y-2 text-sm'>
+                {[
+                  { label: t('systemTasks.metric.total'), value: item.total },
+                  { label: t('systemTasks.metric.active'), value: item.active },
+                  {
+                    label: t('systemTasks.metric.succeeded'),
+                    value: item.succeeded,
+                  },
+                  { label: t('systemTasks.metric.failed'), value: item.failed },
+                  {
+                    label: t('systemTasks.metric.errorPresent'),
+                    value: item.error_present,
+                  },
+                ].map(({ label, value }) => (
+                  <div key={label}>
+                    <dt className='text-muted-foreground text-xs'>{label}</dt>
+                    <dd className='font-mono font-medium'>
+                      <MetricValue value={value} />
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <span className='text-muted-foreground text-xs'>
+                {timestamp(item.as_of)}
+              </span>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function TabPurpose({
+  dataErrorCode,
+  metadata,
+  notice,
+  status,
+  tab,
+}: {
+  dataErrorCode: SystemTaskStatistics['data_error_code'] | undefined
+  metadata?: string
+  notice?: string
+  status: SystemTaskStatistics['data_status'] | undefined
+  tab: SystemTaskSearch['tab']
+}) {
+  const { t } = useTranslation()
+  const keys = {
+    list: 'list',
+    sites: 'sites',
+    statuses: 'statuses',
+    types: 'types',
+  } as const
+  const key = keys[tab]
+  return (
+    <section className='border-border bg-muted/30 flex flex-wrap items-start justify-between gap-3 rounded-xl border p-4'>
+      <div className='min-w-0'>
+        <p className='font-medium'>
+          {t(dynamicI18nKey('systemTasks', `systemTasks.purpose.${key}Title`))}
+        </p>
+        <p className='text-muted-foreground text-sm'>
+          {t(
+            dynamicI18nKey(
+              'systemTasks',
+              `systemTasks.purpose.${key}Description`
+            )
+          )}
+        </p>
+        {metadata && (
+          <p className='text-muted-foreground mt-1 text-xs'>{metadata}</p>
+        )}
+        {notice && (
+          <p className='text-warning mt-1 text-xs' role='alert'>
+            {notice}
+          </p>
+        )}
+      </div>
+      <div className='flex items-center gap-2'>
+        <DataStatusBadge status={status ?? 'pending'} />
+        {dataErrorCode && (
+          <span className='text-destructive text-xs' role='alert'>
+            {t(
+              dynamicI18nKey(
+                'systemTasks',
+                `systemTasks.dataError.${dataErrorCode}`
+              )
+            )}
           </span>
-        </article>
-      ))}
+        )}
+      </div>
     </section>
   )
 }
@@ -187,141 +321,142 @@ function Filters({
   global,
   onChange,
   search,
+  sites,
 }: {
   global: boolean
   onChange: (changes: Partial<SystemTaskSearch>) => void
   search: SystemTaskSearch
+  sites: SiteListItem[]
 }) {
   const { t } = useTranslation()
-  const toggle = <T extends string>(
-    values: T[],
-    value: T,
-    key: 'statuses' | 'types'
-  ) =>
-    onChange({
-      [key]: values.includes(value)
-        ? values.filter((item) => item !== value)
-        : [...values, value],
-      page: 1,
-    })
-  const reset = buildSystemTaskSearch({ pageSize: search.pageSize })
+  const reset = buildSystemTaskSearch({
+    pageSize: search.pageSize,
+    tab: search.tab,
+  })
+  const hasActiveFilters = hasFilterChanges(search, reset, [
+    'createdEnd',
+    'createdStart',
+    'errorPresent',
+    'siteIds',
+    'statuses',
+    'types',
+  ])
+  let errorValue = ''
+  if (search.errorPresent === true) errorValue = 'yes'
+  if (search.errorPresent === false) errorValue = 'no'
   return (
-    <FilterPanel
-      description={t('systemTasks.filters.description')}
-      hasActiveFilters={hasFilterChanges(search, reset, [
-        'createdEnd',
-        'createdStart',
-        'errorPresent',
-        'siteIds',
-        'statuses',
-        'types',
-      ])}
-      onReset={() => onChange(reset)}
-      title={t('systemTasks.filters.title')}
+    <section
+      aria-label={t('systemTasks.filters.title')}
+      className='flex min-w-0 flex-wrap items-center gap-2'
     >
-      <div className='grid min-w-0 flex-1 gap-3 md:grid-cols-3'>
-        {global && (
-          <label className='grid gap-1 text-sm'>
-            <span>{t('systemTasks.filters.siteIds')}</span>
-            <Input
-              inputMode='numeric'
-              value={search.siteIds.join(',')}
-              onChange={(event) =>
-                onChange({
-                  page: 1,
-                  siteIds: event.target.value
-                    .split(',')
-                    .map((v) => v.trim())
-                    .filter(isIdString)
-                    .map(parseIdString),
-                })
-              }
-            />
-          </label>
-        )}
-        <label className='grid gap-1 text-sm'>
-          <span>{t('systemTasks.filters.createdStart')}</span>
-          <Input
-            type='datetime-local'
-            value={dateTimeValue(search.createdStart)}
-            onChange={(event) =>
-              onChange({
-                createdStart: parseDateTime(event.target.value),
-                page: 1,
-              })
-            }
-          />
-        </label>
-        <label className='grid gap-1 text-sm'>
-          <span>{t('systemTasks.filters.createdEnd')}</span>
-          <Input
-            type='datetime-local'
-            value={dateTimeValue(search.createdEnd)}
-            onChange={(event) =>
-              onChange({
-                createdEnd: parseDateTime(event.target.value),
-                page: 1,
-              })
-            }
-          />
-        </label>
-      </div>
-      <fieldset className='grid gap-2'>
-        <legend className='text-sm'>{t('systemTasks.filters.types')}</legend>
-        <div className='flex flex-wrap gap-2'>
-          {systemTaskTypes.map((type) => (
-            <Button
-              aria-pressed={search.types.includes(type)}
-              key={type}
-              onClick={() => toggle(search.types, type, 'types')}
-              size='sm'
-              type='button'
-              variant={search.types.includes(type) ? 'secondary' : 'outline'}
-            >
-              {taskTypeText(t, type)}
-            </Button>
-          ))}
-        </div>
-      </fieldset>
-      <fieldset className='grid gap-2'>
-        <legend className='text-sm'>{t('systemTasks.filters.statuses')}</legend>
-        <div className='flex flex-wrap gap-2'>
-          {systemTaskStatuses.map((status) => (
-            <Button
-              aria-pressed={search.statuses.includes(status)}
-              key={status}
-              onClick={() => toggle(search.statuses, status, 'statuses')}
-              size='sm'
-              type='button'
-              variant={
-                search.statuses.includes(status) ? 'secondary' : 'outline'
-              }
-            >
-              {taskStatusText(t, status)}
-            </Button>
-          ))}
-        </div>
-      </fieldset>
-      <fieldset className='grid gap-2'>
-        <legend className='text-sm'>
-          {t('systemTasks.filters.errorPresent')}
-        </legend>
-        <div className='flex flex-wrap gap-2'>
-          {([undefined, true, false] as const).map((value) => (
-            <Button
-              aria-pressed={search.errorPresent === value}
-              key={String(value)}
-              onClick={() => onChange({ errorPresent: value, page: 1 })}
-              size='sm'
-              type='button'
-              variant={search.errorPresent === value ? 'secondary' : 'outline'}
-            >
-              {errorFilterText(t, value)}
-            </Button>
-          ))}
-        </div>
-      </fieldset>
-    </FilterPanel>
+      {global && (
+        <FacetedFilter
+          clearLabel={t('systemTasks.filters.allSites')}
+          onChange={(value) =>
+            onChange({
+              page: 1,
+              siteIds: isIdString(value) ? [parseIdString(value)] : [],
+            })
+          }
+          options={sites.map((site) => ({ label: site.name, value: site.id }))}
+          title={t('systemTasks.filters.site')}
+          value={search.siteIds.length === 1 ? search.siteIds[0] : ''}
+        />
+      )}
+      <FacetedFilter
+        clearLabel={t('systemTasks.filters.allTypes')}
+        onChange={(value) =>
+          onChange({
+            page: 1,
+            types: systemTaskTypes.includes(value as SystemTaskType)
+              ? [value as SystemTaskType]
+              : [],
+          })
+        }
+        options={systemTaskTypes.map((type) => ({
+          label: taskTypeText(t, type),
+          value: type,
+        }))}
+        title={t('systemTasks.filters.types')}
+        value={search.types.length === 1 ? search.types[0] : ''}
+      />
+      <FacetedFilter
+        clearLabel={t('systemTasks.filters.allStatuses')}
+        onChange={(value) =>
+          onChange({
+            page: 1,
+            statuses: systemTaskStatuses.includes(value as SystemTaskStatus)
+              ? [value as SystemTaskStatus]
+              : [],
+          })
+        }
+        options={systemTaskStatuses.map((status) => ({
+          label: taskStatusText(t, status),
+          value: status,
+        }))}
+        title={t('systemTasks.filters.statuses')}
+        value={search.statuses.length === 1 ? search.statuses[0] : ''}
+      />
+      <FacetedFilter
+        clearLabel={t('systemTasks.filters.allErrors')}
+        onChange={(value) => {
+          let errorPresent: boolean | undefined
+          if (value === 'yes') errorPresent = true
+          if (value === 'no') errorPresent = false
+          onChange({
+            errorPresent,
+            page: 1,
+          })
+        }}
+        options={[
+          { label: errorFilterText(t, true), value: 'yes' },
+          { label: errorFilterText(t, false), value: 'no' },
+        ]}
+        title={t('systemTasks.filters.errorPresent')}
+        value={errorValue}
+      />
+      <label>
+        <span className='sr-only'>{t('systemTasks.filters.createdStart')}</span>
+        <Input
+          aria-label={t('systemTasks.filters.createdStart')}
+          className='h-10 w-48 sm:h-8'
+          type='datetime-local'
+          value={dateTimeValue(search.createdStart)}
+          onChange={(event) =>
+            onChange({
+              createdStart: parseDateTime(event.target.value),
+              page: 1,
+            })
+          }
+        />
+      </label>
+      <label>
+        <span className='sr-only'>{t('systemTasks.filters.createdEnd')}</span>
+        <Input
+          aria-label={t('systemTasks.filters.createdEnd')}
+          className='h-10 w-48 sm:h-8'
+          type='datetime-local'
+          value={dateTimeValue(search.createdEnd)}
+          onChange={(event) =>
+            onChange({
+              createdEnd: parseDateTime(event.target.value),
+              page: 1,
+            })
+          }
+        />
+      </label>
+      {hasActiveFilters && (
+        <Button
+          className='text-muted-foreground px-2'
+          onClick={() => onChange(reset)}
+          size='sm'
+          type='button'
+          variant='ghost'
+        >
+          {t('common.reset')}
+        </Button>
+      )}
+    </section>
   )
 }
 
@@ -361,6 +496,12 @@ function ResultView({ item }: { item: SystemTaskItem }) {
     entries.push([
       t('systemTasks.result.deletedCount'),
       item.result.deleted_count,
+    ])
+  }
+  if (item.type === 'log_detail_cleanup') {
+    entries.push([
+      t('systemTasks.result.archivedDays'),
+      item.result.archived_days,
     ])
   }
   if (item.type === 'channel_test') {
@@ -429,8 +570,24 @@ export function SystemTasksPage({
   const parsedSiteId =
     siteId && isIdString(siteId) ? parseIdString(siteId) : undefined
   const currentParams = useMemo(() => params(search), [search])
+  const overviewParams = useMemo(() => params(buildSystemTaskSearch({})), [])
+  const siteParams = useMemo(
+    () => ({
+      p: 1,
+      page_size: 100,
+      sort_by: 'name',
+      sort_order: 'asc' as const,
+    }),
+    []
+  )
+  const sitesQuery = useQuery({
+    enabled: siteId == null,
+    queryFn: () => listSites(siteParams),
+    queryKey: siteKeys.list(siteParams),
+    staleTime: 5 * 60_000,
+  })
   const listQuery = useQuery({
-    enabled: validSiteId,
+    enabled: validSiteId && search.tab === 'list',
     placeholderData: keepPreviousData,
     queryFn: () =>
       parsedSiteId
@@ -445,11 +602,11 @@ export function SystemTasksPage({
     placeholderData: keepPreviousData,
     queryFn: () =>
       parsedSiteId
-        ? getSiteSystemTaskStatistics(parsedSiteId, currentParams)
-        : getSystemTaskStatistics(currentParams),
+        ? getSiteSystemTaskStatistics(parsedSiteId, overviewParams)
+        : getSystemTaskStatistics(overviewParams),
     queryKey: parsedSiteId
-      ? systemTaskKeys.site(siteId ?? '', 'statistics', currentParams)
-      : systemTaskKeys.global('statistics', currentParams),
+      ? systemTaskKeys.site(siteId ?? '', 'statistics', overviewParams)
+      : systemTaskKeys.global('statistics', overviewParams),
   })
   const exportMutation = useMutation({
     mutationFn: (format: StatisticsExportFormat) =>
@@ -533,6 +690,48 @@ export function SystemTasksPage({
       : (search.page - 1) * search.pageSize + data.items.length
   }
   const stats = statisticsQuery.data
+  const unavailable = data?.data_status === 'unavailable'
+  const emptyTitleKey = unavailable
+    ? 'systemTasks.empty.unavailableTitle'
+    : 'systemTasks.empty'
+  const emptyDescriptionKey = unavailable
+    ? 'systemTasks.empty.unavailableDescription'
+    : 'systemTasks.emptyDescription'
+  let activeBreakdown = stats?.site_breakdown ?? []
+  let activeBreakdownTitle = t('systemTasks.breakdown.site')
+  if (search.tab === 'types') {
+    activeBreakdown = stats?.type_breakdown ?? []
+    activeBreakdownTitle = t('systemTasks.breakdown.type')
+  } else if (search.tab === 'statuses') {
+    activeBreakdown = stats?.status_breakdown ?? []
+    activeBreakdownTitle = t('systemTasks.breakdown.status')
+  }
+  const tabs = [
+    {
+      count: stats?.summary.total,
+      icon: Database01Icon,
+      label: t('systemTasks.tabs.list'),
+      value: 'list',
+    },
+    {
+      count: stats?.type_breakdown.length,
+      icon: Chart01Icon,
+      label: t('systemTasks.tabs.types'),
+      value: 'types',
+    },
+    {
+      count: stats?.status_breakdown.length,
+      icon: Alert02Icon,
+      label: t('systemTasks.tabs.statuses'),
+      value: 'statuses',
+    },
+    {
+      count: stats?.site_breakdown.length,
+      icon: Database01Icon,
+      label: t('systemTasks.tabs.sites'),
+      value: 'sites',
+    },
+  ] as const
   let truncation: SystemTaskPage | SystemTaskStatistics | undefined
   if (data?.truncated) truncation = data
   else if (!data && stats?.truncated) truncation = stats
@@ -552,27 +751,40 @@ export function SystemTasksPage({
       limit: truncation.source_limit,
     })
   }
+  let purposeMetadata: string | undefined
+  if (search.tab === 'list' && data) {
+    purposeMetadata = `${t('systemTasks.totalValue', {
+      total: data.total,
+    })} · ${t('systemTasks.asOf', { time: timestamp(data.as_of) })}`
+  } else if (stats) {
+    purposeMetadata = t('systemTasks.asOf', { time: timestamp(stats.as_of) })
+  }
   return (
     <SectionPageLayout
-      actions={(['xlsx', 'csv'] as const).map((format) => (
-        <Button
-          disabled={exportMutation.isPending || !validSiteId}
-          key={format}
-          onClick={() => exportMutation.mutate(format)}
-          variant='outline'
-        >
-          <HugeiconsIcon icon={FileExportIcon} strokeWidth={2} />
-          {t('systemTasks.export', { format: format.toUpperCase() })}
-        </Button>
-      ))}
+      actions={
+        search.tab === 'list'
+          ? (['xlsx', 'csv'] as const).map((format) => (
+              <Button
+                disabled={exportMutation.isPending || !validSiteId}
+                key={format}
+                onClick={() => exportMutation.mutate(format)}
+                variant='outline'
+              >
+                <HugeiconsIcon icon={FileExportIcon} strokeWidth={2} />
+                {t('systemTasks.export', { format: format.toUpperCase() })}
+              </Button>
+            ))
+          : undefined
+      }
       description={
         siteId
           ? t('systemTasks.siteDescription', { id: siteId })
           : t('systemTasks.description')
       }
+      fixedContent
       title={siteId ? t('systemTasks.siteTitle') : t('systemTasks.title')}
     >
-      <div className='grid min-w-0 gap-6'>
+      <div className='flex h-full min-h-0 min-w-0 flex-col gap-4'>
         {siteId && (
           <DetailBackLink
             render={<Link params={{ siteId }} to='/sites/$siteId' />}
@@ -581,44 +793,51 @@ export function SystemTasksPage({
             {t('systemTasks.backToSite')}
           </DetailBackLink>
         )}
-        <section
-          className='border-primary/30 bg-primary/5 rounded-lg border p-4'
-          role='note'
+        {stats ? (
+          <MetricGrid metric={stats.summary} />
+        ) : (
+          <div
+            aria-hidden='true'
+            className='border-border bg-muted/40 h-20 animate-pulse rounded-lg border'
+          />
+        )}
+        <Tabs
+          onValueChange={(tab) =>
+            onSearchChange(changeSystemTaskTab(tab as SystemTaskSearch['tab']))
+          }
+          value={search.tab}
         >
-          <p className='font-medium'>{t('systemTasks.boundary.title')}</p>
-          <p className='text-muted-foreground mt-1 text-sm'>
-            {t('systemTasks.boundary.description')}
-          </p>
-          <p className='text-muted-foreground mt-1 text-sm'>
-            {t('systemTasks.retention')}
-          </p>
-        </section>
-        <Filters global={!siteId} onChange={onSearchChange} search={search} />
-        {stats && (
-          <div className='grid gap-5'>
-            <div className='flex items-center gap-2' role='status'>
-              <span>{t('systemTasks.statisticsStatus')}</span>
-              <DataStatusBadge status={stats.data_status} />
-              <span className='text-muted-foreground text-xs'>
-                {timestamp(stats.as_of)}
-              </span>
-            </div>
-            <MetricGrid metric={stats.summary} />
-            <div className='grid gap-5 xl:grid-cols-3'>
-              <Breakdown
-                items={stats.type_breakdown}
-                title={t('systemTasks.breakdown.type')}
-              />
-              <Breakdown
-                items={stats.status_breakdown}
-                title={t('systemTasks.breakdown.status')}
-              />
-              <Breakdown
-                items={stats.site_breakdown}
-                title={t('systemTasks.breakdown.site')}
-              />
-            </div>
-          </div>
+          <TabsList
+            aria-label={t('systemTasks.tabs.label')}
+            className='max-w-full flex-wrap justify-start group-data-horizontal/tabs:h-auto'
+          >
+            {tabs.map((tab) => (
+              <TabsTrigger key={tab.value} value={tab.value}>
+                <HugeiconsIcon icon={tab.icon} size={15} strokeWidth={2} />
+                {tab.label}
+                {tab.count != null && (
+                  <Badge className='px-1.5 font-mono' variant='secondary'>
+                    {tab.count}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+        <TabPurpose
+          dataErrorCode={data?.data_error_code ?? stats?.data_error_code}
+          metadata={purposeMetadata}
+          notice={truncationMessage}
+          status={data?.data_status ?? stats?.data_status}
+          tab={search.tab}
+        />
+        {search.tab === 'list' && (
+          <Filters
+            global={!siteId}
+            onChange={onSearchChange}
+            search={search}
+            sites={sitesQuery.data?.items ?? []}
+          />
         )}
         {statisticsQuery.isError && !stats && (
           <ErrorState
@@ -629,63 +848,55 @@ export function SystemTasksPage({
             title={t('systemTasks.statisticsError')}
           />
         )}
-        {truncation && (
-          <section
-            className='border-warning/40 bg-warning/10 rounded-lg border p-4'
-            role='alert'
-          >
-            <p className='font-medium'>{t('systemTasks.truncation.title')}</p>
-            <p className='text-sm'>{truncationMessage}</p>
-          </section>
-        )}
-        <div className='flex flex-wrap items-center gap-2' role='status'>
-          <span>{t('systemTasks.listStatus')}</span>
-          <DataStatusBadge status={data?.data_status ?? 'pending'} />
-          {data && (
-            <span className='text-muted-foreground text-xs'>
-              {t('systemTasks.totalValue', { total: data.total })} ·{' '}
-              {timestamp(data.as_of)}
-            </span>
-          )}
-        </div>
-        <DataTable
-          ariaLabel={t('systemTasks.table')}
-          columns={columns}
-          data={data?.items ?? []}
-          emptyDescription={t('systemTasks.emptyDescription')}
-          emptyTitle={t('systemTasks.empty')}
-          error={!validSiteId || listQuery.isError}
-          fetching={listQuery.isFetching}
-          loading={listQuery.isPending}
-          onPageChange={(page) => onSearchChange({ page })}
-          onPageSizeChange={(pageSize) => onSearchChange({ page: 1, pageSize })}
-          onRetry={validSiteId ? () => void listQuery.refetch() : undefined}
-          page={search.page}
-          pageSize={search.pageSize}
-          renderMobileCard={(item) => (
-            <article className='bg-card text-card-foreground ring-foreground/10 grid gap-3 rounded-xl p-4 ring-1'>
-              <div className='flex items-start justify-between gap-2'>
-                <div>
-                  <strong>{item.task_id}</strong>
-                  <p className='text-muted-foreground text-xs'>
-                    {item.site_name} · {item.site_id} · {item.remote_id}
-                  </p>
+        {search.tab === 'list' && (
+          <DataTable
+            ariaLabel={t('systemTasks.table')}
+            columns={columns}
+            data={data?.items ?? []}
+            emptyDescription={t(
+              dynamicI18nKey('systemTasks', emptyDescriptionKey)
+            )}
+            emptyTitle={t(dynamicI18nKey('systemTasks', emptyTitleKey))}
+            error={!validSiteId || listQuery.isError}
+            fetching={listQuery.isFetching}
+            loading={listQuery.isPending}
+            onPageChange={(page) => onSearchChange({ page })}
+            onPageSizeChange={(pageSize) =>
+              onSearchChange({ page: 1, pageSize })
+            }
+            onRetry={validSiteId ? () => void listQuery.refetch() : undefined}
+            page={search.page}
+            pageSize={search.pageSize}
+            renderMobileCard={(item) => (
+              <article className='bg-card text-card-foreground ring-foreground/10 grid gap-3 rounded-xl p-4 ring-1'>
+                <div className='flex items-start justify-between gap-2'>
+                  <div>
+                    <strong>{item.task_id}</strong>
+                    <p className='text-muted-foreground text-xs'>
+                      {item.site_name} · {item.site_id} · {item.remote_id}
+                    </p>
+                  </div>
+                  <StatusBadge status={item.status} />
                 </div>
-                <StatusBadge status={item.status} />
-              </div>
-              <Badge variant='neutral'>{taskTypeText(t, item.type)}</Badge>
-              <ProgressView item={item} />
-              <ResultView item={item} />
-              {item.error_present && (
-                <Badge variant='destructive'>
-                  {errorCodeText(t, item.error_code)}
-                </Badge>
-              )}
-              <DataStatusBadge status={item.data_status} />
-            </article>
-          )}
-          total={approximateTotal}
-        />
+                <Badge variant='neutral'>{taskTypeText(t, item.type)}</Badge>
+                <ProgressView item={item} />
+                <ResultView item={item} />
+                {item.error_present && (
+                  <Badge variant='destructive'>
+                    {errorCodeText(t, item.error_code)}
+                  </Badge>
+                )}
+                <DataStatusBadge status={item.data_status} />
+              </article>
+            )}
+            total={approximateTotal}
+          />
+        )}
+        {stats && search.tab !== 'list' && (
+          <div className='min-h-0 flex-1 overflow-y-auto' tabIndex={0}>
+            <Breakdown items={activeBreakdown} title={activeBreakdownTitle} />
+          </div>
+        )}
       </div>
       <ExportTaskSheet
         exportId={search.exportId}

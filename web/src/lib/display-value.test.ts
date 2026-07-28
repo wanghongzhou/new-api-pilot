@@ -35,7 +35,7 @@ describe('formatDisplayValue', () => {
 })
 
 describe('formatNumericDisplayValue', () => {
-  test('uses zero for missing numeric values', () => {
+  test('uses the shared placeholder for missing numeric values', () => {
     expect(formatNumericDisplayValue(null)).toBe(EMPTY_NUMERIC_DISPLAY_VALUE)
     expect(formatNumericDisplayValue(undefined)).toBe(
       EMPTY_NUMERIC_DISPLAY_VALUE

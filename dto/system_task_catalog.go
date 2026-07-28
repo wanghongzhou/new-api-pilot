@@ -7,6 +7,7 @@ type UpstreamSystemTask struct {
 	ErrorCode                                                                 string
 	Total, Processed, Progress, Remaining                                     *int64
 	DeletedCount                                                              *int64
+	ArchivedDays                                                              *int64
 	Tested, Succeeded, Failed, Disabled, Enabled                              *int64
 	CheckedChannels, ChangedChannels, DetectedAddModels, DetectedRemoveModels *int64
 	FailedChannels, AutoAddedModels                                           *int64
@@ -20,6 +21,7 @@ type UpstreamSystemTaskSnapshot struct {
 	IDGap             bool
 	ListObservedCount int64
 	CurrentFailures   []string
+	UnsupportedTypes  int64
 }
 
 type SystemTaskQuery struct {
@@ -41,7 +43,7 @@ func (q SystemTaskQuery) Validate() map[string]string {
 	if q.Page < 1 || q.PageSize < 1 || q.PageSize > 100 || !statisticsPaginationValid(q.Page, q.PageSize) {
 		e["p"] = "invalid"
 	}
-	allowedTypes := map[string]bool{"log_cleanup": true, "channel_test": true, "model_update": true, "midjourney_poll": true, "async_task_poll": true}
+	allowedTypes := map[string]bool{"log_cleanup": true, "log_detail_cleanup": true, "channel_test": true, "model_update": true, "midjourney_poll": true, "async_task_poll": true}
 	for _, value := range q.Types {
 		if !allowedTypes[value] {
 			e["types"] = "invalid"
@@ -73,6 +75,7 @@ type SystemTaskProgress struct {
 
 type SystemTaskResult struct {
 	DeletedCount         *string `json:"deleted_count"`
+	ArchivedDays         *string `json:"archived_days"`
 	Tested               *string `json:"tested"`
 	Succeeded            *string `json:"succeeded"`
 	Failed               *string `json:"failed"`
@@ -119,6 +122,7 @@ type SystemTaskPageResponse struct {
 	TruncationReason *string          `json:"truncation_reason"`
 	SourceLimit      string           `json:"source_limit"`
 	ObservedCount    string           `json:"observed_count"`
+	DataErrorCode    string           `json:"data_error_code"`
 }
 
 type SystemTaskMetric struct {
@@ -150,4 +154,5 @@ type SystemTaskStatisticsResponse struct {
 	TruncationReason *string               `json:"truncation_reason"`
 	SourceLimit      string                `json:"source_limit"`
 	ObservedCount    string                `json:"observed_count"`
+	DataErrorCode    string                `json:"data_error_code"`
 }

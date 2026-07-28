@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { calculateCrossSiteQuotaAmount, formatDecimal } from '@/lib/amount'
+import { cn } from '@/lib/utils'
 
 import type { CustomerListItem, CustomerStatus } from '../types'
 
@@ -161,11 +162,11 @@ export function CustomerCard({
   const { t } = useTranslation()
   return (
     <article
-      className={
-        customer.status === 'disabled'
-          ? 'bg-muted/25 text-card-foreground ring-foreground/10 grid gap-4 rounded-xl p-4 ring-1'
-          : 'bg-card text-card-foreground ring-foreground/10 grid gap-4 rounded-xl p-4 ring-1'
-      }
+      className={cn(
+        'text-card-foreground flex min-w-0 flex-col gap-3 rounded-lg border bg-(--data-table-card-bg,var(--table-row)) px-3 py-2.5 transition-[background-color,border-color] duration-150',
+        customer.status === 'disabled' && 'saturate-50 opacity-75'
+      )}
+      data-slot='customer-card'
     >
       <div className='flex min-w-0 items-start justify-between gap-2'>
         <div className='min-w-0'>

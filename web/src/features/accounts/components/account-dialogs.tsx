@@ -24,7 +24,9 @@ import {
 import { FormField } from '@/components/ui/form-field'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
+import { UnsavedChangesConfirmDialog } from '@/components/unsaved-changes-guard'
 import type { CollectionRunItem } from '@/features/sites/types'
+import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import { applyApiFieldErrors } from '@/lib/form-errors'
@@ -65,7 +67,7 @@ function EditAccountDialog({
     staleTime: 0,
   })
   const {
-    formState: { errors },
+    formState: { errors, isDirty },
     handleSubmit,
     register,
     reset,
@@ -74,6 +76,8 @@ function EditAccountDialog({
     defaultValues: { remark: '' },
     resolver: zodResolver(accountRemarkSchema),
   })
+  const { confirmOpen, discardAndClose, requestClose, setConfirmOpen } =
+    useUnsavedChangesGuard({ hasUnsavedChanges: isDirty, onClose })
   useEffect(() => {
     if (detailQuery.data) reset({ remark: detailQuery.data.remark })
   }, [detailQuery.data, reset])
@@ -145,28 +149,41 @@ function EditAccountDialog({
     )
   }
   return (
-    <Drawer direction='right' onOpenChange={(open) => !open && onClose()} open>
-      <DrawerContent className={sideDrawerContentClassName('sm:max-w-xl')}>
-        <DrawerHeader className={sideDrawerHeaderClassName()}>
-          <DrawerTitle>{t('account.edit.title')}</DrawerTitle>
-          <DrawerDescription>{t('account.edit.description')}</DrawerDescription>
-        </DrawerHeader>
-        {content}
-        <DrawerFooter className={sideDrawerFooterClassName()}>
-          <Button onClick={onClose} variant='outline'>
-            {t('common.cancel')}
-          </Button>
-          <Button
-            disabled={pending || !detailQuery.data}
-            form='account-edit-form'
-            type='submit'
-          >
-            {pending && <Spinner />}
-            {t('common.save')}
-          </Button>
-        </DrawerFooter>
-      </DrawerContent>
-    </Drawer>
+    <>
+      <Drawer
+        direction='right'
+        onOpenChange={(open) => !open && requestClose()}
+        open
+      >
+        <DrawerContent className={sideDrawerContentClassName('sm:max-w-xl')}>
+          <DrawerHeader className={sideDrawerHeaderClassName()}>
+            <DrawerTitle>{t('account.edit.title')}</DrawerTitle>
+            <DrawerDescription>
+              {t('account.edit.description')}
+            </DrawerDescription>
+          </DrawerHeader>
+          {content}
+          <DrawerFooter className={sideDrawerFooterClassName()}>
+            <Button onClick={requestClose} variant='outline'>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              disabled={pending || !detailQuery.data}
+              form='account-edit-form'
+              type='submit'
+            >
+              {pending && <Spinner />}
+              {t('common.save')}
+            </Button>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
+      <UnsavedChangesConfirmDialog
+        onConfirm={discardAndClose}
+        onOpenChange={setConfirmOpen}
+        open={confirmOpen}
+      />
+    </>
   )
 }
 

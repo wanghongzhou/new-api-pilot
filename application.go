@@ -261,8 +261,7 @@ func bootstrapApplication(
 	}
 
 	readiness := common.NewReadiness()
-	readiness.AddCheck("database", options.Database.SQL.PingContext)
-	readiness.AddCheck("redis", redisStore.Ping)
+	addApplicationReadinessChecks(readiness, options.RuntimeMode, options.Database.SQL.PingContext, redisStore.Ping)
 	identityResolver := middleware.SessionIdentityResolver{Store: sessionStore, Loader: authService}
 	engine, err := router.New(router.Options{
 		Config: options.Config, Database: options.Database.SQL, Readiness: readiness, Metrics: metrics,
@@ -296,6 +295,18 @@ func bootstrapApplication(
 		return nil, service.BootstrapResult{}, fmt.Errorf("create HTTP router: %w", err)
 	}
 	return &application{Handler: engine, Readiness: readiness, Metrics: metrics, runtime: applicationRuntime}, bootstrap, nil
+}
+
+func addApplicationReadinessChecks(
+	readiness *common.Readiness,
+	runtimeMode applicationRuntimeMode,
+	databaseCheck common.ReadinessCheck,
+	redisCheck common.ReadinessCheck,
+) {
+	readiness.AddCheck("database", databaseCheck)
+	if runtimeMode != applicationRuntimeA49ReadOnly {
+		readiness.AddCheck("redis", redisCheck)
+	}
 }
 
 func validateApplicationRuntimeOptions(options applicationOptions) error {

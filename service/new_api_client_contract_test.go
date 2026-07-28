@@ -141,6 +141,36 @@ func TestPerformanceSummaryContract(t *testing.T) {
 	}
 }
 
+func TestPerformanceSummaryAllowsOfficialEnvelopeWithoutMessage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/api/perf-metrics/summary" || request.URL.Query().Get("hours") != "24" {
+			http.Error(writer, "unexpected request", http.StatusBadRequest)
+			return
+		}
+		_, _ = writer.Write([]byte(`{"data":{"models":[]},"success":true}`))
+	}))
+	defer server.Close()
+	client := testClientForServer(t, server, true, testClientSettings{})
+	summary, err := client.PerformanceSummary(context.Background(), "performance-no-message", 24)
+	if err != nil {
+		t.Fatalf("official performance envelope without message: %v", err)
+	}
+	if summary.Models == nil || len(summary.Models) != 0 {
+		t.Fatalf("unexpected performance summary: %#v", summary)
+	}
+}
+
+func TestPerformanceSummaryOptionalMessageDoesNotRelaxOtherEndpoints(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		_, _ = writer.Write([]byte(`{"success":true,"data":{"version":"v1","system_name":"Test","quota_per_unit":1,"usd_exchange_rate":1,"enable_data_export":true}}`))
+	}))
+	defer server.Close()
+	client := testClientForServer(t, server, false, testClientSettings{})
+	if _, err := client.Status(context.Background(), "status-no-message"); !errors.Is(err, ErrUpstreamEnvelopeInvalid) {
+		t.Fatalf("non-performance endpoint accepted missing message: %v", err)
+	}
+}
+
 func TestPerformanceSummaryRejectsInvalidMetrics(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		_, _ = writer.Write([]byte(`{"success":true,"message":"","data":{"models":[{"model_name":"model-a","request_count":-1,"success_rate":100,"avg_latency_ms":1,"avg_tps":1}]}}`))

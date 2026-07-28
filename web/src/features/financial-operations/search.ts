@@ -12,6 +12,7 @@ import type { FinanceRemoteState, FinancialOperationTab } from './types'
 
 export interface FinancialOperationsSearch {
   tab: FinancialOperationTab
+  view: 'analysis' | 'list'
   page: number
   pageSize: number
   siteIds: IdString[]
@@ -116,5 +117,6 @@ export function buildFinancialOperationsSearch(
       .sort((left, right) => left.localeCompare(right)),
     statuses: stableStrings(raw.statuses),
     tab: raw.tab === 'redemptions' ? 'redemptions' : 'topups',
+    view: raw.view === 'analysis' ? 'analysis' : 'list',
   }
 }

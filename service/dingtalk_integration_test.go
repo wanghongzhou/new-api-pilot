@@ -249,6 +249,56 @@ func TestAlertDeliveryLeaseCASRejectsOldAttempt(t *testing.T) {
 	}
 }
 
+func TestDingTalkCompletionPersistsAfterParentCancellation(t *testing.T) {
+	tx := openAlertTestTransaction(t)
+	now := int64(1_752_400_800)
+	clock := testsupport.NewFakeClock(time.Unix(now, 0))
+	repository := model.NewAlertDeliveryRepository(tx)
+	notifier := &DingTalkService{deliveries: repository, clock: clock}
+	payload, err := marshalDingTalkDeliverySnapshot(dingTalkDeliverySnapshot{Version: 1, Kind: "test"})
+	if err != nil {
+		t.Fatalf("marshal cancellation payload: %v", err)
+	}
+	testCases := []struct {
+		name       string
+		result     dingTalkAttemptResult
+		wantStatus string
+		wantRetry  bool
+	}{
+		{name: "delivered", result: dingTalkAttemptResult{success: true, responseMessage: "ok"}, wantStatus: model.AlertDeliveryStatusSuccess},
+		{name: "retry", result: dingTalkAttemptResult{retryable: true, responseMessage: "temporary"}, wantStatus: model.AlertDeliveryStatusPending, wantRetry: true},
+		{name: "failed", result: dingTalkAttemptResult{errorCode: constant.MessageDingTalkRejected, responseMessage: "rejected"}, wantStatus: model.AlertDeliveryStatusFailed},
+	}
+	for index, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			attemptAt := now + int64(index)
+			delivery, _, enqueueErr := repository.Enqueue(context.Background(), nil, model.AlertDeliveryEventTest, payload, attemptAt)
+			if enqueueErr != nil {
+				t.Fatalf("enqueue delivery: %v", enqueueErr)
+			}
+			claim, claimErr := repository.ClaimByID(context.Background(), delivery.ID, attemptAt, attemptAt+30)
+			if claimErr != nil {
+				t.Fatalf("claim delivery: %v", claimErr)
+			}
+			parent, cancelParent := context.WithCancel(context.Background())
+			cancelParent()
+			if completeErr := notifier.completeAttempt(parent, claim, testCase.result); completeErr != nil {
+				t.Fatalf("complete after cancellation: %v", completeErr)
+			}
+			persisted, findErr := repository.Find(context.Background(), delivery.ID)
+			if findErr != nil {
+				t.Fatalf("find completed delivery: %v", findErr)
+			}
+			if persisted.Status != testCase.wantStatus || persisted.ClaimToken != nil || persisted.LeaseExpiresAt != nil {
+				t.Fatalf("completed delivery = %#v", persisted)
+			}
+			if (persisted.NextRetryAt != nil) != testCase.wantRetry {
+				t.Fatalf("completed retry timestamp = %v", persisted.NextRetryAt)
+			}
+		})
+	}
+}
+
 func TestDingTalkCrashBeforeHTTPReusesReservedAttempt(t *testing.T) {
 	tx := openAlertTestTransaction(t)
 	now := time.Unix(1_752_400_800, 0)

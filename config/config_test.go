@@ -58,6 +58,21 @@ func TestLoadFromRejectsUnsafeProduction(t *testing.T) {
 	}
 }
 
+func TestLoadFromRequiresProductionBootstrapSecretAndImmutableImage(t *testing.T) {
+	values := validProductionEnvironment(t)
+	delete(values, "PLATFORM_BOOTSTRAP_ADMIN_PASSWORD")
+	if _, err := LoadFrom(mapLookup(values)); err == nil || !strings.Contains(err.Error(), "PLATFORM_BOOTSTRAP_ADMIN_PASSWORD") {
+		t.Fatalf("missing production bootstrap password error = %v", err)
+	}
+	values["PLATFORM_BOOTSTRAP_ADMIN_PASSWORD"] = "change-me"
+	for _, image := range []string{"", "new-api-pilot:latest", "registry.example.com/new-api-pilot@sha256:short"} {
+		values["API_IMAGE"] = image
+		if _, err := LoadFrom(mapLookup(values)); err == nil || !strings.Contains(err.Error(), "API_IMAGE") {
+			t.Fatalf("mutable production API_IMAGE %q error = %v", image, err)
+		}
+	}
+}
+
 func TestLoadFromRequiresAbsoluteProductionExportDirectory(t *testing.T) {
 	values := validEnvironment()
 	values["APP_ENV"] = EnvironmentProduction
@@ -153,6 +168,33 @@ func TestValidateRuntimeFilesCreatesPrivateWritableExportDirectory(t *testing.T)
 	}
 }
 
+func TestValidateBootstrapAdminOutputRequiresUnusedAbsoluteFile(t *testing.T) {
+	directory := t.TempDir()
+	configuration := Config{
+		AppEnv:             EnvironmentDevelopment,
+		BootstrapAdminFile: filepath.Join(directory, "bootstrap-admin-password"),
+	}
+	if err := configuration.ValidateBootstrapAdminOutput(); err != nil {
+		t.Fatalf("ValidateBootstrapAdminOutput() error = %v", err)
+	}
+	configuration.BootstrapAdminFile = "relative-password-file"
+	if err := configuration.ValidateBootstrapAdminOutput(); err == nil || !strings.Contains(err.Error(), "absolute path") {
+		t.Fatalf("relative bootstrap file error = %v", err)
+	}
+	existing := filepath.Join(directory, "existing")
+	if err := os.WriteFile(existing, []byte("occupied"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	configuration.BootstrapAdminFile = existing
+	if err := configuration.ValidateBootstrapAdminOutput(); err == nil || !strings.Contains(err.Error(), "must not already exist") {
+		t.Fatalf("existing bootstrap file error = %v", err)
+	}
+	configuration = Config{AppEnv: EnvironmentProduction, BootstrapAdminSecret: "configured"}
+	if err := configuration.ValidateBootstrapAdminOutput(); err != nil {
+		t.Fatalf("production configured password should not require a file: %v", err)
+	}
+}
+
 func TestValidateRuntimeFilesRejectsExportDirectorySymlinkAncestor(t *testing.T) {
 	root := t.TempDir()
 	realParent := filepath.Join(root, "real")
@@ -212,6 +254,7 @@ func TestValidateRuntimeFilesAllowsDevelopmentSymlinkDirectory(t *testing.T) {
 func validEnvironment() map[string]string {
 	return map[string]string{
 		"APP_ENV":                           EnvironmentDevelopment,
+		"API_IMAGE":                         "registry.example.com/new-api-pilot@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 		"PORT":                              "3000",
 		"DATABASE_DSN":                      "pilot:pilot@tcp(localhost:3306)/pilot?charset=utf8mb4&parseTime=true&loc=Asia%2FShanghai",
 		"SESSION_SECRET":                    base64.StdEncoding.EncodeToString([]byte("01234567890123456789012345678901")),

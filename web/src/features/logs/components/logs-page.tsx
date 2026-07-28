@@ -1,19 +1,24 @@
 import {
   ArrowLeft01Icon,
+  Calendar03Icon,
+  Chart01Icon,
+  Clock01Icon,
+  Database01Icon,
   FileExportIcon,
+  Search01Icon,
+  Settings02Icon,
   ViewIcon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import type { ColumnDef } from '@tanstack/react-table'
-import { useMemo, useState, type ChangeEvent } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
-import { DataFreshness } from '@/components/data/data-freshness'
 import { DataStatusBadge } from '@/components/data/data-status'
-import { FilterPanel } from '@/components/data/filter-panel'
+import { FacetedFilter } from '@/components/data/faceted-filter'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Badge } from '@/components/ui/badge'
@@ -28,7 +33,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { SelectControl as Select } from '@/components/ui/select-control'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { listSites } from '@/features/sites/api'
+import { siteKeys } from '@/features/sites/query-keys'
+import type { SiteListItem } from '@/features/sites/types'
 import { createStatisticsExport } from '@/features/statistics/api'
 import { ExportTaskSheet } from '@/features/statistics/components/export-task-sheet'
 import type {
@@ -152,146 +164,210 @@ function LogFilters({
   global,
   onChange,
   search,
+  sites,
 }: {
   global: boolean
   onChange: (changes: Partial<LogSearch>) => void
   search: LogSearch
+  sites: SiteListItem[]
 }) {
   const { t } = useTranslation()
-  const updateText =
-    (key: keyof LogSearch) => (event: ChangeEvent<HTMLInputElement>) =>
-      onChange({ [key]: event.target.value, page: 1 })
   const reset = buildLogSearch({ pageSize: search.pageSize })
+  const hasActiveFilters = hasFilterChanges(search, reset, [
+    'channelId',
+    'end',
+    'group',
+    'modelName',
+    'requestId',
+    'siteIds',
+    'start',
+    'tokenName',
+    'type',
+    'upstreamRequestId',
+    'username',
+  ])
+  const advancedTextFilter = (
+    key: 'group' | 'requestId' | 'tokenName' | 'upstreamRequestId',
+    label: string
+  ) => (
+    <label className='grid gap-1.5'>
+      <span className='text-muted-foreground text-xs'>{label}</span>
+      <Input
+        aria-label={label}
+        className='h-8'
+        onChange={(event) => onChange({ [key]: event.target.value, page: 1 })}
+        value={search[key]}
+      />
+    </label>
+  )
+  const advancedCount = [
+    search.tokenName !== '',
+    search.channelId != null,
+    search.group !== '',
+    search.requestId !== '',
+    search.upstreamRequestId !== '',
+    search.start !== reset.start,
+    search.end !== reset.end,
+  ].filter(Boolean).length
   return (
-    <FilterPanel
-      description={t('logs.filters.description')}
-      hasActiveFilters={hasFilterChanges(search, reset, [
-        'channelId',
-        'end',
-        'group',
-        'modelName',
-        'requestId',
-        'siteIds',
-        'start',
-        'tokenName',
-        'type',
-        'upstreamRequestId',
-        'username',
-      ])}
-      onReset={() => onChange(reset)}
-      title={t('logs.filters.title')}
+    <section
+      aria-label={t('logs.filters.title')}
+      className='flex min-w-0 flex-wrap items-center gap-2'
     >
-      <div className='grid min-w-0 flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-4'>
-        <label className='grid gap-1 text-sm'>
-          <span>{t('logs.filters.start')}</span>
-          <Input
-            onChange={(event) => {
-              const start = parseDateTime(event.target.value)
-              if (start != null) onChange({ page: 1, start })
-            }}
-            type='datetime-local'
-            value={dateTimeValue(search.start)}
-          />
-        </label>
-        <label className='grid gap-1 text-sm'>
-          <span>{t('logs.filters.end')}</span>
-          <Input
-            onChange={(event) => {
-              const end = parseDateTime(event.target.value)
-              if (end != null) onChange({ end, page: 1 })
-            }}
-            type='datetime-local'
-            value={dateTimeValue(search.end)}
-          />
-        </label>
-        <label className='grid gap-1 text-sm'>
-          <span>{t('logs.filters.type')}</span>
-          <Select
-            className='w-full'
-            onChange={(event) =>
-              onChange({
-                page: 1,
-                type:
-                  event.target.value === ''
-                    ? undefined
-                    : (Number(event.target.value) as LogType),
-              })
-            }
-            value={search.type ?? ''}
-          >
-            <option value=''>{t('logs.filters.allTypes')}</option>
-            {logTypes.map((type) => (
-              <option key={type} value={type}>
-                {logTypeLabel(type, t)}
-              </option>
-            ))}
-          </Select>
-        </label>
-        {global && (
-          <label className='grid gap-1 text-sm'>
-            <span>{t('logs.filters.siteIds')}</span>
-            <Input
-              onChange={(event) =>
-                onChange({
-                  page: 1,
-                  siteIds: event.target.value
-                    .split(',')
-                    .map((value) => value.trim())
-                    .filter(isIdString)
-                    .map(parseIdString),
-                })
-              }
-              placeholder={t('logs.filters.siteIdsPlaceholder')}
-              value={search.siteIds.join(',')}
+      <label className='relative min-w-48 flex-1 sm:max-w-72'>
+        <span className='sr-only'>{t('logs.fields.username')}</span>
+        <HugeiconsIcon
+          className='text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2'
+          icon={Search01Icon}
+          size={15}
+          strokeWidth={2}
+        />
+        <Input
+          aria-label={t('logs.fields.username')}
+          className='h-10 pl-8 sm:h-8'
+          onChange={(event) =>
+            onChange({ page: 1, username: event.target.value })
+          }
+          placeholder={t('logs.fields.username')}
+          value={search.username}
+        />
+      </label>
+      {global && (
+        <FacetedFilter
+          clearLabel={t('logs.filters.allSites')}
+          onChange={(value) =>
+            onChange({
+              page: 1,
+              siteIds: isIdString(value) ? [parseIdString(value)] : [],
+            })
+          }
+          options={sites.map((site) => ({ label: site.name, value: site.id }))}
+          title={t('logs.filters.site')}
+          value={search.siteIds.length === 1 ? search.siteIds[0] : ''}
+        />
+      )}
+      <FacetedFilter
+        clearLabel={t('logs.filters.allTypes')}
+        onChange={(value) =>
+          onChange({
+            page: 1,
+            type: logTypes.includes(Number(value) as LogType)
+              ? (Number(value) as LogType)
+              : undefined,
+          })
+        }
+        options={logTypes.map((type) => ({
+          label: logTypeLabel(type, t),
+          value: String(type),
+        }))}
+        title={t('logs.filters.type')}
+        value={search.type == null ? '' : String(search.type)}
+      />
+      <Input
+        aria-label={t('logs.fields.model')}
+        className='h-10 w-40 sm:h-8'
+        onChange={(event) =>
+          onChange({ modelName: event.target.value, page: 1 })
+        }
+        placeholder={t('logs.fields.model')}
+        value={search.modelName}
+      />
+      <Popover>
+        <PopoverTrigger
+          render={
+            <Button
+              className='h-10 border-dashed sm:h-8'
+              size='sm'
+              type='button'
+              variant='outline'
             />
-          </label>
-        )}
-        <label className='grid gap-1 text-sm'>
-          <span>{t('logs.fields.username')}</span>
-          <Input onChange={updateText('username')} value={search.username} />
-        </label>
-        <label className='grid gap-1 text-sm'>
-          <span>{t('logs.fields.model')}</span>
-          <Input onChange={updateText('modelName')} value={search.modelName} />
-        </label>
-        <label className='grid gap-1 text-sm'>
-          <span>{t('logs.fields.token')}</span>
-          <Input onChange={updateText('tokenName')} value={search.tokenName} />
-        </label>
-        <label className='grid gap-1 text-sm'>
-          <span>{t('logs.fields.channelId')}</span>
-          <Input
-            inputMode='numeric'
-            onChange={(event) => {
-              const value = event.target.value
-              if (value === '') onChange({ channelId: undefined, page: 1 })
-              else if (isNonNegativeIdString(value)) {
-                onChange({
-                  channelId: parseNonNegativeIdString(value),
-                  page: 1,
-                })
-              }
-            }}
-            value={search.channelId ?? ''}
-          />
-        </label>
-        <label className='grid gap-1 text-sm'>
-          <span>{t('logs.fields.group')}</span>
-          <Input onChange={updateText('group')} value={search.group} />
-        </label>
-        <label className='grid gap-1 text-sm'>
-          <span>{t('logs.fields.requestId')}</span>
-          <Input onChange={updateText('requestId')} value={search.requestId} />
-        </label>
-        <label className='grid gap-1 text-sm xl:col-span-2'>
-          <span>{t('logs.fields.upstreamRequestId')}</span>
-          <Input
-            onChange={updateText('upstreamRequestId')}
-            value={search.upstreamRequestId}
-          />
-        </label>
-      </div>
-    </FilterPanel>
+          }
+        >
+          <HugeiconsIcon icon={Settings02Icon} size={15} strokeWidth={2} />
+          {t('common.moreFilters')}
+          {advancedCount > 0 && (
+            <Badge className='px-1.5 font-mono' variant='secondary'>
+              {advancedCount}
+            </Badge>
+          )}
+        </PopoverTrigger>
+        <PopoverContent
+          align='start'
+          className='w-[min(640px,calc(100vw-2rem))] p-3'
+        >
+          <div className='grid gap-3 sm:grid-cols-2'>
+            {advancedTextFilter('tokenName', t('logs.fields.token'))}
+            <label className='grid gap-1.5'>
+              <span className='text-muted-foreground text-xs'>
+                {t('logs.fields.channelId')}
+              </span>
+              <Input
+                aria-label={t('logs.fields.channelId')}
+                className='h-8'
+                inputMode='numeric'
+                onChange={(event) => {
+                  const value = event.target.value
+                  onChange({
+                    channelId: isNonNegativeIdString(value)
+                      ? parseNonNegativeIdString(value)
+                      : undefined,
+                    page: 1,
+                  })
+                }}
+                value={search.channelId ?? ''}
+              />
+            </label>
+            {advancedTextFilter('group', t('logs.fields.group'))}
+            {advancedTextFilter('requestId', t('logs.fields.requestId'))}
+            {advancedTextFilter(
+              'upstreamRequestId',
+              t('logs.fields.upstreamRequestId')
+            )}
+            <label className='grid gap-1.5'>
+              <span className='text-muted-foreground text-xs'>
+                {t('logs.filters.start')}
+              </span>
+              <Input
+                aria-label={t('logs.filters.start')}
+                className='h-8'
+                onChange={(event) => {
+                  const start = parseDateTime(event.target.value)
+                  if (start != null) onChange({ page: 1, start })
+                }}
+                type='datetime-local'
+                value={dateTimeValue(search.start)}
+              />
+            </label>
+            <label className='grid gap-1.5'>
+              <span className='text-muted-foreground text-xs'>
+                {t('logs.filters.end')}
+              </span>
+              <Input
+                aria-label={t('logs.filters.end')}
+                className='h-8'
+                onChange={(event) => {
+                  const end = parseDateTime(event.target.value)
+                  if (end != null) onChange({ end, page: 1 })
+                }}
+                type='datetime-local'
+                value={dateTimeValue(search.end)}
+              />
+            </label>
+          </div>
+        </PopoverContent>
+      </Popover>
+      {hasActiveFilters && (
+        <Button
+          className='text-muted-foreground px-2'
+          onClick={() => onChange(reset)}
+          size='sm'
+          type='button'
+          variant='ghost'
+        >
+          {t('common.reset')}
+        </Button>
+      )}
+    </section>
   )
 }
 
@@ -383,6 +459,21 @@ export function LogsPage({
   const [initialJob, setInitialJob] = useState<StatisticsExportJobItem>()
   const validSiteId = siteId == null || isIdString(siteId)
   const params = useMemo(() => logParams(search), [search])
+  const siteParams = useMemo(
+    () => ({
+      p: 1,
+      page_size: 100,
+      sort_by: 'name',
+      sort_order: 'asc' as const,
+    }),
+    []
+  )
+  const sitesQuery = useQuery({
+    enabled: siteId == null,
+    queryFn: () => listSites(siteParams),
+    queryKey: siteKeys.list(siteParams),
+    staleTime: 5 * 60_000,
+  })
   const logsQuery = useQuery({
     enabled: validSiteId,
     placeholderData: keepPreviousData,
@@ -520,6 +611,30 @@ export function LogsPage({
       ))}
     </>
   )
+  const overviewItems = [
+    {
+      icon: Database01Icon,
+      label: t('logs.overview.total'),
+      value: <span className='text-2xl font-semibold'>{data?.total ?? 0}</span>,
+    },
+    {
+      icon: Chart01Icon,
+      label: t('logs.completeness'),
+      value: <DataStatusBadge status={data?.data_status ?? 'pending'} />,
+    },
+    {
+      icon: Clock01Icon,
+      label: t('logs.asOf'),
+      value: data?.as_of
+        ? fromUnixSeconds(data.as_of).format('YYYY-MM-DD HH:mm:ss')
+        : '-',
+    },
+    {
+      icon: Calendar03Icon,
+      label: t('logs.overview.range'),
+      value: `${fromUnixSeconds(search.start).format('MM-DD HH:mm')} — ${fromUnixSeconds(search.end).format('MM-DD HH:mm')}`,
+    },
+  ] as const
   return (
     <SectionPageLayout
       fixedContent
@@ -540,37 +655,51 @@ export function LogsPage({
             {t('logs.backToSite')}
           </DetailBackLink>
         )}
-        <section
-          className='border-primary/30 bg-primary/5 rounded-lg border p-4 text-sm'
-          role='note'
-        >
-          <p className='font-medium'>{t('logs.financialNotice.title')}</p>
-          <p className='text-muted-foreground mt-1'>
-            {t('logs.financialNotice.description')}
-          </p>
+        <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
+          {overviewItems.map(({ icon, label, value }) => (
+            <div
+              className='bg-card text-card-foreground ring-foreground/10 flex min-w-0 items-center gap-3 rounded-xl p-4 ring-1'
+              key={label}
+            >
+              <span className='bg-muted text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-lg'>
+                <HugeiconsIcon icon={icon} size={18} strokeWidth={2} />
+              </span>
+              <dl className='min-w-0'>
+                <dt className='text-muted-foreground truncate text-xs'>
+                  {label}
+                </dt>
+                <dd className='mt-0.5 truncate text-sm font-medium tracking-tight'>
+                  {value}
+                </dd>
+              </dl>
+            </div>
+          ))}
+        </div>
+        <section className='border-border bg-muted/30 flex items-start gap-3 rounded-xl border p-4'>
+          <span className='bg-background text-muted-foreground ring-foreground/10 flex size-9 shrink-0 items-center justify-center rounded-lg ring-1'>
+            <HugeiconsIcon icon={Database01Icon} size={18} strokeWidth={2} />
+          </span>
+          <div className='min-w-0 flex-1'>
+            <div className='flex flex-wrap items-center justify-between gap-2'>
+              <p className='font-medium'>{t('logs.financialNotice.title')}</p>
+              <DataStatusBadge status={data?.data_status ?? 'pending'} />
+            </div>
+            <p className='text-muted-foreground mt-1 text-sm'>
+              {t('logs.financialNotice.description')}
+            </p>
+            {data && (
+              <p className='text-muted-foreground mt-1 text-xs'>
+                {statusDescription(data.data_status, t)}
+              </p>
+            )}
+          </div>
         </section>
         <LogFilters
           global={!siteId}
           onChange={onSearchChange}
           search={search}
+          sites={sitesQuery.data?.items ?? []}
         />
-        {data && (
-          <section
-            className='border-border flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4'
-            role='status'
-          >
-            <div className='flex flex-wrap items-center gap-2'>
-              <span className='text-sm font-medium'>
-                {t('logs.completeness')}
-              </span>
-              <DataStatusBadge status={data.data_status} />
-              <span className='text-muted-foreground text-sm'>
-                {statusDescription(data.data_status, t)}
-              </span>
-            </div>
-            <DataFreshness labelKey='logs.asOf' timestamp={data.as_of} />
-          </section>
-        )}
         <DataTable
           ariaLabel={t('logs.table')}
           columns={columns}

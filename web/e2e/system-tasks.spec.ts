@@ -9,6 +9,8 @@ import {
   type TestInfo,
 } from '@playwright/test'
 
+import { mockAuthenticatedShell } from './helpers/auth'
+
 const viewer = {
   display_name: '系统任务只读员',
   id: '9007199254740991',
@@ -50,6 +52,7 @@ const envelope = <T>(data: T, requestId = 'req_system_task_e2e') => ({
   success: true,
 })
 async function seedAuth(page: Page, testInfo: TestInfo) {
+  await mockAuthenticatedShell(page)
   if (testInfo.project.name === 'chromium-mobile') {
     await page.setViewportSize({ height: 812, width: 375 })
   }
@@ -59,6 +62,16 @@ async function seedAuth(page: Page, testInfo: TestInfo) {
   }, viewer)
   await page.route(/\/api\/user\/self(?:\?.*)?$/, (route) =>
     route.fulfill({ json: envelope(viewer, 'req_system_self') })
+  )
+  await page.route(/\/api\/sites(?:\?.*)?$/, (route) =>
+    route.fulfill({
+      json: envelope({
+        items: [{ id: '9007199254740997', name: '华东维护站点' }],
+        page: 1,
+        page_size: 100,
+        total: 1,
+      }),
+    })
   )
 }
 
@@ -101,7 +114,7 @@ const metric = {
   error_present: '1',
   failed: '1',
   succeeded: '1',
-  total: '5',
+  total: '6',
 }
 const breakdown = (id: string, name: string) => ({
   ...metric,
@@ -114,6 +127,7 @@ const breakdown = (id: string, name: string) => ({
 })
 const statistics = {
   as_of: 1_784_348_700,
+  data_error_code: '',
   data_status: 'partial',
   site_breakdown: [
     {
@@ -129,11 +143,13 @@ const statistics = {
   summary: metric,
   type_breakdown: [
     breakdown('log_cleanup', 'log_cleanup'),
+    breakdown('log_detail_cleanup', 'log_detail_cleanup'),
     breakdown('channel_test', 'channel_test'),
   ],
 }
 const pageData = {
   as_of: 1_784_348_700,
+  data_error_code: '',
   data_status: 'partial',
   items,
   observed_count: '100',
@@ -210,34 +226,37 @@ test('A100 system tasks stay read-only, typed, bounded and responsive', async ({
     '/system-tasks?siteIds=9007199254740997&types=log_cleanup&statuses=running&errorPresent=false'
   )
   await expect(
-    page.getByRole('heading', { exact: true, name: '系统维护任务' })
+    page.getByRole('heading', { exact: true, name: '系统任务' })
   ).toBeVisible()
   await expect(page.getByText('9007199254740995').first()).toBeVisible()
-  await expect(page.getByText('上游任务列表已截断')).toBeVisible()
+  await expect(page.getByText(/本轮观察 100 条/)).toBeVisible()
   for (const text of [
     '日志清理',
+    '日志明细归档',
     '渠道测试',
     '模型更新',
     'Midjourney 轮询',
     '异步任务轮询',
     '9007199254740993',
-    '上游任务失败',
+    '上游系统任务失败',
   ]) {
     await expect(
       page.getByText(text).filter({ visible: true }).first()
     ).toBeVisible()
   }
+  await expect(page.getByRole('button', { name: '导出 CSV' })).toBeVisible()
   expect(systemRequests.every((request) => request.method === 'GET')).toBe(true)
   expect(
     systemRequests.some((request) => /\/system-tasks\/[^s]/.test(request.path))
   ).toBe(false)
-  for (const request of systemRequests.slice(0, 2)) {
-    expect(request.url.searchParams.getAll('site_ids')).toEqual([
-      '9007199254740997',
-    ])
-    expect(request.url.searchParams.getAll('types')).toEqual(['log_cleanup'])
-    expect(request.url.searchParams.get('error_present')).toBe('false')
-  }
+  const listRequest = systemRequests.find(
+    (request) => request.path === '/api/system-tasks'
+  )
+  expect(listRequest?.url.searchParams.getAll('site_ids')).toEqual([
+    '9007199254740997',
+  ])
+  expect(listRequest?.url.searchParams.getAll('types')).toEqual(['log_cleanup'])
+  expect(listRequest?.url.searchParams.get('error_present')).toBe('false')
 
   await page.getByRole('button', { name: '导出 CSV' }).click()
   await expect.poll(() => exportBodies.length).toBe(1)
@@ -262,11 +281,19 @@ test('A100 system tasks stay read-only, typed, bounded and responsive', async ({
   ]) {
     expect(safe).not.toContain(field)
   }
+  await page.getByRole('button', { name: '关闭' }).click()
+
+  await page.getByRole('tab', { name: /类型分析/ }).click()
+  await expect(page).toHaveURL(/tab=types/)
+  await expect(page).not.toHaveURL(/types=log_cleanup/)
+  await expect(page.getByText('任务类型拆分')).toBeVisible()
+  await page.getByRole('tab', { name: /任务列表/ }).click()
+  await expect(page.getByRole('button', { name: '导出 CSV' })).toBeVisible()
 
   systemRequests.length = 0
   await page.goto('/sites/9007199254740997/system-tasks?siteIds=9')
   await expect(
-    page.getByRole('heading', { exact: true, name: '站点系统维护任务' })
+    page.getByRole('heading', { exact: true, name: '站点系统任务' })
   ).toBeVisible()
   await expect.poll(() => systemRequests.length).toBeGreaterThanOrEqual(2)
   expect(
@@ -283,4 +310,51 @@ test('A100 system tasks stay read-only, typed, bounded and responsive', async ({
     )
   ).toBe(false)
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])
+})
+
+test('A100 unavailable collection is diagnosed instead of shown as a real empty inventory', async ({
+  page,
+}, testInfo) => {
+  await seedAuth(page, testInfo)
+  await page.route(/\/api\/system-tasks\/statistics(?:\?.*)?$/, (route) =>
+    route.fulfill({
+      json: envelope({
+        ...statistics,
+        as_of: null,
+        data_error_code: 'SYSTEM_TASK_UPSTREAM_UNAVAILABLE',
+        data_status: 'unavailable',
+        site_breakdown: [],
+        status_breakdown: [],
+        summary: {
+          active: '0',
+          error_present: '0',
+          failed: '0',
+          succeeded: '0',
+          total: '0',
+        },
+        type_breakdown: [],
+      }),
+    })
+  )
+  await page.route(/\/api\/system-tasks(?:\?.*)?$/, (route) =>
+    route.fulfill({
+      json: envelope({
+        ...pageData,
+        as_of: null,
+        data_error_code: 'SYSTEM_TASK_UPSTREAM_UNAVAILABLE',
+        data_status: 'unavailable',
+        items: [],
+        observed_count: '0',
+        total: '0',
+        truncated: false,
+        truncation_reason: null,
+      }),
+    })
+  )
+  await page.goto('/system-tasks')
+  await expect(page.getByText('上游系统任务采集失败')).toBeVisible()
+  await expect(
+    page.getByText('系统任务采集不可用').filter({ visible: true })
+  ).toBeVisible()
+  await expect(page.getByText('当前筛选下没有系统任务')).toHaveCount(0)
 })

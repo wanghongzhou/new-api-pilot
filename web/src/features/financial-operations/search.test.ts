@@ -17,6 +17,7 @@ describe('financial operations URL search', () => {
         states: ['missing', 'normal'],
         statuses: ['success', 'pending'],
         tab: 'redemptions',
+        view: 'analysis',
       },
       dayjs.tz('2026-07-18 12:34:00', 'Asia/Shanghai')
     )
@@ -26,6 +27,7 @@ describe('financial operations URL search', () => {
     expect(search.methods).toEqual(['stripe'])
     expect(search.states).toEqual(['missing', 'normal'])
     expect(search.tab).toBe('redemptions')
+    expect(search.view).toBe('analysis')
   })
 
   test('fails closed to an aligned 30-day range', () => {
@@ -33,5 +35,11 @@ describe('financial operations URL search', () => {
     const search = buildFinancialOperationsSearch({ end: 10, start: 20 }, now)
     expect(search.end - search.start).toBe(30 * 24 * 3600)
     expect(search.start % 3600).toBe(0)
+  })
+
+  test('defaults invalid view values to the record list', () => {
+    expect(
+      buildFinancialOperationsSearch({ view: 'invalid' as never }).view
+    ).toBe('list')
   })
 })

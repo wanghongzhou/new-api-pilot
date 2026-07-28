@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -30,8 +31,9 @@ const (
 type LookupFunc func(string) (string, bool)
 
 type Config struct {
-	AppEnv string
-	Port   string
+	AppEnv   string
+	Port     string
+	APIImage string
 
 	DatabaseDSN          string
 	SQLMaxIdleConns      int
@@ -41,6 +43,7 @@ type Config struct {
 	EncryptionKey        []byte
 	EncryptionKeyID      string
 	BootstrapAdminSecret string
+	BootstrapAdminFile   string
 	SessionCookieSecure  bool
 	ExportDir            string
 	RedisDSN             string
@@ -54,6 +57,8 @@ type Config struct {
 	MetricsAllowedCIDRs  []netip.Prefix
 }
 
+var immutableImagePattern = regexp.MustCompile(`^[^@[:space:]]+@sha256:[a-fA-F0-9]{64}$`)
+
 func Load() (Config, error) {
 	_ = godotenv.Load()
 	return LoadFrom(os.LookupEnv)
@@ -66,6 +71,10 @@ func LoadFrom(lookup LookupFunc) (Config, error) {
 	}
 	if appEnv != EnvironmentDevelopment && appEnv != EnvironmentTest && appEnv != EnvironmentProduction {
 		return Config{}, fmt.Errorf("APP_ENV must be development, test, or production")
+	}
+	apiImage := value(lookup, "API_IMAGE")
+	if appEnv == EnvironmentProduction && !immutableImagePattern.MatchString(apiImage) {
+		return Config{}, fmt.Errorf("API_IMAGE must be an immutable repository@sha256 digest in production")
 	}
 
 	port, err := parsePort(valueOrDefault(lookup, "PORT", "3000"))
@@ -107,6 +116,16 @@ func LoadFrom(lookup LookupFunc) (Config, error) {
 		if err := common.ValidatePassword(bootstrapPassword); err != nil {
 			return Config{}, fmt.Errorf("PLATFORM_BOOTSTRAP_ADMIN_PASSWORD: %w", err)
 		}
+	}
+	if appEnv == EnvironmentProduction && bootstrapPassword == "" {
+		return Config{}, fmt.Errorf("PLATFORM_BOOTSTRAP_ADMIN_PASSWORD is required in production")
+	}
+	bootstrapFile := value(lookup, "PLATFORM_BOOTSTRAP_ADMIN_PASSWORD_FILE")
+	if bootstrapFile != "" {
+		if !filepath.IsAbs(bootstrapFile) {
+			return Config{}, fmt.Errorf("PLATFORM_BOOTSTRAP_ADMIN_PASSWORD_FILE must be an absolute path")
+		}
+		bootstrapFile = filepath.Clean(bootstrapFile)
 	}
 
 	cookieSecure, err := boolValue(lookup, "SESSION_COOKIE_SECURE", false)
@@ -168,6 +187,7 @@ func LoadFrom(lookup LookupFunc) (Config, error) {
 	return Config{
 		AppEnv:               appEnv,
 		Port:                 port,
+		APIImage:             apiImage,
 		DatabaseDSN:          dsn,
 		SQLMaxIdleConns:      maxIdle,
 		SQLMaxOpenConns:      maxOpen,
@@ -176,6 +196,7 @@ func LoadFrom(lookup LookupFunc) (Config, error) {
 		EncryptionKey:        encryptionKey,
 		EncryptionKeyID:      common.KeyFingerprint(encryptionKey),
 		BootstrapAdminSecret: bootstrapPassword,
+		BootstrapAdminFile:   bootstrapFile,
 		SessionCookieSecure:  cookieSecure,
 		ExportDir:            filepath.Clean(exportDir),
 		RedisDSN:             redisDSN, RedisDB: redisDB, RedisTimeout: time.Duration(redisTimeoutSeconds) * time.Second,
@@ -197,6 +218,40 @@ func (c Config) ValidateRuntimeFiles() error {
 		if info.IsDir() {
 			return errors.New("UPSTREAM_CA_FILE must be a file")
 		}
+	}
+	return nil
+}
+
+func (c Config) ValidateBootstrapAdminOutput() error {
+	if c.AppEnv == EnvironmentProduction || c.BootstrapAdminSecret != "" {
+		return nil
+	}
+	return validateBootstrapAdminFile(c.BootstrapAdminFile)
+}
+
+func validateBootstrapAdminFile(path string) error {
+	if path == "" {
+		return errors.New("PLATFORM_BOOTSTRAP_ADMIN_PASSWORD_FILE is required when the bootstrap password is generated")
+	}
+	if !filepath.IsAbs(path) {
+		return errors.New("PLATFORM_BOOTSTRAP_ADMIN_PASSWORD_FILE must be an absolute path")
+	}
+	cleanPath := filepath.Clean(path)
+	if _, err := os.Lstat(cleanPath); err == nil {
+		return errors.New("PLATFORM_BOOTSTRAP_ADMIN_PASSWORD_FILE must not already exist")
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("inspect PLATFORM_BOOTSTRAP_ADMIN_PASSWORD_FILE: %w", err)
+	}
+	parent := filepath.Dir(cleanPath)
+	if err := rejectSymlinkPath(parent); err != nil {
+		return fmt.Errorf("validate PLATFORM_BOOTSTRAP_ADMIN_PASSWORD_FILE parent: %w", err)
+	}
+	info, err := os.Stat(parent)
+	if err != nil {
+		return fmt.Errorf("inspect PLATFORM_BOOTSTRAP_ADMIN_PASSWORD_FILE parent: %w", err)
+	}
+	if !info.IsDir() {
+		return errors.New("PLATFORM_BOOTSTRAP_ADMIN_PASSWORD_FILE parent must be a directory")
 	}
 	return nil
 }

@@ -12,6 +12,8 @@ $ErrorActionPreference = 'Stop'
 $acceptanceID = 'A49'
 $mysqlImage = 'mysql:8.4'
 $goImage = 'golang:1.25.1'
+$goModuleProxy = 'https://goproxy.cn,https://mirrors.aliyun.com/goproxy/,direct'
+$goSumDatabase = 'sum.golang.google.cn'
 $databaseName = 'pilot_a49'
 $fixedNowUnix = '1768665599'
 $dockerOperationTimeoutSeconds = 180
@@ -411,6 +413,7 @@ try {
         '--label', 'new-api-pilot.acceptance=A49', '--label', $runLabel,
         '--workdir', '/workspace', '--mount', $repositoryMount,
         '--mount', 'type=volume,source=new-api-pilot-go-mod-cache,target=/go/pkg/mod',
+        '--env', "GOPROXY=$goModuleProxy", '--env', "GOSUMDB=$goSumDatabase",
         $goImage, 'go', 'mod', 'download'
     ))
     [void](Invoke-Docker -Arguments @('start', $containers.warm) -TimeoutSeconds 30)

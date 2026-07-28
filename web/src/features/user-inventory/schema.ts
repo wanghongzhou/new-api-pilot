@@ -43,5 +43,9 @@ export const userInventorySearchSchema = z
       4
     ),
     statuses: numberArray([1, 2]),
+    tab: z
+      .enum(['list', 'trend', 'dimensions', 'sites'])
+      .optional()
+      .catch(undefined),
   })
   .transform((search) => buildUserInventorySearch(search))

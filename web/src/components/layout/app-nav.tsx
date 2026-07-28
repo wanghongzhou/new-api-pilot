@@ -1,7 +1,9 @@
 import { HugeiconsIcon } from '@hugeicons/react'
+import { useQuery } from '@tanstack/react-query'
 import { Link, useRouterState } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 
+import { Badge } from '@/components/ui/badge'
 import {
   SidebarGroup,
   SidebarGroupLabel,
@@ -10,8 +12,11 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar'
+import { getAlertSummary } from '@/features/alerts/api'
+import { alertKeys } from '@/features/alerts/query-keys'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 
+import { resolveAlertNavBadge } from './app-nav-badge'
 import { navGroups } from './app-nav-config'
 
 export function AppNav() {
@@ -20,6 +25,17 @@ export function AppNav() {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   })
+  const alertSummaryQuery = useQuery({
+    queryFn: getAlertSummary,
+    queryKey: alertKeys.summary(),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  })
+  const firingAlertCount = alertSummaryQuery.data?.firing_count
+  const alertBadge = resolveAlertNavBadge(
+    firingAlertCount,
+    alertSummaryQuery.isError
+  )
 
   return (
     <nav aria-label={t('Primary navigation')}>
@@ -36,6 +52,16 @@ export function AppNav() {
                 pathname === item.to ||
                 pathname.startsWith(`${item.to}/`)
               const label = t(dynamicI18nKey('layout', item.label))
+              let alertBadgeLabel = t('alerts.navigation.firingCount', {
+                count: firingAlertCount ?? 0,
+              })
+              if (alertBadge.kind === 'unknown') {
+                alertBadgeLabel = t('alerts.navigation.countUnknown')
+              } else if (alertBadge.kind === 'stale') {
+                alertBadgeLabel = t('alerts.navigation.countStale', {
+                  count: firingAlertCount ?? 0,
+                })
+              }
 
               return (
                 <SidebarMenuItem key={item.to}>
@@ -56,6 +82,20 @@ export function AppNav() {
                       strokeWidth={2}
                     />
                     <span className='min-w-0 flex-1 truncate'>{label}</span>
+                    {item.to === '/alerts' && alertBadge.text ? (
+                      <Badge
+                        aria-label={alertBadgeLabel}
+                        className='ml-auto h-5 min-w-5 px-1.5 tabular-nums group-data-[collapsible=icon]:hidden'
+                        title={alertBadgeLabel}
+                        variant={
+                          alertBadge.kind === 'count'
+                            ? 'destructive'
+                            : 'warning'
+                        }
+                      >
+                        {alertBadge.text}
+                      </Badge>
+                    ) : null}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               )

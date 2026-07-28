@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import { BEIJING_TIMEZONE, dayjs } from '@/lib/dayjs'
 
-import { buildUserInventorySearch } from './search'
+import { buildUserInventorySearch, changeUserInventoryTab } from './search'
 
 const now = dayjs.tz('2026-07-17 12:34:56', BEIJING_TIMEZONE)
 
@@ -44,5 +44,19 @@ describe('user inventory URL normalization', () => {
     )
     expect(invalid.start).toBe(defaults.start)
     expect(invalid.end).toBe(defaults.end)
+  })
+
+  test('normalizes tabs and clears list-only filters for analysis views', () => {
+    expect(buildUserInventorySearch({ tab: 'trend' }, now).tab).toBe('trend')
+    expect(buildUserInventorySearch({ tab: 'invalid' as never }, now).tab).toBe(
+      'list'
+    )
+    expect(changeUserInventoryTab('dimensions')).toMatchObject({
+      keyword: '',
+      page: 1,
+      remoteUserId: undefined,
+      states: [],
+      tab: 'dimensions',
+    })
   })
 })

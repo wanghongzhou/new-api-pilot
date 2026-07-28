@@ -44,6 +44,7 @@ export const upstreamTaskSearchSchema = z
     statuses: z
       .preprocess(arrayValue, z.array(z.enum(upstreamTaskStatuses)).max(20))
       .catch([]),
+    tab: z.string().optional().catch(undefined),
     taskId: z.string().optional().catch(undefined),
   })
   .transform((search) => buildUpstreamTaskSearch(search))

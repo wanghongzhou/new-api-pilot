@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page, type Route } from '@playwright/test'
 
-import { clickOpenSelectOption } from './helpers/select-control'
+import { mockAuthenticatedShell } from './helpers/auth'
 
 const authStorageKey = 'pilot-auth-user'
 const uidStorageKey = 'uid'
@@ -31,6 +31,7 @@ function envelope<T>(data: T, requestId = 'req_logs_e2e') {
 }
 
 async function seedAuth(page: Page) {
+  await mockAuthenticatedShell(page)
   await page.addInitScript(
     ({ authKey, authUser, uidKey }) => {
       window.localStorage.setItem(authKey, JSON.stringify(authUser))
@@ -41,6 +42,17 @@ async function seedAuth(page: Page) {
   await page.route('**/api/user/self', async (route) => {
     assertAuthenticated(route)
     await route.fulfill({ json: envelope(viewer, 'req_logs_self') })
+  })
+  await page.route(/\/api\/sites(?:\?.*)?$/, async (route) => {
+    assertAuthenticated(route)
+    await route.fulfill({
+      json: envelope({
+        items: [{ id: '9007199254740993', name: '华东生产站点' }],
+        page: 1,
+        page_size: 100,
+        total: 1,
+      }),
+    })
   })
 }
 
@@ -145,9 +157,10 @@ test('queries, inspects and exports global redacted logs without treating them a
 
   await page.goto('/logs')
   await expect(
-    page.getByRole('heading', { name: '全局日志明细' })
+    page.getByRole('heading', { name: '全局使用日志' })
   ).toBeVisible()
-  await expect(page.getByText('日志不是财务事实')).toBeVisible()
+  await expect(page.getByText('使用日志不是财务事实')).toBeVisible()
+  await expect(page.getByText('当前查询日志数')).toBeVisible()
   await expect(page.getByText('部分站点或时间窗口未完整采集')).toBeVisible()
   await expect(
     page
@@ -163,12 +176,16 @@ test('queries, inspects and exports global redacted logs without treating them a
   ).toBeVisible()
 
   await page.getByLabel('用户名').fill('alice')
-  await page.getByLabel('日志类型').click()
-  await clickOpenSelectOption(page, '5')
+  await page.getByRole('button', { name: '日志类型' }).click()
+  await page.getByRole('button', { name: '错误' }).click()
+  await expect(page.getByLabel('Channel ID')).not.toBeVisible()
+  await page.getByRole('button', { name: /更多筛选/ }).click()
   await page.getByLabel('Channel ID').fill('9007199254740997')
   await page.getByLabel('分组').fill('vip')
   await page.getByLabel('Request ID', { exact: true }).fill('req-local-safe')
   await page.getByLabel('上游 Request ID').fill('req-upstream-safe')
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('button', { name: /更多筛选 4/ })).toBeVisible()
   await expect
     .poll(() => reads.at(-1)?.searchParams.get('username'))
     .toBe('alice')
@@ -238,10 +255,12 @@ test('uses the site-scoped endpoint and preserves unavailable as a distinct empt
 
   await page.goto('/sites/1/logs')
   await expect(
-    page.getByRole('heading', { name: '站点日志明细' })
+    page.getByRole('heading', { name: '站点使用日志' })
   ).toBeVisible()
   await expect(
-    page.getByRole('status').getByText('上游日志暂不可用')
+    page
+      .getByText('上游日志暂不可用，当前列表可能不完整。', { exact: true })
+      .first()
   ).toBeVisible()
   await expect(page.getByLabel('站点 ID')).toHaveCount(0)
   await page.getByLabel('模型').fill('gpt-4.1')

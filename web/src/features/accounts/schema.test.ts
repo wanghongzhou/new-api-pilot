@@ -9,11 +9,13 @@ describe('account schemas', () => {
         customer_id: '9007199254740993',
         remoteState: 'missing',
         site_id: '9007199254740994',
+        view: 'table',
       })
     ).toMatchObject({
       customer_id: '9007199254740993',
       remoteState: ['missing'],
       site_id: '9007199254740994',
+      view: 'table',
     })
   })
 

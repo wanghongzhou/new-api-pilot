@@ -68,6 +68,10 @@ func TestDockerBackendValidationUsesIsolatedProtectedDatabase(t *testing.T) {
 		"-e \"GOPROXY=$test_go_proxy\"",
 		"-e \"GOSUMDB=$test_go_sum_database\"",
 		"current_database=\"${test_database_prefix}_${index}\"",
+		"run_test_database()",
+		"new-api-pilot/tests/integration",
+		"go test -list '^Test'",
+		"-run \"^${test_name}$\"",
 		"MSYS_NO_PATHCONV=1",
 		"target=/root/.cache/go-build",
 		"DROP DATABASE IF EXISTS",
@@ -167,6 +171,17 @@ func TestDockerBuildSourcesAreConfigurableAndDomesticByDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 	compose := strings.ReplaceAll(string(composePayload), "\r\n", "\n")
+	for _, required := range []string{
+		"image: ${API_IMAGE:?API_IMAGE must be an immutable repository@sha256 digest}",
+		"API_IMAGE: ${API_IMAGE:?API_IMAGE must be an immutable repository@sha256 digest}",
+	} {
+		if !strings.Contains(compose, required) {
+			t.Fatalf("docker-compose.yml is missing immutable API image contract %q", required)
+		}
+	}
+	if strings.Contains(compose, "API_IMAGE:-new-api-pilot:local") {
+		t.Fatal("docker-compose.yml still permits a mutable local API image")
+	}
 	for _, required := range []string{
 		"BUN_IMAGE: ${BUN_IMAGE:-docker.m.daocloud.io/oven/bun:1.3.13-alpine}",
 		"GO_IMAGE: ${GO_IMAGE:-docker.m.daocloud.io/library/golang:1.25-alpine}",

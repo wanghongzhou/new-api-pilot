@@ -1,6 +1,8 @@
 import { useMutation } from '@tanstack/react-query'
 import { Outlet, useRouter } from '@tanstack/react-router'
 import { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
 import { AnimatedOutlet } from '@/components/page-transition'
 import { SkipToMain } from '@/components/skip-to-main'
@@ -16,11 +18,15 @@ import { AppHeader } from './app-header'
 import { AppSidebar } from './app-sidebar'
 
 export function AuthenticatedLayout() {
+  const { t } = useTranslation()
   const router = useRouter()
   const user = useAuthStore((state) => state.user)
   const logoutMutation = useMutation({
     mutationFn: logout,
-    onSettled: () => {
+    onError: () => {
+      toast.error(t('Unable to sign out'))
+    },
+    onSuccess: () => {
       clearAuthenticatedSession()
       void router.navigate({ to: '/sign-in' })
     },

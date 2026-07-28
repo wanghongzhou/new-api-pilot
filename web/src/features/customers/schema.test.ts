@@ -4,9 +4,9 @@ import { customerFormSchema, customersSearchSchema } from './schema'
 
 describe('customer schemas', () => {
   test('restores a single status filter as an array', () => {
-    expect(customersSearchSchema.parse({ status: 'using' }).status).toEqual([
-      'using',
-    ])
+    expect(
+      customersSearchSchema.parse({ status: 'using', view: 'table' })
+    ).toMatchObject({ status: ['using'], view: 'table' })
   })
 
   test('trims profile fields and validates amounts', () => {

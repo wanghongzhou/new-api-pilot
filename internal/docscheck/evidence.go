@@ -38,6 +38,9 @@ type formalEvidenceRecord struct {
 // after this baseline check. The normal docs check intentionally does not call
 // this function so development work can retain planned or historical evidence.
 func (current *checker) checkFormalEvidenceRoot(manifestPath, acceptanceID, evidenceRoot string) {
+	if !current.repositoryStateReady {
+		return
+	}
 	fixtureManifest := filepath.Join(current.root, "testdata", "design", "manifest.sha256")
 	fixtureSHA, err := hashFile(fixtureManifest)
 	if err != nil {
@@ -65,7 +68,7 @@ func (current *checker) checkFormalEvidenceRoot(manifestPath, acceptanceID, evid
 			continue
 		}
 		runDirectory := filepath.Join(evidenceRoot, entry.Name())
-		if err := validateFormalEvidenceRun(runDirectory, acceptanceID, fixtureSHA); err == nil {
+		if err := validateFormalEvidenceRun(runDirectory, acceptanceID, fixtureSHA, current.expectedCommit); err == nil {
 			return
 		} else if len(problems) < 3 {
 			problems = append(problems, entry.Name()+": "+err.Error())
@@ -77,7 +80,7 @@ func (current *checker) checkFormalEvidenceRoot(manifestPath, acceptanceID, evid
 	current.add("evidence", manifestPath, "%s has no valid current formal evidence: %s", acceptanceID, strings.Join(problems, "; "))
 }
 
-func validateFormalEvidenceRun(runDirectory, acceptanceID, fixtureSHA string) error {
+func validateFormalEvidenceRun(runDirectory, acceptanceID, fixtureSHA, expectedCommit string) error {
 	info, err := os.Lstat(runDirectory)
 	if err != nil {
 		return fmt.Errorf("inspect run directory: %w", err)
@@ -133,8 +136,11 @@ func validateFormalEvidenceRun(runDirectory, acceptanceID, fixtureSHA string) er
 		finishedAt.Sub(startedAt).Milliseconds() != record.DurationMilliseconds {
 		return fmt.Errorf("invalid evidence duration")
 	}
-	if strings.TrimSpace(record.Commit) == "" {
-		return fmt.Errorf("commit is empty")
+	if record.WorktreeDirty {
+		return fmt.Errorf("evidence was produced from a dirty worktree")
+	}
+	if record.Commit != expectedCommit {
+		return fmt.Errorf("evidence commit does not match the current candidate commit")
 	}
 	if record.FixtureManifestPath != "testdata/design/manifest.sha256" || record.FixtureManifestSHA != fixtureSHA {
 		return fmt.Errorf("fixture manifest checksum does not match the current contract")

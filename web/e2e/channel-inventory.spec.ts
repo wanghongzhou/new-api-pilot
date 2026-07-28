@@ -7,6 +7,8 @@ import {
   type TestInfo,
 } from '@playwright/test'
 
+import { mockAuthenticatedShell } from './helpers/auth'
+
 const authStorageKey = 'pilot-auth-user'
 const uidStorageKey = 'uid'
 const viewer = {
@@ -41,6 +43,7 @@ function assertAuthenticated(route: Route) {
 }
 
 async function seedAuth(page: Page, testInfo: TestInfo) {
+  await mockAuthenticatedShell(page)
   if (testInfo.project.name === 'chromium-mobile') {
     await page.setViewportSize({ height: 812, width: 375 })
   }
@@ -54,6 +57,17 @@ async function seedAuth(page: Page, testInfo: TestInfo) {
   await page.route('**/api/user/self', async (route) => {
     assertAuthenticated(route)
     await route.fulfill({ json: envelope(viewer, 'req_channel_self') })
+  })
+  await page.route(/\/api\/sites(?:\?.*)?$/, async (route) => {
+    assertAuthenticated(route)
+    await route.fulfill({
+      json: envelope({
+        items: [{ id: '9007199254740993', name: '华东生产站点' }],
+        page: 1,
+        page_size: 100,
+        total: 1,
+      }),
+    })
   })
 }
 
@@ -242,10 +256,12 @@ test('keeps channel inventory exact, filterable, exportable, secure and responsi
   ).toBeVisible()
 
   await page.getByLabel('渠道名称或模型').fill('gpt')
+  await page.getByRole('button', { name: /更多筛选/ }).click()
   await page.getByLabel('渠道类型 ID').fill('8')
   await page.getByLabel('分组').fill('vip')
   await page.getByLabel('标签').fill('primary')
   await page.getByRole('button', { name: '已启用' }).click()
+  await page.getByRole('button', { name: /库存状态/ }).click()
   await page.getByRole('button', { name: '本轮缺失' }).click()
   await expect
     .poll(() => listReads.at(-1)?.searchParams.get('keyword'))
@@ -335,6 +351,7 @@ test('uses forced site channel endpoints and preserves unavailable semantics', a
     page.getByRole('heading', { name: '站点渠道库存' })
   ).toBeVisible()
   await expect(page.getByLabel('站点 ID')).toHaveCount(0)
+  await page.getByRole('button', { name: /更多筛选/ }).click()
   await page.getByLabel('分组').fill('vip')
   await expect
     .poll(() => listReads.at(-1)?.searchParams.getAll('groups'))
@@ -345,10 +362,10 @@ test('uses forced site channel endpoints and preserves unavailable semantics', a
   expect(listReads.at(-1)?.searchParams.has('site_ids')).toBe(false)
   expect(statsReads.at(-1)?.searchParams.has('site_ids')).toBe(false)
   await page.reload()
+  await page.getByRole('button', { name: /更多筛选/ }).click()
   await expect(page.getByLabel('分组')).toHaveValue('vip')
   await expect(page.getByRole('button', { name: '返回站点详情' })).toBeVisible()
-  const statuses = page.locator('[role="status"]')
-  await expect(statuses).toHaveCount(2)
+  await expect(page.getByText('不可用').first()).toBeVisible()
   const accessibility = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa'])
     .analyze()

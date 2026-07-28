@@ -7,6 +7,8 @@ import {
   type TestInfo,
 } from '@playwright/test'
 
+import { mockAuthenticatedShell } from './helpers/auth'
+
 const viewer = {
   display_name: '任务只读员',
   id: '9007199254740991',
@@ -35,6 +37,7 @@ function assertAuthenticated(route: Route) {
 }
 
 async function seedAuth(page: Page, testInfo: TestInfo) {
+  await mockAuthenticatedShell(page)
   if (testInfo.project.name === 'chromium-mobile') {
     await page.setViewportSize({ height: 812, width: 375 })
   }
@@ -48,6 +51,17 @@ async function seedAuth(page: Page, testInfo: TestInfo) {
   await page.route('**/api/user/self', async (route) => {
     assertAuthenticated(route)
     await route.fulfill({ json: envelope(viewer, 'req_task_self') })
+  })
+  await page.route(/\/api\/sites(?:\?.*)?$/, async (route) => {
+    assertAuthenticated(route)
+    await route.fulfill({
+      json: envelope({
+        items: [{ id: '9007199254740997', name: '华东任务站点' }],
+        page: 1,
+        page_size: 100,
+        total: 1,
+      }),
+    })
   })
 }
 
@@ -243,7 +257,7 @@ test('A95 keeps upstream tasks exact, read-only, private, exportable and respons
 
   await page.goto('/upstream-tasks')
   await expect(
-    page.getByRole('heading', { exact: true, name: '上游任务' })
+    page.getByRole('heading', { exact: true, name: '任务日志' })
   ).toBeVisible()
   expect(new URL(page.url()).searchParams.has('start')).toBe(false)
   expect(new URL(page.url()).searchParams.has('end')).toBe(false)
@@ -251,7 +265,10 @@ test('A95 keeps upstream tasks exact, read-only, private, exportable and respons
     page.getByText('阶段 2/4').filter({ visible: true }).first()
   ).toBeVisible()
   await expect(
-    page.getByText('不可用').filter({ visible: true }).first()
+    page
+      .getByText('部分完整', { exact: true })
+      .filter({ visible: true })
+      .first()
   ).toBeVisible()
   for (const label of [
     '未开始',
@@ -267,15 +284,23 @@ test('A95 keeps upstream tasks exact, read-only, private, exportable and respons
     ).toBeVisible()
   }
 
-  await page
-    .getByRole('textbox', { exact: true, name: '站点 ID' })
-    .fill('9007199254740997')
-  await page
-    .getByRole('textbox', { exact: true, name: '远端记录 ID' })
-    .fill('9007199254740993')
+  await page.getByRole('tab', { name: /平台分析/ }).click()
+  await expect(page).toHaveURL(/tab=platforms/)
+  await expect(page.getByText('Platform 拆分')).toBeVisible()
+  await page.getByRole('tab', { name: /任务列表/ }).click()
+
+  await page.getByRole('button', { name: '站点' }).click()
+  await page.getByRole('button', { name: /华东任务站点/ }).click()
   await page
     .getByRole('textbox', { exact: true, name: 'Task ID（精确）' })
     .fill('task-safe')
+  await page.getByRole('button', { name: '任务状态' }).click()
+  await page.getByRole('button', { name: /运行中/ }).click()
+  await expect(page.getByLabel('远端记录 ID')).not.toBeVisible()
+  await page.getByRole('button', { name: /更多筛选/ }).click()
+  await page
+    .getByRole('textbox', { exact: true, name: '远端记录 ID' })
+    .fill('9007199254740993')
   await page
     .getByRole('textbox', { exact: true, name: '远端用户 ID' })
     .fill('0')
@@ -294,7 +319,8 @@ test('A95 keeps upstream tasks exact, read-only, private, exportable and respons
   await page
     .getByRole('textbox', { exact: true, name: 'Model' })
     .fill('safe-model')
-  await page.getByRole('button', { name: '运行中' }).click()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('button', { name: /更多筛选 7/ })).toBeVisible()
 
   await expect
     .poll(() => globalReads.at(-1)?.searchParams.get('remote_channel_id'))
@@ -360,7 +386,7 @@ test('A95 keeps upstream tasks exact, read-only, private, exportable and respons
 
   await page.goto('/sites/9007199254740997/upstream-tasks')
   await expect(
-    page.getByRole('heading', { exact: true, name: '站点上游任务' })
+    page.getByRole('heading', { exact: true, name: '站点任务日志' })
   ).toBeVisible()
   await expect(
     page.getByText('不可用').filter({ visible: true }).first()

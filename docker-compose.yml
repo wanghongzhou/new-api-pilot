@@ -10,13 +10,14 @@ services:
         GO_MODULE_PROXY: ${GO_MODULE_PROXY:-https://goproxy.cn,https://mirrors.aliyun.com/goproxy/,direct}
         GO_SUM_DATABASE: ${GO_SUM_DATABASE:-sum.golang.google.cn}
         ALPINE_MIRROR: ${ALPINE_MIRROR:-https://mirrors.aliyun.com/alpine}
-    image: ${API_IMAGE:-new-api-pilot:local}
+    image: ${API_IMAGE:?API_IMAGE must be an immutable repository@sha256 digest}
     container_name: new-api-pilot-api
     restart: unless-stopped
     ports:
       - '${API_PORT:-3000}:3000'
     environment:
       APP_ENV: production
+      API_IMAGE: ${API_IMAGE:?API_IMAGE must be an immutable repository@sha256 digest}
       PORT: '3000'
       DATABASE_DSN: ${DATABASE_DSN:?DATABASE_DSN is required}
       REDIS_DSN: ${REDIS_DSN:?REDIS_DSN is required}
@@ -27,7 +28,7 @@ services:
       SQL_MAX_LIFETIME_SECONDS: ${SQL_MAX_LIFETIME_SECONDS:-60}
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
-      PLATFORM_BOOTSTRAP_ADMIN_PASSWORD: ${PLATFORM_BOOTSTRAP_ADMIN_PASSWORD:-}
+      PLATFORM_BOOTSTRAP_ADMIN_PASSWORD: ${PLATFORM_BOOTSTRAP_ADMIN_PASSWORD:?PLATFORM_BOOTSTRAP_ADMIN_PASSWORD is required}
       SESSION_COOKIE_SECURE: 'true'
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?PUBLIC_ORIGIN is required}
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}

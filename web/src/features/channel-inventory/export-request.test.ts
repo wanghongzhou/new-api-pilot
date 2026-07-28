@@ -10,6 +10,7 @@ import { buildChannelInventoryExportRequest } from './export-request'
 
 test('channel inventory export freezes safe filters without pagination or key material', () => {
   const request = buildChannelInventoryExportRequest('xlsx', {
+    tab: 'list',
     end: 1_784_348_800,
     groups: ['vip'],
     keyword: 'gpt',

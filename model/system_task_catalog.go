@@ -71,11 +71,15 @@ func (r *SiteRepository) MarkSystemTaskCollectionFailure(ctx context.Context, si
 }
 
 func systemTaskRow(site Site, at int64, item dto.UpstreamSystemTask) SiteSystemTask {
-	return SiteSystemTask{SiteID: site.ID, RemoteID: item.ID, RemoteTaskID: item.TaskID, TaskType: item.Type, RemoteStatus: item.Status, ErrorPresent: item.ErrorPresent, ErrorCode: item.ErrorCode, Total: item.Total, Processed: item.Processed, Progress: item.Progress, Remaining: item.Remaining, DeletedCount: item.DeletedCount, Tested: item.Tested, Succeeded: item.Succeeded, Failed: item.Failed, Disabled: item.Disabled, Enabled: item.Enabled, CheckedChannels: item.CheckedChannels, ChangedChannels: item.ChangedChannels, DetectedAddModels: item.DetectedAddModels, DetectedRemoveModels: item.DetectedRemoveModels, FailedChannels: item.FailedChannels, AutoAddedModels: item.AutoAddedModels, UnfinishedTasks: item.UnfinishedTasks, ChannelsScanned: item.ChannelsScanned, PlatformsScanned: item.PlatformsScanned, NullTasksFailed: item.NullTasksFailed, RemoteCreatedAt: item.CreatedAt, RemoteUpdatedAt: item.UpdatedAt, SourceHash: systemTaskSourceHash(item), ConfigVersion: site.ConfigVersion, FirstSeenAt: at, LastSeenAt: at, CollectedAt: at, CreatedAt: at, UpdatedAt: at}
+	terminalCount := item.DeletedCount
+	if item.Type == "log_detail_cleanup" {
+		terminalCount = item.ArchivedDays
+	}
+	return SiteSystemTask{SiteID: site.ID, RemoteID: item.ID, RemoteTaskID: item.TaskID, TaskType: item.Type, RemoteStatus: item.Status, ErrorPresent: item.ErrorPresent, ErrorCode: item.ErrorCode, Total: item.Total, Processed: item.Processed, Progress: item.Progress, Remaining: item.Remaining, DeletedCount: terminalCount, Tested: item.Tested, Succeeded: item.Succeeded, Failed: item.Failed, Disabled: item.Disabled, Enabled: item.Enabled, CheckedChannels: item.CheckedChannels, ChangedChannels: item.ChangedChannels, DetectedAddModels: item.DetectedAddModels, DetectedRemoveModels: item.DetectedRemoveModels, FailedChannels: item.FailedChannels, AutoAddedModels: item.AutoAddedModels, UnfinishedTasks: item.UnfinishedTasks, ChannelsScanned: item.ChannelsScanned, PlatformsScanned: item.PlatformsScanned, NullTasksFailed: item.NullTasksFailed, RemoteCreatedAt: item.CreatedAt, RemoteUpdatedAt: item.UpdatedAt, SourceHash: systemTaskSourceHash(item), ConfigVersion: site.ConfigVersion, FirstSeenAt: at, LastSeenAt: at, CollectedAt: at, CreatedAt: at, UpdatedAt: at}
 }
 
 func (r *SiteRepository) SyncSystemTasks(ctx context.Context, site Site, at int64, snapshot dto.UpstreamSystemTaskSnapshot) (int64, error) {
-	if r == nil || r.db == nil || site.ID <= 0 || at <= 0 || len(snapshot.Items) > 105 {
+	if r == nil || r.db == nil || site.ID <= 0 || at <= 0 || len(snapshot.Items) > 106 {
 		return 0, errors.New("invalid system task snapshot")
 	}
 	items := append([]dto.UpstreamSystemTask{}, snapshot.Items...)
@@ -113,28 +117,33 @@ func (r *SiteRepository) SyncSystemTasks(ctx context.Context, site Site, at int6
 		written++
 	}
 	listStatus := "complete"
-	if snapshot.Truncated || snapshot.IDGap {
+	if snapshot.Truncated || snapshot.IDGap || snapshot.UnsupportedTypes > 0 {
 		listStatus = "partial"
 	}
 	observed := snapshot.ListObservedCount
 	if observed == 0 && len(items) > 0 {
 		observed = int64(len(items))
 	}
-	states := []SiteSystemTaskCollectionState{{SiteID: site.ID, ResourceKind: "list", DataStatus: listStatus, Truncated: snapshot.Truncated, IDGap: snapshot.IDGap, AsOf: &at, LastSuccessAt: &at, ObservedCount: observed, ConfigVersion: site.ConfigVersion, UpdatedAt: at}}
+	listState := SiteSystemTaskCollectionState{SiteID: site.ID, ResourceKind: "list", DataStatus: listStatus, Truncated: snapshot.Truncated, IDGap: snapshot.IDGap, AsOf: &at, LastSuccessAt: &at, ObservedCount: observed, ConfigVersion: site.ConfigVersion, UpdatedAt: at}
+	if snapshot.UnsupportedTypes > 0 {
+		listState.LastErrorCode = "SYSTEM_TASK_UNSUPPORTED_TYPE"
+	}
+	states := []SiteSystemTaskCollectionState{listState}
 	failures := map[string]bool{}
 	for _, kind := range snapshot.CurrentFailures {
 		failures[kind] = true
 	}
 	for _, kind := range []string{"log_cleanup", "channel_test", "model_update", "midjourney_poll", "async_task_poll"} {
 		state := SiteSystemTaskCollectionState{SiteID: site.ID, ResourceKind: "current:" + kind, DataStatus: "complete", AsOf: &at, LastSuccessAt: &at, ConfigVersion: site.ConfigVersion, UpdatedAt: at}
-		if failures[kind] {
+		if failures[kind] || kind == "log_cleanup" && failures["log_detail_cleanup"] {
 			state.DataStatus = "unavailable"
 			state.LastSuccessAt = nil
 			state.LastFailureAt = &at
 			state.LastErrorCode = "SYSTEM_TASK_CURRENT_UNAVAILABLE"
 		}
 		for _, item := range items {
-			if item.Type == kind && (item.Status == "pending" || item.Status == "running") {
+			matchesKind := item.Type == kind || kind == "log_cleanup" && item.Type == "log_detail_cleanup"
+			if matchesKind && (item.Status == "pending" || item.Status == "running") {
 				state.ObservedCount = 1
 				break
 			}
@@ -174,6 +183,7 @@ type SystemTaskMetricRow struct {
 type SystemTaskRepository struct{ db *gorm.DB }
 type SystemTaskSiteCollectionState struct {
 	DataStatus       string
+	ErrorCode        string
 	Truncated, IDGap bool
 	AsOf             *int64
 	ObservedCount    int64
@@ -208,6 +218,7 @@ func (r *SystemTaskRepository) CollectionStatuses(ctx context.Context, siteIDs [
 	for siteID, resources := range grouped {
 		summary := SystemTaskSiteCollectionState{DataStatus: "partial"}
 		completeResources, unavailableResources := 0, 0
+		listUnavailable := false
 		for _, state := range resources {
 			if state.DataStatus == "complete" {
 				completeResources++
@@ -219,6 +230,10 @@ func (r *SystemTaskRepository) CollectionStatuses(ctx context.Context, siteIDs [
 				summary.Truncated = state.Truncated
 				summary.IDGap = state.IDGap
 				summary.ObservedCount = state.ObservedCount
+				summary.ErrorCode = state.LastErrorCode
+				listUnavailable = state.DataStatus == "unavailable"
+			} else if summary.ErrorCode == "" && state.LastErrorCode != "" {
+				summary.ErrorCode = state.LastErrorCode
 			}
 			if state.AsOf != nil && (summary.AsOf == nil || *state.AsOf > *summary.AsOf) {
 				v := *state.AsOf
@@ -229,7 +244,10 @@ func (r *SystemTaskRepository) CollectionStatuses(ctx context.Context, siteIDs [
 				asOf = &v
 			}
 		}
-		if len(resources) == 6 && completeResources == 6 {
+		if listUnavailable {
+			summary.DataStatus = "unavailable"
+			unavailable++
+		} else if len(resources) == 6 && completeResources == 6 {
 			summary.DataStatus = "complete"
 			complete++
 		} else if unavailableResources == len(resources) && len(resources) == 6 {

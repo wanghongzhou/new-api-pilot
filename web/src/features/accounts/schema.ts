@@ -37,6 +37,7 @@ export const accountsSearchSchema = z.object({
   remoteStatus: searchArray(remoteUserStatusFilters),
   remoteState: searchArray(accountRemoteStates),
   managedStatus: searchArray(accountManagedStatuses),
+  view: z.enum(['card', 'table']).optional().catch(undefined),
   sort: z
     .enum(['updated_at', 'username', 'today_quota', 'quota'])
     .optional()

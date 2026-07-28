@@ -7,6 +7,11 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"reflect"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,7 +19,50 @@ import (
 	"new-api-pilot/config"
 	"new-api-pilot/model"
 	"new-api-pilot/router"
+	"new-api-pilot/service"
 )
+
+func TestPersistGeneratedBootstrapPasswordUsesPrivateExclusiveFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "bootstrap-admin-password")
+	const sentinel = "bootstrap-secret-sentinel-never-log"
+	if err := persistGeneratedBootstrapPassword(path, service.BootstrapResult{
+		Created: true, GeneratedPassword: sentinel,
+	}); err != nil {
+		t.Fatalf("persist generated bootstrap password: %v", err)
+	}
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(payload) != "username=admin\npassword="+sentinel+"\n" {
+		t.Fatalf("unexpected bootstrap file contents: %q", payload)
+	}
+	if info, err := os.Stat(path); err != nil {
+		t.Fatal(err)
+	} else if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
+		t.Fatalf("bootstrap password file mode = %#o", info.Mode().Perm())
+	}
+	if err := persistGeneratedBootstrapPassword(path, service.BootstrapResult{
+		Created: true, GeneratedPassword: "replacement",
+	}); err == nil || !strings.Contains(err.Error(), "file exists") {
+		t.Fatalf("existing bootstrap file error = %v", err)
+	}
+}
+
+func TestPersistGeneratedBootstrapPasswordSkipsConfiguredOrExistingAdmin(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "bootstrap-admin-password")
+	for _, result := range []service.BootstrapResult{
+		{Created: false, GeneratedPassword: "unused"},
+		{Created: true, GeneratedPassword: ""},
+	} {
+		if err := persistGeneratedBootstrapPassword(path, result); err != nil {
+			t.Fatalf("skip bootstrap file: %v", err)
+		}
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("bootstrap file unexpectedly exists: %v", err)
+	}
+}
 
 func TestPrivateUpstreamNetworksAreDevelopmentOnly(t *testing.T) {
 	tests := []struct {
@@ -133,6 +181,33 @@ func TestA49ReadOnlyRuntimeDoesNotRequireWorkerDependencies(t *testing.T) {
 	}
 	if err := runtime.Quiesce(); err != nil || runtime.Ready() {
 		t.Fatalf("quiesce A49 runtime ready=%v err=%v", runtime.Ready(), err)
+	}
+}
+
+func TestA49ReadinessDoesNotRequireRedis(t *testing.T) {
+	redisFailure := errors.New("redis is intentionally absent")
+	for _, test := range []struct {
+		name        string
+		runtimeMode applicationRuntimeMode
+		want        []string
+	}{
+		{name: "standard", runtimeMode: applicationRuntimeStandard, want: []string{"redis"}},
+		{name: "A49 read only", runtimeMode: applicationRuntimeA49ReadOnly, want: []string{}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			readiness := common.NewReadiness()
+			addApplicationReadinessChecks(
+				readiness,
+				test.runtimeMode,
+				func(context.Context) error { return nil },
+				func(context.Context) error { return redisFailure },
+			)
+			readiness.SetInitialized(true)
+			readiness.SetSchedulerReady(true)
+			if failures := readiness.Check(context.Background()); !reflect.DeepEqual(failures, test.want) {
+				t.Fatalf("readiness failures = %v, want %v", failures, test.want)
+			}
+		})
 	}
 }
 

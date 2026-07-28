@@ -15,7 +15,10 @@ import { BEIJING_TIMEZONE, dayjs, fromUnixSeconds } from '@/lib/dayjs'
 
 import type { ChannelInventoryState } from './types'
 
+export type ChannelInventoryTab = 'dimensions' | 'list' | 'sites' | 'trend'
+
 export interface ChannelInventorySearch {
+  tab: ChannelInventoryTab
   page: number
   pageSize: number
   siteIds: IdString[]
@@ -156,5 +159,23 @@ export function buildChannelInventorySearch(
     statuses: stableNumbers(raw.statuses, 3),
     tags: stableStrings(raw.tags, 128),
     types: stableNumbers(raw.types, 10_000),
+    tab:
+      raw.tab === 'trend' || raw.tab === 'dimensions' || raw.tab === 'sites'
+        ? raw.tab
+        : 'list',
+  }
+}
+
+export function changeChannelInventoryTab(tab: ChannelInventoryTab) {
+  if (tab === 'list') return { page: 1, tab }
+  return {
+    keyword: '',
+    maxBalance: undefined,
+    maxResponseTime: undefined,
+    minBalance: undefined,
+    minResponseTime: undefined,
+    page: 1,
+    states: [] as ChannelInventoryState[],
+    tab,
   }
 }

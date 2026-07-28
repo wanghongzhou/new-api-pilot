@@ -14,11 +14,13 @@ test('supports an explicit zero fallback when the metric contract defines it', (
 })
 
 describe('MetricValue', () => {
-  test('renders missing numeric values as zero by default', () => {
-    expect(renderToStaticMarkup(<MetricValue value={null} />)).toContain('0')
+  test('renders missing numeric values with the shared placeholder by default', () => {
+    expect(renderToStaticMarkup(<MetricValue value={null} />)).toContain(
+      '>-</span>'
+    )
   })
 
-  test('preserves numeric values and normalizes null to zero', () => {
+  test('preserves real zero without treating missing values as zero', () => {
     expect(
       renderToStaticMarkup(<MetricValue value={parseMetricString('1')} />)
     ).toContain('title="1">1</span>')
@@ -26,7 +28,7 @@ describe('MetricValue', () => {
       renderToStaticMarkup(<MetricValue value={parseMetricString('0')} />)
     ).toContain('title="0">0</span>')
     expect(renderToStaticMarkup(<MetricValue value={null} />)).toContain(
-      '>0</span>'
+      '>-</span>'
     )
   })
 })

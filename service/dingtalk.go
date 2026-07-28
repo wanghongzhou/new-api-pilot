@@ -36,6 +36,8 @@ const (
 	dingTalkMessageLimit      = 2000
 )
 
+const dingTalkFinalizationTimeout = 5 * time.Second
+
 var (
 	ErrDingTalkServiceDependencies = errors.New("dingtalk service dependencies are required")
 	errDingTalkRedirectForbidden   = errors.New("dingtalk redirect is forbidden")
@@ -228,14 +230,14 @@ func (service *DingTalkService) ProcessNext(ctx context.Context) (bool, error) {
 	}
 	if preflight != nil {
 		result := dingTalkAttemptResult{errorCode: preflight.code, responseMessage: safeDeliveryMessage(preflight.code)}
-		return true, service.completeAttempt(claim, result)
+		return true, service.completeAttempt(ctx, claim, result)
 	}
 	payload, err := service.payloadForClaim(ctx, claim)
 	if err != nil {
 		return true, err
 	}
 	result := service.send(ctx, prepared, payload, requestID)
-	return true, service.completeAttempt(claim, result)
+	return true, service.completeAttempt(ctx, claim, result)
 }
 
 func (service *DingTalkService) Test(ctx context.Context, requestID string) (dto.NotificationTestResult, error) {
@@ -267,7 +269,7 @@ func (service *DingTalkService) Test(ctx context.Context, requestID string) (dto
 		return dto.NotificationTestResult{}, err
 	}
 	result := service.send(ctx, prepared, dingTalkTestPayload(), requestID)
-	if err := service.completeAttempt(claim, result); err != nil {
+	if err := service.completeAttempt(ctx, claim, result); err != nil {
 		return dto.NotificationTestResult{}, err
 	}
 	deliveryID := strconv.FormatInt(delivery.ID, 10)
@@ -536,9 +538,12 @@ func (service *DingTalkService) send(
 }
 
 func (service *DingTalkService) completeAttempt(
+	parent context.Context,
 	claim model.AlertDeliveryClaim,
 	result dingTalkAttemptResult,
 ) error {
+	ctx, cancel := common.FinalizationContext(parent, dingTalkFinalizationTimeout)
+	defer cancel()
 	now := service.clock.Now().Unix()
 	message := truncateDeliveryMessage(result.responseMessage)
 	completion := model.AlertDeliveryCompletion{
@@ -547,7 +552,7 @@ func (service *DingTalkService) completeAttempt(
 	}
 	if result.success {
 		completion.Status, completion.SentAt = model.AlertDeliveryStatusSuccess, &now
-		err := service.deliveries.Complete(context.Background(), completion)
+		err := service.deliveries.Complete(ctx, completion)
 		if err == nil {
 			service.recordDeliveryMetric("success")
 		}
@@ -564,7 +569,7 @@ func (service *DingTalkService) completeAttempt(
 		next := service.clock.Now().Add(delay).Unix()
 		completion.Status, completion.NextRetryAt = model.AlertDeliveryStatusPending, &next
 		completion.ErrorCode = string(result.errorCode)
-		err := service.deliveries.Complete(context.Background(), completion)
+		err := service.deliveries.Complete(ctx, completion)
 		if err == nil {
 			service.recordDeliveryMetric("retry")
 		}
@@ -578,7 +583,7 @@ func (service *DingTalkService) completeAttempt(
 	} else {
 		completion.ErrorCode = string(constant.MessageDingTalkRejected)
 	}
-	err := service.deliveries.Complete(context.Background(), completion)
+	err := service.deliveries.Complete(ctx, completion)
 	if err == nil {
 		metricResult := "failed"
 		if result.retryable {

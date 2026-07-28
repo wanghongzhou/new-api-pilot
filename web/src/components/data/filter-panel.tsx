@@ -1,4 +1,8 @@
-import { ArrowDown01Icon, Cancel01Icon } from '@hugeicons/core-free-icons'
+import {
+  ArrowDown01Icon,
+  Cancel01Icon,
+  Settings02Icon,
+} from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   Children,
@@ -11,8 +15,14 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { SelectControl as Select } from '@/components/ui/select-control'
 import { cn } from '@/lib/utils'
 
@@ -105,6 +115,8 @@ function compactFilterFields(children: ReactNode): ReactNode {
 export function FilterPanel({
   actions,
   advanced,
+  advancedCount = 0,
+  advancedMode = 'inline',
   children,
   description,
   expandOnLargeScreen = false,
@@ -116,6 +128,8 @@ export function FilterPanel({
 }: {
   actions?: React.ReactNode
   advanced?: React.ReactNode
+  advancedCount?: number
+  advancedMode?: 'inline' | 'popover'
   children: React.ReactNode
   description: string
   expandOnLargeScreen?: boolean
@@ -172,33 +186,68 @@ export function FilterPanel({
             </Button>
           )}
           {actions}
-          {hasAdvanced && !(expandOnLargeScreen && isLargeScreen) && (
-            <Button
-              aria-expanded={expanded}
-              className={cn(
-                'text-muted-foreground hover:text-foreground shrink-0 gap-1 px-2',
-                hasAdvancedActive &&
-                  !expanded &&
-                  'text-primary hover:text-primary'
-              )}
-              onClick={() => setExpanded((current) => !current)}
-              type='button'
-              variant='ghost'
-            >
-              {expanded ? t('common.collapse') : t('common.expand')}
-              <HugeiconsIcon
-                className={cn(
-                  'size-3.5 transition-transform duration-200',
-                  expanded && 'rotate-180'
+          {hasAdvanced && advancedMode === 'popover' && (
+            <Popover>
+              <PopoverTrigger
+                render={
+                  <Button
+                    className='border-dashed'
+                    type='button'
+                    variant='outline'
+                  />
+                }
+              >
+                <HugeiconsIcon
+                  icon={Settings02Icon}
+                  size={15}
+                  strokeWidth={2}
+                />
+                {t('common.moreFilters')}
+                {advancedCount > 0 && (
+                  <Badge className='px-1.5 font-mono' variant='secondary'>
+                    {advancedCount}
+                  </Badge>
                 )}
-                icon={ArrowDown01Icon}
-                strokeWidth={2}
-              />
-            </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                align='end'
+                className='w-[min(640px,calc(100vw-2rem))] p-3'
+              >
+                <div className='grid gap-3 sm:grid-cols-2'>
+                  {compactFilterFields(advanced)}
+                </div>
+              </PopoverContent>
+            </Popover>
           )}
+          {hasAdvanced &&
+            advancedMode === 'inline' &&
+            !(expandOnLargeScreen && isLargeScreen) && (
+              <Button
+                aria-expanded={expanded}
+                className={cn(
+                  'text-muted-foreground hover:text-foreground shrink-0 gap-1 px-2',
+                  hasAdvancedActive &&
+                    !expanded &&
+                    'text-primary hover:text-primary'
+                )}
+                onClick={() => setExpanded((current) => !current)}
+                type='button'
+                variant='ghost'
+              >
+                {expanded ? t('common.collapse') : t('common.expand')}
+                <HugeiconsIcon
+                  className={cn(
+                    'size-3.5 transition-transform duration-200',
+                    expanded && 'rotate-180'
+                  )}
+                  icon={ArrowDown01Icon}
+                  strokeWidth={2}
+                />
+              </Button>
+            )}
         </div>
       </div>
-      {advancedVisible && advanced && (
+      {advancedMode === 'inline' && advancedVisible && advanced && (
         <div className='flex flex-wrap items-center gap-2 sm:gap-3 [&_[data-slot=button]]:min-h-10 sm:[&_[data-slot=button]]:min-h-8'>
           {compactFilterFields(advanced)}
         </div>

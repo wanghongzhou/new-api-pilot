@@ -16,6 +16,7 @@ import (
 	"new-api-pilot/common"
 	"new-api-pilot/config"
 	"new-api-pilot/model"
+	"new-api-pilot/service"
 )
 
 var errApplicationShutdownTimeout = errors.New("application shutdown deadline exceeded")
@@ -130,6 +131,9 @@ func serveWithOptions(appConfig config.Config, options serveOptions) error {
 	if err := appConfig.ValidateRuntimeFiles(); err != nil {
 		return fmt.Errorf("validate runtime files: %w", err)
 	}
+	if err := appConfig.ValidateBootstrapAdminOutput(); err != nil {
+		return fmt.Errorf("validate bootstrap admin output: %w", err)
+	}
 	cipher, err := common.NewCipher(appConfig.EncryptionKey)
 	if err != nil {
 		return fmt.Errorf("initialize encryption: %w", err)
@@ -159,8 +163,9 @@ func serveWithOptions(appConfig config.Config, options serveOptions) error {
 		_ = database.Close()
 		return err
 	}
-	if bootstrap.Created && bootstrap.GeneratedPassword != "" {
-		fmt.Printf("bootstrap admin username=admin password=%s\n", bootstrap.GeneratedPassword)
+	if err := persistGeneratedBootstrapPassword(appConfig.BootstrapAdminFile, bootstrap); err != nil {
+		_ = database.Close()
+		return err
 	}
 	defer func() { _ = database.Close() }()
 
@@ -211,6 +216,34 @@ func serveWithOptions(appConfig config.Config, options serveOptions) error {
 
 	shutdownError := shutdownApplication(app, server, listener, 30*time.Second)
 	return errors.Join(terminalError, shutdownError)
+}
+
+func persistGeneratedBootstrapPassword(path string, bootstrap service.BootstrapResult) error {
+	if !bootstrap.Created || bootstrap.GeneratedPassword == "" {
+		return nil
+	}
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return fmt.Errorf("create bootstrap admin password file: %w", err)
+	}
+	complete := false
+	defer func() {
+		_ = file.Close()
+		if !complete {
+			_ = os.Remove(path)
+		}
+	}()
+	if _, err := fmt.Fprintf(file, "username=admin\npassword=%s\n", bootstrap.GeneratedPassword); err != nil {
+		return fmt.Errorf("write bootstrap admin password file: %w", err)
+	}
+	if err := file.Sync(); err != nil {
+		return fmt.Errorf("sync bootstrap admin password file: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("close bootstrap admin password file: %w", err)
+	}
+	complete = true
+	return nil
 }
 
 func initializeDatabase(

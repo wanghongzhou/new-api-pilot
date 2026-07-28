@@ -69,6 +69,7 @@ func TestA49RunnerStaticSafetyContract(t *testing.T) {
 		"--default-time-zone=+08:00", "@@global.time_zone",
 		"Get-A49RepositoryRelativePath", "GetFullPath", "OrdinalIgnoreCase",
 		"Get-A49GitState", "Invoke-A49GitProcess", "rev-list", "--all", "--count",
+		"GOPROXY=$goModuleProxy", "GOSUMDB=$goSumDatabase", "https://goproxy.cn,https://mirrors.aliyun.com/goproxy/,direct",
 	} {
 		if !strings.Contains(staticContract, required) {
 			t.Fatalf("runner is missing %q", required)

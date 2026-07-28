@@ -950,14 +950,14 @@ func (client *NewAPIClient) PerformanceSummary(ctx context.Context, requestID st
 	if hours < 1 || hours > 24*30 {
 		return dto.UpstreamPerformanceSummary{}, newUpstreamRequestError(UpstreamErrorResponseInvalid)
 	}
-	var wire dto.UpstreamPerformanceSummary
-	if _, err := client.get(ctx, client.httpClient, "/api/perf-metrics/summary", url.Values{"hours": []string{strconv.Itoa(hours)}}, requestID, upstreamAuthManagement, client.requestTimeout, &wire, false); err != nil {
+	var response upstreamPerformanceSummaryResponse
+	if _, err := client.get(ctx, client.httpClient, "/api/perf-metrics/summary", url.Values{"hours": []string{strconv.Itoa(hours)}}, requestID, upstreamAuthManagement, client.requestTimeout, &response, false); err != nil {
 		return dto.UpstreamPerformanceSummary{}, err
 	}
-	if err := validatePerformanceSummary(wire); err != nil {
+	if err := validatePerformanceSummary(response.Summary); err != nil {
 		return dto.UpstreamPerformanceSummary{}, err
 	}
-	return wire, nil
+	return response.Summary, nil
 }
 
 func (client *NewAPIClient) PerformanceHistory(ctx context.Context, requestID string, hours int) (dto.UpstreamPerformanceHistory, error) {

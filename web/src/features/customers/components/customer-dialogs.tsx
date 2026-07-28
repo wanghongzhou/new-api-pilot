@@ -25,7 +25,9 @@ import { Input } from '@/components/ui/input'
 import { SelectControl as Select } from '@/components/ui/select-control'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
+import { UnsavedChangesConfirmDialog } from '@/components/unsaved-changes-guard'
 import type { CollectionRunItem } from '@/features/sites/types'
+import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import { applyApiFieldErrors } from '@/lib/form-errors'
@@ -64,7 +66,7 @@ function CustomerFormDialog({
   const [pending, setPending] = useState(false)
   const {
     control,
-    formState: { errors },
+    formState: { errors, isDirty },
     handleSubmit,
     register,
     setError,
@@ -84,6 +86,8 @@ function CustomerFormDialog({
     },
     resolver: zodResolver(customerFormSchema),
   })
+  const { confirmOpen, discardAndClose, requestClose, setConfirmOpen } =
+    useUnsavedChangesGuard({ hasUnsavedChanges: isDirty, onClose })
   const submit = handleSubmit(async (values) => {
     setPending(true)
     try {
@@ -124,152 +128,168 @@ function CustomerFormDialog({
     }
   })
   return (
-    <Drawer direction='right' onOpenChange={(open) => !open && onClose()} open>
-      <DrawerContent className={sideDrawerContentClassName('sm:max-w-xl')}>
-        <DrawerHeader className={sideDrawerHeaderClassName()}>
-          <DrawerTitle>
-            {t(
-              dynamicI18nKey(
-                'customer',
-                customer ? 'customer.edit.title' : 'customer.create.title'
-              )
-            )}
-          </DrawerTitle>
-          <DrawerDescription>
-            {t(
-              dynamicI18nKey(
-                'customer',
-                customer
-                  ? 'customer.edit.description'
-                  : 'customer.create.description'
-              )
-            )}
-          </DrawerDescription>
-        </DrawerHeader>
-        <form
-          className={sideDrawerFormClassName('gap-4')}
-          id='customer-form'
-          noValidate
-          onSubmit={submit}
-        >
-          <FormField
-            error={
-              errors.name?.type === 'server'
-                ? errors.name.message
-                : errors.name?.message &&
-                  t(dynamicI18nKey('customer', errors.name.message))
-            }
-            htmlFor='customer-name'
-            label={t('customer.name')}
-            required
-          >
-            <Input id='customer-name' {...register('name')} />
-          </FormField>
-          <FormField
-            error={
-              errors.contact?.type === 'server'
-                ? errors.contact.message
-                : errors.contact?.message &&
-                  t(dynamicI18nKey('customer', errors.contact.message))
-            }
-            htmlFor='customer-contact'
-            label={t('customer.contact')}
-          >
-            <Input id='customer-contact' {...register('contact')} />
-          </FormField>
-          <FormField
-            error={
-              errors.contract_amount?.type === 'server'
-                ? errors.contract_amount.message
-                : errors.contract_amount?.message &&
-                  t(dynamicI18nKey('customer', errors.contract_amount.message))
-            }
-            htmlFor='customer-contract-amount'
-            label={t('customer.contractAmount')}
-          >
-            <Input
-              id='customer-contract-amount'
-              inputMode='decimal'
-              {...register('contract_amount')}
-            />
-          </FormField>
-          <FormField
-            error={
-              errors.payment_amount?.type === 'server'
-                ? errors.payment_amount.message
-                : errors.payment_amount?.message &&
-                  t(dynamicI18nKey('customer', errors.payment_amount.message))
-            }
-            htmlFor='customer-payment-amount'
-            label={t('customer.paymentAmount')}
-          >
-            <Input
-              id='customer-payment-amount'
-              inputMode='decimal'
-              {...register('payment_amount')}
-            />
-          </FormField>
-          <FormField
-            htmlFor='customer-status'
-            label={t('customer.statusLabel')}
-            required
-          >
-            <Controller
-              control={control}
-              name='status'
-              render={({ field }) => (
-                <Select
-                  alignItemWithTrigger={false}
-                  id='customer-status'
-                  name={field.name}
-                  onChange={(event) => field.onChange(event.target.value)}
-                  portalled={false}
-                  value={field.value}
-                >
-                  {editableCustomerStatuses.map((status) => (
-                    <option key={status} value={status}>
-                      {t(
-                        dynamicI18nKey('customer', `customer.status.${status}`)
-                      )}
-                    </option>
-                  ))}
-                </Select>
+    <>
+      <Drawer
+        direction='right'
+        onOpenChange={(open) => !open && requestClose()}
+        open
+      >
+        <DrawerContent className={sideDrawerContentClassName('sm:max-w-xl')}>
+          <DrawerHeader className={sideDrawerHeaderClassName()}>
+            <DrawerTitle>
+              {t(
+                dynamicI18nKey(
+                  'customer',
+                  customer ? 'customer.edit.title' : 'customer.create.title'
+                )
               )}
-            />
-          </FormField>
-          <FormField
-            error={
-              errors.remark?.type === 'server'
-                ? errors.remark.message
-                : errors.remark?.message &&
-                  t(dynamicI18nKey('customer', errors.remark.message))
-            }
-            htmlFor='customer-remark'
-            label={t('customer.remark')}
+            </DrawerTitle>
+            <DrawerDescription>
+              {t(
+                dynamicI18nKey(
+                  'customer',
+                  customer
+                    ? 'customer.edit.description'
+                    : 'customer.create.description'
+                )
+              )}
+            </DrawerDescription>
+          </DrawerHeader>
+          <form
+            className={sideDrawerFormClassName('gap-4')}
+            id='customer-form'
+            noValidate
+            onSubmit={submit}
           >
-            <Textarea
-              className='min-h-24'
-              id='customer-remark'
-              {...register('remark')}
-            />
-          </FormField>
-          {errors.root?.message && (
-            <p className='text-destructive text-sm' role='alert'>
-              {t(dynamicI18nKey('customer', errors.root.message))}
-            </p>
-          )}
-        </form>
-        <DrawerFooter className={sideDrawerFooterClassName()}>
-          <Button onClick={onClose} type='button' variant='outline'>
-            {t('common.cancel')}
-          </Button>
-          <Button disabled={pending} form='customer-form' type='submit'>
-            {pending && <Spinner />}
-            {t('common.save')}
-          </Button>
-        </DrawerFooter>
-      </DrawerContent>
-    </Drawer>
+            <FormField
+              error={
+                errors.name?.type === 'server'
+                  ? errors.name.message
+                  : errors.name?.message &&
+                    t(dynamicI18nKey('customer', errors.name.message))
+              }
+              htmlFor='customer-name'
+              label={t('customer.name')}
+              required
+            >
+              <Input id='customer-name' {...register('name')} />
+            </FormField>
+            <FormField
+              error={
+                errors.contact?.type === 'server'
+                  ? errors.contact.message
+                  : errors.contact?.message &&
+                    t(dynamicI18nKey('customer', errors.contact.message))
+              }
+              htmlFor='customer-contact'
+              label={t('customer.contact')}
+            >
+              <Input id='customer-contact' {...register('contact')} />
+            </FormField>
+            <FormField
+              error={
+                errors.contract_amount?.type === 'server'
+                  ? errors.contract_amount.message
+                  : errors.contract_amount?.message &&
+                    t(
+                      dynamicI18nKey('customer', errors.contract_amount.message)
+                    )
+              }
+              htmlFor='customer-contract-amount'
+              label={t('customer.contractAmount')}
+            >
+              <Input
+                id='customer-contract-amount'
+                inputMode='decimal'
+                {...register('contract_amount')}
+              />
+            </FormField>
+            <FormField
+              error={
+                errors.payment_amount?.type === 'server'
+                  ? errors.payment_amount.message
+                  : errors.payment_amount?.message &&
+                    t(dynamicI18nKey('customer', errors.payment_amount.message))
+              }
+              htmlFor='customer-payment-amount'
+              label={t('customer.paymentAmount')}
+            >
+              <Input
+                id='customer-payment-amount'
+                inputMode='decimal'
+                {...register('payment_amount')}
+              />
+            </FormField>
+            <FormField
+              htmlFor='customer-status'
+              label={t('customer.statusLabel')}
+              required
+            >
+              <Controller
+                control={control}
+                name='status'
+                render={({ field }) => (
+                  <Select
+                    alignItemWithTrigger={false}
+                    id='customer-status'
+                    name={field.name}
+                    onChange={(event) => field.onChange(event.target.value)}
+                    portalled={false}
+                    value={field.value}
+                  >
+                    {editableCustomerStatuses.map((status) => (
+                      <option key={status} value={status}>
+                        {t(
+                          dynamicI18nKey(
+                            'customer',
+                            `customer.status.${status}`
+                          )
+                        )}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              />
+            </FormField>
+            <FormField
+              error={
+                errors.remark?.type === 'server'
+                  ? errors.remark.message
+                  : errors.remark?.message &&
+                    t(dynamicI18nKey('customer', errors.remark.message))
+              }
+              htmlFor='customer-remark'
+              label={t('customer.remark')}
+            >
+              <Textarea
+                className='min-h-24'
+                id='customer-remark'
+                {...register('remark')}
+              />
+            </FormField>
+            {errors.root?.message && (
+              <p className='text-destructive text-sm' role='alert'>
+                {t(dynamicI18nKey('customer', errors.root.message))}
+              </p>
+            )}
+          </form>
+          <DrawerFooter className={sideDrawerFooterClassName()}>
+            <Button onClick={requestClose} type='button' variant='outline'>
+              {t('common.cancel')}
+            </Button>
+            <Button disabled={pending} form='customer-form' type='submit'>
+              {pending && <Spinner />}
+              {t('common.save')}
+            </Button>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
+      <UnsavedChangesConfirmDialog
+        onConfirm={discardAndClose}
+        onOpenChange={setConfirmOpen}
+        open={confirmOpen}
+      />
+    </>
   )
 }
 

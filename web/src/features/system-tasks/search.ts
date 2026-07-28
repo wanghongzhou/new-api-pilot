@@ -8,6 +8,7 @@ import {
 } from './types'
 
 export interface SystemTaskSearch {
+  tab: 'list' | 'types' | 'statuses' | 'sites'
   page: number
   pageSize: number
   siteIds: ReturnType<typeof parseIdString>[]
@@ -27,6 +28,7 @@ type SearchInput = Omit<
   siteIds?: readonly string[]
   statuses?: readonly string[]
   types?: readonly string[]
+  tab?: string
 }
 
 function optionalTimestamp(value: unknown) {
@@ -70,6 +72,27 @@ export function buildSystemTaskSearch(raw: SearchInput): SystemTaskSearch {
     statuses: systemTaskStatuses.filter((value) =>
       raw.statuses?.includes(value)
     ),
+    tab:
+      raw.tab === 'types' || raw.tab === 'statuses' || raw.tab === 'sites'
+        ? raw.tab
+        : 'list',
     types: systemTaskTypes.filter((value) => raw.types?.includes(value)),
+  }
+}
+
+export function changeSystemTaskTab(
+  tab: SystemTaskSearch['tab']
+): Partial<SystemTaskSearch> {
+  if (tab === 'list') return { page: 1, tab }
+  return {
+    createdEnd: undefined,
+    createdStart: undefined,
+    errorPresent: undefined,
+    page: 1,
+    pageSize: 20,
+    siteIds: [],
+    statuses: [],
+    tab,
+    types: [],
   }
 }

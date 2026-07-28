@@ -38,8 +38,12 @@ export const systemTaskSearchSchema = z
     statuses: z
       .preprocess(arrayValue, z.array(z.enum(systemTaskStatuses)).max(4))
       .catch([]),
+    tab: z
+      .enum(['list', 'types', 'statuses', 'sites'])
+      .optional()
+      .catch('list'),
     types: z
-      .preprocess(arrayValue, z.array(z.enum(systemTaskTypes)).max(5))
+      .preprocess(arrayValue, z.array(z.enum(systemTaskTypes)).max(6))
       .catch([]),
   })
   .transform(buildSystemTaskSearch)

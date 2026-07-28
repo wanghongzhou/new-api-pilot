@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page, type Route } from '@playwright/test'
 
+import { mockAuthenticatedShell } from './helpers/auth'
 import { clickOpenSelectOption } from './helpers/select-control'
 
 type F12Task = {
@@ -315,6 +316,9 @@ async function mockPage(page: Page) {
     assertRead(route)
     await route.fulfill({ json: envelope(siteDetail()) })
   })
+  // Register this exact shell route last so it takes precedence over the
+  // strict catch-all above while every other unexpected API still fails.
+  await mockAuthenticatedShell(page)
   return { collectionRequests, fastRequests }
 }
 

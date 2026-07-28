@@ -1,6 +1,8 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page, type Route } from '@playwright/test'
 
+import { mockAuthenticatedShell } from './helpers/auth'
+
 const authStorageKey = 'pilot-auth-user'
 const uidStorageKey = 'uid'
 const siteId = '9007199254740993'
@@ -88,6 +90,15 @@ async function followAppNavigation(page: Page, name: string) {
     .getByRole('navigation', { name: '主导航' })
     .getByRole('link', { name, exact: true })
   if (await directLink.isVisible()) {
+    await directLink.click()
+    return
+  }
+  const desktopSidebarButton = page
+    .getByRole('banner')
+    .getByRole('button', { name: '展开或收起侧栏' })
+  if (await desktopSidebarButton.isVisible()) {
+    await desktopSidebarButton.click()
+    await expect(directLink).toBeVisible()
     await directLink.click()
     return
   }
@@ -217,6 +228,7 @@ function statisticsResponse(url: URL) {
 }
 
 async function seedAuth(page: Page, user: TestUser) {
+  await mockAuthenticatedShell(page)
   await page.addInitScript(
     ({ authKey, authUser, uidKey }) => {
       window.localStorage.setItem(authKey, JSON.stringify(authUser))
@@ -384,7 +396,7 @@ test('creates CSV and XLSX from the complete current filters and surfaces active
     expect(request.filters).not.toHaveProperty('page_size')
   }
 
-  await followAppNavigation(page, '导出任务')
+  await followAppNavigation(page, '导出中心')
   await expect(page).toHaveURL(/\/exports/)
   await expect(
     page.getByRole('heading', { name: '导出任务', exact: true })

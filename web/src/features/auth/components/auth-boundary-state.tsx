@@ -3,6 +3,7 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { useRouter, type ErrorComponentProps } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 
+import { RouteErrorState } from '@/components/layout/route-error-state'
 import { Button } from '@/components/ui/button'
 import {
   Empty,
@@ -15,6 +16,16 @@ import {
 import { Spinner } from '@/components/ui/spinner'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey, normalizeApiError } from '@/lib/api'
+
+import { SessionVerificationError } from '../session-verification-error'
+
+export function AuthenticatedRouteErrorState(props: ErrorComponentProps) {
+  if (props.error instanceof SessionVerificationError) {
+    return <AuthErrorState {...props} error={props.error.originalError} />
+  }
+
+  return <RouteErrorState {...props} />
+}
 
 export function AuthPendingState() {
   const { t } = useTranslation()

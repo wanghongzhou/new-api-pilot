@@ -3,6 +3,10 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { Outlet, createRootRouteWithContext } from '@tanstack/react-router'
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
 
+import {
+  RouteErrorState,
+  RouteNotFoundState,
+} from '@/components/layout/route-error-state'
 import { Toaster } from '@/components/ui/sonner'
 import { DirectionProvider } from '@/context/direction-provider'
 import { ThemeCustomizationProvider } from '@/context/theme-customization-provider'
@@ -36,4 +40,6 @@ export const Route = createRootRouteWithContext<{
   queryClient: QueryClient
 }>()({
   component: RootComponent,
+  errorComponent: RouteErrorState,
+  notFoundComponent: RouteNotFoundState,
 })

@@ -64,11 +64,24 @@ packages=$(docker run --rm \
   "$test_image" go list $go_packages)
 status=0
 index=0
-for package in $packages; do
+run_test_database() {
+  package=$1
+  test_name=${2:-}
   index=$((index + 1))
   current_database="${test_database_prefix}_${index}"
   mysql_root -e "DROP DATABASE IF EXISTS \`$current_database\`; CREATE DATABASE \`$current_database\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; GRANT ALL PRIVILEGES ON \`$current_database\`.* TO 'pilot'@'%';"
-  if ! docker run --rm \
+  if [ -n "$test_name" ]; then
+    if ! docker run --rm \
+      --network "$test_network" \
+      --mount "type=volume,source=$test_build_cache,target=/root/.cache/go-build" \
+      -e "GOPROXY=$test_go_proxy" \
+      -e "GOSUMDB=$test_go_sum_database" \
+      -e "TEST_DATABASE_DSN=pilot:pilot@tcp(mysql:3306)/$current_database?charset=utf8mb4&parseTime=True&loc=Asia%2FShanghai" \
+      -e 'TEST_DATABASE_ADMIN_DSN=root:root@tcp(mysql:3306)/?charset=utf8mb4&parseTime=True&loc=Asia%2FShanghai' \
+      "$test_image" go test -count=1 -p 1 -run "^${test_name}$" "$package"; then
+      status=1
+    fi
+  elif ! docker run --rm \
     --network "$test_network" \
     --mount "type=volume,source=$test_build_cache,target=/root/.cache/go-build" \
     -e "GOPROXY=$test_go_proxy" \
@@ -80,5 +93,18 @@ for package in $packages; do
   fi
   cleanup
   current_database=
+}
+
+for package in $packages; do
+  if [ "$package" = "new-api-pilot/tests/integration" ]; then
+    test_names=$(docker run --rm -e "GOPROXY=$test_go_proxy" -e "GOSUMDB=$test_go_sum_database" "$test_image" go test -list '^Test' "$package")
+    for test_name in $test_names; do
+      case "$test_name" in
+        Test*) run_test_database "$package" "$test_name" ;;
+      esac
+    done
+  else
+    run_test_database "$package"
+  fi
 done
 exit "$status"

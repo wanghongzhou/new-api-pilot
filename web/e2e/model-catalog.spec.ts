@@ -7,6 +7,8 @@ import {
   type TestInfo,
 } from '@playwright/test'
 
+import { mockAuthenticatedShell } from './helpers/auth'
+
 const viewer = {
   display_name: '模型目录只读员',
   id: '9007199254740991',
@@ -35,6 +37,7 @@ function assertAuthenticated(route: Route) {
 }
 
 async function seedAuth(page: Page, testInfo: TestInfo) {
+  await mockAuthenticatedShell(page)
   if (testInfo.project.name === 'chromium-mobile') {
     await page.setViewportSize({ height: 812, width: 375 })
   }

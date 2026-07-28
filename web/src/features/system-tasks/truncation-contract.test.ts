@@ -17,6 +17,7 @@ describe('system task truncation contract', () => {
   test('keeps truncation metadata on statistics responses', () => {
     const statistics = {
       as_of: null,
+      data_error_code: '',
       data_status: 'complete',
       observed_count: parseMetricString('200'),
       site_breakdown: [],

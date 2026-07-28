@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import { parseIdString, parseNonNegativeIdString } from '@/lib/api-types'
 
-import { buildUpstreamTaskSearch } from './search'
+import { buildUpstreamTaskSearch, changeUpstreamTaskTab } from './search'
 
 describe('upstream task URL search', () => {
   test('preserves bigint-safe identities and normalizes frozen filters', () => {
@@ -35,5 +35,20 @@ describe('upstream task URL search', () => {
     const search = buildUpstreamTaskSearch({ end: 10, start: 20 })
     expect(search.start).toBeUndefined()
     expect(search.end).toBeUndefined()
+  })
+
+  test('keeps analysis tabs free of list-only filters', () => {
+    expect(changeUpstreamTaskTab('platforms')).toMatchObject({
+      actions: [],
+      groups: [],
+      models: [],
+      page: 1,
+      platforms: [],
+      siteIds: [],
+      statuses: [],
+      tab: 'platforms',
+      taskId: '',
+    })
+    expect(changeUpstreamTaskTab('list')).toEqual({ page: 1, tab: 'list' })
   })
 })

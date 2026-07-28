@@ -8,6 +8,7 @@ import {
 import type { UpstreamTaskStatus } from './types'
 
 export interface UpstreamTaskSearch {
+  tab: 'list' | 'statuses' | 'platforms' | 'actions' | 'models' | 'sites'
   page: number
   pageSize: number
   siteIds: ReturnType<typeof parseIdString>[]
@@ -37,6 +38,7 @@ type SearchInput = Omit<
   | 'remoteUserId'
   | 'siteIds'
   | 'statuses'
+  | 'tab'
 > & {
   actions?: readonly string[]
   exportId?: string
@@ -48,6 +50,7 @@ type SearchInput = Omit<
   remoteUserId?: string
   siteIds?: readonly string[]
   statuses?: readonly string[]
+  tab?: string
 }
 
 export const upstreamTaskStatuses: readonly UpstreamTaskStatus[] = [
@@ -127,6 +130,37 @@ export function buildUpstreamTaskSearch(raw: SearchInput): UpstreamTaskSearch {
           upstreamTaskStatuses.indexOf(left) -
           upstreamTaskStatuses.indexOf(right)
       ),
+    tab:
+      raw.tab === 'statuses' ||
+      raw.tab === 'platforms' ||
+      raw.tab === 'actions' ||
+      raw.tab === 'models' ||
+      raw.tab === 'sites'
+        ? raw.tab
+        : 'list',
     taskId: new TextEncoder().encode(taskId).length <= 191 ? taskId : '',
+  }
+}
+
+export function changeUpstreamTaskTab(
+  tab: UpstreamTaskSearch['tab']
+): Partial<UpstreamTaskSearch> {
+  if (tab === 'list') return { page: 1, tab }
+  return {
+    actions: [],
+    end: undefined,
+    groups: [],
+    models: [],
+    page: 1,
+    pageSize: 20,
+    platforms: [],
+    remoteChannelId: undefined,
+    remoteId: undefined,
+    remoteUserId: undefined,
+    siteIds: [],
+    start: undefined,
+    statuses: [],
+    tab,
+    taskId: '',
   }
 }

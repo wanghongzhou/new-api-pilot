@@ -2,7 +2,10 @@ import { describe, expect, test } from 'bun:test'
 
 import { BEIJING_TIMEZONE, dayjs } from '@/lib/dayjs'
 
-import { buildChannelInventorySearch } from './search'
+import {
+  buildChannelInventorySearch,
+  changeChannelInventoryTab,
+} from './search'
 
 const now = dayjs.tz('2026-07-18 12:34:56', BEIJING_TIMEZONE)
 
@@ -58,5 +61,18 @@ describe('channel inventory URL normalization', () => {
     expect(invalid.maxBalance).toBeUndefined()
     expect(invalid.minResponseTime).toBeUndefined()
     expect(invalid.maxResponseTime).toBeUndefined()
+  })
+
+  test('normalizes tabs and clears list-only filters for analysis views', () => {
+    expect(buildChannelInventorySearch({ tab: 'sites' }, now).tab).toBe('sites')
+    expect(
+      buildChannelInventorySearch({ tab: 'invalid' as never }, now).tab
+    ).toBe('list')
+    expect(changeChannelInventoryTab('trend')).toMatchObject({
+      keyword: '',
+      page: 1,
+      states: [],
+      tab: 'trend',
+    })
   })
 })

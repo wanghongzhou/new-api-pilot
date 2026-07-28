@@ -1,5 +1,7 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
 
+import { mockAuthenticatedShell } from './helpers/auth'
+
 const authStorageKey = 'pilot-auth-user'
 const uidStorageKey = 'uid'
 const siteId = '1'
@@ -105,6 +107,7 @@ function booleanRule() {
 }
 
 async function setup(page: Page, user: typeof admin | typeof viewer) {
+  await mockAuthenticatedShell(page)
   const updateBodies: unknown[] = []
   const createBodies: unknown[] = []
   const mutationMethods: string[] = []

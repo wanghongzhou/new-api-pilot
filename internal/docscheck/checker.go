@@ -2,9 +2,14 @@ package docscheck
 
 import (
 	"fmt"
+	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strings"
 )
+
+var gitCommitPattern = regexp.MustCompile(`^[0-9a-f]{40,64}$`)
 
 type Issue struct {
 	Check   string
@@ -20,13 +25,18 @@ func (issue Issue) String() string {
 }
 
 type checker struct {
-	root    string
-	options Options
-	issues  []Issue
+	root                 string
+	options              Options
+	issues               []Issue
+	expectedCommit       string
+	worktreeClean        bool
+	repositoryStateReady bool
 }
 
 type Options struct {
-	RequireNoPlanned bool
+	RequireNoPlanned      bool
+	ExpectedGitCommit     string
+	ExpectedWorktreeClean *bool
 }
 
 func Check(root string) []Issue {
@@ -40,7 +50,11 @@ func CheckWithOptions(root string, options Options) []Issue {
 	}
 
 	current := &checker{root: filepath.Clean(absoluteRoot), options: options}
+	if options.RequireNoPlanned {
+		current.initializeFinalRepositoryState()
+	}
 	trace := current.checkTraceability()
+	current.checkAuthoritativeDesignContracts()
 	manifest := current.checkAcceptanceManifest(trace)
 	current.checkSiteTaskCatalog()
 	current.checkDataMaintenanceCatalog()
@@ -61,6 +75,52 @@ func CheckWithOptions(root string, options Options) []Issue {
 		return current.issues[left].Message < current.issues[right].Message
 	})
 	return current.issues
+}
+
+func (current *checker) initializeFinalRepositoryState() {
+	commit := strings.TrimSpace(current.options.ExpectedGitCommit)
+	clean := current.options.ExpectedWorktreeClean
+	if commit != "" || clean != nil {
+		if commit == "" || clean == nil {
+			current.add("git", current.root, "final evidence validation requires both expected git commit and worktree state")
+			return
+		}
+		if !gitCommitPattern.MatchString(commit) {
+			current.add("git", current.root, "expected git commit is not a full hexadecimal object id")
+			return
+		}
+		current.expectedCommit = commit
+		current.worktreeClean = *clean
+		current.repositoryStateReady = true
+	} else {
+		resolvedCommit, resolvedClean, err := repositoryGitState(current.root)
+		if err != nil {
+			current.add("git", current.root, "resolve current repository state: %v", err)
+			return
+		}
+		current.expectedCommit = resolvedCommit
+		current.worktreeClean = resolvedClean
+		current.repositoryStateReady = true
+	}
+	if !current.worktreeClean {
+		current.add("git", current.root, "current worktree is dirty; final evidence requires a clean candidate commit")
+	}
+}
+
+func repositoryGitState(root string) (string, bool, error) {
+	commitOutput, err := exec.Command("git", "-C", root, "rev-parse", "--verify", "HEAD").Output()
+	if err != nil {
+		return "", false, fmt.Errorf("git rev-parse HEAD: %w", err)
+	}
+	commit := strings.TrimSpace(string(commitOutput))
+	if !gitCommitPattern.MatchString(commit) {
+		return "", false, fmt.Errorf("git rev-parse returned an invalid object id")
+	}
+	statusOutput, err := exec.Command("git", "-C", root, "status", "--porcelain", "--untracked-files=all").Output()
+	if err != nil {
+		return "", false, fmt.Errorf("git status: %w", err)
+	}
+	return commit, len(strings.TrimSpace(string(statusOutput))) == 0, nil
 }
 
 func (current *checker) add(check string, path string, format string, args ...any) {

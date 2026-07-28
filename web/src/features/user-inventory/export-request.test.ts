@@ -6,6 +6,7 @@ import { buildUserInventoryExportRequest } from './export-request'
 
 test('user inventory export freezes only safe list filters without pagination', () => {
   const request = buildUserInventoryExportRequest('csv', {
+    tab: 'list',
     end: 1_784_262_400,
     groups: ['vip'],
     keyword: 'alice',

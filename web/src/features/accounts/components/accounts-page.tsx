@@ -13,18 +13,24 @@ import { toast } from 'sonner'
 
 import { DataFreshness } from '@/components/data/data-freshness'
 import { DataStatusBadge } from '@/components/data/data-status'
+import { DataViewModeToggle } from '@/components/data/data-view-mode-toggle'
 import { MetricValue } from '@/components/data/metric-value'
 import { QuotaAmount } from '@/components/data/quota-amount'
 import { RunFeedbackSheet } from '@/components/data/run-feedback-sheet'
+import { EmptyState } from '@/components/empty-state'
+import { ErrorState } from '@/components/error-state'
+import { PageFooterPortal } from '@/components/layout/page-footer'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
+import { DataTablePagination } from '@/components/ui/data-table-pagination'
 import { Spinner } from '@/components/ui/spinner'
 import { listCustomers } from '@/features/customers/api'
 import { customerKeys } from '@/features/customers/query-keys'
 import { listSites } from '@/features/sites/api'
 import { siteKeys } from '@/features/sites/query-keys'
 import type { CollectionRunItem } from '@/features/sites/types'
+import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { listAccounts, refreshAccount } from '../api'
@@ -47,6 +53,77 @@ import {
   RemoteStatusBadge,
   type AccountAction,
 } from './account-ui'
+
+function AccountCardGridState({
+  error,
+  fetching,
+  isAdmin,
+  items,
+  loading,
+  onAction,
+  onRetry,
+}: {
+  error: boolean
+  fetching: boolean
+  isAdmin: boolean
+  items: AccountListItem[]
+  loading: boolean
+  onAction: (action: AccountAction, account: AccountListItem) => void
+  onRetry: () => void
+}) {
+  const { t } = useTranslation()
+  if (loading && items.length === 0) {
+    return (
+      <div className='grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3'>
+        {Array.from({ length: 3 }, (_, index) => (
+          <div
+            aria-hidden='true'
+            className='bg-muted/40 h-56 animate-pulse rounded-xl border'
+            key={index}
+          />
+        ))}
+      </div>
+    )
+  }
+  if (error && items.length === 0) {
+    return (
+      <ErrorState
+        className='border'
+        description={t('table.loadErrorDescription')}
+        onRetry={onRetry}
+        title={t('table.loadError')}
+      />
+    )
+  }
+  if (items.length === 0) {
+    return (
+      <EmptyState
+        bordered
+        description={t('accounts.emptyDescription')}
+        title={t('accounts.empty')}
+      />
+    )
+  }
+  return (
+    <div className='grid min-w-0'>
+      <div
+        className={cn(
+          'grid min-w-0 gap-4 transition-opacity duration-150 min-[1800px]:grid-cols-5 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4',
+          fetching && 'pointer-events-none opacity-60'
+        )}
+      >
+        {items.map((account) => (
+          <AccountCard
+            account={account}
+            isAdmin={isAdmin}
+            key={account.id}
+            onAction={onAction}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
 
 export function AccountsPage({
   onOpenAccount,
@@ -129,6 +206,7 @@ export function AccountsPage({
     staleTime: 5 * 60_000,
   })
   const accounts = accountsQuery.data?.items ?? []
+  const total = accountsQuery.data?.total ?? 0
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: accountKeys.all })
@@ -297,8 +375,17 @@ export function AccountsPage({
       description={t('accounts.description')}
       title={t('accounts.title')}
     >
-      <div className='flex h-full min-h-0 min-w-0 flex-col gap-4'>
+      <div className='flex h-full min-h-0 min-w-0 flex-col gap-5'>
         <AccountFilters
+          actions={
+            <DataViewModeToggle
+              ariaLabel={t('accounts.viewMode')}
+              cardLabel={t('accounts.cardView')}
+              onChange={(view) => onSearchChange({ view })}
+              tableLabel={t('accounts.tableView')}
+              value={search.view}
+            />
+          }
           customers={customersQuery.data?.items ?? []}
           onApply={(filters) => onSearchChange({ ...filters, page: 1 })}
           sites={sitesQuery.data?.items ?? []}
@@ -311,33 +398,47 @@ export function AccountsPage({
             siteId: search.siteId,
           }}
         />
-        <DataTable
-          ariaLabel={t('accounts.table')}
-          columns={columns}
-          data={accounts}
-          emptyDescription={t('accounts.emptyDescription')}
-          emptyTitle={t('accounts.empty')}
-          error={accountsQuery.isError}
-          fetching={accountsQuery.isFetching}
-          loading={accountsQuery.isPending}
+        {search.view === 'card' ? (
+          <div className='min-h-0 flex-1 overflow-y-auto' tabIndex={0}>
+            <AccountCardGridState
+              error={accountsQuery.isError}
+              fetching={accountsQuery.isFetching}
+              isAdmin={Boolean(isAdmin)}
+              items={accounts}
+              loading={accountsQuery.isPending}
+              onAction={onAction}
+              onRetry={() => void accountsQuery.refetch()}
+            />
+          </div>
+        ) : (
+          <div className='flex min-h-0 flex-1 flex-col'>
+            <DataTable
+              ariaLabel={t('accounts.table')}
+              columns={columns}
+              data={accounts}
+              emptyDescription={t('accounts.emptyDescription')}
+              emptyTitle={t('accounts.empty')}
+              error={accountsQuery.isError}
+              fetching={accountsQuery.isFetching}
+              fillAvailableHeight
+              loading={accountsQuery.isPending}
+              onRetry={() => void accountsQuery.refetch()}
+              onSortingChange={updateSorting}
+              preserveHeaderWhenEmpty
+              sorting={[{ desc: search.order === 'desc', id: search.sort }]}
+            />
+          </div>
+        )}
+      </div>
+      <PageFooterPortal>
+        <DataTablePagination
           onPageChange={(page) => onSearchChange({ page })}
           onPageSizeChange={(pageSize) => onSearchChange({ page: 1, pageSize })}
-          onRetry={() => void accountsQuery.refetch()}
-          onSortingChange={updateSorting}
           page={search.page}
           pageSize={search.pageSize}
-          paginationInFooter
-          renderMobileCard={(account) => (
-            <AccountCard
-              account={account}
-              isAdmin={Boolean(isAdmin)}
-              onAction={onAction}
-            />
-          )}
-          sorting={[{ desc: search.order === 'desc', id: search.sort }]}
-          total={accountsQuery.data?.total ?? 0}
+          total={total}
         />
-      </div>
+      </PageFooterPortal>
       <AccountOnboardingDrawer
         initialCustomerId={search.customerId}
         onComplete={(account: AccountDetail) => {

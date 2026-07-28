@@ -24,6 +24,7 @@ import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { translateMessageRef } from '@/lib/message-ref'
+import { cn } from '@/lib/utils'
 
 import {
   AmountValue,
@@ -57,6 +58,7 @@ type DashboardQueryState<T> = {
 
 function DashboardPanel({
   children,
+  className,
   empty,
   icon,
   id,
@@ -64,6 +66,7 @@ function DashboardPanel({
   title,
 }: {
   children: ReactNode
+  className?: string
   empty?: boolean
   icon: typeof Analytics01Icon
   id: string
@@ -111,7 +114,10 @@ function DashboardPanel({
   return (
     <section
       aria-labelledby={`dashboard-${id}`}
-      className='border-border grid min-w-0 content-start gap-4 border-b pb-7'
+      className={cn(
+        'border-border bg-(--data-table-card-bg,var(--table-row)) grid min-w-0 content-start gap-4 rounded-lg border p-4',
+        className
+      )}
     >
       <header className='flex min-w-0 flex-wrap items-center justify-between gap-3'>
         <h2
@@ -134,9 +140,145 @@ function DashboardPanel({
 
 function MetricCell({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className='min-w-0 p-4'>
+    <div className='border-border bg-background/60 min-w-0 rounded-lg border px-3 py-3.5'>
       <dt className='text-muted-foreground text-xs break-words'>{label}</dt>
-      <dd className='mt-1 text-xl font-semibold break-words'>{value}</dd>
+      <dd className='mt-1.5 text-xl font-semibold break-words'>{value}</dd>
+    </div>
+  )
+}
+
+function OperationalAttention({ data }: { data: DashboardHealth }) {
+  const { t } = useTranslation()
+  const offlineSites = data.sites.filter(
+    (site) =>
+      site.management_status === 'active' && site.online_status !== 'online'
+  ).length
+  const alertSearch = {
+    level: [],
+    ruleCategory: [],
+    ruleLevel: [],
+    status: [],
+    targetType: [],
+  }
+  const siteSearch = {
+    auth: [],
+    health: [],
+    management: [],
+    online: [],
+    statistics: [],
+  }
+  const items = [
+    {
+      destination: 'alerts',
+      label: t('dashboard.health.firing'),
+      tone: data.firing_alert_count > 0 ? 'warning' : 'neutral',
+      value: data.firing_alert_count,
+    },
+    {
+      destination: 'alerts',
+      label: t('dashboard.health.critical'),
+      tone: data.critical_alert_count > 0 ? 'critical' : 'neutral',
+      value: data.critical_alert_count,
+    },
+    {
+      destination: 'alerts',
+      label: t('dashboard.health.warning'),
+      tone: data.warning_alert_count > 0 ? 'warning' : 'neutral',
+      value: data.warning_alert_count,
+    },
+    {
+      destination: 'sites',
+      label: t('dashboard.attention.offlineSites'),
+      tone: offlineSites > 0 ? 'critical' : 'neutral',
+      value: offlineSites,
+    },
+    {
+      destination: 'sites',
+      label: t('dashboard.health.authExpiredSites'),
+      tone: data.auth_expired_site_ids.length > 0 ? 'warning' : 'neutral',
+      value: data.auth_expired_site_ids.length,
+    },
+    {
+      destination: 'sites',
+      label: t('dashboard.health.statisticsNotReadySites'),
+      tone:
+        data.statistics_not_ready_site_ids.length > 0 ? 'warning' : 'neutral',
+      value: data.statistics_not_ready_site_ids.length,
+    },
+  ] as const
+
+  return (
+    <div className='grid gap-4'>
+      <div className='grid gap-2 sm:grid-cols-2 xl:grid-cols-6'>
+        {items.map((item) => {
+          const content = (
+            <>
+              <span className='text-muted-foreground text-xs'>
+                {item.label}
+              </span>
+              <span
+                className={cn(
+                  'text-xl font-semibold',
+                  item.tone === 'critical' && 'text-destructive',
+                  item.tone === 'warning' && 'text-warning-foreground'
+                )}
+              >
+                {item.value}
+              </span>
+            </>
+          )
+          const className = cn(
+            'border-border bg-background/60 grid min-h-20 content-center gap-1 rounded-lg border px-3 py-2.5 transition-colors',
+            item.tone === 'critical' &&
+              'border-destructive/35 bg-destructive/5',
+            item.tone === 'warning' && 'border-warning/40 bg-warning/10'
+          )
+          if (item.destination === 'alerts') {
+            return (
+              <Link
+                className={cn(className, 'hover:bg-muted/70')}
+                key={item.label}
+                search={alertSearch}
+                to='/alerts'
+              >
+                {content}
+              </Link>
+            )
+          }
+          return (
+            <Link
+              className={cn(className, 'hover:bg-muted/70')}
+              key={item.label}
+              search={siteSearch}
+              to='/sites'
+            >
+              {content}
+            </Link>
+          )
+        })}
+      </div>
+      <div className='flex flex-wrap items-center justify-between gap-3 border-t pt-3'>
+        <div className='flex flex-wrap items-center gap-2'>
+          <span className='text-muted-foreground text-xs'>
+            {t('dashboard.health.yesterdayValidation')}
+          </span>
+          <DataStatusBadge status={data.yesterday_validation_status} />
+          <span className='text-muted-foreground text-xs'>
+            {data.is_final
+              ? t('statistics.final.final')
+              : t('statistics.final.provisional')}
+          </span>
+        </div>
+        <DataFreshness
+          labelKey='dashboard.currentAsOf'
+          timestamp={data.as_of}
+        />
+      </div>
+      {data.reason && (
+        <p className='border-warning/40 bg-warning/10 rounded-md border p-3 text-sm'>
+          {translateMessageRef(data.reason)}
+        </p>
+      )}
     </div>
   )
 }
@@ -164,7 +306,7 @@ function TodayOperations({ data }: { data: DashboardSummary }) {
           {translateMessageRef(data.today.reason)}
         </p>
       )}
-      <dl className='border-border grid overflow-hidden rounded-md border sm:grid-cols-2 xl:grid-cols-5 [&>div]:border-r [&>div]:border-b'>
+      <dl className='grid gap-2 sm:grid-cols-2 xl:grid-cols-5'>
         <MetricCell
           label={t('dashboard.today.requests')}
           value={
@@ -211,83 +353,6 @@ function TodayOperations({ data }: { data: DashboardSummary }) {
           }
         />
       </dl>
-      <dl className='grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 xl:grid-cols-4'>
-        <div>
-          <dt className='text-muted-foreground'>
-            {t('dashboard.entities.sites')}
-          </dt>
-          <dd className='mt-1 font-medium'>
-            {t('dashboard.entities.siteValue', {
-              offline: data.offline_site_count,
-              online: data.online_site_count,
-              total: data.site_count,
-            })}
-          </dd>
-        </div>
-        <div>
-          <dt className='text-muted-foreground'>
-            {t('dashboard.entities.customers')}
-          </dt>
-          <dd className='mt-1 font-medium'>{data.customer_count}</dd>
-        </div>
-        <div>
-          <dt className='text-muted-foreground'>
-            {t('dashboard.entities.accounts')}
-          </dt>
-          <dd className='mt-1 font-medium'>{data.managed_account_count}</dd>
-        </div>
-        <div>
-          <dt className='text-muted-foreground'>
-            {t('dashboard.entities.instances')}
-          </dt>
-          <dd className='mt-1 font-medium'>
-            {data.instance_count == null || data.online_instance_count == null
-              ? t('data.unavailableValue')
-              : t('dashboard.entities.instanceValue', {
-                  online: data.online_instance_count,
-                  total: data.instance_count,
-                })}
-          </dd>
-        </div>
-      </dl>
-      <section
-        aria-labelledby='resource-completeness-title'
-        className='border-border grid gap-3 border-t pt-4'
-      >
-        <div className='flex flex-wrap items-center justify-between gap-3'>
-          <div className='flex flex-wrap items-center gap-2'>
-            <h3
-              className='text-sm font-medium'
-              id='resource-completeness-title'
-            >
-              {t('dashboard.entities.resourceCompleteness')}
-            </h3>
-            <DataStatusBadge status={data.resource_data_status} />
-            <span className='text-muted-foreground text-xs'>
-              {t('dashboard.realtime.coverage', {
-                complete: data.resource_complete_site_count,
-                expected: data.resource_expected_site_count,
-              })}
-            </span>
-          </div>
-          <DataFreshness
-            labelKey='dashboard.currentAsOf'
-            timestamp={data.resource_as_of}
-          />
-        </div>
-        {data.resource_reason && (
-          <p className='border-warning/40 bg-warning/10 rounded-md border p-3 text-sm'>
-            {translateMessageRef(data.resource_reason)}
-          </p>
-        )}
-        {data.resource_stale_site_ids.length > 0 && (
-          <p className='text-muted-foreground text-xs break-all'>
-            {t('dashboard.entities.resourceStaleSites', {
-              ids: data.resource_stale_site_ids.join(', '),
-            })}
-          </p>
-        )}
-      </section>
     </div>
   )
 }
@@ -311,7 +376,7 @@ function RealtimeThroughput({ data }: { data: DashboardSummary }) {
           timestamp={data.realtime_as_of}
         />
       </div>
-      <dl className='border-border grid overflow-hidden rounded-md border sm:grid-cols-2 [&>div]:border-r'>
+      <dl className='grid gap-2 sm:grid-cols-2'>
         <MetricCell
           label={t('dashboard.realtime.rpm')}
           value={
@@ -325,6 +390,108 @@ function RealtimeThroughput({ data }: { data: DashboardSummary }) {
           }
         />
       </dl>
+      <div className='grid gap-2 sm:grid-cols-2'>
+        <Link
+          className='border-border hover:bg-muted/70 grid rounded-lg border px-3 py-2.5 transition-colors'
+          search={{
+            auth: [],
+            health: [],
+            management: [],
+            online: [],
+            statistics: [],
+          }}
+          to='/sites'
+        >
+          <span className='text-muted-foreground text-xs'>
+            {t('dashboard.entities.sites')}
+          </span>
+          <span className='mt-1 font-medium'>
+            {t('dashboard.entities.siteValue', {
+              offline: data.offline_site_count,
+              online: data.online_site_count,
+              total: data.site_count,
+            })}
+          </span>
+        </Link>
+        <Link
+          className='border-border hover:bg-muted/70 grid rounded-lg border px-3 py-2.5 transition-colors'
+          search={{ status: [] }}
+          to='/customers'
+        >
+          <span className='text-muted-foreground text-xs'>
+            {t('dashboard.entities.customers')}
+          </span>
+          <span className='mt-1 font-medium'>{data.customer_count}</span>
+        </Link>
+        <Link
+          className='border-border hover:bg-muted/70 grid rounded-lg border px-3 py-2.5 transition-colors'
+          search={{ managedStatus: [], remoteState: [], remoteStatus: [] }}
+          to='/accounts'
+        >
+          <span className='text-muted-foreground text-xs'>
+            {t('dashboard.entities.accounts')}
+          </span>
+          <span className='mt-1 font-medium'>{data.managed_account_count}</span>
+        </Link>
+        <Link
+          className='border-border hover:bg-muted/70 grid rounded-lg border px-3 py-2.5 transition-colors'
+          search={{
+            auth: [],
+            health: [],
+            management: [],
+            online: [],
+            statistics: [],
+          }}
+          to='/sites'
+        >
+          <span className='text-muted-foreground text-xs'>
+            {t('dashboard.entities.instances')}
+          </span>
+          <span className='mt-1 font-medium'>
+            {data.instance_count == null || data.online_instance_count == null
+              ? t('data.unavailableValue')
+              : t('dashboard.entities.instanceValue', {
+                  online: data.online_instance_count,
+                  total: data.instance_count,
+                })}
+          </span>
+        </Link>
+      </div>
+      <section
+        aria-label={t('dashboard.entities.resourceCompleteness')}
+        className='grid gap-3 border-t pt-3'
+      >
+        <div className='flex flex-wrap items-center justify-between gap-2'>
+          <div className='flex flex-wrap items-center gap-2'>
+            <span className='text-sm font-medium'>
+              {t('dashboard.entities.resourceCompleteness')}
+            </span>
+            <DataStatusBadge status={data.resource_data_status} />
+          </div>
+          <span className='text-muted-foreground text-xs'>
+            {t('dashboard.realtime.coverage', {
+              complete: data.resource_complete_site_count,
+              expected: data.resource_expected_site_count,
+            })}
+          </span>
+        </div>
+        <DataFreshness
+          labelKey='dashboard.currentAsOf'
+          timestamp={data.resource_as_of}
+        />
+        {data.resource_reason && (
+          <p className='text-muted-foreground text-sm'>
+            {translateMessageRef(data.resource_reason)}
+          </p>
+        )}
+        {data.resource_stale_site_ids.length > 0 && (
+          <p className='text-muted-foreground text-xs break-all'>
+            {t('dashboard.entities.resourceStaleSites', {
+              ids: data.resource_stale_site_ids.join(', '),
+            })}
+          </p>
+        )}
+      </section>
       {data.realtime_reason && (
         <p className='text-muted-foreground text-sm'>
           {translateMessageRef(data.realtime_reason)}
@@ -537,138 +704,111 @@ function Ranking({
 
 function HealthAndCompleteness({ data }: { data: DashboardHealth }) {
   const { t } = useTranslation()
-  return (
-    <div className='grid min-w-0 gap-6'>
-      <div className='grid gap-3 sm:grid-cols-3'>
-        <div className='border-border rounded-md border p-4'>
-          <p className='text-muted-foreground text-xs'>
-            {t('dashboard.health.firing')}
-          </p>
-          <p className='mt-1 text-xl font-semibold'>
-            {data.firing_alert_count}
-          </p>
-        </div>
-        <div className='border-destructive/30 rounded-md border p-4'>
-          <p className='text-muted-foreground text-xs'>
-            {t('dashboard.health.critical')}
-          </p>
-          <p className='mt-1 text-xl font-semibold'>
-            {data.critical_alert_count}
-          </p>
-        </div>
-        <div className='border-warning/40 rounded-md border p-4'>
-          <p className='text-muted-foreground text-xs'>
-            {t('dashboard.health.warning')}
-          </p>
-          <p className='mt-1 text-xl font-semibold'>
-            {data.warning_alert_count}
-          </p>
-        </div>
+  const problemSites = data.sites.filter(
+    (site) =>
+      site.management_status !== 'active' ||
+      site.online_status !== 'online' ||
+      site.auth_status !== 'authorized' ||
+      site.statistics_status !== 'complete' ||
+      site.health_status !== 'healthy'
+  )
+  let problemSiteContent: ReactNode
+  if (data.sites.length === 0) {
+    problemSiteContent = (
+      <p className='text-muted-foreground text-sm'>
+        {t('dashboard.health.noSites')}
+      </p>
+    )
+  } else if (problemSites.length === 0) {
+    problemSiteContent = (
+      <p className='text-muted-foreground text-sm'>
+        {t('dashboard.health.allSitesHealthy')}
+      </p>
+    )
+  } else {
+    problemSiteContent = (
+      <div className='grid gap-2 sm:grid-cols-2'>
+        {problemSites.slice(0, 6).map((site) => (
+          <Link
+            className='border-border hover:bg-muted/50 grid min-w-0 gap-2 rounded-md border p-3 transition-colors'
+            key={site.site_id}
+            params={{ siteId: site.site_id }}
+            to='/sites/$siteId'
+          >
+            <span className='font-medium break-words'>{site.site_name}</span>
+            <div className='flex flex-wrap gap-1'>
+              <Badge variant='neutral'>
+                {t(dynamicI18nKey('site', `site.online.${site.online_status}`))}
+              </Badge>
+              <Badge variant='neutral'>
+                {t(dynamicI18nKey('site', `site.auth.${site.auth_status}`))}
+              </Badge>
+              <Badge variant='neutral'>
+                {t(dynamicI18nKey('site', `site.health.${site.health_status}`))}
+              </Badge>
+              <Badge variant='neutral'>
+                {t(
+                  dynamicI18nKey(
+                    'site',
+                    `site.statistics.${site.statistics_status}`
+                  )
+                )}
+              </Badge>
+            </div>
+          </Link>
+        ))}
       </div>
-      <dl className='border-border grid gap-4 border-y py-4 text-sm sm:grid-cols-3'>
-        <div className='grid content-start gap-2'>
-          <dt className='text-muted-foreground text-xs'>
-            {t('dashboard.health.yesterdayValidation')}
-          </dt>
-          <dd className='flex flex-wrap items-center gap-2'>
-            <DataStatusBadge status={data.yesterday_validation_status} />
-            <span className='text-muted-foreground text-xs'>
-              {data.is_final
-                ? t('statistics.final.final')
-                : t('statistics.final.provisional')}
-            </span>
-          </dd>
-        </div>
-        <div className='grid content-start gap-2'>
-          <dt className='text-muted-foreground text-xs'>
-            {t('dashboard.health.authExpiredSites')}
-          </dt>
-          <dd className='font-medium break-all'>
-            {data.auth_expired_site_ids.length > 0
-              ? data.auth_expired_site_ids.join(', ')
-              : t('common.none')}
-          </dd>
-        </div>
-        <div className='grid content-start gap-2'>
-          <dt className='text-muted-foreground text-xs'>
-            {t('dashboard.health.statisticsNotReadySites')}
-          </dt>
-          <dd className='font-medium break-all'>
-            {data.statistics_not_ready_site_ids.length > 0
-              ? data.statistics_not_ready_site_ids.join(', ')
-              : t('common.none')}
-          </dd>
-        </div>
-      </dl>
-      {data.reason && (
-        <p
-          className='border-warning/40 bg-warning/10 rounded-md border p-3 text-sm'
-          data-testid='dashboard-health-reason'
-        >
-          {translateMessageRef(data.reason)}
-        </p>
-      )}
+    )
+  }
+  return (
+    <div className='grid min-w-0 gap-5'>
       <div>
         <div className='mb-3 flex flex-wrap items-center justify-between gap-2'>
-          <h3 className='font-medium'>{t('dashboard.health.sites')}</h3>
-          <DataFreshness
-            labelKey='dashboard.currentAsOf'
-            timestamp={data.as_of}
-          />
-        </div>
-        {data.sites.length === 0 ? (
-          <p className='text-muted-foreground text-sm'>
-            {t('dashboard.health.noSites')}
-          </p>
-        ) : (
-          <div className='grid gap-2 sm:grid-cols-2 lg:grid-cols-3'>
-            {data.sites.map((site) => (
+          <h3 className='font-medium'>{t('dashboard.health.problemSites')}</h3>
+          <Button
+            render={
               <Link
-                className='border-border hover:bg-muted/50 grid min-w-0 gap-2 rounded-md border p-3 transition-colors'
-                key={site.site_id}
-                params={{ siteId: site.site_id }}
-                to='/sites/$siteId'
-              >
-                <span className='font-medium break-words'>
-                  {site.site_name}
-                </span>
-                <div className='flex flex-wrap gap-1'>
-                  <Badge variant='neutral'>
-                    {t(
-                      dynamicI18nKey(
-                        'site',
-                        `site.online.${site.online_status}`
-                      )
-                    )}
-                  </Badge>
-                  <Badge variant='neutral'>
-                    {t(dynamicI18nKey('site', `site.auth.${site.auth_status}`))}
-                  </Badge>
-                  <Badge variant='neutral'>
-                    {t(
-                      dynamicI18nKey(
-                        'site',
-                        `site.health.${site.health_status}`
-                      )
-                    )}
-                  </Badge>
-                  <Badge variant='neutral'>
-                    {t(
-                      dynamicI18nKey(
-                        'site',
-                        `site.statistics.${site.statistics_status}`
-                      )
-                    )}
-                  </Badge>
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
+                search={{
+                  auth: [],
+                  health: [],
+                  management: [],
+                  online: [],
+                  statistics: [],
+                }}
+                to='/sites'
+              />
+            }
+            size='sm'
+            variant='ghost'
+          >
+            {t('dashboard.openSites')}
+          </Button>
+        </div>
+        {problemSiteContent}
       </div>
       <CompletenessAlert completeness={data.completeness} />
       <div className='grid gap-3'>
-        <h3 className='font-medium'>{t('dashboard.health.latestAlerts')}</h3>
+        <div className='flex flex-wrap items-center justify-between gap-2'>
+          <h3 className='font-medium'>{t('dashboard.health.latestAlerts')}</h3>
+          <Button
+            render={
+              <Link
+                search={{
+                  level: [],
+                  ruleCategory: [],
+                  ruleLevel: [],
+                  status: [],
+                  targetType: [],
+                }}
+                to='/alerts'
+              />
+            }
+            size='sm'
+            variant='ghost'
+          >
+            {t('dashboard.openAlerts')}
+          </Button>
+        </div>
         {data.latest_alerts.length === 0 ? (
           <p className='text-muted-foreground text-sm'>
             {t('dashboard.health.noAlerts')}
@@ -797,64 +937,108 @@ export function DashboardPage() {
   }
   return (
     <SectionPageLayout
+      actions={
+        <>
+          <Button
+            render={
+              <Link
+                search={{
+                  level: [],
+                  ruleCategory: [],
+                  ruleLevel: [],
+                  status: [],
+                  targetType: [],
+                }}
+                to='/alerts'
+              />
+            }
+            variant='outline'
+          >
+            {t('dashboard.openAlerts')}
+          </Button>
+          <Button
+            render={
+              <Link
+                search={buildStatisticsSearch({})}
+                to='/statistics/global'
+              />
+            }
+          >
+            {t('dashboard.openStatistics')}
+          </Button>
+        </>
+      }
       description={t('dashboard.description')}
+      fixedContent
       title={t('dashboard.title')}
     >
-      <div className='grid min-w-0 gap-7'>
-        <DashboardPanel
-          icon={Analytics01Icon}
-          id='today'
-          state={summaryState}
-          title={t('dashboard.section.today')}
-        >
-          {summaryQuery.data && <TodayOperations data={summaryQuery.data} />}
-        </DashboardPanel>
-        <DashboardPanel
-          icon={Pulse01Icon}
-          id='realtime'
-          state={summaryState}
-          title={t('dashboard.section.realtime')}
-        >
-          {summaryQuery.data && <RealtimeThroughput data={summaryQuery.data} />}
-        </DashboardPanel>
-        <DashboardPanel
-          empty={trendQuery.data?.length === 0}
-          icon={Chart01Icon}
-          id='trend'
-          state={trendState}
-          title={t('dashboard.section.trend')}
-        >
-          {trendQuery.data && <ThirtyDayTrend data={trendQuery.data} />}
-        </DashboardPanel>
-        <DashboardPanel
-          empty={topQuery.data?.length === 0}
-          icon={RankingIcon}
-          id='ranking'
-          state={topState}
-          title={t('dashboard.section.ranking')}
-        >
-          {topQuery.data && (
-            <Ranking
-              data={topQuery.data}
-              limit={topLimit}
-              metric={topMetric}
-              onLimitChange={setTopLimit}
-              onMetricChange={setTopMetric}
-              onTypeChange={setTopType}
-              type={topType}
-            />
-          )}
-        </DashboardPanel>
-        <DashboardPanel
-          icon={Alert02Icon}
-          id='health'
-          state={healthState}
-          title={t('dashboard.section.health')}
-        >
-          {healthQuery.data && (
-            <HealthAndCompleteness data={healthQuery.data} />
-          )}
-        </DashboardPanel>
+      <div className='h-full min-h-0 overflow-y-auto pr-1' tabIndex={0}>
+        <div className='grid min-w-0 gap-4 pb-1 lg:grid-cols-12'>
+          <DashboardPanel
+            className='lg:col-span-12'
+            icon={Analytics01Icon}
+            id='today'
+            state={summaryState}
+            title={t('dashboard.section.today')}
+          >
+            {summaryQuery.data && <TodayOperations data={summaryQuery.data} />}
+          </DashboardPanel>
+          <DashboardPanel
+            className='lg:col-span-8'
+            empty={trendQuery.data?.length === 0}
+            icon={Chart01Icon}
+            id='trend'
+            state={trendState}
+            title={t('dashboard.section.trend')}
+          >
+            {trendQuery.data && <ThirtyDayTrend data={trendQuery.data} />}
+          </DashboardPanel>
+          <DashboardPanel
+            className='lg:col-span-4'
+            icon={Pulse01Icon}
+            id='realtime'
+            state={summaryState}
+            title={t('dashboard.section.realtime')}
+          >
+            {summaryQuery.data && (
+              <RealtimeThroughput data={summaryQuery.data} />
+            )}
+          </DashboardPanel>
+          <DashboardPanel
+            className='lg:col-span-7'
+            empty={topQuery.data?.length === 0}
+            icon={RankingIcon}
+            id='ranking'
+            state={topState}
+            title={t('dashboard.section.ranking')}
+          >
+            {topQuery.data && (
+              <Ranking
+                data={topQuery.data}
+                limit={topLimit}
+                metric={topMetric}
+                onLimitChange={setTopLimit}
+                onMetricChange={setTopMetric}
+                onTypeChange={setTopType}
+                type={topType}
+              />
+            )}
+          </DashboardPanel>
+          <DashboardPanel
+            className='lg:col-span-5'
+            icon={Alert02Icon}
+            id='health'
+            state={healthState}
+            title={t('dashboard.section.health')}
+          >
+            {healthQuery.data && (
+              <div className='grid gap-4'>
+                <OperationalAttention data={healthQuery.data} />
+                <HealthAndCompleteness data={healthQuery.data} />
+              </div>
+            )}
+          </DashboardPanel>
+        </div>
       </div>
     </SectionPageLayout>
   )

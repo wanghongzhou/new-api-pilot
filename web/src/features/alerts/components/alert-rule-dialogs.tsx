@@ -25,6 +25,8 @@ import {
 import { FormField } from '@/components/ui/form-field'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
+import { UnsavedChangesConfirmDialog } from '@/components/unsaved-changes-guard'
+import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import type { IdString } from '@/lib/api-types'
@@ -105,6 +107,8 @@ export function AlertRuleFormDialog({
     defaultValues: initialValues,
     resolver: zodResolver(schema),
   })
+  const { confirmOpen, discardAndClose, requestClose, setConfirmOpen } =
+    useUnsavedChangesGuard({ hasUnsavedChanges: isDirty, onClose })
   const submit = handleSubmit(async (values) => {
     try {
       await mutation.mutateAsync(values)
@@ -131,180 +135,191 @@ export function AlertRuleFormDialog({
     }
   })
   return (
-    <Drawer direction='right' onOpenChange={(open) => !open && onClose()} open>
-      <DrawerContent className={sideDrawerContentClassName('sm:max-w-xl')}>
-        <DrawerHeader className={sideDrawerHeaderClassName()}>
-          <DrawerTitle>
-            {createOverride
-              ? t('alerts.rules.createOverride')
-              : t('alerts.rules.edit')}
-          </DrawerTitle>
-          <DrawerDescription>
-            {createOverride
-              ? t('alerts.rules.createOverrideDescription')
-              : t('alerts.rules.editDescription')}
-          </DrawerDescription>
-        </DrawerHeader>
-        <form
-          className={sideDrawerFormClassName('gap-4')}
-          id='alert-rule-form'
-          noValidate
-          onSubmit={submit}
-        >
-          <dl className='border-border divide-border grid divide-y border-y text-sm'>
-            <div className='grid gap-1 py-2 sm:grid-cols-[9rem_1fr]'>
-              <dt className='text-muted-foreground'>
-                {t('alerts.table.rule')}
-              </dt>
-              <dd>
-                <p>{alertRuleName(t, rule.rule_key, rule.level)}</p>
-                <p className='text-muted-foreground mt-1 text-xs'>
-                  {alertRuleDescription(t, rule.rule_key)}
-                </p>
-              </dd>
-            </div>
-            <div className='grid gap-1 py-2 sm:grid-cols-[9rem_1fr]'>
-              <dt className='text-muted-foreground'>
-                {t('alerts.rules.level')}
-              </dt>
-              <dd>{alertLevelText(t, rule.level)}</dd>
-            </div>
-            <div className='grid gap-1 py-2 sm:grid-cols-[9rem_1fr]'>
-              <dt className='text-muted-foreground'>
-                {t('alerts.rules.metric')}
-              </dt>
-              <dd className='font-mono text-xs break-all'>{rule.metric}</dd>
-            </div>
-            <div className='grid gap-1 py-2 sm:grid-cols-[9rem_1fr]'>
-              <dt className='text-muted-foreground'>
-                {t('alerts.rules.compareOperator')}
-              </dt>
-              <dd className='font-mono'>{rule.compare_operator}</dd>
-            </div>
-            <div className='grid gap-1 py-2 sm:grid-cols-[9rem_1fr]'>
-              <dt className='text-muted-foreground'>
-                {t('alerts.rules.scope')}
-              </dt>
-              <dd>
-                {createOverride
-                  ? t('alerts.rules.scope.site')
-                  : ruleScopeText(t, rule.scope_type)}
-              </dd>
-            </div>
-          </dl>
-          <FormField
-            error={formError(errors.enabled, t)}
-            htmlFor='alert-rule-enabled'
-            label={t('alerts.rules.enabled')}
+    <>
+      <Drawer
+        direction='right'
+        onOpenChange={(open) => !open && requestClose()}
+        open
+      >
+        <DrawerContent className={sideDrawerContentClassName('sm:max-w-xl')}>
+          <DrawerHeader className={sideDrawerHeaderClassName()}>
+            <DrawerTitle>
+              {createOverride
+                ? t('alerts.rules.createOverride')
+                : t('alerts.rules.edit')}
+            </DrawerTitle>
+            <DrawerDescription>
+              {createOverride
+                ? t('alerts.rules.createOverrideDescription')
+                : t('alerts.rules.editDescription')}
+            </DrawerDescription>
+          </DrawerHeader>
+          <form
+            className={sideDrawerFormClassName('gap-4')}
+            id='alert-rule-form'
+            noValidate
+            onSubmit={submit}
           >
-            <label
-              className='flex min-h-10 items-center gap-3'
+            <dl className='border-border divide-border grid divide-y border-y text-sm'>
+              <div className='grid gap-1 py-2 sm:grid-cols-[9rem_1fr]'>
+                <dt className='text-muted-foreground'>
+                  {t('alerts.table.rule')}
+                </dt>
+                <dd>
+                  <p>{alertRuleName(t, rule.rule_key, rule.level)}</p>
+                  <p className='text-muted-foreground mt-1 text-xs'>
+                    {alertRuleDescription(t, rule.rule_key)}
+                  </p>
+                </dd>
+              </div>
+              <div className='grid gap-1 py-2 sm:grid-cols-[9rem_1fr]'>
+                <dt className='text-muted-foreground'>
+                  {t('alerts.rules.level')}
+                </dt>
+                <dd>{alertLevelText(t, rule.level)}</dd>
+              </div>
+              <div className='grid gap-1 py-2 sm:grid-cols-[9rem_1fr]'>
+                <dt className='text-muted-foreground'>
+                  {t('alerts.rules.metric')}
+                </dt>
+                <dd className='font-mono text-xs break-all'>{rule.metric}</dd>
+              </div>
+              <div className='grid gap-1 py-2 sm:grid-cols-[9rem_1fr]'>
+                <dt className='text-muted-foreground'>
+                  {t('alerts.rules.compareOperator')}
+                </dt>
+                <dd className='font-mono'>{rule.compare_operator}</dd>
+              </div>
+              <div className='grid gap-1 py-2 sm:grid-cols-[9rem_1fr]'>
+                <dt className='text-muted-foreground'>
+                  {t('alerts.rules.scope')}
+                </dt>
+                <dd>
+                  {createOverride
+                    ? t('alerts.rules.scope.site')
+                    : ruleScopeText(t, rule.scope_type)}
+                </dd>
+              </div>
+            </dl>
+            <FormField
+              error={formError(errors.enabled, t)}
               htmlFor='alert-rule-enabled'
+              label={t('alerts.rules.enabled')}
             >
-              <Controller
-                control={control}
-                name='enabled'
-                render={({ field }) => (
-                  <Checkbox
-                    checked={field.value}
-                    id='alert-rule-enabled'
-                    onBlur={field.onBlur}
-                    onCheckedChange={field.onChange}
-                    ref={field.ref}
-                  />
-                )}
-              />
-              <span className='text-sm'>
-                {t('alerts.rules.enabledDescription')}
-              </span>
-            </label>
-          </FormField>
-          {rule.constraints.threshold_editable ? (
-            <FormField
-              description={t('alerts.rules.thresholdDescription', {
-                maximum: rule.constraints.threshold_max
-                  ? formatAlertThreshold(rule.constraints.threshold_max)
-                  : t('alerts.value.unavailable'),
-                minimum: rule.constraints.threshold_min
-                  ? formatAlertThreshold(rule.constraints.threshold_min)
-                  : t('alerts.value.unavailable'),
-              })}
-              error={formError(errors.thresholdValue, t)}
-              htmlFor='alert-rule-threshold'
-              label={t('alerts.rules.threshold')}
-              required
-            >
-              <Input
-                id='alert-rule-threshold'
-                inputMode='decimal'
-                {...register('thresholdValue')}
-              />
+              <label
+                className='flex min-h-10 items-center gap-3'
+                htmlFor='alert-rule-enabled'
+              >
+                <Controller
+                  control={control}
+                  name='enabled'
+                  render={({ field }) => (
+                    <Checkbox
+                      checked={field.value}
+                      id='alert-rule-enabled'
+                      onBlur={field.onBlur}
+                      onCheckedChange={field.onChange}
+                      ref={field.ref}
+                    />
+                  )}
+                />
+                <span className='text-sm'>
+                  {t('alerts.rules.enabledDescription')}
+                </span>
+              </label>
             </FormField>
-          ) : (
-            <div className='grid gap-1.5'>
-              <span className='text-sm font-medium'>
-                {t('alerts.rules.threshold')}
-              </span>
-              <output className='border-border bg-muted/35 flex min-h-10 items-center rounded-md border px-3 text-sm'>
-                {t('alerts.rules.fixedBySystem')}
-              </output>
-            </div>
-          )}
-          {rule.constraints.for_times_editable ? (
-            <FormField
-              description={t('alerts.rules.forTimesDescription', {
-                maximum: rule.constraints.for_times_max,
-                minimum: rule.constraints.for_times_min,
-              })}
-              error={formError(errors.forTimes, t)}
-              htmlFor='alert-rule-for-times'
-              label={t('alerts.rules.forTimes')}
-              required
+            {rule.constraints.threshold_editable ? (
+              <FormField
+                description={t('alerts.rules.thresholdDescription', {
+                  maximum: rule.constraints.threshold_max
+                    ? formatAlertThreshold(rule.constraints.threshold_max)
+                    : t('alerts.value.unavailable'),
+                  minimum: rule.constraints.threshold_min
+                    ? formatAlertThreshold(rule.constraints.threshold_min)
+                    : t('alerts.value.unavailable'),
+                })}
+                error={formError(errors.thresholdValue, t)}
+                htmlFor='alert-rule-threshold'
+                label={t('alerts.rules.threshold')}
+                required
+              >
+                <Input
+                  id='alert-rule-threshold'
+                  inputMode='decimal'
+                  {...register('thresholdValue')}
+                />
+              </FormField>
+            ) : (
+              <div className='grid gap-1.5'>
+                <span className='text-sm font-medium'>
+                  {t('alerts.rules.threshold')}
+                </span>
+                <output className='border-border bg-muted/35 flex min-h-10 items-center rounded-md border px-3 text-sm'>
+                  {t('alerts.rules.fixedBySystem')}
+                </output>
+              </div>
+            )}
+            {rule.constraints.for_times_editable ? (
+              <FormField
+                description={t('alerts.rules.forTimesDescription', {
+                  maximum: rule.constraints.for_times_max,
+                  minimum: rule.constraints.for_times_min,
+                })}
+                error={formError(errors.forTimes, t)}
+                htmlFor='alert-rule-for-times'
+                label={t('alerts.rules.forTimes')}
+                required
+              >
+                <Input
+                  id='alert-rule-for-times'
+                  inputMode='numeric'
+                  max={rule.constraints.for_times_max}
+                  min={rule.constraints.for_times_min}
+                  type='number'
+                  {...register('forTimes')}
+                />
+              </FormField>
+            ) : (
+              <div className='grid gap-1.5'>
+                <span className='text-sm font-medium'>
+                  {t('alerts.rules.forTimes')}
+                </span>
+                <output className='border-border bg-muted/35 flex min-h-10 items-center rounded-md border px-3 text-sm'>
+                  {rule.for_times}
+                </output>
+              </div>
+            )}
+            {errors.root?.message && (
+              <p className='text-destructive text-sm' role='alert'>
+                {errors.root.type === 'server'
+                  ? errors.root.message
+                  : t(dynamicI18nKey('api', String(errors.root.message)))}
+              </p>
+            )}
+          </form>
+          <DrawerFooter className={sideDrawerFooterClassName()}>
+            <Button onClick={requestClose} type='button' variant='outline'>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              disabled={mutation.isPending || (!createOverride && !isDirty)}
+              form='alert-rule-form'
+              type='submit'
             >
-              <Input
-                id='alert-rule-for-times'
-                inputMode='numeric'
-                max={rule.constraints.for_times_max}
-                min={rule.constraints.for_times_min}
-                type='number'
-                {...register('forTimes')}
-              />
-            </FormField>
-          ) : (
-            <div className='grid gap-1.5'>
-              <span className='text-sm font-medium'>
-                {t('alerts.rules.forTimes')}
-              </span>
-              <output className='border-border bg-muted/35 flex min-h-10 items-center rounded-md border px-3 text-sm'>
-                {rule.for_times}
-              </output>
-            </div>
-          )}
-          {errors.root?.message && (
-            <p className='text-destructive text-sm' role='alert'>
-              {errors.root.type === 'server'
-                ? errors.root.message
-                : t(dynamicI18nKey('api', String(errors.root.message)))}
-            </p>
-          )}
-        </form>
-        <DrawerFooter className={sideDrawerFooterClassName()}>
-          <Button onClick={onClose} type='button' variant='outline'>
-            {t('common.cancel')}
-          </Button>
-          <Button
-            disabled={mutation.isPending || (!createOverride && !isDirty)}
-            form='alert-rule-form'
-            type='submit'
-          >
-            {mutation.isPending && <Spinner />}
-            {createOverride
-              ? t('alerts.rules.createOverride')
-              : t('common.save')}
-          </Button>
-        </DrawerFooter>
-      </DrawerContent>
-    </Drawer>
+              {mutation.isPending && <Spinner />}
+              {createOverride
+                ? t('alerts.rules.createOverride')
+                : t('common.save')}
+            </Button>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
+      <UnsavedChangesConfirmDialog
+        onConfirm={discardAndClose}
+        onOpenChange={setConfirmOpen}
+        open={confirmOpen}
+      />
+    </>
   )
 }
 

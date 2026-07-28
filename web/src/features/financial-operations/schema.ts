@@ -38,5 +38,6 @@ export const financialOperationsSearchSchema = z
     states: strings(z.enum(['normal', 'missing'])),
     statuses: strings(z.string().max(255)),
     tab: z.enum(['topups', 'redemptions']).optional().catch(undefined),
+    view: z.enum(['list', 'analysis']).optional().catch(undefined),
   })
   .transform((search) => buildFinancialOperationsSearch(search))

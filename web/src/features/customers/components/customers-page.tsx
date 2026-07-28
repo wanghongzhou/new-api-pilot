@@ -15,6 +15,8 @@ import { DataStatusBadge } from '@/components/data/data-status'
 import { DataViewModeToggle } from '@/components/data/data-view-mode-toggle'
 import { MetricValue } from '@/components/data/metric-value'
 import { RunFeedbackSheet } from '@/components/data/run-feedback-sheet'
+import { EmptyState } from '@/components/empty-state'
+import { ErrorState } from '@/components/error-state'
 import { PageFooterPortal } from '@/components/layout/page-footer'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Button } from '@/components/ui/button'
@@ -22,6 +24,7 @@ import { DataTable } from '@/components/ui/data-table'
 import { DataTablePagination } from '@/components/ui/data-table-pagination'
 import { accountKeys } from '@/features/accounts/query-keys'
 import type { CollectionRunItem } from '@/features/sites/types'
+import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { listCustomers } from '../api'
@@ -40,6 +43,80 @@ import {
   CustomerStatusBadge,
   type CustomerAction,
 } from './customer-ui'
+
+function CustomerCardGridState({
+  error,
+  fetching,
+  isAdmin,
+  items,
+  loading,
+  onAction,
+  onOpenAccounts,
+  onRetry,
+}: {
+  error: boolean
+  fetching: boolean
+  isAdmin: boolean
+  items: CustomerListItem[]
+  loading: boolean
+  onAction: (action: CustomerAction, customer: CustomerListItem) => void
+  onOpenAccounts: (customerId: string) => void
+  onRetry: () => void
+}) {
+  const { t } = useTranslation()
+  if (loading && items.length === 0) {
+    return (
+      <div className='grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3'>
+        {Array.from({ length: 3 }, (_, index) => (
+          <div
+            aria-hidden='true'
+            className='bg-muted/40 h-56 animate-pulse rounded-xl border'
+            key={index}
+          />
+        ))}
+      </div>
+    )
+  }
+  if (error && items.length === 0) {
+    return (
+      <ErrorState
+        className='border'
+        description={t('table.loadErrorDescription')}
+        onRetry={onRetry}
+        title={t('table.loadError')}
+      />
+    )
+  }
+  if (items.length === 0) {
+    return (
+      <EmptyState
+        bordered
+        description={t('customers.emptyDescription')}
+        title={t('customers.empty')}
+      />
+    )
+  }
+  return (
+    <div className='grid min-w-0'>
+      <div
+        className={cn(
+          'grid min-w-0 gap-4 transition-opacity duration-150 min-[1800px]:grid-cols-5 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4',
+          fetching && 'pointer-events-none opacity-60'
+        )}
+      >
+        {items.map((customer) => (
+          <CustomerCard
+            customer={customer}
+            isAdmin={isAdmin}
+            key={customer.id}
+            onAction={onAction}
+            onOpenAccounts={onOpenAccounts}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
 
 export function CustomersPage({
   onOpenAccounts,
@@ -223,68 +300,62 @@ export function CustomersPage({
       description={t('customers.description')}
       title={t('customers.title')}
     >
-      <div className='flex h-full min-h-0 min-w-0 flex-col gap-4'>
+      <div className='flex h-full min-h-0 min-w-0 flex-col gap-5'>
         <CustomerFilters
+          actions={
+            <DataViewModeToggle
+              ariaLabel={t('customers.viewMode')}
+              cardLabel={t('customers.cardView')}
+              onChange={(view) => onSearchChange({ view })}
+              tableLabel={t('customers.tableView')}
+              value={search.view}
+            />
+          }
           onApply={(filters) => onSearchChange({ ...filters, page: 1 })}
           value={{ filter: search.filter, status: search.status }}
         />
-        <div className='flex justify-end'>
-          <DataViewModeToggle
-            ariaLabel={t('customers.viewMode')}
-            cardLabel={t('customers.cardView')}
-            onChange={(view) => onSearchChange({ view })}
-            tableLabel={t('customers.tableView')}
-            value={search.view}
-          />
-        </div>
-        {search.view === 'card' && customers.length > 0 ? (
-          <>
-            <div className='grid min-h-0 flex-1 gap-3 overflow-y-auto sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'>
-              {customers.map((customer) => (
-                <CustomerCard
-                  customer={customer}
-                  isAdmin={Boolean(isAdmin)}
-                  key={customer.id}
-                  onAction={onAction}
-                  onOpenAccounts={onOpenAccounts}
-                />
-              ))}
-            </div>
-            <PageFooterPortal>
-              <DataTablePagination
-                onPageChange={(page) => onSearchChange({ page })}
-                onPageSizeChange={(pageSize) =>
-                  onSearchChange({ page: 1, pageSize })
-                }
-                page={search.page}
-                pageSize={search.pageSize}
-                total={total}
-              />
-            </PageFooterPortal>
-          </>
+        {search.view === 'card' ? (
+          <div className='min-h-0 flex-1 overflow-y-auto' tabIndex={0}>
+            <CustomerCardGridState
+              error={customersQuery.isError}
+              fetching={customersQuery.isFetching}
+              isAdmin={Boolean(isAdmin)}
+              items={customers}
+              loading={customersQuery.isPending}
+              onAction={onAction}
+              onOpenAccounts={onOpenAccounts}
+              onRetry={() => void customersQuery.refetch()}
+            />
+          </div>
         ) : (
-          <DataTable
-            ariaLabel={t('customers.table')}
-            columns={columns}
-            data={customers}
-            emptyDescription={t('customers.emptyDescription')}
-            emptyTitle={t('customers.empty')}
-            error={customersQuery.isError}
-            fetching={customersQuery.isFetching}
-            loading={customersQuery.isPending}
-            onPageChange={(page) => onSearchChange({ page })}
-            onPageSizeChange={(pageSize) =>
-              onSearchChange({ page: 1, pageSize })
-            }
-            onRetry={() => void customersQuery.refetch()}
-            onSortingChange={updateSorting}
-            page={search.page}
-            pageSize={search.pageSize}
-            sorting={[{ desc: search.order === 'desc', id: search.sort }]}
-            total={total}
-          />
+          <div className='flex min-h-0 flex-1 flex-col'>
+            <DataTable
+              ariaLabel={t('customers.table')}
+              columns={columns}
+              data={customers}
+              emptyDescription={t('customers.emptyDescription')}
+              emptyTitle={t('customers.empty')}
+              error={customersQuery.isError}
+              fetching={customersQuery.isFetching}
+              fillAvailableHeight
+              loading={customersQuery.isPending}
+              onRetry={() => void customersQuery.refetch()}
+              onSortingChange={updateSorting}
+              preserveHeaderWhenEmpty
+              sorting={[{ desc: search.order === 'desc', id: search.sort }]}
+            />
+          </div>
         )}
       </div>
+      <PageFooterPortal>
+        <DataTablePagination
+          onPageChange={(page) => onSearchChange({ page })}
+          onPageSizeChange={(pageSize) => onSearchChange({ page: 1, pageSize })}
+          page={search.page}
+          pageSize={search.pageSize}
+          total={total}
+        />
+      </PageFooterPortal>
       <CustomerDialogs
         onClose={() => setDialogState(null)}
         onRecovery={(run, customer) => setRecovery({ customer, run })}

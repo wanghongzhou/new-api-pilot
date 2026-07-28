@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page, type Route } from '@playwright/test'
 
+import { mockAuthenticatedShell } from './helpers/auth'
 import { clickOpenSelectOption } from './helpers/select-control'
 
 const authStorageKey = 'pilot-auth-user'
@@ -255,6 +256,7 @@ function pageData<T>(items: T[]) {
 }
 
 async function seedAuth(page: Page, user: TestUser) {
+  await mockAuthenticatedShell(page)
   await page.addInitScript(
     ({ authKey, authUser, uidKey }) => {
       window.localStorage.setItem(authKey, JSON.stringify(authUser))
@@ -537,6 +539,7 @@ test('uses the refreshed new-api list chrome for account and customer pages', as
       page.getByText('当前筛选下没有纳管账户').filter({ visible: true }).first()
     ).toBeVisible()
   } else {
+    await page.getByRole('button', { name: '表格视图' }).click()
     await expectReferenceEmptyTableRow(page)
   }
   await expect(page.getByRole('button', { name: '添加账户' })).toHaveCount(1)
@@ -576,6 +579,7 @@ test('uses the refreshed new-api list chrome for account and customer pages', as
       page.getByText('尚未创建客户').filter({ visible: true }).first()
     ).toBeVisible()
   } else {
+    await page.getByRole('button', { name: '表格视图' }).click()
     await expectReferenceEmptyTableRow(page)
   }
   await expect(page.getByRole('button', { name: '新建客户' })).toHaveCount(1)

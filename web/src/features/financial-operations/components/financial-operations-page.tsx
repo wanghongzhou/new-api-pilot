@@ -1,4 +1,10 @@
-import { ArrowLeft01Icon, FileExportIcon } from '@hugeicons/core-free-icons'
+import {
+  Alert02Icon,
+  ArrowLeft01Icon,
+  Chart01Icon,
+  Database01Icon,
+  FileExportIcon,
+} from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
@@ -8,6 +14,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { DataStatusBadge } from '@/components/data/data-status'
+import { FacetedFilter } from '@/components/data/faceted-filter'
 import { FilterPanel } from '@/components/data/filter-panel'
 import { MetricValue } from '@/components/data/metric-value'
 import { ErrorState } from '@/components/error-state'
@@ -18,6 +25,9 @@ import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { listSites } from '@/features/sites/api'
+import { siteKeys } from '@/features/sites/query-keys'
+import type { SiteListItem } from '@/features/sites/types'
 import { createStatisticsExport } from '@/features/statistics/api'
 import { ExportTaskSheet } from '@/features/statistics/components/export-task-sheet'
 import type {
@@ -76,6 +86,36 @@ function parseDateTime(value: string) {
   return parsed.isValid() ? parsed.startOf('hour').unix() : undefined
 }
 
+function purposeText(
+  search: FinancialOperationsSearch,
+  t: (key: string) => string
+) {
+  if (search.tab === 'topups' && search.view === 'analysis') {
+    return {
+      description: t('financialOperations.purpose.topupsAnalysisDescription'),
+      title: t('financialOperations.purpose.topupsAnalysisTitle'),
+    }
+  }
+  if (search.tab === 'topups') {
+    return {
+      description: t('financialOperations.purpose.topupsListDescription'),
+      title: t('financialOperations.purpose.topupsListTitle'),
+    }
+  }
+  if (search.view === 'analysis') {
+    return {
+      description: t(
+        'financialOperations.purpose.redemptionsAnalysisDescription'
+      ),
+      title: t('financialOperations.purpose.redemptionsAnalysisTitle'),
+    }
+  }
+  return {
+    description: t('financialOperations.purpose.redemptionsListDescription'),
+    title: t('financialOperations.purpose.redemptionsListTitle'),
+  }
+}
+
 function queryParams(search: FinancialOperationsSearch) {
   return {
     end_timestamp: search.end,
@@ -109,10 +149,12 @@ function Filters({
   global,
   onChange,
   search,
+  sites,
 }: {
   global: boolean
   onChange: (changes: Partial<FinancialOperationsSearch>) => void
   search: FinancialOperationsSearch
+  sites: SiteListItem[]
 }) {
   const { t } = useTranslation()
   const listChange =
@@ -128,9 +170,86 @@ function Filters({
   const reset = buildFinancialOperationsSearch({
     pageSize: search.pageSize,
     tab: search.tab,
+    view: search.view,
   })
+  const advancedCount = [
+    search.remoteUserId != null,
+    search.statuses.length > 0,
+    search.providers.length > 0,
+    search.methods.length > 0,
+    search.start !== reset.start,
+    search.end !== reset.end,
+  ].filter(Boolean).length
   return (
     <FilterPanel
+      advanced={
+        <>
+          <label className='grid gap-1 text-sm'>
+            <span>{t('financialOperations.filters.remoteUserId')}</span>
+            <Input
+              inputMode='numeric'
+              onChange={(event) =>
+                onChange({
+                  page: 1,
+                  remoteUserId: isNonNegativeIdString(event.target.value)
+                    ? parseNonNegativeIdString(event.target.value)
+                    : undefined,
+                })
+              }
+              value={search.remoteUserId ?? ''}
+            />
+          </label>
+          <label className='grid gap-1 text-sm'>
+            <span>{t('financialOperations.filters.statuses')}</span>
+            <Input
+              onChange={listChange('statuses')}
+              value={search.statuses.join(',')}
+            />
+          </label>
+          {search.tab === 'topups' && (
+            <>
+              <label className='grid gap-1 text-sm'>
+                <span>{t('financialOperations.filters.providers')}</span>
+                <Input
+                  onChange={listChange('providers')}
+                  value={search.providers.join(',')}
+                />
+              </label>
+              <label className='grid gap-1 text-sm'>
+                <span>{t('financialOperations.filters.methods')}</span>
+                <Input
+                  onChange={listChange('methods')}
+                  value={search.methods.join(',')}
+                />
+              </label>
+            </>
+          )}
+          <label className='grid gap-1 text-sm'>
+            <span>{t('financialOperations.filters.start')}</span>
+            <Input
+              onChange={(event) => {
+                const start = parseDateTime(event.target.value)
+                if (start != null) onChange({ page: 1, start })
+              }}
+              type='datetime-local'
+              value={dateTimeValue(search.start)}
+            />
+          </label>
+          <label className='grid gap-1 text-sm'>
+            <span>{t('financialOperations.filters.end')}</span>
+            <Input
+              onChange={(event) => {
+                const end = parseDateTime(event.target.value)
+                if (end != null) onChange({ end, page: 1 })
+              }}
+              type='datetime-local'
+              value={dateTimeValue(search.end)}
+            />
+          </label>
+        </>
+      }
+      advancedCount={advancedCount}
+      advancedMode='popover'
       description={t('financialOperations.filters.description')}
       hasActiveFilters={hasFilterChanges(search, reset, [
         'end',
@@ -147,24 +266,35 @@ function Filters({
       onReset={() => onChange(reset)}
       title={t('financialOperations.filters.title')}
     >
-      <div className='grid min-w-0 flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-4'>
-        {global && (
+      <div className='flex min-w-0 flex-1 flex-wrap items-center gap-2'>
+        {search.tab === 'redemptions' && (
           <label className='grid gap-1 text-sm'>
-            <span>{t('financialOperations.filters.siteIds')}</span>
+            <span>{t('financialOperations.filters.keyword')}</span>
             <Input
+              className='min-w-48 sm:w-72'
               onChange={(event) =>
-                onChange({
-                  page: 1,
-                  siteIds: event.target.value
-                    .split(',')
-                    .map((value) => value.trim())
-                    .filter(isIdString)
-                    .map(parseIdString),
-                })
+                onChange({ keyword: event.target.value, page: 1 })
               }
-              value={search.siteIds.join(',')}
+              value={search.keyword}
             />
           </label>
+        )}
+        {global && (
+          <FacetedFilter
+            clearLabel={t('common.all')}
+            onChange={(value) =>
+              onChange({
+                page: 1,
+                siteIds: isIdString(value) ? [parseIdString(value)] : [],
+              })
+            }
+            options={sites.map((site) => ({
+              label: site.name,
+              value: site.id,
+            }))}
+            title={t('financialOperations.filters.siteIds')}
+            value={search.siteIds.length === 1 ? search.siteIds[0] : ''}
+          />
         )}
         <label className='grid gap-1 text-sm'>
           <span>{t('financialOperations.filters.remoteId')}</span>
@@ -181,110 +311,22 @@ function Filters({
             value={search.remoteId ?? ''}
           />
         </label>
-        <label className='grid gap-1 text-sm'>
-          <span>{t('financialOperations.filters.remoteUserId')}</span>
-          <Input
-            inputMode='numeric'
-            onChange={(event) =>
-              onChange({
-                page: 1,
-                remoteUserId: isNonNegativeIdString(event.target.value)
-                  ? parseNonNegativeIdString(event.target.value)
-                  : undefined,
-              })
-            }
-            value={search.remoteUserId ?? ''}
-          />
-        </label>
-        <label className='grid gap-1 text-sm'>
-          <span>{t('financialOperations.filters.statuses')}</span>
-          <Input
-            onChange={listChange('statuses')}
-            value={search.statuses.join(',')}
-          />
-        </label>
-        {search.tab === 'topups' ? (
-          <>
-            <label className='grid gap-1 text-sm'>
-              <span>{t('financialOperations.filters.providers')}</span>
-              <Input
-                onChange={listChange('providers')}
-                value={search.providers.join(',')}
-              />
-            </label>
-            <label className='grid gap-1 text-sm'>
-              <span>{t('financialOperations.filters.methods')}</span>
-              <Input
-                onChange={listChange('methods')}
-                value={search.methods.join(',')}
-              />
-            </label>
-          </>
-        ) : (
-          <label className='grid gap-1 text-sm'>
-            <span>{t('financialOperations.filters.keyword')}</span>
-            <Input
-              onChange={(event) =>
-                onChange({ keyword: event.target.value, page: 1 })
-              }
-              value={search.keyword}
-            />
-          </label>
-        )}
-        <label className='grid gap-1 text-sm'>
-          <span>{t('financialOperations.filters.start')}</span>
-          <Input
-            onChange={(event) => {
-              const start = parseDateTime(event.target.value)
-              if (start != null) onChange({ page: 1, start })
-            }}
-            type='datetime-local'
-            value={dateTimeValue(search.start)}
-          />
-        </label>
-        <label className='grid gap-1 text-sm'>
-          <span>{t('financialOperations.filters.end')}</span>
-          <Input
-            onChange={(event) => {
-              const end = parseDateTime(event.target.value)
-              if (end != null) onChange({ end, page: 1 })
-            }}
-            type='datetime-local'
-            value={dateTimeValue(search.end)}
-          />
-        </label>
+        <FacetedFilter
+          clearLabel={t('common.all')}
+          onChange={(value) =>
+            onChange({
+              page: 1,
+              states: value === 'normal' || value === 'missing' ? [value] : [],
+            })
+          }
+          options={[
+            { label: t('financialOperations.state.normal'), value: 'normal' },
+            { label: t('financialOperations.state.missing'), value: 'missing' },
+          ]}
+          title={t('financialOperations.filters.states')}
+          value={search.states.length === 1 ? search.states[0] : ''}
+        />
       </div>
-      <fieldset className='grid gap-2'>
-        <legend className='text-sm'>
-          {t('financialOperations.filters.states')}
-        </legend>
-        <div className='flex flex-wrap gap-2'>
-          {(['normal', 'missing'] as const).map((state) => {
-            const active = search.states.includes(state)
-            return (
-              <Button
-                aria-pressed={active}
-                key={state}
-                onClick={() =>
-                  onChange({
-                    page: 1,
-                    states: active
-                      ? search.states.filter((value) => value !== state)
-                      : [...search.states, state],
-                  })
-                }
-                size='sm'
-                type='button'
-                variant={active ? 'secondary' : 'outline'}
-              >
-                {state === 'normal'
-                  ? t('financialOperations.state.normal')
-                  : t('financialOperations.state.missing')}
-              </Button>
-            )
-          })}
-        </div>
-      </fieldset>
     </FilterPanel>
   )
 }
@@ -304,16 +346,24 @@ function Summary({ metric, topup }: { metric: FinanceMetric; topup: boolean }) {
         ]),
   ] as const
   return (
-    <dl className='border-border grid overflow-hidden rounded-lg border sm:grid-cols-3'>
+    <div className='grid gap-3 sm:grid-cols-3'>
       {items.map(([label, value]) => (
-        <div className='border-border min-w-0 border-b p-4' key={label}>
-          <dt className='text-muted-foreground text-xs'>{label}</dt>
-          <dd className='mt-1 text-xl font-semibold break-all'>
-            <MetricValue value={value} />
-          </dd>
+        <div
+          className='bg-card text-card-foreground ring-foreground/10 flex min-w-0 items-center gap-3 rounded-xl p-4 ring-1'
+          key={label}
+        >
+          <span className='bg-muted text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-lg'>
+            <HugeiconsIcon icon={Database01Icon} size={18} strokeWidth={2} />
+          </span>
+          <dl className='min-w-0'>
+            <dt className='text-muted-foreground text-xs'>{label}</dt>
+            <dd className='mt-0.5 text-2xl font-semibold tracking-tight break-all'>
+              <MetricValue value={value} />
+            </dd>
+          </dl>
         </div>
       ))}
-    </dl>
+    </div>
   )
 }
 
@@ -677,8 +727,14 @@ export function FinancialOperationsPage({
   const [initialJob, setInitialJob] = useState<StatisticsExportJobItem>()
   const validSiteId = siteId == null || isIdString(siteId)
   const params = useMemo(() => queryParams(search), [search])
+  const siteParams = useMemo(() => ({ page_size: 100 }), [])
+  const sitesQuery = useQuery({
+    enabled: !siteId,
+    queryFn: () => listSites(siteParams),
+    queryKey: siteKeys.list(siteParams),
+  })
   const topupListQuery = useQuery({
-    enabled: validSiteId && search.tab === 'topups',
+    enabled: validSiteId && search.tab === 'topups' && search.view === 'list',
     placeholderData: keepPreviousData,
     queryFn: () =>
       siteId && isIdString(siteId)
@@ -687,7 +743,8 @@ export function FinancialOperationsPage({
     queryKey: financialOperationsKeys.list('topups', siteId, params),
   })
   const redemptionListQuery = useQuery({
-    enabled: validSiteId && search.tab === 'redemptions',
+    enabled:
+      validSiteId && search.tab === 'redemptions' && search.view === 'list',
     placeholderData: keepPreviousData,
     queryFn: () =>
       siteId && isIdString(siteId)
@@ -735,32 +792,40 @@ export function FinancialOperationsPage({
   const redemptionData =
     search.tab === 'redemptions' ? redemptionListQuery.data : undefined
   const currentPage = topupData ?? redemptionData
+  const purpose = purposeText(search, t)
 
   return (
     <SectionPageLayout
-      actions={(['xlsx', 'csv'] as const).map((format) => (
-        <Button
-          disabled={exportMutation.isPending || !validSiteId}
-          key={format}
-          onClick={() => exportMutation.mutate(format)}
-          variant='outline'
-        >
-          <HugeiconsIcon icon={FileExportIcon} strokeWidth={2} />
-          {t('financialOperations.export', { format: format.toUpperCase() })}
-        </Button>
-      ))}
+      actions={
+        search.view === 'list'
+          ? (['xlsx', 'csv'] as const).map((format) => (
+              <Button
+                disabled={exportMutation.isPending || !validSiteId}
+                key={format}
+                onClick={() => exportMutation.mutate(format)}
+                variant='outline'
+              >
+                <HugeiconsIcon icon={FileExportIcon} strokeWidth={2} />
+                {t('financialOperations.export', {
+                  format: format.toUpperCase(),
+                })}
+              </Button>
+            ))
+          : undefined
+      }
       description={
         siteId
           ? t('financialOperations.siteDescription', { id: siteId })
           : t('financialOperations.description')
       }
+      fixedContent
       title={
         siteId
           ? t('financialOperations.siteTitle')
           : t('financialOperations.title')
       }
     >
-      <div className='grid min-w-0 gap-6'>
+      <div className='flex h-full min-h-0 min-w-0 flex-col gap-4'>
         {siteId && (
           <DetailBackLink
             render={<Link params={{ siteId }} to='/sites/$siteId' />}
@@ -769,119 +834,116 @@ export function FinancialOperationsPage({
             {t('financialOperations.backToSite')}
           </DetailBackLink>
         )}
-        <section
-          className='border-destructive/20 bg-muted/30 rounded-lg border p-4'
-          role='note'
-        >
-          <p className='font-medium'>
-            {t('financialOperations.security.title')}
-          </p>
-          <p className='text-muted-foreground mt-1 text-sm'>
-            {t('financialOperations.security.description')}
-          </p>
-        </section>
-        <Tabs
-          onValueChange={(tab) =>
-            onSearchChange({
-              page: 1,
-              tab: tab as FinancialOperationsSearch['tab'],
-            })
-          }
-          value={search.tab}
-        >
-          <TabsList aria-label={t('financialOperations.tabs.label')}>
-            <TabsTrigger value='topups'>
-              {t('financialOperations.tabs.topups')}
-            </TabsTrigger>
-            <TabsTrigger value='redemptions'>
-              {t('financialOperations.tabs.redemptions')}
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-        {search.tab === 'topups' && (
-          <section
-            className='border-warning/30 bg-warning/5 rounded-lg border p-4'
-            role='note'
-          >
-            <p className='font-medium'>
-              {t('financialOperations.nominalNotice.title')}
-            </p>
-            <p className='text-muted-foreground mt-1 text-sm'>
-              {t('financialOperations.nominalNotice.description')}
-            </p>
-          </section>
-        )}
-        <Filters global={!siteId} onChange={onSearchChange} search={search} />
-        <div className='grid gap-3 sm:grid-cols-2'>
-          {currentPage && (
-            <section
-              className='border-border flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3'
-              role='status'
-            >
-              <div className='flex items-center gap-2'>
-                <span className='text-sm font-medium'>
-                  {t('financialOperations.listStatus')}
-                </span>
-                <DataStatusBadge status={currentPage.data_status} />
-              </div>
-              <span className='text-muted-foreground text-xs'>
-                {t('financialOperations.asOf', {
-                  time: timestamp(currentPage.as_of),
-                })}
-              </span>
-            </section>
-          )}
-          {statistics && (
-            <section
-              className='border-border flex items-center gap-2 rounded-lg border p-3'
-              role='status'
-            >
-              <span className='text-sm font-medium'>
-                {t('financialOperations.statisticsStatus')}
-              </span>
-              <DataStatusBadge status={statistics.data_status} />
-            </section>
-          )}
-        </div>
         {statistics && (
           <Summary
             metric={statistics.summary}
             topup={search.tab === 'topups'}
           />
         )}
-        {search.tab === 'topups' ? (
-          <TopupTable
-            data={topupData}
-            error={!validSiteId || activeListQuery.isError}
-            fetching={activeListQuery.isFetching}
-            loading={activeListQuery.isPending}
-            onPageChange={(page) => onSearchChange({ page })}
-            onPageSizeChange={(pageSize) =>
-              onSearchChange({ page: 1, pageSize })
-            }
-            onRetry={
-              validSiteId ? () => void activeListQuery.refetch() : undefined
-            }
-            page={search.page}
-            pageSize={search.pageSize}
-          />
-        ) : (
-          <RedemptionTable
-            data={redemptionData}
-            error={!validSiteId || activeListQuery.isError}
-            fetching={activeListQuery.isFetching}
-            loading={activeListQuery.isPending}
-            onPageChange={(page) => onSearchChange({ page })}
-            onPageSizeChange={(pageSize) =>
-              onSearchChange({ page: 1, pageSize })
-            }
-            onRetry={
-              validSiteId ? () => void activeListQuery.refetch() : undefined
-            }
-            page={search.page}
-            pageSize={search.pageSize}
-          />
-        )}
+        <Tabs
+          onValueChange={(value) => {
+            const [tab, view] = value.split(':') as [
+              FinancialOperationsSearch['tab'],
+              FinancialOperationsSearch['view'],
+            ]
+            onSearchChange({
+              page: 1,
+              tab,
+              view,
+            })
+          }}
+          value={`${search.tab}:${search.view}`}
+        >
+          <TabsList aria-label={t('financialOperations.tabs.label')}>
+            <TabsTrigger value='topups:list'>
+              {t('financialOperations.tabs.topupList')}
+            </TabsTrigger>
+            <TabsTrigger value='topups:analysis'>
+              {t('financialOperations.tabs.topupAnalysis')}
+            </TabsTrigger>
+            <TabsTrigger value='redemptions:list'>
+              {t('financialOperations.tabs.redemptionList')}
+            </TabsTrigger>
+            <TabsTrigger value='redemptions:analysis'>
+              {t('financialOperations.tabs.redemptionAnalysis')}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <section className='border-border bg-muted/20 flex items-start gap-3 rounded-xl border p-4'>
+          <span className='bg-background text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-lg border'>
+            <HugeiconsIcon
+              icon={search.view === 'list' ? Database01Icon : Chart01Icon}
+              size={18}
+              strokeWidth={2}
+            />
+          </span>
+          <div className='min-w-0 flex-1'>
+            <div className='flex flex-wrap items-center gap-2'>
+              <p className='font-medium'>{purpose.title}</p>
+              {statistics && (
+                <DataStatusBadge status={statistics.data_status} />
+              )}
+              {search.view === 'list' && currentPage && (
+                <DataStatusBadge status={currentPage.data_status} />
+              )}
+            </div>
+            <p className='text-muted-foreground mt-1 text-sm'>
+              {purpose.description}
+            </p>
+            <p className='text-muted-foreground mt-1 flex items-start gap-1.5 text-xs'>
+              <HugeiconsIcon
+                className='mt-0.5 shrink-0'
+                icon={Alert02Icon}
+                size={14}
+              />
+              <span>
+                {search.tab === 'topups'
+                  ? t('financialOperations.nominalNotice.description')
+                  : t('financialOperations.security.description')}
+              </span>
+            </p>
+          </div>
+        </section>
+        <Filters
+          global={!siteId}
+          onChange={onSearchChange}
+          search={search}
+          sites={sitesQuery.data?.items ?? []}
+        />
+        {search.view === 'list' &&
+          (search.tab === 'topups' ? (
+            <TopupTable
+              data={topupData}
+              error={!validSiteId || activeListQuery.isError}
+              fetching={activeListQuery.isFetching}
+              loading={activeListQuery.isPending}
+              onPageChange={(page) => onSearchChange({ page })}
+              onPageSizeChange={(pageSize) =>
+                onSearchChange({ page: 1, pageSize })
+              }
+              onRetry={
+                validSiteId ? () => void activeListQuery.refetch() : undefined
+              }
+              page={search.page}
+              pageSize={search.pageSize}
+            />
+          ) : (
+            <RedemptionTable
+              data={redemptionData}
+              error={!validSiteId || activeListQuery.isError}
+              fetching={activeListQuery.isFetching}
+              loading={activeListQuery.isPending}
+              onPageChange={(page) => onSearchChange({ page })}
+              onPageSizeChange={(pageSize) =>
+                onSearchChange({ page: 1, pageSize })
+              }
+              onRetry={
+                validSiteId ? () => void activeListQuery.refetch() : undefined
+              }
+              page={search.page}
+              pageSize={search.pageSize}
+            />
+          ))}
         {statisticsQuery.isError && !statistics && (
           <ErrorState
             className='min-h-40'
@@ -889,8 +951,8 @@ export function FinancialOperationsPage({
             title={t('financialOperations.statisticsError')}
           />
         )}
-        {statistics && (
-          <>
+        {statistics && search.view === 'analysis' && (
+          <div className='min-h-0 flex-1 overflow-y-auto pr-1' tabIndex={0}>
             <Breakdown
               items={statistics.status_breakdown}
               nominal={false}
@@ -908,7 +970,7 @@ export function FinancialOperationsPage({
               nominal={search.tab === 'topups'}
               title={t('financialOperations.breakdown.site')}
             />
-          </>
+          </div>
         )}
       </div>
       <ExportTaskSheet

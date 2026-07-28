@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"testing"
+	"time"
 
 	"new-api-pilot/constant"
 	"new-api-pilot/model"
@@ -33,7 +34,7 @@ func TestLocalRebuildCompletionNotifiesLifecycleScope(t *testing.T) {
 				TaskType: testCase.taskType, TargetID: 42,
 			}}
 			executor.notifyWindowAfterCommit(
-				claim, model.CollectionRunWindow{},
+				context.Background(), claim, model.CollectionRunWindow{},
 				model.CollectionRun{Status: model.CollectionTaskStatusSuccess}, 101, false,
 			)
 			if len(notifier.triggers) != 1 {
@@ -45,5 +46,42 @@ func TestLocalRebuildCompletionNotifiesLifecycleScope(t *testing.T) {
 				t.Fatalf("lifecycle trigger = %#v", trigger)
 			}
 		})
+	}
+}
+
+type contextRecordingPostCommitNotifier struct {
+	err       error
+	deadline  time.Time
+	hasExpiry bool
+}
+
+func (notifier *contextRecordingPostCommitNotifier) NotifyAfterCommit(ctx context.Context, _ service.AlertPostCommitTrigger) {
+	notifier.err = ctx.Err()
+	notifier.deadline, notifier.hasExpiry = ctx.Deadline()
+}
+
+func TestPostCommitFinalizationDetachesCancellationAndHasDeadline(t *testing.T) {
+	notifier := &contextRecordingPostCommitNotifier{}
+	executor := &Executor{postCommit: notifier}
+	parent, cancelParent := context.WithCancel(context.Background())
+	cancelParent()
+
+	executor.notifyWindowAfterCommit(
+		parent,
+		model.CollectionTaskClaim{Run: model.CollectionRun{TaskType: constant.TaskTypeAccountRebuild, TargetID: 42}},
+		model.CollectionRunWindow{},
+		model.CollectionRun{Status: model.CollectionTaskStatusSuccess},
+		101,
+		false,
+	)
+	if notifier.err != nil {
+		t.Fatalf("post-commit context inherited cancellation: %v", notifier.err)
+	}
+	if !notifier.hasExpiry {
+		t.Fatal("post-commit context has no deadline")
+	}
+	remaining := time.Until(notifier.deadline)
+	if remaining <= 0 || remaining > executorFinalizationTimeout {
+		t.Fatalf("post-commit deadline remaining = %s", remaining)
 	}
 }

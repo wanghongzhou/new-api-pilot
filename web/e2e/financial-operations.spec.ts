@@ -7,6 +7,8 @@ import {
   type TestInfo,
 } from '@playwright/test'
 
+import { mockAuthenticatedShell } from './helpers/auth'
+
 const viewer = {
   display_name: '财务运营只读员',
   id: '9007199254740991',
@@ -35,6 +37,7 @@ function assertAuthenticated(route: Route) {
 }
 
 async function seedAuth(page: Page, testInfo: TestInfo) {
+  await mockAuthenticatedShell(page)
   if (testInfo.project.name === 'chromium-mobile') {
     await page.setViewportSize({ height: 812, width: 375 })
   }
@@ -48,6 +51,17 @@ async function seedAuth(page: Page, testInfo: TestInfo) {
   await page.route('**/api/user/self', async (route) => {
     assertAuthenticated(route)
     await route.fulfill({ json: envelope(viewer, 'req_finance_self') })
+  })
+  await page.route(/\/api\/sites(?:\?.*)?$/, async (route) => {
+    assertAuthenticated(route)
+    await route.fulfill({
+      json: envelope({
+        items: [{ id: '9007199254740997', name: '华东充值站点' }],
+        page: 1,
+        page_size: 100,
+        total: 1,
+      }),
+    })
   })
 }
 
@@ -294,9 +308,7 @@ test('keeps finance operations exact, non-reconciling, secret-free, exportable a
   await expect(
     page.getByRole('heading', { exact: true, name: '财务运营' })
   ).toBeVisible()
-  await expect(
-    page.getByText('充值金额是 provider 名义值，不是统一货币')
-  ).toBeVisible()
+  await expect(page.getByText('充值记录明细')).toBeVisible()
   await expect(
     page
       .getByText('123456789012345678.1234567890', { exact: true })
@@ -305,9 +317,9 @@ test('keeps finance operations exact, non-reconciling, secret-free, exportable a
   ).toBeVisible()
   await expect(page.getByText(/不能称为钱包对账/)).toBeVisible()
 
-  await page
-    .getByRole('textbox', { exact: true, name: '站点 ID' })
-    .fill('9007199254740997')
+  await page.getByRole('button', { name: /站点 ID/ }).click()
+  await page.getByRole('button', { name: '华东充值站点' }).click()
+  await page.getByRole('button', { name: /更多筛选/ }).click()
   await page
     .getByRole('textbox', { exact: true, name: '远端用户 ID' })
     .fill('0')
@@ -317,6 +329,7 @@ test('keeps finance operations exact, non-reconciling, secret-free, exportable a
   await page
     .getByRole('textbox', { exact: true, name: '支付方式' })
     .fill('card')
+  await page.getByRole('button', { name: /库存状态/ }).click()
   await page.getByRole('button', { name: '本轮缺失' }).click()
   await expect
     .poll(() => topupReads.at(-1)?.searchParams.getAll('site_ids'))
@@ -336,7 +349,7 @@ test('keeps finance operations exact, non-reconciling, secret-free, exportable a
   expect(topupExport).not.toContain('secret')
 
   await page.goto('/financial-operations?tab=redemptions')
-  await expect(page.getByRole('tab', { name: '兑换码' })).toHaveAttribute(
+  await expect(page.getByRole('tab', { name: '兑换记录' })).toHaveAttribute(
     'aria-selected',
     'true'
   )

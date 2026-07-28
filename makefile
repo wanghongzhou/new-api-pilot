@@ -67,7 +67,9 @@ docs-check-docker:
 
 docs-check-final-docker:
 	docker build --target go-test-runner $(DOCKER_BUILD_ARGS) -t new-api-pilot-go-test:latest .
-	docker run --rm -v "$(CURDIR):/workspace:ro" -w /workspace new-api-pilot-go-test:latest go run ./cmd/docscheck -root . -final
+	@test -n "$$(git rev-parse --verify HEAD)"
+	@worktree_clean=false; test -z "$$(git status --porcelain --untracked-files=all)" && worktree_clean=true; \
+		docker run --rm -e EXPECTED_GIT_COMMIT="$$(git rev-parse --verify HEAD)" -e EXPECTED_GIT_WORKTREE_CLEAN="$$worktree_clean" -v "$(CURDIR):/workspace:ro" -w /workspace new-api-pilot-go-test:latest go run ./cmd/docscheck -root . -final
 
 contract-generate:
 	go run ./cmd/contractgen -root .

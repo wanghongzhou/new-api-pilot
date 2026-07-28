@@ -51,5 +51,9 @@ export const channelInventorySearchSchema = z
     statuses: numberArray(3),
     tags: stringArray(z.string().max(128)),
     types: numberArray(10_000),
+    tab: z
+      .enum(['list', 'trend', 'dimensions', 'sites'])
+      .optional()
+      .catch(undefined),
   })
   .transform((search) => buildChannelInventorySearch(search))

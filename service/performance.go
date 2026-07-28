@@ -1,6 +1,8 @@
 package service
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"math"
 	"strconv"
@@ -9,6 +11,40 @@ import (
 )
 
 const sitePerformanceDataReady = "ready"
+
+type upstreamPerformanceSummaryResponse struct {
+	Summary dto.UpstreamPerformanceSummary
+}
+
+func (response *upstreamPerformanceSummaryResponse) decodeUpstreamResponse(payload []byte) error {
+	var envelope struct {
+		Success *bool           `json:"success"`
+		Message *string         `json:"message"`
+		Data    json.RawMessage `json:"data"`
+	}
+	if err := validateStrictJSONFor(payload, envelope); err != nil {
+		return newUpstreamRequestErrorWithDetail(UpstreamErrorResponseInvalid, "invalid_envelope_json")
+	}
+	if err := json.Unmarshal(payload, &envelope); err != nil {
+		return newUpstreamRequestErrorWithDetail(UpstreamErrorEnvelopeInvalid, "invalid_envelope_json")
+	}
+	if envelope.Success == nil {
+		return newUpstreamRequestErrorWithDetail(UpstreamErrorEnvelopeInvalid, "missing_success")
+	}
+	if !*envelope.Success {
+		return newUpstreamRequestErrorWithDetail(UpstreamErrorEnvelopeInvalid, "success_false")
+	}
+	if len(envelope.Data) == 0 || bytes.Equal(bytes.TrimSpace(envelope.Data), []byte("null")) {
+		return newUpstreamRequestErrorWithDetail(UpstreamErrorEnvelopeInvalid, "missing_data")
+	}
+	if err := validateStrictJSONFor(envelope.Data, dto.UpstreamPerformanceSummary{}); err != nil {
+		return newUpstreamRequestErrorWithDetail(UpstreamErrorResponseInvalid, "invalid_data_json")
+	}
+	if err := json.Unmarshal(envelope.Data, &response.Summary); err != nil {
+		return newUpstreamRequestErrorWithDetail(UpstreamErrorResponseInvalid, "invalid_data_schema")
+	}
+	return nil
+}
 
 func validatePerformanceSummary(summary dto.UpstreamPerformanceSummary) error {
 	var totalRequests int64

@@ -1,6 +1,8 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page, type Route } from '@playwright/test'
 
+import { mockAuthenticatedShell } from './helpers/auth'
+
 const authStorageKey = 'pilot-auth-user'
 const uidStorageKey = 'uid'
 const viewer = {
@@ -35,6 +37,7 @@ function assertAuthenticated(route: Route) {
 }
 
 async function seedAuth(page: Page) {
+  await mockAuthenticatedShell(page)
   await page.addInitScript(
     ({ authKey, authUser, uidKey }) => {
       window.localStorage.setItem(authKey, JSON.stringify(authUser))
@@ -45,6 +48,17 @@ async function seedAuth(page: Page) {
   await page.route('**/api/user/self', async (route) => {
     assertAuthenticated(route)
     await route.fulfill({ json: envelope(viewer, 'req_inventory_self') })
+  })
+  await page.route(/\/api\/sites(?:\?.*)?$/, async (route) => {
+    assertAuthenticated(route)
+    await route.fulfill({
+      json: envelope({
+        items: [{ id: '9007199254740993', name: '华东生产站点' }],
+        page: 1,
+        page_size: 100,
+        total: 1,
+      }),
+    })
   })
 }
 
@@ -210,7 +224,7 @@ test('keeps upstream inventory distinct, bigint-safe, filterable, exportable and
   await expect(
     page.getByRole('heading', { name: '全局上游用户库存' })
   ).toBeVisible()
-  await expect(page.getByText('上游库存不等于已纳管账户')).toBeVisible()
+  await expect(page.getByText('上游用户库存明细')).toBeVisible()
   await expect(
     page
       .getByText(/9223372036854775807/)
@@ -240,9 +254,11 @@ test('keeps upstream inventory distinct, bigint-safe, filterable, exportable and
   ).toHaveAttribute('href', '/accounts/88')
 
   await page.getByLabel('用户名或显示名').fill('alice')
+  await page.getByRole('button', { name: /更多筛选/ }).click()
   await page.getByLabel('远端用户 ID').fill('9007199254740997')
   await page.getByLabel('分组').fill('vip')
   await page.getByRole('button', { name: '普通用户' }).click()
+  await page.getByRole('button', { name: /库存状态/ }).click()
   await page.getByRole('button', { name: '身份不一致' }).click()
   await expect
     .poll(() => listReads.at(-1)?.searchParams.get('keyword'))
@@ -332,6 +348,7 @@ test('uses forced site inventory endpoints and keeps unavailable distinct from z
   await expect(page.getByText('等待采集')).toBeVisible()
   await expect(page.getByText('不可用')).toBeVisible()
   await expect(page.getByLabel('站点 ID')).toHaveCount(0)
+  await page.getByRole('button', { name: /更多筛选/ }).click()
   await page.getByLabel('分组').fill('vip')
   await expect
     .poll(() => listReads.at(-1)?.searchParams.getAll('groups'))
@@ -342,6 +359,7 @@ test('uses forced site inventory endpoints and keeps unavailable distinct from z
   expect(listReads.at(-1)?.searchParams.has('site_ids')).toBe(false)
   expect(statsReads.at(-1)?.searchParams.has('site_ids')).toBe(false)
   await page.reload()
+  await page.getByRole('button', { name: /更多筛选/ }).click()
   await expect(page.getByLabel('分组')).toHaveValue('vip')
   await expect(page.getByRole('button', { name: '返回站点详情' })).toBeVisible()
   const accessibility = await new AxeBuilder({ page })

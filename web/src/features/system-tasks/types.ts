@@ -7,6 +7,7 @@ import type {
 
 export const systemTaskTypes = [
   'log_cleanup',
+  'log_detail_cleanup',
   'channel_test',
   'model_update',
   'midjourney_poll',
@@ -32,6 +33,11 @@ export type SystemTaskErrorCode =
   | 'UPSTREAM_SYSTEM_TASK_FAILED'
   | 'UPSTREAM_SYSTEM_TASK_LEASE_EXPIRED'
   | 'UPSTREAM_SYSTEM_TASK_INVALID_RESPONSE'
+export type SystemTaskDataErrorCode =
+  | ''
+  | 'SYSTEM_TASK_UPSTREAM_UNAVAILABLE'
+  | 'SYSTEM_TASK_CURRENT_UNAVAILABLE'
+  | 'SYSTEM_TASK_UNSUPPORTED_TYPE'
 
 export interface SystemTaskProgress {
   total: MetricString | null
@@ -42,6 +48,9 @@ export interface SystemTaskProgress {
 
 interface LogCleanupResult {
   deleted_count: MetricString | null
+}
+interface LogDetailCleanupResult {
+  archived_days: MetricString | null
 }
 interface ChannelTestResult {
   tested: MetricString | null
@@ -89,6 +98,7 @@ interface SystemTaskItemBase<TType extends SystemTaskType, TResult> {
 
 export type SystemTaskItem =
   | SystemTaskItemBase<'log_cleanup', LogCleanupResult>
+  | SystemTaskItemBase<'log_detail_cleanup', LogDetailCleanupResult>
   | SystemTaskItemBase<'channel_test', ChannelTestResult>
   | SystemTaskItemBase<'model_update', ModelUpdateResult>
   | SystemTaskItemBase<'midjourney_poll', MidjourneyPollResult>
@@ -105,6 +115,7 @@ export interface SystemTaskPage {
   truncation_reason: SystemTaskTruncationReason | null
   source_limit: MetricString
   observed_count: MetricString
+  data_error_code: SystemTaskDataErrorCode
 }
 
 export interface SystemTaskMetric {
@@ -135,6 +146,7 @@ export interface SystemTaskStatistics {
   truncation_reason: SystemTaskTruncationReason | null
   source_limit: MetricString
   observed_count: MetricString
+  data_error_code: SystemTaskDataErrorCode
 }
 
 export interface SystemTaskQueryParams {

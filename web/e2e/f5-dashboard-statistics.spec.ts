@@ -1,6 +1,8 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page, type Route } from '@playwright/test'
 
+import { mockAuthenticatedShell } from './helpers/auth'
+
 const authStorageKey = 'pilot-auth-user'
 const uidStorageKey = 'uid'
 const rangeStart = 1_783_789_200
@@ -224,6 +226,7 @@ function dashboardHealth(state: DashboardFixtureState = 'partial') {
 }
 
 async function seedAuth(page: Page) {
+  await mockAuthenticatedShell(page)
   await page.addInitScript(
     ({ authKey, authUser, uidKey }) => {
       window.localStorage.setItem(authKey, JSON.stringify(authUser))
@@ -363,16 +366,16 @@ test('Dashboard renders the complete fixture across all five sections', async ({
   await expectAccessibleSkipLink(page)
 
   const today = page.getByRole('region', { name: '今日运营' })
-  await expect(today.getByText('完整', { exact: true })).toHaveCount(2)
+  await expect(today.getByText('完整', { exact: true })).toHaveCount(1)
   await expect(today.getByText('9,007,199,254,740,995').first()).toBeVisible()
-  const resource = today.getByRole('region', { name: '实例资源完整性' })
+  const realtime = page.getByRole('region', { name: '实时吞吐' })
+  const resource = realtime.getByRole('region', { name: '实例资源完整性' })
   await expect(resource.getByText('完整', { exact: true })).toBeVisible()
   await expect(resource.getByText('完整站点 2 / 预期 2')).toBeVisible()
   await expect(resource.getByText('资源过期站点 ID：')).toHaveCount(0)
 
-  const realtime = page.getByRole('region', { name: '实时吞吐' })
-  await expect(realtime.getByText('完整', { exact: true })).toBeVisible()
-  await expect(realtime.getByText('完整站点 2 / 预期 2')).toBeVisible()
+  await expect(realtime.getByText('完整', { exact: true })).toHaveCount(2)
+  await expect(realtime.getByText('完整站点 2 / 预期 2')).toHaveCount(2)
 
   const trend = page.getByRole('region', { name: '近 30 天趋势' })
   await expect(trend.getByRole('img', { name: '统计趋势图' })).toBeVisible()
@@ -397,9 +400,12 @@ test('Dashboard renders the complete fixture across all five sections', async ({
   ).toBeVisible()
   await expect(health.getByText('昨日校验状态')).toBeVisible()
   await expect(health.getByText('已最终确认')).toBeVisible()
-  await expect(health.getByText('授权过期站点 ID')).toBeVisible()
-  await expect(health.getByText('统计未就绪站点 ID')).toBeVisible()
-  await expect(health.getByText('无', { exact: true })).toHaveCount(2)
+  await expect(
+    health.getByRole('link', { name: '授权过期站点 ID 0' })
+  ).toBeVisible()
+  await expect(
+    health.getByRole('link', { name: '统计未就绪站点 ID 0' })
+  ).toBeVisible()
   await expect(
     health.getByText('华东超长名称生产站点用于验证移动端不会横向溢出')
   ).toBeVisible()
@@ -424,18 +430,18 @@ test('Dashboard renders partial values without presenting missing data as zero',
   await expectFiveDashboardSections(page)
 
   const today = page.getByRole('region', { name: '今日运营' })
-  await expect(today.getByText('部分完整', { exact: true })).toHaveCount(2)
-  await expect(today.getByText('该范围的数据缺失')).toHaveCount(2)
-  const resource = today.getByRole('region', { name: '实例资源完整性' })
+  await expect(today.getByText('部分完整', { exact: true })).toHaveCount(1)
+  await expect(today.getByText('该范围的数据缺失')).toHaveCount(1)
+  const realtime = page.getByRole('region', { name: '实时吞吐' })
+  const resource = realtime.getByRole('region', { name: '实例资源完整性' })
   await expect(resource.getByText('部分完整', { exact: true })).toBeVisible()
   await expect(resource.getByText('完整站点 1 / 预期 2')).toBeVisible()
   await expect(
     resource.getByText('资源过期站点 ID：9007199254740996')
   ).toBeVisible()
 
-  const realtime = page.getByRole('region', { name: '实时吞吐' })
-  await expect(realtime.getByText('部分完整', { exact: true })).toBeVisible()
-  await expect(realtime.getByText('完整站点 1 / 预期 2')).toBeVisible()
+  await expect(realtime.getByText('部分完整', { exact: true })).toHaveCount(2)
+  await expect(realtime.getByText('完整站点 1 / 预期 2')).toHaveCount(2)
   await expect(
     realtime.getByText('数据过期站点 ID：9007199254740996')
   ).toBeVisible()
@@ -459,15 +465,13 @@ test('Dashboard renders partial values without presenting missing data as zero',
   await expect(health.getByText('昨日校验状态')).toBeVisible()
   await expect(health.getByText('尚未最终确认')).toBeVisible()
   await expect(
-    health.getByText('9007199254740996', { exact: true })
+    health.getByRole('link', { name: '授权过期站点 ID 1' })
   ).toBeVisible()
   await expect(
-    health.getByText('9007199254740993', { exact: true })
+    health.getByRole('link', { name: '统计未就绪站点 ID 1' })
   ).toBeVisible()
   await expect(health.getByRole('link', { name: /部分完整/ })).toBeVisible()
-  await expect(health.getByTestId('dashboard-health-reason')).toHaveText(
-    '该范围的数据缺失'
-  )
+  await expect(health.getByText('该范围的数据缺失')).toHaveCount(3)
   await expect(page.getByText('该区块加载失败')).toHaveCount(0)
   await expect(page.getByText('暂无可展示数据')).toHaveCount(0)
 })
@@ -483,13 +487,13 @@ test('Dashboard renders empty trend, ranking, site and alert states', async ({
 
   const today = page.getByRole('region', { name: '今日运营' })
   await expect(today.getByText('不可用', { exact: true }).first()).toBeVisible()
-  const resource = today.getByRole('region', { name: '实例资源完整性' })
+  const realtime = page.getByRole('region', { name: '实时吞吐' })
+  const resource = realtime.getByRole('region', { name: '实例资源完整性' })
   await expect(resource.getByText('完整站点 0 / 预期 0')).toBeVisible()
   await expect(resource.getByText('暂无更新时间')).toBeVisible()
 
-  const realtime = page.getByRole('region', { name: '实时吞吐' })
   await expect(realtime.getByText('不可用', { exact: true })).toHaveCount(2)
-  await expect(realtime.getByText('完整站点 0 / 预期 0')).toBeVisible()
+  await expect(realtime.getByText('完整站点 0 / 预期 0')).toHaveCount(2)
 
   const trend = page.getByRole('region', { name: '近 30 天趋势' })
   await expect(trend.getByText('暂无可展示数据')).toBeVisible()
@@ -506,7 +510,12 @@ test('Dashboard renders empty trend, ranking, site and alert states', async ({
   await expect(health.getByText('当前没有触发中的告警。')).toBeVisible()
   await expect(health.getByText('昨日校验状态')).toBeVisible()
   await expect(health.getByText('已最终确认')).toBeVisible()
-  await expect(health.getByText('无', { exact: true })).toHaveCount(2)
+  await expect(
+    health.getByRole('link', { name: '授权过期站点 ID 0' })
+  ).toBeVisible()
+  await expect(
+    health.getByRole('link', { name: '统计未就绪站点 ID 0' })
+  ).toBeVisible()
   await expect(page.getByText('该区块加载失败')).toHaveCount(0)
 })
 

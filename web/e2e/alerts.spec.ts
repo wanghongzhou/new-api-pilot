@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page, type Route } from '@playwright/test'
 
+import { mockAuthenticatedShell } from './helpers/auth'
 import { clickOpenSelectOption } from './helpers/select-control'
 
 const authStorageKey = 'pilot-auth-user'
@@ -213,6 +214,7 @@ const alertDetail = {
 }
 
 async function seedAuth(page: Page, user: TestUser) {
+  await mockAuthenticatedShell(page)
   await page.addInitScript(() => {
     const style = document.createElement('style')
     style.textContent = `

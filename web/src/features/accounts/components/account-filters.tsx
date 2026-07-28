@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { FilterPanel } from '@/components/data/filter-panel'
@@ -28,11 +28,13 @@ type Draft = Pick<
 >
 
 export function AccountFilters({
+  actions,
   customers,
   onApply,
   sites,
   value,
 }: {
+  actions?: ReactNode
   customers: CustomerListItem[]
   onApply: (value: Draft) => void
   sites: SiteListItem[]
@@ -59,6 +61,7 @@ export function AccountFilters({
   }
   return (
     <FilterPanel
+      actions={actions}
       description={t('account.filters.description')}
       hasActiveFilters={hasFilterChanges(draft, reset, [
         'customerId',

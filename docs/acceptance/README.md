@@ -45,8 +45,8 @@
 
 1. 功能任务开始时，责任人确认关联 A 项、fixture 和断言，创建计划测试路径，并移除该项路径的 `planned:` 前缀。
 2. 自动化用例按 Given/When/Then 实现，同时断言 HTTP 状态与 `code`/DTO、数据库不变量、用户可见状态及外部副作用。运行手册按模板执行并由另一角色复核。
-3. 每次验收写入独立证据目录，至少包含 commit、镜像 digest、fixture 版本/checksum、命令或操作记录、开始/结束时间、结果以及日志/报告路径；秘密和 Webhook 查询参数必须脱敏。
-4. `make acceptance` 汇总结果。失败、缺证据、证据过期、路径仍为 `planned:` 或 required 用例被 skipped，均阻断发布。
+3. 每次验收写入独立证据目录，至少包含 commit、工作区 clean 状态、镜像 digest、fixture 版本/checksum、命令或操作记录、开始/结束时间、结果以及日志/报告路径；秘密和 Webhook 查询参数必须脱敏。
+4. `make acceptance` 汇总结果。最终门禁只接受与当前 HEAD 完全一致且 `worktree_dirty=false` 的 formal 证据，并要求执行门禁的宿主工作区无 tracked/untracked 非忽略变更；历史 commit、脏工作区、无法解析当前 Git 状态、缺证据、证据过期、路径仍为 `planned:` 或 required 用例被 skipped，均阻断发布。
 
 ## 发布与变更规则
 

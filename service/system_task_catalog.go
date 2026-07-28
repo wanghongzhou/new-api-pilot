@@ -38,7 +38,24 @@ func systemTaskResult(row model.SiteSystemTask) *dto.SystemTaskResult {
 	if row.DeletedCount == nil && row.Tested == nil && row.Succeeded == nil && row.Failed == nil && row.Disabled == nil && row.Enabled == nil && row.CheckedChannels == nil && row.ChangedChannels == nil && row.DetectedAddModels == nil && row.DetectedRemoveModels == nil && row.FailedChannels == nil && row.AutoAddedModels == nil && row.UnfinishedTasks == nil && row.ChannelsScanned == nil && row.PlatformsScanned == nil && row.NullTasksFailed == nil {
 		return nil
 	}
-	return &dto.SystemTaskResult{DeletedCount: systemTaskInt64String(row.DeletedCount), Tested: systemTaskInt64String(row.Tested), Succeeded: systemTaskInt64String(row.Succeeded), Failed: systemTaskInt64String(row.Failed), Disabled: systemTaskInt64String(row.Disabled), Enabled: systemTaskInt64String(row.Enabled), CheckedChannels: systemTaskInt64String(row.CheckedChannels), ChangedChannels: systemTaskInt64String(row.ChangedChannels), DetectedAddModels: systemTaskInt64String(row.DetectedAddModels), DetectedRemoveModels: systemTaskInt64String(row.DetectedRemoveModels), FailedChannels: systemTaskInt64String(row.FailedChannels), AutoAddedModels: systemTaskInt64String(row.AutoAddedModels), UnfinishedTasks: systemTaskInt64String(row.UnfinishedTasks), ChannelsScanned: systemTaskInt64String(row.ChannelsScanned), PlatformsScanned: systemTaskInt64String(row.PlatformsScanned), NullTasksFailed: systemTaskInt64String(row.NullTasksFailed)}
+	result := &dto.SystemTaskResult{Tested: systemTaskInt64String(row.Tested), Succeeded: systemTaskInt64String(row.Succeeded), Failed: systemTaskInt64String(row.Failed), Disabled: systemTaskInt64String(row.Disabled), Enabled: systemTaskInt64String(row.Enabled), CheckedChannels: systemTaskInt64String(row.CheckedChannels), ChangedChannels: systemTaskInt64String(row.ChangedChannels), DetectedAddModels: systemTaskInt64String(row.DetectedAddModels), DetectedRemoveModels: systemTaskInt64String(row.DetectedRemoveModels), FailedChannels: systemTaskInt64String(row.FailedChannels), AutoAddedModels: systemTaskInt64String(row.AutoAddedModels), UnfinishedTasks: systemTaskInt64String(row.UnfinishedTasks), ChannelsScanned: systemTaskInt64String(row.ChannelsScanned), PlatformsScanned: systemTaskInt64String(row.PlatformsScanned), NullTasksFailed: systemTaskInt64String(row.NullTasksFailed)}
+	if row.TaskType == "log_detail_cleanup" {
+		result.ArchivedDays = systemTaskInt64String(row.DeletedCount)
+	} else if row.TaskType == "log_cleanup" {
+		result.DeletedCount = systemTaskInt64String(row.DeletedCount)
+	}
+	return result
+}
+
+func systemTaskDataErrorCode(states map[int64]model.SystemTaskSiteCollectionState) string {
+	for _, code := range []string{"SYSTEM_TASK_UPSTREAM_UNAVAILABLE", "SYSTEM_TASK_CURRENT_UNAVAILABLE", "SYSTEM_TASK_UNSUPPORTED_TYPE"} {
+		for _, state := range states {
+			if state.ErrorCode == code {
+				return code
+			}
+		}
+	}
+	return ""
 }
 func systemTaskItem(row model.SystemTaskReadRow, status string) dto.SystemTaskItem {
 	return dto.SystemTaskItem{ID: strconv.FormatInt(row.ID, 10), SiteID: strconv.FormatInt(row.SiteID, 10), RemoteID: strconv.FormatInt(row.RemoteID, 10), SiteName: row.SiteName, TaskID: row.RemoteTaskID, Type: row.TaskType, Status: row.RemoteStatus, ErrorPresent: row.ErrorPresent, ErrorCode: row.ErrorCode, Progress: systemTaskProgress(row.SiteSystemTask), Result: systemTaskResult(row.SiteSystemTask), RemoteCreatedAt: row.RemoteCreatedAt, RemoteUpdatedAt: row.RemoteUpdatedAt, CollectedAt: row.CollectedAt, DataStatus: status}
@@ -75,7 +92,7 @@ func (s *SystemTaskCatalogService) List(ctx context.Context, q dto.SystemTaskQue
 		items = append(items, systemTaskItem(row, status))
 	}
 	truncated, reason, observed := systemTaskCompleteness(statuses)
-	return dto.SystemTaskPageResponse{Items: items, Total: strconv.FormatInt(total, 10), Page: q.Page, PageSize: q.PageSize, DataStatus: overall, AsOf: asOf, Truncated: truncated, TruncationReason: reason, SourceLimit: "100", ObservedCount: strconv.FormatInt(observed, 10)}, nil
+	return dto.SystemTaskPageResponse{Items: items, Total: strconv.FormatInt(total, 10), Page: q.Page, PageSize: q.PageSize, DataStatus: overall, AsOf: asOf, Truncated: truncated, TruncationReason: reason, SourceLimit: "100", ObservedCount: strconv.FormatInt(observed, 10), DataErrorCode: systemTaskDataErrorCode(statuses)}, nil
 }
 func systemTaskMetric(row model.SystemTaskMetricRow) dto.SystemTaskMetric {
 	return dto.SystemTaskMetric{Total: strconv.FormatInt(row.Total, 10), Active: strconv.FormatInt(row.Active, 10), Succeeded: strconv.FormatInt(row.Succeeded, 10), Failed: strconv.FormatInt(row.Failed, 10), ErrorPresent: strconv.FormatInt(row.ErrorPresent, 10)}
@@ -152,7 +169,7 @@ func (s *SystemTaskCatalogService) Statistics(ctx context.Context, q dto.SystemT
 		return dto.SystemTaskStatisticsResponse{}, err
 	}
 	truncated, reason, observed := systemTaskCompleteness(statuses)
-	out := dto.SystemTaskStatisticsResponse{TypeBreakdown: systemTaskBreakdowns(types, nil, overall), StatusBreakdown: systemTaskBreakdowns(statusRows, nil, overall), SiteBreakdown: systemTaskBreakdowns(sites, statuses, overall), DataStatus: overall, AsOf: asOf, Truncated: truncated, TruncationReason: reason, SourceLimit: "100", ObservedCount: strconv.FormatInt(observed, 10)}
+	out := dto.SystemTaskStatisticsResponse{TypeBreakdown: systemTaskBreakdowns(types, nil, overall), StatusBreakdown: systemTaskBreakdowns(statusRows, nil, overall), SiteBreakdown: systemTaskBreakdowns(sites, statuses, overall), DataStatus: overall, AsOf: asOf, Truncated: truncated, TruncationReason: reason, SourceLimit: "100", ObservedCount: strconv.FormatInt(observed, 10), DataErrorCode: systemTaskDataErrorCode(statuses)}
 	if len(summary) > 0 {
 		out.Summary = systemTaskMetric(summary[0])
 	} else {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { FilterPanel } from '@/components/data/filter-panel'
@@ -11,9 +11,11 @@ import { customerStatuses } from '../constants'
 import type { CustomerSearch, CustomerStatus } from '../types'
 
 export function CustomerFilters({
+  actions,
   onApply,
   value,
 }: {
+  actions?: ReactNode
   onApply: (filters: Pick<CustomerSearch, 'filter' | 'status'>) => void
   value: Pick<CustomerSearch, 'filter' | 'status'>
 }) {
@@ -25,6 +27,7 @@ export function CustomerFilters({
   const reset = { filter: '', status: [] as CustomerStatus[] }
   return (
     <FilterPanel
+      actions={actions}
       description={t('customer.filters.description')}
       hasActiveFilters={hasFilterChanges(draft, reset, ['filter', 'status'])}
       onApply={() => onApply({ ...draft, filter: draft.filter.trim() })}

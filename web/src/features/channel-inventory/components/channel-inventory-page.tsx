@@ -1,4 +1,10 @@
-import { ArrowLeft01Icon, FileExportIcon } from '@hugeicons/core-free-icons'
+import {
+  Alert02Icon,
+  ArrowLeft01Icon,
+  Chart01Icon,
+  Database01Icon,
+  FileExportIcon,
+} from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
@@ -8,6 +14,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { DataStatusBadge } from '@/components/data/data-status'
+import { FacetedFilter } from '@/components/data/faceted-filter'
 import { FilterPanel } from '@/components/data/filter-panel'
 import { MetricValue } from '@/components/data/metric-value'
 import { ErrorState } from '@/components/error-state'
@@ -17,6 +24,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
 import { Input } from '@/components/ui/input'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { listSites } from '@/features/sites/api'
+import { siteKeys } from '@/features/sites/query-keys'
+import type { SiteListItem } from '@/features/sites/types'
 import { createStatisticsExport } from '@/features/statistics/api'
 import { ExportTaskSheet } from '@/features/statistics/components/export-task-sheet'
 import type {
@@ -46,6 +57,7 @@ import { buildChannelInventoryExportRequest } from '../export-request'
 import { channelInventoryKeys } from '../query-keys'
 import {
   buildChannelInventorySearch,
+  changeChannelInventoryTab,
   type ChannelInventorySearch,
 } from '../search'
 import type {
@@ -117,6 +129,34 @@ function statusText(value: number, t: (key: string) => string) {
   return t('common.unknown')
 }
 
+function purposeText(
+  tab: ChannelInventorySearch['tab'],
+  t: (key: string) => string
+) {
+  if (tab === 'trend') {
+    return {
+      description: t('channelInventory.purpose.trendDescription'),
+      title: t('channelInventory.purpose.trendTitle'),
+    }
+  }
+  if (tab === 'dimensions') {
+    return {
+      description: t('channelInventory.purpose.dimensionsDescription'),
+      title: t('channelInventory.purpose.dimensionsTitle'),
+    }
+  }
+  if (tab === 'sites') {
+    return {
+      description: t('channelInventory.purpose.sitesDescription'),
+      title: t('channelInventory.purpose.sitesTitle'),
+    }
+  }
+  return {
+    description: t('channelInventory.purpose.listDescription'),
+    title: t('channelInventory.purpose.listTitle'),
+  }
+}
+
 function ChannelStateBadge({ state }: { state: ChannelInventoryState }) {
   const { t } = useTranslation()
   return (
@@ -130,11 +170,25 @@ function ChannelStateBadge({ state }: { state: ChannelInventoryState }) {
 
 function MetricGrid({ metric }: { metric: ChannelInventoryMetric }) {
   const { t } = useTranslation()
-  const values = [
-    [t('channelInventory.metric.channelCount'), metric.channel_count],
-    [t('channelInventory.metric.available'), metric.available_count],
-    [t('channelInventory.metric.unavailable'), metric.unavailable_count],
-    [t('channelInventory.metric.missing'), metric.missing_count],
+  const primary = [
+    [
+      Database01Icon,
+      t('channelInventory.metric.channelCount'),
+      metric.channel_count,
+    ],
+    [
+      Chart01Icon,
+      t('channelInventory.metric.available'),
+      metric.available_count,
+    ],
+    [
+      Alert02Icon,
+      t('channelInventory.metric.unavailable'),
+      metric.unavailable_count,
+    ],
+    [Alert02Icon, t('channelInventory.metric.missing'), metric.missing_count],
+  ] as const
+  const quality = [
     [t('channelInventory.metric.balance'), metric.balance_total],
     [t('channelInventory.metric.usedQuota'), metric.used_quota],
     [t('channelInventory.metric.responseAvg'), metric.response_time_avg_ms],
@@ -142,19 +196,41 @@ function MetricGrid({ metric }: { metric: ChannelInventoryMetric }) {
     [t('channelInventory.metric.availability'), metric.availability_rate],
   ] as const
   return (
-    <dl className='border-border grid overflow-hidden rounded-lg border sm:grid-cols-2 xl:grid-cols-5'>
-      {values.map(([label, value]) => (
-        <div
-          className='border-border min-w-0 border-b p-3 xl:border-r'
-          key={label}
-        >
-          <dt className='text-muted-foreground text-xs'>{label}</dt>
-          <dd className='mt-1 text-lg font-semibold break-all'>
-            <MetricValue value={value} />
-          </dd>
-        </div>
-      ))}
-    </dl>
+    <div className='grid gap-3'>
+      <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
+        {primary.map(([icon, label, value]) => (
+          <div
+            className='bg-card text-card-foreground ring-foreground/10 flex min-w-0 items-center gap-3 rounded-xl p-4 ring-1'
+            key={label}
+          >
+            <span className='bg-muted text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-lg'>
+              <HugeiconsIcon icon={icon} size={18} strokeWidth={2} />
+            </span>
+            <dl className='min-w-0'>
+              <dt className='text-muted-foreground truncate text-xs'>
+                {label}
+              </dt>
+              <dd className='mt-0.5 text-2xl font-semibold tracking-tight'>
+                <MetricValue value={value} />
+              </dd>
+            </dl>
+          </div>
+        ))}
+      </div>
+      <dl className='border-border bg-muted/20 grid gap-x-6 gap-y-2 rounded-xl border px-4 py-3 sm:grid-cols-2 xl:grid-cols-5'>
+        {quality.map(([label, value]) => (
+          <div
+            className='flex items-baseline justify-between gap-3'
+            key={label}
+          >
+            <dt className='text-muted-foreground text-xs'>{label}</dt>
+            <dd className='font-mono text-sm font-medium'>
+              <MetricValue value={value} />
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
   )
 }
 
@@ -209,10 +285,12 @@ function InventoryFilters({
   global,
   onChange,
   search,
+  sites,
 }: {
   global: boolean
   onChange: (changes: Partial<ChannelInventorySearch>) => void
   search: ChannelInventorySearch
+  sites: SiteListItem[]
 }) {
   const { t } = useTranslation()
   const decimalChange =
@@ -242,9 +320,127 @@ function InventoryFilters({
           .filter(Boolean),
         page: 1,
       })
-  const reset = buildChannelInventorySearch({ pageSize: search.pageSize })
+  const reset = buildChannelInventorySearch({
+    pageSize: search.pageSize,
+    tab: search.tab,
+  })
+  const advancedCount = [
+    search.types.length > 0,
+    search.statuses.length > 0,
+    search.groups.length > 0,
+    search.tags.length > 0,
+    search.minBalance != null,
+    search.maxBalance != null,
+    search.minResponseTime != null,
+    search.maxResponseTime != null,
+    search.start !== reset.start,
+    search.end !== reset.end,
+  ].filter(Boolean).length
   return (
     <FilterPanel
+      advanced={
+        <>
+          <label className='grid gap-1 text-sm'>
+            <span>{t('channelInventory.filters.types')}</span>
+            <Input
+              inputMode='numeric'
+              onChange={(event) =>
+                onChange({
+                  page: 1,
+                  types: commaNumbers(event.target.value, 10_000),
+                })
+              }
+              placeholder={t('channelInventory.filters.typesPlaceholder')}
+              value={search.types.join(',')}
+            />
+          </label>
+          <label className='grid gap-1 text-sm'>
+            <span>{t('channelInventory.filters.groups')}</span>
+            <Input
+              onChange={stringList('groups')}
+              value={search.groups.join(',')}
+            />
+          </label>
+          <label className='grid gap-1 text-sm'>
+            <span>{t('channelInventory.filters.tags')}</span>
+            <Input
+              onChange={stringList('tags')}
+              value={search.tags.join(',')}
+            />
+          </label>
+          <MultiChoice
+            label={t('channelInventory.filters.statuses')}
+            onChange={(values) =>
+              onChange({ page: 1, statuses: values.map(Number) })
+            }
+            options={statusValues.map((value) => ({
+              label: statusText(value, t),
+              value,
+            }))}
+            selected={search.statuses}
+          />
+          {search.tab === 'list' && (
+            <>
+              <label className='grid gap-1 text-sm'>
+                <span>{t('channelInventory.filters.minBalance')}</span>
+                <Input
+                  inputMode='decimal'
+                  onChange={decimalChange('minBalance')}
+                  value={search.minBalance ?? ''}
+                />
+              </label>
+              <label className='grid gap-1 text-sm'>
+                <span>{t('channelInventory.filters.maxBalance')}</span>
+                <Input
+                  inputMode='decimal'
+                  onChange={decimalChange('maxBalance')}
+                  value={search.maxBalance ?? ''}
+                />
+              </label>
+              <label className='grid gap-1 text-sm'>
+                <span>{t('channelInventory.filters.minResponse')}</span>
+                <Input
+                  inputMode='numeric'
+                  onChange={metricChange('minResponseTime')}
+                  value={search.minResponseTime ?? ''}
+                />
+              </label>
+              <label className='grid gap-1 text-sm'>
+                <span>{t('channelInventory.filters.maxResponse')}</span>
+                <Input
+                  inputMode='numeric'
+                  onChange={metricChange('maxResponseTime')}
+                  value={search.maxResponseTime ?? ''}
+                />
+              </label>
+            </>
+          )}
+          <label className='grid gap-1 text-sm'>
+            <span>{t('channelInventory.filters.start')}</span>
+            <Input
+              onChange={(event) => {
+                const start = parseDateTime(event.target.value)
+                if (start != null) onChange({ page: 1, start })
+              }}
+              type='datetime-local'
+              value={dateTimeValue(search.start)}
+            />
+          </label>
+          <label className='grid gap-1 text-sm'>
+            <span>{t('channelInventory.filters.end')}</span>
+            <Input
+              onChange={(event) => {
+                const end = parseDateTime(event.target.value)
+                if (end != null) onChange({ end, page: 1 })
+              }}
+              type='datetime-local'
+              value={dateTimeValue(search.end)}
+            />
+          </label>
+        </>
+      }
+      advancedCount={advancedCount}
+      advancedMode='popover'
       description={t('channelInventory.filters.description')}
       hasActiveFilters={hasFilterChanges(search, reset, [
         'end',
@@ -264,142 +460,59 @@ function InventoryFilters({
       onReset={() => onChange(reset)}
       title={t('channelInventory.filters.title')}
     >
-      <div className='grid min-w-0 flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-4'>
-        <label className='grid gap-1 text-sm'>
-          <span>{t('channelInventory.filters.keyword')}</span>
-          <Input
-            onChange={(event) =>
-              onChange({ keyword: event.target.value, page: 1 })
-            }
-            placeholder={t('channelInventory.filters.keywordPlaceholder')}
-            value={search.keyword}
-          />
-        </label>
-        {global && (
+      <div className='flex min-w-0 flex-1 flex-wrap items-center gap-2'>
+        {search.tab === 'list' && (
           <label className='grid gap-1 text-sm'>
-            <span>{t('channelInventory.filters.siteIds')}</span>
+            <span>{t('channelInventory.filters.keyword')}</span>
             <Input
+              className='min-w-48 sm:w-72'
               onChange={(event) =>
-                onChange({
-                  page: 1,
-                  siteIds: event.target.value
-                    .split(',')
-                    .map((value) => value.trim())
-                    .filter(isIdString)
-                    .map(parseIdString),
-                })
+                onChange({ keyword: event.target.value, page: 1 })
               }
-              placeholder={t('channelInventory.filters.siteIdsPlaceholder')}
-              value={search.siteIds.join(',')}
+              placeholder={t('channelInventory.filters.keywordPlaceholder')}
+              value={search.keyword}
             />
           </label>
         )}
-        <label className='grid gap-1 text-sm'>
-          <span>{t('channelInventory.filters.types')}</span>
-          <Input
-            inputMode='numeric'
-            onChange={(event) =>
+        {global && (
+          <FacetedFilter
+            clearLabel={t('common.all')}
+            onChange={(value) =>
               onChange({
                 page: 1,
-                types: commaNumbers(event.target.value, 10_000),
+                siteIds: isIdString(value) ? [parseIdString(value)] : [],
               })
             }
-            placeholder={t('channelInventory.filters.typesPlaceholder')}
-            value={search.types.join(',')}
+            options={sites.map((site) => ({
+              label: site.name,
+              value: site.id,
+            }))}
+            title={t('channelInventory.filters.siteIds')}
+            value={search.siteIds.length === 1 ? search.siteIds[0] : ''}
           />
-        </label>
-        <label className='grid gap-1 text-sm'>
-          <span>{t('channelInventory.filters.groups')}</span>
-          <Input
-            onChange={stringList('groups')}
-            value={search.groups.join(',')}
+        )}
+        {search.tab === 'list' && (
+          <FacetedFilter
+            clearLabel={t('common.all')}
+            onChange={(value) =>
+              onChange({
+                page: 1,
+                states: stateValues.includes(value as ChannelInventoryState)
+                  ? [value as ChannelInventoryState]
+                  : [],
+              })
+            }
+            options={stateValues.map((value) => ({
+              label:
+                value === 'normal'
+                  ? t('channelInventory.state.normal')
+                  : t('channelInventory.state.missing'),
+              value,
+            }))}
+            title={t('channelInventory.filters.states')}
+            value={search.states.length === 1 ? search.states[0] : ''}
           />
-        </label>
-        <label className='grid gap-1 text-sm'>
-          <span>{t('channelInventory.filters.tags')}</span>
-          <Input onChange={stringList('tags')} value={search.tags.join(',')} />
-        </label>
-        <label className='grid gap-1 text-sm'>
-          <span>{t('channelInventory.filters.minBalance')}</span>
-          <Input
-            inputMode='decimal'
-            onChange={decimalChange('minBalance')}
-            value={search.minBalance ?? ''}
-          />
-        </label>
-        <label className='grid gap-1 text-sm'>
-          <span>{t('channelInventory.filters.maxBalance')}</span>
-          <Input
-            inputMode='decimal'
-            onChange={decimalChange('maxBalance')}
-            value={search.maxBalance ?? ''}
-          />
-        </label>
-        <label className='grid gap-1 text-sm'>
-          <span>{t('channelInventory.filters.minResponse')}</span>
-          <Input
-            inputMode='numeric'
-            onChange={metricChange('minResponseTime')}
-            value={search.minResponseTime ?? ''}
-          />
-        </label>
-        <label className='grid gap-1 text-sm'>
-          <span>{t('channelInventory.filters.maxResponse')}</span>
-          <Input
-            inputMode='numeric'
-            onChange={metricChange('maxResponseTime')}
-            value={search.maxResponseTime ?? ''}
-          />
-        </label>
-        <label className='grid gap-1 text-sm'>
-          <span>{t('channelInventory.filters.start')}</span>
-          <Input
-            onChange={(event) => {
-              const start = parseDateTime(event.target.value)
-              if (start != null) onChange({ start })
-            }}
-            type='datetime-local'
-            value={dateTimeValue(search.start)}
-          />
-        </label>
-        <label className='grid gap-1 text-sm'>
-          <span>{t('channelInventory.filters.end')}</span>
-          <Input
-            onChange={(event) => {
-              const end = parseDateTime(event.target.value)
-              if (end != null) onChange({ end })
-            }}
-            type='datetime-local'
-            value={dateTimeValue(search.end)}
-          />
-        </label>
-      </div>
-      <div className='grid gap-3 sm:grid-cols-2'>
-        <MultiChoice
-          label={t('channelInventory.filters.statuses')}
-          onChange={(values) =>
-            onChange({ page: 1, statuses: values.map(Number) })
-          }
-          options={statusValues.map((value) => ({
-            label: statusText(value, t),
-            value,
-          }))}
-          selected={search.statuses}
-        />
-        <MultiChoice
-          label={t('channelInventory.filters.states')}
-          onChange={(values) =>
-            onChange({ page: 1, states: values as ChannelInventoryState[] })
-          }
-          options={stateValues.map((value) => ({
-            label:
-              value === 'normal'
-                ? t('channelInventory.state.normal')
-                : t('channelInventory.state.missing'),
-            value,
-          }))}
-          selected={search.states}
-        />
+        )}
       </div>
     </FilterPanel>
   )
@@ -538,8 +651,14 @@ export function ChannelInventoryPage({
     () => statisticsParams(search),
     [search]
   )
+  const siteParams = useMemo(() => ({ page_size: 100 }), [])
+  const sitesQuery = useQuery({
+    enabled: !siteId,
+    queryFn: () => listSites(siteParams),
+    queryKey: siteKeys.list(siteParams),
+  })
   const listQuery = useQuery({
-    enabled: validSiteId,
+    enabled: validSiteId && search.tab === 'list',
     placeholderData: keepPreviousData,
     queryFn: () =>
       siteId && isIdString(siteId)
@@ -583,6 +702,7 @@ export function ChannelInventoryPage({
   })
   const list = listQuery.data
   const statistics = statisticsQuery.data
+  const purpose = purposeText(search.tab, t)
   const columns = useMemo<ColumnDef<ChannelInventoryItem, unknown>[]>(
     () => [
       {
@@ -703,30 +823,31 @@ export function ChannelInventoryPage({
   return (
     <SectionPageLayout
       actions={
-        <>
-          {(['xlsx', 'csv'] as const).map((format) => (
-            <Button
-              disabled={exportMutation.isPending || !validSiteId}
-              key={format}
-              onClick={() => exportMutation.mutate(format)}
-              variant='outline'
-            >
-              <HugeiconsIcon icon={FileExportIcon} strokeWidth={2} />
-              {t('channelInventory.export', { format: format.toUpperCase() })}
-            </Button>
-          ))}
-        </>
+        search.tab === 'list'
+          ? (['xlsx', 'csv'] as const).map((format) => (
+              <Button
+                disabled={exportMutation.isPending || !validSiteId}
+                key={format}
+                onClick={() => exportMutation.mutate(format)}
+                variant='outline'
+              >
+                <HugeiconsIcon icon={FileExportIcon} strokeWidth={2} />
+                {t('channelInventory.export', { format: format.toUpperCase() })}
+              </Button>
+            ))
+          : undefined
       }
       description={
         siteId
           ? t('channelInventory.siteDescription', { id: siteId })
           : t('channelInventory.description')
       }
+      fixedContent
       title={
         siteId ? t('channelInventory.siteTitle') : t('channelInventory.title')
       }
     >
-      <div className='grid min-w-0 gap-6'>
+      <div className='flex h-full min-h-0 min-w-0 flex-col gap-4'>
         {siteId && (
           <DetailBackLink
             render={<Link params={{ siteId }} to='/sites/$siteId' />}
@@ -735,109 +856,130 @@ export function ChannelInventoryPage({
             {t('channelInventory.backToSite')}
           </DetailBackLink>
         )}
-        <section
-          className='border-destructive/20 bg-muted/30 rounded-lg border p-4'
-          role='note'
+        {statistics && <MetricGrid metric={statistics.summary} />}
+        <Tabs
+          onValueChange={(tab) =>
+            onSearchChange(
+              changeChannelInventoryTab(tab as ChannelInventorySearch['tab'])
+            )
+          }
+          value={search.tab}
         >
-          <p className='font-medium'>{t('channelInventory.security.title')}</p>
-          <p className='text-muted-foreground mt-1 text-sm'>
-            {t('channelInventory.security.description')}
-          </p>
+          <TabsList aria-label={t('channelInventory.tabs.label')}>
+            <TabsTrigger value='list'>
+              {t('channelInventory.tabs.list')}
+            </TabsTrigger>
+            <TabsTrigger value='trend'>
+              {t('channelInventory.tabs.trend')}
+            </TabsTrigger>
+            <TabsTrigger value='dimensions'>
+              {t('channelInventory.tabs.dimensions')}
+            </TabsTrigger>
+            <TabsTrigger value='sites'>
+              {t('channelInventory.tabs.sites')}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <section className='border-border bg-muted/20 flex items-start gap-3 rounded-xl border p-4'>
+          <span className='bg-background text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-lg border'>
+            <HugeiconsIcon
+              icon={search.tab === 'list' ? Database01Icon : Chart01Icon}
+              size={18}
+              strokeWidth={2}
+            />
+          </span>
+          <div className='min-w-0 flex-1'>
+            <div className='flex flex-wrap items-center gap-2'>
+              <p className='font-medium'>{purpose.title}</p>
+              {statistics && (
+                <DataStatusBadge status={statistics.data_status} />
+              )}
+              {search.tab === 'list' && list && (
+                <DataStatusBadge status={list.data_status} />
+              )}
+            </div>
+            <p className='text-muted-foreground mt-1 text-sm'>
+              {purpose.description}
+            </p>
+            <p className='text-muted-foreground mt-1 flex items-start gap-1.5 text-xs'>
+              <HugeiconsIcon
+                className='mt-0.5 shrink-0'
+                icon={Alert02Icon}
+                size={14}
+              />
+              <span>{t('channelInventory.security.description')}</span>
+            </p>
+          </div>
         </section>
         <InventoryFilters
           global={!siteId}
           onChange={onSearchChange}
           search={search}
+          sites={sitesQuery.data?.items ?? []}
         />
-        <div className='grid gap-3 sm:grid-cols-2'>
-          {list && (
-            <section
-              className='border-border flex items-center justify-between gap-2 rounded-lg border p-3'
-              role='status'
-            >
-              <div className='flex items-center gap-2'>
-                <span className='text-sm font-medium'>
-                  {t('channelInventory.listStatus')}
-                </span>
-                <DataStatusBadge status={list.data_status} />
-              </div>
-              <span className='text-muted-foreground text-xs'>
-                {t('channelInventory.asOf', { time: timestamp(list.as_of) })}
-              </span>
-            </section>
-          )}
-          {statistics && (
-            <section
-              className='border-border flex items-center gap-2 rounded-lg border p-3'
-              role='status'
-            >
-              <span className='text-sm font-medium'>
-                {t('channelInventory.statisticsStatus')}
-              </span>
-              <DataStatusBadge status={statistics.data_status} />
-            </section>
-          )}
-        </div>
-        {statistics && <MetricGrid metric={statistics.summary} />}
-        <DataTable
-          ariaLabel={t('channelInventory.table')}
-          columns={columns}
-          data={list?.items ?? []}
-          emptyDescription={t('channelInventory.emptyDescription')}
-          emptyTitle={t('channelInventory.empty')}
-          error={!validSiteId || listQuery.isError}
-          fetching={listQuery.isFetching}
-          loading={listQuery.isPending}
-          onPageChange={(page) => onSearchChange({ page })}
-          onPageSizeChange={(pageSize) => onSearchChange({ page: 1, pageSize })}
-          onRetry={validSiteId ? () => void listQuery.refetch() : undefined}
-          page={search.page}
-          pageSize={search.pageSize}
-          renderMobileCard={(item) => (
-            <article className='bg-card text-card-foreground ring-foreground/10 grid gap-3 rounded-xl p-4 ring-1'>
-              <div className='flex items-start justify-between gap-2'>
-                <div>
-                  <p className='font-medium'>{item.name}</p>
-                  <code className='text-muted-foreground text-xs'>
-                    {item.remote_channel_id}
-                  </code>
+        {search.tab === 'list' && (
+          <DataTable
+            ariaLabel={t('channelInventory.table')}
+            columns={columns}
+            data={list?.items ?? []}
+            emptyDescription={t('channelInventory.emptyDescription')}
+            emptyTitle={t('channelInventory.empty')}
+            error={!validSiteId || listQuery.isError}
+            fetching={listQuery.isFetching}
+            loading={listQuery.isPending}
+            onPageChange={(page) => onSearchChange({ page })}
+            onPageSizeChange={(pageSize) =>
+              onSearchChange({ page: 1, pageSize })
+            }
+            onRetry={validSiteId ? () => void listQuery.refetch() : undefined}
+            page={search.page}
+            pageSize={search.pageSize}
+            renderMobileCard={(item) => (
+              <article className='bg-card text-card-foreground ring-foreground/10 grid gap-3 rounded-xl p-4 ring-1'>
+                <div className='flex items-start justify-between gap-2'>
+                  <div>
+                    <p className='font-medium'>{item.name}</p>
+                    <code className='text-muted-foreground text-xs'>
+                      {item.remote_channel_id}
+                    </code>
+                  </div>
+                  <ChannelStateBadge state={item.remote_state} />
                 </div>
-                <ChannelStateBadge state={item.remote_state} />
-              </div>
-              <p className='text-muted-foreground text-xs'>
-                {item.site_name} · {item.site_id}
-              </p>
-              <dl className='grid grid-cols-2 gap-3 text-sm'>
-                <div>
-                  <dt className='text-muted-foreground text-xs'>
-                    {t('channelInventory.status')}
-                  </dt>
-                  <dd>{statusText(item.status, t)}</dd>
-                </div>
-                <div>
-                  <dt className='text-muted-foreground text-xs'>
-                    {t('channelInventory.group')}
-                  </dt>
-                  <dd>{item.group || '-'}</dd>
-                </div>
-                <div>
-                  <dt className='text-muted-foreground text-xs'>
-                    {t('channelInventory.metric.balance')}
-                  </dt>
-                  <dd className='break-all'>{item.balance}</dd>
-                </div>
-                <div>
-                  <dt className='text-muted-foreground text-xs'>
-                    {t('channelInventory.responseTime')}
-                  </dt>
-                  <dd>{item.response_time_ms}</dd>
-                </div>
-              </dl>
-              <p className='text-xs break-words'>{item.models || '-'}</p>
-            </article>
-          )}
-          total={list?.total ?? 0}
-        />
+                <p className='text-muted-foreground text-xs'>
+                  {item.site_name} · {item.site_id}
+                </p>
+                <dl className='grid grid-cols-2 gap-3 text-sm'>
+                  <div>
+                    <dt className='text-muted-foreground text-xs'>
+                      {t('channelInventory.status')}
+                    </dt>
+                    <dd>{statusText(item.status, t)}</dd>
+                  </div>
+                  <div>
+                    <dt className='text-muted-foreground text-xs'>
+                      {t('channelInventory.group')}
+                    </dt>
+                    <dd>{item.group || '-'}</dd>
+                  </div>
+                  <div>
+                    <dt className='text-muted-foreground text-xs'>
+                      {t('channelInventory.metric.balance')}
+                    </dt>
+                    <dd className='break-all'>{item.balance}</dd>
+                  </div>
+                  <div>
+                    <dt className='text-muted-foreground text-xs'>
+                      {t('channelInventory.responseTime')}
+                    </dt>
+                    <dd>{item.response_time_ms}</dd>
+                  </div>
+                </dl>
+                <p className='text-xs break-words'>{item.models || '-'}</p>
+              </article>
+            )}
+            total={list?.total ?? 0}
+          />
+        )}
         {statisticsQuery.isError && !statistics && (
           <ErrorState
             className='min-h-40'
@@ -845,32 +987,36 @@ export function ChannelInventoryPage({
             title={t('channelInventory.statisticsError')}
           />
         )}
-        {statistics && (
-          <>
-            <TrendTable points={statistics.trend} />
-            <div className='grid gap-6 sm:grid-cols-2 xl:grid-cols-4'>
+        {statistics && search.tab !== 'list' && (
+          <div className='min-h-0 flex-1 overflow-y-auto pr-1' tabIndex={0}>
+            {search.tab === 'trend' && <TrendTable points={statistics.trend} />}
+            {search.tab === 'dimensions' && (
+              <div className='grid gap-6 sm:grid-cols-2 xl:grid-cols-4'>
+                <BreakdownSection
+                  items={statistics.type_breakdown}
+                  title={t('channelInventory.breakdown.type')}
+                />
+                <BreakdownSection
+                  items={statistics.status_breakdown}
+                  title={t('channelInventory.breakdown.status')}
+                />
+                <BreakdownSection
+                  items={statistics.group_breakdown}
+                  title={t('channelInventory.breakdown.group')}
+                />
+                <BreakdownSection
+                  items={statistics.tag_breakdown}
+                  title={t('channelInventory.breakdown.tag')}
+                />
+              </div>
+            )}
+            {search.tab === 'sites' && (
               <BreakdownSection
-                items={statistics.type_breakdown}
-                title={t('channelInventory.breakdown.type')}
+                items={statistics.site_breakdown}
+                title={t('channelInventory.breakdown.site')}
               />
-              <BreakdownSection
-                items={statistics.status_breakdown}
-                title={t('channelInventory.breakdown.status')}
-              />
-              <BreakdownSection
-                items={statistics.group_breakdown}
-                title={t('channelInventory.breakdown.group')}
-              />
-              <BreakdownSection
-                items={statistics.tag_breakdown}
-                title={t('channelInventory.breakdown.tag')}
-              />
-            </div>
-            <BreakdownSection
-              items={statistics.site_breakdown}
-              title={t('channelInventory.breakdown.site')}
-            />
-          </>
+            )}
+          </div>
         )}
       </div>
       <ExportTaskSheet

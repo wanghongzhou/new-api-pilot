@@ -42,6 +42,8 @@ import { FormField } from '@/components/ui/form-field'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
+import { UnsavedChangesConfirmDialog } from '@/components/unsaved-changes-guard'
+import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey, normalizeApiError } from '@/lib/api'
 import { BEIJING_TIMEZONE, dayjs, fromUnixSeconds } from '@/lib/dayjs'
@@ -194,7 +196,7 @@ function EditSiteDialog({
   })
   const {
     clearErrors,
-    formState: { errors },
+    formState: { errors, isDirty },
     handleSubmit,
     register,
     reset,
@@ -205,6 +207,8 @@ function EditSiteDialog({
     resolver: zodResolver(siteFormSchema),
   })
   const candidateUrl = watch('baseUrl')
+  const { confirmOpen, discardAndClose, requestClose, setConfirmOpen } =
+    useUnsavedChangesGuard({ hasUnsavedChanges: isDirty, onClose })
 
   useEffect(() => {
     if (!detailQuery.data || initialized.current) return
@@ -359,218 +363,233 @@ function EditSiteDialog({
     : null
 
   return (
-    <Drawer direction='right' onOpenChange={(open) => !open && onClose()} open>
-      <DrawerContent className={sideDrawerContentClassName('sm:max-w-2xl')}>
-        <DrawerHeader className={sideDrawerHeaderClassName()}>
-          <DrawerTitle>{t('site.edit.title')}</DrawerTitle>
-          <DrawerDescription>{t('site.edit.description')}</DrawerDescription>
-        </DrawerHeader>
-        <DetailQueryContent
-          error={detailQuery.isError}
-          pending={detailQuery.isPending}
-        >
-          <form
-            className={sideDrawerFormClassName('gap-4')}
-            id='edit-site-form'
-            noValidate
-            onSubmit={submit}
+    <>
+      <Drawer
+        direction='right'
+        onOpenChange={(open) => !open && requestClose()}
+        open
+      >
+        <DrawerContent className={sideDrawerContentClassName('sm:max-w-2xl')}>
+          <DrawerHeader className={sideDrawerHeaderClassName()}>
+            <DrawerTitle>{t('site.edit.title')}</DrawerTitle>
+            <DrawerDescription>{t('site.edit.description')}</DrawerDescription>
+          </DrawerHeader>
+          <DetailQueryContent
+            error={detailQuery.isError}
+            pending={detailQuery.isPending}
           >
-            <FormField
-              error={
-                errors.name?.message &&
-                t(dynamicI18nKey('site', errors.name.message))
-              }
-              htmlFor='edit-site-name'
-              label={t('site.name')}
-              required
+            <form
+              className={sideDrawerFormClassName('gap-4')}
+              id='edit-site-form'
+              noValidate
+              onSubmit={submit}
             >
-              <Input id='edit-site-name' {...register('name')} />
-            </FormField>
-            <FormField
-              description={t('site.edit.preflightRequired')}
-              error={
-                errors.baseUrl?.message &&
-                t(dynamicI18nKey('site', errors.baseUrl.message))
-              }
-              htmlFor='edit-site-url'
-              label={t('site.baseUrl')}
-              required
-            >
-              <Input
-                id='edit-site-url'
-                inputMode='url'
-                {...register('baseUrl')}
-              />
-            </FormField>
-            <FormField
-              error={
-                errors.remark?.message &&
-                t(dynamicI18nKey('site', errors.remark.message))
-              }
-              htmlFor='edit-site-remark'
-              label={t('site.remark')}
-            >
-              <Textarea
-                className='min-h-24'
-                id='edit-site-remark'
-                {...register('remark')}
-              />
-            </FormField>
-            {preflight && (
-              <section className='border-border bg-muted/30 rounded-md border p-3 text-sm'>
-                <div className='flex flex-wrap items-center justify-between gap-2'>
-                  <h3 className='font-medium'>{t('site.preflight.result')}</h3>
-                  <Badge
-                    variant={
-                      preflight.contract_status === 'compatible'
-                        ? 'success'
-                        : 'destructive'
-                    }
-                  >
-                    {t(
-                      dynamicI18nKey(
-                        'site',
-                        `site.preflight.${preflight.contract_status}`
-                      )
-                    )}
-                  </Badge>
-                </div>
-                <div className='mt-3 grid gap-2 sm:grid-cols-3'>
-                  <dl>
-                    <dt className='text-muted-foreground'>
-                      {t('site.preflight.changeType')}
-                    </dt>
-                    <dd>
+              <FormField
+                error={
+                  errors.name?.message &&
+                  t(dynamicI18nKey('site', errors.name.message))
+                }
+                htmlFor='edit-site-name'
+                label={t('site.name')}
+                required
+              >
+                <Input id='edit-site-name' {...register('name')} />
+              </FormField>
+              <FormField
+                description={t('site.edit.preflightRequired')}
+                error={
+                  errors.baseUrl?.message &&
+                  t(dynamicI18nKey('site', errors.baseUrl.message))
+                }
+                htmlFor='edit-site-url'
+                label={t('site.baseUrl')}
+                required
+              >
+                <Input
+                  id='edit-site-url'
+                  inputMode='url'
+                  {...register('baseUrl')}
+                />
+              </FormField>
+              <FormField
+                error={
+                  errors.remark?.message &&
+                  t(dynamicI18nKey('site', errors.remark.message))
+                }
+                htmlFor='edit-site-remark'
+                label={t('site.remark')}
+              >
+                <Textarea
+                  className='min-h-24'
+                  id='edit-site-remark'
+                  {...register('remark')}
+                />
+              </FormField>
+              {preflight && (
+                <section className='border-border bg-muted/30 rounded-md border p-3 text-sm'>
+                  <div className='flex flex-wrap items-center justify-between gap-2'>
+                    <h3 className='font-medium'>
+                      {t('site.preflight.result')}
+                    </h3>
+                    <Badge
+                      variant={
+                        preflight.contract_status === 'compatible'
+                          ? 'success'
+                          : 'destructive'
+                      }
+                    >
                       {t(
                         dynamicI18nKey(
                           'site',
-                          `site.preflight.change.${preflight.change_type}`
+                          `site.preflight.${preflight.contract_status}`
                         )
                       )}
-                    </dd>
-                  </dl>
-                  <dl>
-                    <dt className='text-muted-foreground'>
-                      {t('site.preflight.expiresAt')}
-                    </dt>
-                    <dd>
-                      {fromUnixSeconds(preflight.expires_at).format(
-                        'YYYY-MM-DD HH:mm:ss'
-                      )}
-                    </dd>
-                  </dl>
-                </div>
-                <div className='mt-3 overflow-x-auto'>
-                  <table className='w-full min-w-136 border-collapse text-left text-xs'>
-                    <thead>
-                      <tr className='border-border border-b'>
-                        <th className='px-2 py-2'>
-                          {t('site.preflight.field')}
-                        </th>
-                        <th className='px-2 py-2'>{t('site.preflight.old')}</th>
-                        <th className='px-2 py-2'>
-                          {t('site.preflight.candidate')}
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr className='border-border border-b'>
-                        <th className='px-2 py-2'>
-                          {t('site.preflight.origin')}
-                        </th>
-                        <td className='px-2 py-2 break-all'>
-                          {oldUrlParts?.origin}
-                        </td>
-                        <td className='px-2 py-2 break-all'>
-                          {candidateUrlParts?.origin}
-                        </td>
-                      </tr>
-                      <tr className='border-border border-b'>
-                        <th className='px-2 py-2'>
-                          {t('site.preflight.path')}
-                        </th>
-                        <td className='px-2 py-2 break-all'>
-                          {oldUrlParts?.path}
-                        </td>
-                        <td className='px-2 py-2 break-all'>
-                          {candidateUrlParts?.path}
-                        </td>
-                      </tr>
-                      <tr className='border-border border-b'>
-                        <th className='px-2 py-2'>{t('site.systemName')}</th>
-                        <td className='px-2 py-2'>
-                          {preflight.old_public.system_name}
-                        </td>
-                        <td className='px-2 py-2'>
-                          {preflight.candidate_public.system_name}
-                        </td>
-                      </tr>
-                      <tr>
-                        <th className='px-2 py-2'>{t('site.version')}</th>
-                        <td className='px-2 py-2'>
-                          {preflight.old_public.version}
-                        </td>
-                        <td className='px-2 py-2'>
-                          {preflight.candidate_public.version}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-                {preflight.change_type === 'origin' && (
-                  <p className='text-warning-foreground mt-3 font-medium'>
-                    {t('site.edit.originChangeWarning')}
-                  </p>
-                )}
-                {preflight.contract_status === 'incompatible' && (
-                  <p className='text-destructive mt-3 font-medium'>
-                    {t('SITE_INCOMPATIBLE')}
-                  </p>
-                )}
-                {preflight.contract_status === 'compatible' && (
-                  <label className='border-border mt-3 flex min-h-12 items-start gap-3 rounded-md border p-3'>
-                    <Checkbox
-                      checked={confirmSameSite}
-                      className='mt-0.5'
-                      onCheckedChange={(checked) => {
-                        setConfirmSameSite(checked)
-                        if (checked) clearErrors('root')
-                      }}
-                    />
-                    <span>{t('site.preflight.confirmSameSite')}</span>
-                  </label>
-                )}
-              </section>
-            )}
-            {errors.root?.message && (
-              <p className='text-destructive text-sm' role='alert'>
-                {t(dynamicI18nKey('site', errors.root.message))}
-              </p>
-            )}
-          </form>
-        </DetailQueryContent>
-        <DrawerFooter className={sideDrawerFooterClassName()}>
-          <Button onClick={onClose} type='button' variant='outline'>
-            {t('common.cancel')}
-          </Button>
-          <Button
-            disabled={
-              submitting ||
-              detailQuery.isPending ||
-              preflight?.contract_status === 'incompatible' ||
-              (urlChanged && Boolean(preflight) && !confirmSameSite)
-            }
-            form='edit-site-form'
-            type='submit'
-          >
-            {submitting && <Spinner />}
-            {urlChanged && !preflight
-              ? t('site.preflight.run')
-              : t('common.save')}
-          </Button>
-        </DrawerFooter>
-      </DrawerContent>
-    </Drawer>
+                    </Badge>
+                  </div>
+                  <div className='mt-3 grid gap-2 sm:grid-cols-3'>
+                    <dl>
+                      <dt className='text-muted-foreground'>
+                        {t('site.preflight.changeType')}
+                      </dt>
+                      <dd>
+                        {t(
+                          dynamicI18nKey(
+                            'site',
+                            `site.preflight.change.${preflight.change_type}`
+                          )
+                        )}
+                      </dd>
+                    </dl>
+                    <dl>
+                      <dt className='text-muted-foreground'>
+                        {t('site.preflight.expiresAt')}
+                      </dt>
+                      <dd>
+                        {fromUnixSeconds(preflight.expires_at).format(
+                          'YYYY-MM-DD HH:mm:ss'
+                        )}
+                      </dd>
+                    </dl>
+                  </div>
+                  <div className='mt-3 overflow-x-auto'>
+                    <table className='w-full min-w-136 border-collapse text-left text-xs'>
+                      <thead>
+                        <tr className='border-border border-b'>
+                          <th className='px-2 py-2'>
+                            {t('site.preflight.field')}
+                          </th>
+                          <th className='px-2 py-2'>
+                            {t('site.preflight.old')}
+                          </th>
+                          <th className='px-2 py-2'>
+                            {t('site.preflight.candidate')}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className='border-border border-b'>
+                          <th className='px-2 py-2'>
+                            {t('site.preflight.origin')}
+                          </th>
+                          <td className='px-2 py-2 break-all'>
+                            {oldUrlParts?.origin}
+                          </td>
+                          <td className='px-2 py-2 break-all'>
+                            {candidateUrlParts?.origin}
+                          </td>
+                        </tr>
+                        <tr className='border-border border-b'>
+                          <th className='px-2 py-2'>
+                            {t('site.preflight.path')}
+                          </th>
+                          <td className='px-2 py-2 break-all'>
+                            {oldUrlParts?.path}
+                          </td>
+                          <td className='px-2 py-2 break-all'>
+                            {candidateUrlParts?.path}
+                          </td>
+                        </tr>
+                        <tr className='border-border border-b'>
+                          <th className='px-2 py-2'>{t('site.systemName')}</th>
+                          <td className='px-2 py-2'>
+                            {preflight.old_public.system_name}
+                          </td>
+                          <td className='px-2 py-2'>
+                            {preflight.candidate_public.system_name}
+                          </td>
+                        </tr>
+                        <tr>
+                          <th className='px-2 py-2'>{t('site.version')}</th>
+                          <td className='px-2 py-2'>
+                            {preflight.old_public.version}
+                          </td>
+                          <td className='px-2 py-2'>
+                            {preflight.candidate_public.version}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  {preflight.change_type === 'origin' && (
+                    <p className='text-warning-foreground mt-3 font-medium'>
+                      {t('site.edit.originChangeWarning')}
+                    </p>
+                  )}
+                  {preflight.contract_status === 'incompatible' && (
+                    <p className='text-destructive mt-3 font-medium'>
+                      {t('SITE_INCOMPATIBLE')}
+                    </p>
+                  )}
+                  {preflight.contract_status === 'compatible' && (
+                    <label className='border-border mt-3 flex min-h-12 items-start gap-3 rounded-md border p-3'>
+                      <Checkbox
+                        checked={confirmSameSite}
+                        className='mt-0.5'
+                        onCheckedChange={(checked) => {
+                          setConfirmSameSite(checked)
+                          if (checked) clearErrors('root')
+                        }}
+                      />
+                      <span>{t('site.preflight.confirmSameSite')}</span>
+                    </label>
+                  )}
+                </section>
+              )}
+              {errors.root?.message && (
+                <p className='text-destructive text-sm' role='alert'>
+                  {t(dynamicI18nKey('site', errors.root.message))}
+                </p>
+              )}
+            </form>
+          </DetailQueryContent>
+          <DrawerFooter className={sideDrawerFooterClassName()}>
+            <Button onClick={requestClose} type='button' variant='outline'>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              disabled={
+                submitting ||
+                detailQuery.isPending ||
+                preflight?.contract_status === 'incompatible' ||
+                (urlChanged && Boolean(preflight) && !confirmSameSite)
+              }
+              form='edit-site-form'
+              type='submit'
+            >
+              {submitting && <Spinner />}
+              {urlChanged && !preflight
+                ? t('site.preflight.run')
+                : t('common.save')}
+            </Button>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
+      <UnsavedChangesConfirmDialog
+        onConfirm={discardAndClose}
+        onOpenChange={setConfirmOpen}
+        open={confirmOpen}
+      />
+    </>
   )
 }
 

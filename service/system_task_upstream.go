@@ -3,6 +3,8 @@ package service
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"sort"
 	"strconv"
@@ -10,7 +12,25 @@ import (
 	"new-api-pilot/dto"
 )
 
-var upstreamSystemTaskTypes = []string{"log_cleanup", "channel_test", "model_update", "midjourney_poll", "async_task_poll"}
+var upstreamSystemTaskTypes = []string{"log_cleanup", "log_detail_cleanup", "channel_test", "model_update", "midjourney_poll", "async_task_poll"}
+
+func upstreamChildRequestID(parent, suffix string) string {
+	candidate := parent + "_" + suffix
+	if len(candidate) <= 64 {
+		return candidate
+	}
+	digest := sha256.Sum256([]byte(candidate))
+	digestText := hex.EncodeToString(digest[:6])
+	tail := "_" + suffix + "_" + digestText
+	if len(tail) >= 64 {
+		return "req_" + hex.EncodeToString(digest[:30])
+	}
+	prefixLength := 64 - len(tail)
+	if prefixLength > len(parent) {
+		prefixLength = len(parent)
+	}
+	return parent[:prefixLength] + tail
+}
 
 type upstreamSystemTaskWire struct {
 	ID        *int64          `json:"id"`
@@ -73,6 +93,12 @@ type upstreamModelUpdatePayloadWire struct {
 type upstreamLogCleanupResultWire struct {
 	DeletedCount *int64 `json:"deleted_count"`
 }
+type upstreamLogDetailCleanupPayloadWire struct {
+	CutoffTimestamp *int64 `json:"cutoff_timestamp"`
+}
+type upstreamLogDetailCleanupResultWire struct {
+	ArchivedDays *int64 `json:"archived_days"`
+}
 type upstreamChannelTestResultWire struct {
 	Tested    *int64 `json:"tested"`
 	Succeeded *int64 `json:"succeeded"`
@@ -119,21 +145,30 @@ func nonnegativeSystemTaskValues(values ...*int64) bool {
 	return true
 }
 
-func validateUpstreamSystemTask(wire upstreamSystemTaskWire) (dto.UpstreamSystemTask, error) {
-	if wire.ID == nil || wire.TaskID == nil || wire.Type == nil || wire.Status == nil || wire.Error == nil || wire.CreatedAt == nil || wire.UpdatedAt == nil || *wire.ID <= 0 || *wire.CreatedAt < 0 || *wire.UpdatedAt < *wire.CreatedAt || !validUpstreamString(*wire.TaskID, 1, 64) {
-		return dto.UpstreamSystemTask{}, invalidUpstreamResponse()
-	}
-	validType := false
-	for _, value := range upstreamSystemTaskTypes {
-		if *wire.Type == value {
-			validType = true
-			break
+func supportedUpstreamSystemTaskType(value string) bool {
+	for _, taskType := range upstreamSystemTaskTypes {
+		if value == taskType {
+			return true
 		}
 	}
-	if !validType || (*wire.Status != "pending" && *wire.Status != "running" && *wire.Status != "succeeded" && *wire.Status != "failed") {
+	return false
+}
+
+func validateUpstreamSystemTaskHeader(wire upstreamSystemTaskWire) (dto.UpstreamSystemTask, error) {
+	if wire.ID == nil || wire.TaskID == nil || wire.Type == nil || wire.Status == nil || wire.Error == nil || wire.CreatedAt == nil || wire.UpdatedAt == nil || *wire.ID <= 0 || *wire.CreatedAt < 0 || *wire.UpdatedAt < *wire.CreatedAt || !validUpstreamString(*wire.TaskID, 1, 64) || !validUpstreamString(*wire.Type, 1, 32) {
 		return dto.UpstreamSystemTask{}, invalidUpstreamResponse()
 	}
-	out := dto.UpstreamSystemTask{ID: *wire.ID, TaskID: *wire.TaskID, Type: *wire.Type, Status: *wire.Status, CreatedAt: *wire.CreatedAt, UpdatedAt: *wire.UpdatedAt}
+	if *wire.Status != "pending" && *wire.Status != "running" && *wire.Status != "succeeded" && *wire.Status != "failed" {
+		return dto.UpstreamSystemTask{}, invalidUpstreamResponse()
+	}
+	return dto.UpstreamSystemTask{ID: *wire.ID, TaskID: *wire.TaskID, Type: *wire.Type, Status: *wire.Status, CreatedAt: *wire.CreatedAt, UpdatedAt: *wire.UpdatedAt}, nil
+}
+
+func validateUpstreamSystemTask(wire upstreamSystemTaskWire) (dto.UpstreamSystemTask, error) {
+	out, err := validateUpstreamSystemTaskHeader(wire)
+	if err != nil || !supportedUpstreamSystemTaskType(out.Type) {
+		return dto.UpstreamSystemTask{}, invalidUpstreamResponse()
+	}
 	out.ErrorPresent = *wire.Error != "" || out.Status == "failed"
 	if out.ErrorPresent {
 		out.ErrorCode = "UPSTREAM_SYSTEM_TASK_FAILED"
@@ -151,6 +186,13 @@ func validateUpstreamSystemTask(wire upstreamSystemTaskWire) (dto.UpstreamSystem
 			return dto.UpstreamSystemTask{}, invalidUpstreamResponse()
 		}
 		out.DeletedCount = result.DeletedCount
+	case "log_detail_cleanup":
+		var payload upstreamLogDetailCleanupPayloadWire
+		var result upstreamLogDetailCleanupResultWire
+		if !decodeOptionalSystemTaskObject(wire.Payload, &payload) || !decodeOptionalSystemTaskObject(wire.Result, &result) || !nonnegativeSystemTaskValues(payload.CutoffTimestamp, result.ArchivedDays) {
+			return dto.UpstreamSystemTask{}, invalidUpstreamResponse()
+		}
+		out.ArchivedDays = result.ArchivedDays
 	case "channel_test":
 		var payload upstreamChannelTestPayloadWire
 		var result upstreamChannelTestResultWire
@@ -188,43 +230,51 @@ func (client *NewAPIClient) SnapshotSystemTasks(ctx context.Context, requestID s
 	var list []upstreamSystemTaskWire
 	query := cloneURLValues(nil)
 	query.Set("limit", "100")
-	if _, err := client.get(ctx, client.httpClient, "/api/system-task/list", query, requestID+"_list", upstreamAuthManagement, client.requestTimeout, &list, false); err != nil {
+	if _, err := client.get(ctx, client.httpClient, "/api/system-task/list", query, upstreamChildRequestID(requestID, "list"), upstreamAuthManagement, client.requestTimeout, &list, false); err != nil {
 		return dto.UpstreamSystemTaskSnapshot{}, err
 	}
 	if len(list) > 100 {
 		return dto.UpstreamSystemTaskSnapshot{}, invalidUpstreamResponse()
 	}
-	result := dto.UpstreamSystemTaskSnapshot{Items: make([]dto.UpstreamSystemTask, 0, len(list)+5), Truncated: len(list) == 100}
+	result := dto.UpstreamSystemTaskSnapshot{Items: make([]dto.UpstreamSystemTask, 0, len(list)+len(upstreamSystemTaskTypes)), Truncated: len(list) == 100}
 	result.ListObservedCount = int64(len(list))
 	seenIDs, seenTaskIDs := map[int64]struct{}{}, map[string]struct{}{}
 	previous := int64(0)
 	for index, wire := range list {
+		header, err := validateUpstreamSystemTaskHeader(wire)
+		if err != nil {
+			return dto.UpstreamSystemTaskSnapshot{}, err
+		}
+		if _, ok := seenIDs[header.ID]; ok {
+			return dto.UpstreamSystemTaskSnapshot{}, invalidUpstreamResponse()
+		}
+		if _, ok := seenTaskIDs[header.TaskID]; ok {
+			return dto.UpstreamSystemTaskSnapshot{}, invalidUpstreamResponse()
+		}
+		if index > 0 {
+			if header.ID >= previous {
+				return dto.UpstreamSystemTaskSnapshot{}, invalidUpstreamResponse()
+			}
+			if previous-header.ID != 1 {
+				result.IDGap = true
+			}
+		}
+		seenIDs[header.ID], seenTaskIDs[header.TaskID], previous = struct{}{}, struct{}{}, header.ID
+		if !supportedUpstreamSystemTaskType(header.Type) {
+			result.UnsupportedTypes++
+			continue
+		}
 		item, err := validateUpstreamSystemTask(wire)
 		if err != nil {
 			return dto.UpstreamSystemTaskSnapshot{}, err
 		}
-		if _, ok := seenIDs[item.ID]; ok {
-			return dto.UpstreamSystemTaskSnapshot{}, invalidUpstreamResponse()
-		}
-		if _, ok := seenTaskIDs[item.TaskID]; ok {
-			return dto.UpstreamSystemTaskSnapshot{}, invalidUpstreamResponse()
-		}
-		if index > 0 {
-			if item.ID >= previous {
-				return dto.UpstreamSystemTaskSnapshot{}, invalidUpstreamResponse()
-			}
-			if previous-item.ID != 1 {
-				result.IDGap = true
-			}
-		}
-		seenIDs[item.ID], seenTaskIDs[item.TaskID], previous = struct{}{}, struct{}{}, item.ID
 		result.Items = append(result.Items, item)
 	}
 	for _, taskType := range upstreamSystemTaskTypes {
 		currentQuery := cloneURLValues(nil)
 		currentQuery.Set("type", taskType)
 		var current upstreamNullableSystemTaskResponse
-		if _, err := client.get(ctx, client.httpClient, "/api/system-task/current", currentQuery, requestID+"_current_"+taskType, upstreamAuthManagement, client.requestTimeout, &current, false); err != nil {
+		if _, err := client.get(ctx, client.httpClient, "/api/system-task/current", currentQuery, upstreamChildRequestID(requestID, "current_"+taskType), upstreamAuthManagement, client.requestTimeout, &current, false); err != nil {
 			result.CurrentFailures = append(result.CurrentFailures, taskType)
 			continue
 		}
@@ -246,7 +296,7 @@ func (client *NewAPIClient) SnapshotSystemTasks(ctx context.Context, requestID s
 		result.Items = append(result.Items, item)
 	}
 	sort.Slice(result.Items, func(i, j int) bool { return result.Items[i].ID > result.Items[j].ID })
-	result.Partial = result.Truncated || result.IDGap || len(result.CurrentFailures) > 0
+	result.Partial = result.Truncated || result.IDGap || result.UnsupportedTypes > 0 || len(result.CurrentFailures) > 0
 	return result, nil
 }
 

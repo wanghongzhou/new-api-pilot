@@ -9,6 +9,14 @@ const sitesPage = new URL(
   '../../features/sites/components/sites-page.tsx',
   import.meta.url
 )
+const customersPage = new URL(
+  '../../features/customers/components/customers-page.tsx',
+  import.meta.url
+)
+const accountsPage = new URL(
+  '../../features/accounts/components/accounts-page.tsx',
+  import.meta.url
+)
 const dataTable = new URL('./data-table.tsx', import.meta.url)
 const table = new URL('./table.tsx', import.meta.url)
 const pagination = new URL('./data-table-pagination.tsx', import.meta.url)
@@ -19,6 +27,8 @@ describe('fixed-height data table layout', () => {
   test.each([
     ['platform users', platformUsersPage],
     ['sites', sitesPage],
+    ['customers', customersPage],
+    ['accounts', accountsPage],
   ])(
     '%s keeps DataTable inside a flex column that fills remaining height',
     async (_, path) => {

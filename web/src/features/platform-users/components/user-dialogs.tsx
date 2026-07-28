@@ -34,6 +34,8 @@ import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/ui/password-input'
 import { SelectControl as Select } from '@/components/ui/select-control'
 import { Spinner } from '@/components/ui/spinner'
+import { UnsavedChangesConfirmDialog } from '@/components/unsaved-changes-guard'
+import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import { applyApiFieldErrors } from '@/lib/form-errors'
@@ -78,7 +80,7 @@ export function CreateUserDialog({
   const [submitting, setSubmitting] = useState(false)
   const {
     control,
-    formState: { errors },
+    formState: { errors, isDirty },
     handleSubmit,
     register,
     reset,
@@ -92,6 +94,10 @@ export function CreateUserDialog({
       username: '',
     },
     resolver: zodResolver(createPlatformUserSchema),
+  })
+  const createCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: isDirty,
+    onClose: () => onOpenChange(false),
   })
 
   useEffect(() => {
@@ -136,114 +142,128 @@ export function CreateUserDialog({
   })
 
   return (
-    <Drawer direction='right' onOpenChange={onOpenChange} open={open}>
-      <DrawerContent className={sideDrawerContentClassName('sm:max-w-xl')}>
-        <DrawerHeader className={sideDrawerHeaderClassName()}>
-          <DrawerTitle>{t('Create platform user')}</DrawerTitle>
-          <DrawerDescription>
-            {t('New users must change their password after signing in')}
-          </DrawerDescription>
-        </DrawerHeader>
-        <form
-          className={sideDrawerFormClassName('gap-4')}
-          id='create-user-form'
-          onSubmit={submit}
-        >
-          <FormField
-            error={translatedError(errors.username?.message, t)}
-            htmlFor='create-username'
-            label={t('Username')}
-            required
+    <>
+      <Drawer
+        direction='right'
+        onOpenChange={(nextOpen) => {
+          if (nextOpen) onOpenChange(true)
+          else createCloseGuard.requestClose()
+        }}
+        open={open}
+      >
+        <DrawerContent className={sideDrawerContentClassName('sm:max-w-xl')}>
+          <DrawerHeader className={sideDrawerHeaderClassName()}>
+            <DrawerTitle>{t('Create platform user')}</DrawerTitle>
+            <DrawerDescription>
+              {t('New users must change their password after signing in')}
+            </DrawerDescription>
+          </DrawerHeader>
+          <form
+            className={sideDrawerFormClassName('gap-4')}
+            id='create-user-form'
+            onSubmit={submit}
           >
-            <Input
-              aria-invalid={Boolean(errors.username)}
-              autoCapitalize='none'
-              autoComplete='off'
-              id='create-username'
-              {...register('username')}
-            />
-          </FormField>
-          <FormField
-            error={translatedError(errors.displayName?.message, t)}
-            htmlFor='create-display-name'
-            label={t('Display name')}
-            required
-          >
-            <Input
-              aria-invalid={Boolean(errors.displayName)}
-              id='create-display-name'
-              {...register('displayName')}
-            />
-          </FormField>
-          <FormField htmlFor='create-role' label={t('Role')} required>
-            <Controller
-              control={control}
-              name='role'
-              render={({ field }) => (
-                <Select
-                  alignItemWithTrigger={false}
-                  id='create-role'
-                  name={field.name}
-                  onChange={(event) => field.onChange(event.target.value)}
-                  portalled={false}
-                  value={field.value}
-                >
-                  <option value='viewer'>{t('Viewer')}</option>
-                  <option value='admin'>{t('Administrator')}</option>
-                </Select>
+            <FormField
+              error={translatedError(errors.username?.message, t)}
+              htmlFor='create-username'
+              label={t('Username')}
+              required
+            >
+              <Input
+                aria-invalid={Boolean(errors.username)}
+                autoCapitalize='none'
+                autoComplete='off'
+                id='create-username'
+                {...register('username')}
+              />
+            </FormField>
+            <FormField
+              error={translatedError(errors.displayName?.message, t)}
+              htmlFor='create-display-name'
+              label={t('Display name')}
+              required
+            >
+              <Input
+                aria-invalid={Boolean(errors.displayName)}
+                id='create-display-name'
+                {...register('displayName')}
+              />
+            </FormField>
+            <FormField htmlFor='create-role' label={t('Role')} required>
+              <Controller
+                control={control}
+                name='role'
+                render={({ field }) => (
+                  <Select
+                    alignItemWithTrigger={false}
+                    id='create-role'
+                    name={field.name}
+                    onChange={(event) => field.onChange(event.target.value)}
+                    portalled={false}
+                    value={field.value}
+                  >
+                    <option value='viewer'>{t('Viewer')}</option>
+                    <option value='admin'>{t('Administrator')}</option>
+                  </Select>
+                )}
+              />
+            </FormField>
+            <FormField
+              description={t(
+                'Use 8 or more Unicode characters, up to 72 UTF-8 bytes'
               )}
-            />
-          </FormField>
-          <FormField
-            description={t(
-              'Use 8 or more Unicode characters, up to 72 UTF-8 bytes'
+              error={translatedError(errors.password?.message, t)}
+              htmlFor='create-password'
+              label={t('Temporary password')}
+              required
+            >
+              <PasswordInput
+                aria-invalid={Boolean(errors.password)}
+                autoComplete='new-password'
+                id='create-password'
+                {...register('password')}
+              />
+            </FormField>
+            <FormField
+              error={translatedError(errors.confirmPassword?.message, t)}
+              htmlFor='create-confirm-password'
+              label={t('Confirm password')}
+              required
+            >
+              <PasswordInput
+                aria-invalid={Boolean(errors.confirmPassword)}
+                autoComplete='new-password'
+                id='create-confirm-password'
+                {...register('confirmPassword')}
+              />
+            </FormField>
+            {errors.root?.message && (
+              <p className='text-destructive text-sm' role='alert'>
+                {errors.root.message}
+              </p>
             )}
-            error={translatedError(errors.password?.message, t)}
-            htmlFor='create-password'
-            label={t('Temporary password')}
-            required
-          >
-            <PasswordInput
-              aria-invalid={Boolean(errors.password)}
-              autoComplete='new-password'
-              id='create-password'
-              {...register('password')}
-            />
-          </FormField>
-          <FormField
-            error={translatedError(errors.confirmPassword?.message, t)}
-            htmlFor='create-confirm-password'
-            label={t('Confirm password')}
-            required
-          >
-            <PasswordInput
-              aria-invalid={Boolean(errors.confirmPassword)}
-              autoComplete='new-password'
-              id='create-confirm-password'
-              {...register('confirmPassword')}
-            />
-          </FormField>
-          {errors.root?.message && (
-            <p className='text-destructive text-sm' role='alert'>
-              {errors.root.message}
-            </p>
-          )}
-        </form>
-        <DrawerFooter className={sideDrawerFooterClassName()}>
-          <Button
-            onClick={() => onOpenChange(false)}
-            type='button'
-            variant='outline'
-          >
-            {t('common.cancel')}
-          </Button>
-          <Button disabled={submitting} form='create-user-form' type='submit'>
-            {submitting && <Spinner />}
-            {t('Create user')}
-          </Button>
-        </DrawerFooter>
-      </DrawerContent>
-    </Drawer>
+          </form>
+          <DrawerFooter className={sideDrawerFooterClassName()}>
+            <Button
+              onClick={createCloseGuard.requestClose}
+              type='button'
+              variant='outline'
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button disabled={submitting} form='create-user-form' type='submit'>
+              {submitting && <Spinner />}
+              {t('Create user')}
+            </Button>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
+      <UnsavedChangesConfirmDialog
+        onConfirm={createCloseGuard.discardAndClose}
+        onOpenChange={createCloseGuard.setConfirmOpen}
+        open={createCloseGuard.confirmOpen}
+      />
+    </>
   )
 }
 
@@ -261,7 +281,7 @@ export function EditUserDialog({
   const [submitting, setSubmitting] = useState(false)
   const {
     control,
-    formState: { errors },
+    formState: { errors, isDirty },
     handleSubmit,
     register,
     reset,
@@ -269,6 +289,10 @@ export function EditUserDialog({
   } = useForm<EditPlatformUserFormValues>({
     defaultValues: { displayName: '', role: 'viewer', username: '' },
     resolver: zodResolver(editPlatformUserSchema),
+  })
+  const editCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: isDirty,
+    onClose: () => onOpenChange(false),
   })
 
   useEffect(() => {
@@ -321,98 +345,112 @@ export function EditUserDialog({
   })
 
   return (
-    <Drawer direction='right' onOpenChange={onOpenChange} open={open}>
-      <DrawerContent className={sideDrawerContentClassName('sm:max-w-xl')}>
-        <DrawerHeader className={sideDrawerHeaderClassName()}>
-          <DrawerTitle>{t('Edit platform user')}</DrawerTitle>
-          <DrawerDescription>
-            {t('Role changes invalidate the user session')}
-          </DrawerDescription>
-        </DrawerHeader>
-        <form
-          className={sideDrawerFormClassName('gap-4')}
-          id='edit-user-form'
-          onSubmit={submit}
-        >
-          <FormField
-            error={translatedError(errors.username?.message, t)}
-            htmlFor='edit-username'
-            label={t('Username')}
-            required
+    <>
+      <Drawer
+        direction='right'
+        onOpenChange={(nextOpen) => {
+          if (nextOpen) onOpenChange(true)
+          else editCloseGuard.requestClose()
+        }}
+        open={open}
+      >
+        <DrawerContent className={sideDrawerContentClassName('sm:max-w-xl')}>
+          <DrawerHeader className={sideDrawerHeaderClassName()}>
+            <DrawerTitle>{t('Edit platform user')}</DrawerTitle>
+            <DrawerDescription>
+              {t('Role changes invalidate the user session')}
+            </DrawerDescription>
+          </DrawerHeader>
+          <form
+            className={sideDrawerFormClassName('gap-4')}
+            id='edit-user-form'
+            onSubmit={submit}
           >
-            <Input
-              aria-invalid={Boolean(errors.username)}
-              autoCapitalize='none'
-              id='edit-username'
-              {...register('username')}
-            />
-          </FormField>
-          <FormField
-            error={translatedError(errors.displayName?.message, t)}
-            htmlFor='edit-display-name'
-            label={t('Display name')}
-            required
-          >
-            <Input
-              aria-invalid={Boolean(errors.displayName)}
-              id='edit-display-name'
-              {...register('displayName')}
-            />
-          </FormField>
-          <FormField
-            description={
-              isLastEnabledAdmin
-                ? t('The last enabled administrator cannot be downgraded')
-                : undefined
-            }
-            htmlFor='edit-role'
-            label={t('Role')}
-            required
-          >
-            <Controller
-              control={control}
-              name='role'
-              render={({ field }) => (
-                <Select
-                  alignItemWithTrigger={false}
-                  id='edit-role'
-                  name={field.name}
-                  onChange={(event) => field.onChange(event.target.value)}
-                  portalled={false}
-                  value={field.value}
-                >
-                  <option
-                    disabled={isLastEnabledAdmin && user?.role === 'admin'}
-                    value='viewer'
+            <FormField
+              error={translatedError(errors.username?.message, t)}
+              htmlFor='edit-username'
+              label={t('Username')}
+              required
+            >
+              <Input
+                aria-invalid={Boolean(errors.username)}
+                autoCapitalize='none'
+                id='edit-username'
+                {...register('username')}
+              />
+            </FormField>
+            <FormField
+              error={translatedError(errors.displayName?.message, t)}
+              htmlFor='edit-display-name'
+              label={t('Display name')}
+              required
+            >
+              <Input
+                aria-invalid={Boolean(errors.displayName)}
+                id='edit-display-name'
+                {...register('displayName')}
+              />
+            </FormField>
+            <FormField
+              description={
+                isLastEnabledAdmin
+                  ? t('The last enabled administrator cannot be downgraded')
+                  : undefined
+              }
+              htmlFor='edit-role'
+              label={t('Role')}
+              required
+            >
+              <Controller
+                control={control}
+                name='role'
+                render={({ field }) => (
+                  <Select
+                    alignItemWithTrigger={false}
+                    id='edit-role'
+                    name={field.name}
+                    onChange={(event) => field.onChange(event.target.value)}
+                    portalled={false}
+                    value={field.value}
                   >
-                    {t('Viewer')}
-                  </option>
-                  <option value='admin'>{t('Administrator')}</option>
-                </Select>
-              )}
-            />
-          </FormField>
-          {errors.root?.message && (
-            <p className='text-destructive text-sm' role='alert'>
-              {errors.root.message}
-            </p>
-          )}
-        </form>
-        <DrawerFooter className={sideDrawerFooterClassName()}>
-          <Button
-            onClick={() => onOpenChange(false)}
-            type='button'
-            variant='outline'
-          >
-            {t('common.cancel')}
-          </Button>
-          <Button disabled={submitting} form='edit-user-form' type='submit'>
-            {submitting && <Spinner />}
-            {t('Save changes')}
-          </Button>
-        </DrawerFooter>
-      </DrawerContent>
-    </Drawer>
+                    <option
+                      disabled={isLastEnabledAdmin && user?.role === 'admin'}
+                      value='viewer'
+                    >
+                      {t('Viewer')}
+                    </option>
+                    <option value='admin'>{t('Administrator')}</option>
+                  </Select>
+                )}
+              />
+            </FormField>
+            {errors.root?.message && (
+              <p className='text-destructive text-sm' role='alert'>
+                {errors.root.message}
+              </p>
+            )}
+          </form>
+          <DrawerFooter className={sideDrawerFooterClassName()}>
+            <Button
+              onClick={editCloseGuard.requestClose}
+              type='button'
+              variant='outline'
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button disabled={submitting} form='edit-user-form' type='submit'>
+              {submitting && <Spinner />}
+              {t('Save changes')}
+            </Button>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
+      <UnsavedChangesConfirmDialog
+        onConfirm={editCloseGuard.discardAndClose}
+        onOpenChange={editCloseGuard.setConfirmOpen}
+        open={editCloseGuard.confirmOpen}
+      />
+    </>
   )
 }
 

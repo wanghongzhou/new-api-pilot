@@ -4,6 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io"
+	stdlog "log"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -11,6 +14,7 @@ import (
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 var mysqlVersionPattern = regexp.MustCompile(`^(\d+)\.(\d+)`)
@@ -28,7 +32,10 @@ type Database struct {
 }
 
 func Open(ctx context.Context, options Options) (*Database, error) {
-	orm, err := gorm.Open(mysql.Open(options.DSN), &gorm.Config{DisableAutomaticPing: true})
+	orm, err := gorm.Open(mysql.Open(options.DSN), &gorm.Config{
+		DisableAutomaticPing: true,
+		Logger:               newParameterizedGORMLogger(os.Stderr, logger.Warn),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("open MySQL: %w", err)
 	}
@@ -48,6 +55,15 @@ func Open(ctx context.Context, options Options) (*Database, error) {
 		return nil, err
 	}
 	return &Database{GORM: orm, SQL: sqlDB}, nil
+}
+
+func newParameterizedGORMLogger(writer io.Writer, level logger.LogLevel) logger.Interface {
+	return logger.New(stdlog.New(writer, "\r\n", stdlog.LstdFlags), logger.Config{
+		SlowThreshold:        200 * time.Millisecond,
+		LogLevel:             level,
+		Colorful:             false,
+		ParameterizedQueries: true,
+	})
 }
 
 func (database *Database) Close() error {

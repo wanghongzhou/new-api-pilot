@@ -177,22 +177,24 @@ describe('A89-A100 design fixture consumption', () => {
       upstream: { statuses: string[]; types: string[] }
     }>('f11-system-tasks.json')
     expect(f11.fixture_id).toBe('F11')
-    expect(f11.tasks).toHaveLength(5)
-    expect(f11.upstream.types).toHaveLength(5)
+    expect(f11.tasks).toHaveLength(6)
+    expect(f11.upstream.types).toHaveLength(6)
     expect(f11.upstream.statuses).toEqual([
       'pending',
       'running',
       'succeeded',
       'failed',
     ])
-    expect(f11.tasks[0]?.progress).toMatchObject({
+    expect(
+      f11.tasks.find((task) => task.type === 'log_cleanup')?.progress
+    ).toMatchObject({
       progress: 44,
       total: '9007199254740993',
     })
     expect(f11.scenarios).toEqual(
       expect.arrayContaining([
         'list_limit_100_truncated_partial',
-        'five_current_requests_only_no_per_task_n_plus_one',
+        'six_current_requests_only_no_per_task_n_plus_one',
         'typed_progress_result_only',
         'statistics_completeness_and_export',
         'no_remote_mutation_or_detail_proxy',

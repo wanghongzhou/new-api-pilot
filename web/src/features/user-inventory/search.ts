@@ -8,7 +8,10 @@ import { BEIJING_TIMEZONE, dayjs, fromUnixSeconds } from '@/lib/dayjs'
 
 import type { UserInventoryState } from './types'
 
+export type UserInventoryTab = 'dimensions' | 'list' | 'sites' | 'trend'
+
 export interface UserInventorySearch {
+  tab: UserInventoryTab
   page: number
   pageSize: number
   siteIds: ReturnType<typeof parseIdString>[]
@@ -138,5 +141,22 @@ export function buildUserInventorySearch(
       )
       .sort((left, right) => left.localeCompare(right)),
     statuses: stableNumbers(raw.statuses, validStatuses),
+    tab:
+      raw.tab === 'trend' || raw.tab === 'dimensions' || raw.tab === 'sites'
+        ? raw.tab
+        : 'list',
+  }
+}
+
+export function changeUserInventoryTab(tab: UserInventoryTab) {
+  if (tab === 'list') return { page: 1, tab }
+  return {
+    maxBalance: undefined,
+    minBalance: undefined,
+    keyword: '',
+    page: 1,
+    remoteUserId: undefined,
+    states: [] as UserInventoryState[],
+    tab,
   }
 }

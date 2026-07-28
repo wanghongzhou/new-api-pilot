@@ -1,14 +1,24 @@
 import {
+  AiSearchIcon,
   Alert02Icon,
-  Chart01Icon,
+  Analytics01Icon,
+  Audit02Icon,
+  Building03Icon,
   DashboardSquare01Icon,
   FileExportIcon,
+  LaptopPerformanceIcon,
+  Money03Icon,
+  MoneyBag02Icon,
+  Package02Icon,
+  RankingIcon,
   ServerStack01Icon,
   Settings02Icon,
+  SystemUpdate01Icon,
+  Task02Icon,
   UserAccountIcon,
   UserGroup02Icon,
-  UserGroupIcon,
-  ViewIcon,
+  UserListIcon,
+  UserShield01Icon,
 } from '@hugeicons/core-free-icons'
 
 type NavItem = {
@@ -42,20 +52,59 @@ export const navGroups: ReadonlyArray<{
   items: ReadonlyArray<NavItem>
 }> = [
   {
-    label: 'Overview',
+    label: 'Workspace',
     items: [
-      { icon: DashboardSquare01Icon, label: 'Dashboard', to: '/dashboard' },
+      {
+        icon: DashboardSquare01Icon,
+        label: 'Operations overview',
+        to: '/dashboard',
+      },
       { icon: Alert02Icon, label: 'Alerts', to: '/alerts' },
     ],
   },
   {
-    label: 'Operations',
+    label: 'Business management',
     items: [
-      { icon: ServerStack01Icon, label: 'Sites', to: '/sites' },
+      { icon: Building03Icon, label: 'Sites', to: '/sites' },
       { icon: UserGroup02Icon, label: 'Customers', to: '/customers' },
       { icon: UserAccountIcon, label: 'Accounts', to: '/accounts' },
+    ],
+  },
+  {
+    label: 'Tasks and logs',
+    items: [
+      { icon: Audit02Icon, label: 'Usage logs', to: '/logs' },
+      { icon: Task02Icon, label: 'Task logs', to: '/upstream-tasks' },
+      { icon: SystemUpdate01Icon, label: 'System tasks', to: '/system-tasks' },
+      { icon: FileExportIcon, label: 'Export center', to: '/exports' },
+    ],
+  },
+  {
+    label: 'Operations analytics',
+    items: [
       {
-        icon: UserGroupIcon,
+        icon: Money03Icon,
+        label: 'Financial operations',
+        to: '/financial-operations',
+      },
+      {
+        icon: Analytics01Icon,
+        label: 'Global statistics',
+        to: '/statistics/global',
+      },
+      { icon: RankingIcon, label: 'Rankings', to: '/rankings' },
+      {
+        icon: LaptopPerformanceIcon,
+        label: 'Performance trends',
+        to: '/performance-history',
+      },
+    ],
+  },
+  {
+    label: 'Resource center',
+    items: [
+      {
+        icon: UserListIcon,
         label: 'Upstream user inventory',
         to: '/user-inventory',
       },
@@ -64,49 +113,27 @@ export const navGroups: ReadonlyArray<{
         label: 'Channel inventory',
         to: '/channel-inventory',
       },
+      { icon: AiSearchIcon, label: 'Model catalog', to: '/model-catalog' },
       {
-        icon: FileExportIcon,
-        label: 'Financial operations',
-        to: '/financial-operations',
-      },
-      { icon: FileExportIcon, label: 'Upstream tasks', to: '/upstream-tasks' },
-      { icon: FileExportIcon, label: 'System tasks', to: '/system-tasks' },
-    ],
-  },
-  {
-    label: 'Catalog',
-    items: [
-      { icon: ServerStack01Icon, label: 'Model catalog', to: '/model-catalog' },
-      {
-        icon: ServerStack01Icon,
+        icon: MoneyBag02Icon,
         label: 'Pricing and groups',
         to: '/pricing-groups',
       },
       {
-        icon: ServerStack01Icon,
+        icon: Package02Icon,
         label: 'Subscription plans',
         to: '/subscription-plans',
       },
     ],
   },
   {
-    label: 'Analytics',
+    label: 'Platform administration',
     items: [
-      { icon: Chart01Icon, label: 'Statistics', to: '/statistics/global' },
-      { icon: Chart01Icon, label: 'Rankings', to: '/rankings' },
       {
-        icon: Chart01Icon,
-        label: 'Performance history',
-        to: '/performance-history',
+        icon: UserShield01Icon,
+        label: 'Platform users',
+        to: '/settings/users',
       },
-      { icon: ViewIcon, label: 'Logs', to: '/logs' },
-      { icon: FileExportIcon, label: 'Exports', to: '/exports' },
-    ],
-  },
-  {
-    label: 'Settings and access',
-    items: [
-      { icon: UserGroupIcon, label: 'Platform users', to: '/settings/users' },
       {
         icon: Settings02Icon,
         label: 'System settings',

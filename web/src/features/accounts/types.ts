@@ -86,6 +86,7 @@ export interface AccountSearch {
   remoteStatus: RemoteUserStatusFilter[]
   remoteState: AccountRemoteState[]
   managedStatus: AccountManagedStatus[]
+  view: 'card' | 'table'
   sort: 'updated_at' | 'username' | 'today_quota' | 'quota'
   order: 'asc' | 'desc'
 }

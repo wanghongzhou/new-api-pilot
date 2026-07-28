@@ -6,6 +6,8 @@ import {
   type Route,
 } from '@playwright/test'
 
+import { mockAuthenticatedShell } from './helpers/auth'
+
 const authStorageKey = 'pilot-auth-user'
 const uidStorageKey = 'uid'
 const baseRangeStart = 1_783_785_600
@@ -452,6 +454,7 @@ function escapeRegExp(value: string) {
 }
 
 async function seedAuth(page: Page) {
+  await mockAuthenticatedShell(page)
   await page.addInitScript(
     ({ authKey, authUser, uidKey }) => {
       window.localStorage.setItem(authKey, JSON.stringify(authUser))

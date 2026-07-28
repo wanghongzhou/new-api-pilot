@@ -55,7 +55,7 @@ func GenerateSystemTaskExport(ctx context.Context, o SystemTaskExportOptions) (E
 	if err != nil {
 		return ExportGenerateResult{}, err
 	}
-	header := []string{"site_id", "site_name", "remote_id", "task_id", "type", "status", "error_present", "error_code", "progress_total", "progress_processed", "progress_percent", "progress_remaining", "deleted_count", "tested", "succeeded", "failed", "disabled", "enabled", "checked_channels", "changed_channels", "detected_add_models", "detected_remove_models", "failed_channels", "auto_added_models", "unfinished_tasks", "channels_scanned", "platforms_scanned", "null_tasks_failed", "remote_created_at", "remote_updated_at", "collected_at", "data_status", "truncated", "truncation_reason", "source_limit", "observed_count", "data_snapshot_at", "exported_at"}
+	header := []string{"site_id", "site_name", "remote_id", "task_id", "type", "status", "error_present", "error_code", "progress_total", "progress_processed", "progress_percent", "progress_remaining", "deleted_count", "archived_days", "tested", "succeeded", "failed", "disabled", "enabled", "checked_channels", "changed_channels", "detected_add_models", "detected_remove_models", "failed_channels", "auto_added_models", "unfinished_tasks", "channels_scanned", "platforms_scanned", "null_tasks_failed", "remote_created_at", "remote_updated_at", "collected_at", "data_status", "truncated", "truncation_reason", "source_limit", "observed_count", "data_snapshot_at", "exported_at"}
 	if err = w.WriteHeader(header); err != nil {
 		return ExportGenerateResult{}, err
 	}
@@ -87,7 +87,13 @@ func GenerateSystemTaskExport(ctx context.Context, o SystemTaskExportOptions) (E
 			case state.IDGap:
 				reason = "id_gap"
 			}
-			values := []string{strconv.FormatInt(r.SiteID, 10), r.SiteName, strconv.FormatInt(r.RemoteID, 10), r.RemoteTaskID, r.TaskType, r.RemoteStatus, strconv.FormatBool(r.ErrorPresent), r.ErrorCode, systemTaskExportValue(r.Total), systemTaskExportValue(r.Processed), systemTaskExportValue(r.Progress), systemTaskExportValue(r.Remaining), systemTaskExportValue(r.DeletedCount), systemTaskExportValue(r.Tested), systemTaskExportValue(r.Succeeded), systemTaskExportValue(r.Failed), systemTaskExportValue(r.Disabled), systemTaskExportValue(r.Enabled), systemTaskExportValue(r.CheckedChannels), systemTaskExportValue(r.ChangedChannels), systemTaskExportValue(r.DetectedAddModels), systemTaskExportValue(r.DetectedRemoveModels), systemTaskExportValue(r.FailedChannels), systemTaskExportValue(r.AutoAddedModels), systemTaskExportValue(r.UnfinishedTasks), systemTaskExportValue(r.ChannelsScanned), systemTaskExportValue(r.PlatformsScanned), systemTaskExportValue(r.NullTasksFailed), strconv.FormatInt(r.RemoteCreatedAt, 10), strconv.FormatInt(r.RemoteUpdatedAt, 10), strconv.FormatInt(r.CollectedAt, 10), status, strconv.FormatBool(state.Truncated || state.IDGap), reason, "100", strconv.FormatInt(state.ObservedCount, 10), strconv.FormatInt(o.DataSnapshotAt, 10), strconv.FormatInt(o.ExportedAt, 10)}
+			deletedCount, archivedDays := "", ""
+			if r.TaskType == "log_cleanup" {
+				deletedCount = systemTaskExportValue(r.DeletedCount)
+			} else if r.TaskType == "log_detail_cleanup" {
+				archivedDays = systemTaskExportValue(r.DeletedCount)
+			}
+			values := []string{strconv.FormatInt(r.SiteID, 10), r.SiteName, strconv.FormatInt(r.RemoteID, 10), r.RemoteTaskID, r.TaskType, r.RemoteStatus, strconv.FormatBool(r.ErrorPresent), r.ErrorCode, systemTaskExportValue(r.Total), systemTaskExportValue(r.Processed), systemTaskExportValue(r.Progress), systemTaskExportValue(r.Remaining), deletedCount, archivedDays, systemTaskExportValue(r.Tested), systemTaskExportValue(r.Succeeded), systemTaskExportValue(r.Failed), systemTaskExportValue(r.Disabled), systemTaskExportValue(r.Enabled), systemTaskExportValue(r.CheckedChannels), systemTaskExportValue(r.ChangedChannels), systemTaskExportValue(r.DetectedAddModels), systemTaskExportValue(r.DetectedRemoveModels), systemTaskExportValue(r.FailedChannels), systemTaskExportValue(r.AutoAddedModels), systemTaskExportValue(r.UnfinishedTasks), systemTaskExportValue(r.ChannelsScanned), systemTaskExportValue(r.PlatformsScanned), systemTaskExportValue(r.NullTasksFailed), strconv.FormatInt(r.RemoteCreatedAt, 10), strconv.FormatInt(r.RemoteUpdatedAt, 10), strconv.FormatInt(r.CollectedAt, 10), status, strconv.FormatBool(state.Truncated || state.IDGap), reason, "100", strconv.FormatInt(state.ObservedCount, 10), strconv.FormatInt(o.DataSnapshotAt, 10), strconv.FormatInt(o.ExportedAt, 10)}
 			if e = w.WriteRow(values); e != nil {
 				return ExportGenerateResult{}, e
 			}

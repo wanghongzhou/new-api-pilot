@@ -174,7 +174,14 @@ test('legacy select controls use the new-api below-trigger popup position', asyn
   expect(source).toContain('alignItemWithTrigger={alignItemWithTrigger}')
 })
 
-test('account list keeps creation in the page action and pagination in the footer', async () => {
+test('customer and account lists share the site double-view layout', async () => {
+  const customerSource = await readFile(
+    new URL(
+      '../features/customers/components/customers-page.tsx',
+      import.meta.url
+    ),
+    'utf8'
+  )
   const source = await readFile(
     new URL(
       '../features/accounts/components/accounts-page.tsx',
@@ -183,12 +190,16 @@ test('account list keeps creation in the page action and pagination in the foote
     'utf8'
   )
 
-  const table = source.slice(
-    source.indexOf('<DataTable'),
-    source.indexOf('/>', source.indexOf('<DataTable')) + 2
-  )
-  expect(table).not.toContain('emptyAction=')
-  expect(table).toContain('paginationInFooter')
+  for (const pageSource of [customerSource, source]) {
+    expect(pageSource).toContain('<DataViewModeToggle')
+    expect(pageSource).toContain('<PageFooterPortal>')
+    expect(pageSource).toContain('fillAvailableHeight')
+    expect(pageSource).toContain('preserveHeaderWhenEmpty')
+    expect(pageSource).toContain('<ErrorState')
+    expect(pageSource).toContain('<EmptyState')
+    expect(pageSource).not.toContain("<div className='flex justify-end'>")
+    expect(pageSource).not.toContain('paginationInFooter')
+  }
   expect(source).toContain("t('accounts.add')")
 })
 
@@ -227,6 +238,47 @@ test('site cards preserve the reference data-table card boundary', async () => {
   expect(source).not.toContain('overflow-hidden rounded-lg border')
   expect(source).not.toContain('border-t px-4 py-3')
   expect(source).not.toContain('rounded-xl ring-1')
+})
+
+test('customer and account cards reuse the site card boundary', async () => {
+  const sources = await Promise.all([
+    readFile(
+      new URL(
+        '../features/customers/components/customer-ui.tsx',
+        import.meta.url
+      ),
+      'utf8'
+    ),
+    readFile(
+      new URL(
+        '../features/accounts/components/account-ui.tsx',
+        import.meta.url
+      ),
+      'utf8'
+    ),
+  ])
+
+  for (const source of sources) {
+    expect(source).toContain(
+      'rounded-lg border bg-(--data-table-card-bg,var(--table-row)) px-3 py-2.5'
+    )
+    expect(source).not.toContain('rounded-xl p-4 ring-1')
+  }
+})
+
+test('account onboarding uses the shared padded side-drawer regions', async () => {
+  const source = await readFile(
+    new URL(
+      '../features/accounts/components/account-onboarding-drawer.tsx',
+      import.meta.url
+    ),
+    'utf8'
+  )
+
+  expect(source).toContain('sideDrawerContentClassName(')
+  expect(source).toContain('sideDrawerHeaderClassName()')
+  expect(source).toContain('sideDrawerFormClassName()')
+  expect(source).toContain('sideDrawerFooterClassName()')
 })
 
 test('site view controls follow the new-api channel toolbar pattern', async () => {
@@ -376,7 +428,7 @@ test('entity create and edit flows use right-side drawers while short tasks keep
     sitesSource,
     alertRulesSource,
   ]) {
-    expect(source).toContain("<Drawer direction='right'")
+    expect(source).toMatch(/<Drawer\s+direction='right'/)
     expect(source).toContain('sideDrawerContentClassName')
     expect(source).toContain('sideDrawerHeaderClassName')
     expect(source).toContain('sideDrawerFormClassName')

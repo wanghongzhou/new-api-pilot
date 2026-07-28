@@ -13,6 +13,9 @@ export const Route = createFileRoute('/_authenticated/accounts/')({
 function AccountsRoute() {
   const rawSearch = Route.useSearch()
   const navigate = Route.useNavigate()
+  const storedView = window.localStorage.getItem('accounts:view-mode')
+  const preferredView: AccountSearch['view'] =
+    storedView === 'table' || storedView === 'card' ? storedView : 'card'
   const search: AccountSearch = {
     customerId: isIdString(rawSearch.customer_id)
       ? rawSearch.customer_id
@@ -26,6 +29,7 @@ function AccountsRoute() {
     remoteStatus: rawSearch.remoteStatus,
     siteId: isIdString(rawSearch.site_id) ? rawSearch.site_id : undefined,
     sort: rawSearch.sort ?? 'updated_at',
+    view: rawSearch.view ?? preferredView,
   }
   return (
     <AccountsPage
@@ -33,6 +37,9 @@ function AccountsRoute() {
         void navigate({ params: { accountId }, to: '/accounts/$accountId' })
       }
       onSearchChange={(changes) => {
+        if (changes.view) {
+          window.localStorage.setItem('accounts:view-mode', changes.view)
+        }
         const hasCustomerId = Object.hasOwn(changes, 'customerId')
         const hasSiteId = Object.hasOwn(changes, 'siteId')
         void navigate({
@@ -50,6 +57,7 @@ function AccountsRoute() {
             remoteStatus: changes.remoteStatus ?? current.remoteStatus,
             site_id: hasSiteId ? changes.siteId : current.site_id,
             sort: changes.sort ?? current.sort,
+            view: changes.view ?? current.view,
           }),
         })
       }}

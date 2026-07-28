@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page, type Route } from '@playwright/test'
 
+import { mockAuthenticatedShell } from './helpers/auth'
 import { clickOpenSelectOption } from './helpers/select-control'
 
 const authStorageKey = 'pilot-auth-user'
@@ -65,6 +66,7 @@ function envelope<T>(data: T, requestId = 'req_e2e') {
 }
 
 async function seedAuth(page: Page, user: TestUser) {
+  await mockAuthenticatedShell(page)
   await page.addInitScript(
     ({ authKey, authUser, uidKey }) => {
       window.localStorage.setItem(authKey, JSON.stringify(authUser))
@@ -196,6 +198,16 @@ async function followAppNavigation(page: Page, name: string) {
     return
   }
 
+  const desktopSidebarButton = page
+    .getByRole('banner')
+    .getByRole('button', { name: '展开或收起侧栏' })
+  if (await desktopSidebarButton.isVisible()) {
+    await desktopSidebarButton.click()
+    await expect(directLink).toBeVisible()
+    await directLink.click()
+    return
+  }
+
   const mobileNavigationButton = page.getByRole('button', {
     name: '打开导航',
   })
@@ -208,6 +220,7 @@ async function followAppNavigation(page: Page, name: string) {
 test('signs in, enforces password change, and keeps passwords out of storage', async ({
   page,
 }) => {
+  await mockAuthenticatedShell(page)
   await mockDashboard(page)
   await page.route('**/api/user/login', async (route) => {
     expect(route.request().headers()['new-api-user']).toBeUndefined()
@@ -277,7 +290,7 @@ test('restores a deep link, verifies the session once, and shows viewer read-onl
   await expect(page.getByRole('button', { name: '新建用户' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: '编辑用户' })).toHaveCount(0)
 
-  await followAppNavigation(page, '仪表盘')
+  await followAppNavigation(page, '运营概览')
   await followAppNavigation(page, '平台用户')
   await expect(page).toHaveURL(/\/settings\/users/)
   expect(selfCalls).toBe(1)
@@ -641,6 +654,41 @@ test('sends the user header on logout and clears it with the session', async ({
   expect(storage).toEqual({ auth: null, uid: null })
 })
 
+test('keeps the authenticated session when server logout fails', async ({
+  page,
+}) => {
+  await seedAuth(page, admin)
+  await mockSelf(page, admin)
+  await mockDashboard(page)
+  await page.route('**/api/user/logout', async (route) => {
+    await route.fulfill({
+      json: {
+        code: 'INTERNAL_ERROR',
+        data: null,
+        message: 'logout failed',
+        request_id: 'req_logout_failed',
+        success: false,
+      },
+      status: 500,
+    })
+  })
+
+  await page.goto('/dashboard')
+  await page.getByRole('button', { name: admin.display_name }).click()
+  await page.getByRole('menuitem', { name: '退出登录', exact: true }).click()
+
+  await expect(page).toHaveURL(/\/dashboard\/?$/)
+  await expect(page.getByText('退出失败，请重试')).toBeVisible()
+  const storage = await page.evaluate(
+    ({ authKey, uidKey }) => ({
+      auth: window.localStorage.getItem(authKey),
+      uid: window.localStorage.getItem(uidKey),
+    }),
+    { authKey: authStorageKey, uidKey: uidStorageKey }
+  )
+  expect(storage).toEqual({ auth: JSON.stringify(admin), uid: admin.id })
+})
+
 test('restores auto-applied user filters through browser history', async ({
   page,
 }) => {
@@ -814,5 +862,5 @@ test('keeps the 375px workspace within the viewport and exposes mobile navigatio
 
   await page.getByRole('button', { name: '打开导航' }).click()
   await expect(page.getByRole('dialog', { name: '主导航' })).toBeVisible()
-  await expect(page.getByRole('link', { name: '仪表盘' })).toBeVisible()
+  await expect(page.getByRole('link', { name: '运营概览' })).toBeVisible()
 })

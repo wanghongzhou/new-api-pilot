@@ -1,6 +1,38 @@
 package model
 
-import "testing"
+import (
+	"bytes"
+	"context"
+	"strings"
+	"testing"
+	"time"
+
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
+)
+
+func TestGORMLoggerNeverExpandsSensitiveParameters(t *testing.T) {
+	var output bytes.Buffer
+	databaseLogger := newParameterizedGORMLogger(&output, logger.Info)
+	filter, ok := databaseLogger.(gorm.ParamsFilter)
+	if !ok {
+		t.Fatal("GORM logger does not expose a parameter filter")
+	}
+	const sentinel = "access-token-sentinel-never-log"
+	sql, params := filter.ParamsFilter(context.Background(),
+		"INSERT INTO `sensitive_log_test` (`id`,`value`) VALUES (?,?)", int64(1), sentinel)
+	if len(params) != 0 {
+		t.Fatalf("GORM parameter filter retained %d parameters", len(params))
+	}
+	databaseLogger.Trace(context.Background(), time.Now(), func() (string, int64) { return sql, 1 }, nil)
+	logged := output.String()
+	if strings.Contains(logged, sentinel) {
+		t.Fatalf("GORM log expanded sensitive parameter: %s", logged)
+	}
+	if !strings.Contains(logged, "INSERT INTO `sensitive_log_test`") || !strings.Contains(logged, "VALUES (?,?)") {
+		t.Fatalf("GORM log did not retain a parameterized SQL template: %s", logged)
+	}
+}
 
 func TestValidateMySQLVersion(t *testing.T) {
 	for _, version := range []string{"8.0.36", "8.4.6", "9.0.1-commercial"} {

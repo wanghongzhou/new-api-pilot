@@ -328,6 +328,7 @@ export function SitesPage({
         cell: ({ row }) => (
           <QuotaAmount
             inline
+            nullLabel='0'
             quota={row.original.today.quota}
             rate={row.original.rate}
           />
