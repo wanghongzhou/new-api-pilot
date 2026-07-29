@@ -124,9 +124,14 @@ report it explicitly while still running every safe in-scope validation.
 - After a backend, Go dependency, Dockerfile, Compose or runtime configuration
   change, run:
   `docker compose -f docker-compose.dev.yml up -d --build api web`.
-- For frontend-only TS/TSX/CSS/i18n changes, do not rebuild the API. HMR should
-  apply the change; ensure the stack is running with:
-  `docker compose -f docker-compose.dev.yml up -d web`.
+- For frontend-only TS/TSX/CSS/i18n changes, do not rebuild the API. HMR may be
+  used while iterating, but before handoff always perform a clean Web process
+  restart with:
+  `docker compose -f docker-compose.dev.yml restart web`.
+- After changing locale JSON, i18next initialization or translation resource
+  registration, hard-refresh the affected browser route after the Web restart
+  and verify that no raw i18n keys are visible. Do not treat HMR alone as proof
+  that translation resources were reloaded.
 - Before handoff, require both `new-api-pilot-dev-api` and
   `new-api-pilot-dev-web` to be healthy. Verify `http://localhost:3000/healthz`
   and that `http://localhost:5173` returns successfully. For a user-visible

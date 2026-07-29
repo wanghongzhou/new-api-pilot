@@ -7,29 +7,35 @@ const pagePath = new URL(
 )
 
 describe('pricing and groups information architecture', () => {
-  test('separates lists and each analysis dimension into fixed-workspace tabs', async () => {
+  test('organizes the page around complete group configuration and model pricing', async () => {
     const source = await readFile(pagePath, 'utf8')
     expect(source).toContain('<FacetedFilter')
     expect(source).toContain('pricingGroups.filters.allSites')
     expect(source).not.toContain('<FilterPanel')
     expect(source).not.toContain(".split(',')")
-    expect(source).toContain('pricingGroups.purpose.pricing.description')
     expect(source).toContain('pricingGroups.purpose.groups.description')
-    expect(source).toContain("value: 'site-analysis'")
-    expect(source).toContain("value: 'vendor-analysis'")
-    expect(source).toContain("value: 'group-model-analysis'")
-    expect(source).toContain("value: 'group-availability-analysis'")
+    expect(source).toContain("value: 'groups'")
+    expect(source).toContain("value: 'pricing'")
+    expect(source).toContain('row.original.model_names')
+    expect(source).toContain('row.original.missing_model_names')
+    expect(source).toContain('row.original.outgoing_overrides')
+    expect(source).toContain('row.original.visible_to_groups')
+    expect(source).toContain('row.original.billing_expr')
+    expect(source).toContain('row.original.ability_available')
+    expect(source).toContain('pricingGroups.inspectPricing')
+    expect(source).not.toContain("value: 'overview'")
+    expect(source).not.toContain("value: 'vendors'")
+    expect(source).not.toContain('供应商定价')
     expect(source).toContain('fixedContent')
     expect(source).not.toContain('fillAvailableHeight={false}')
     expect(source).not.toContain('paginationInFooter={false}')
     expect(source).not.toContain('preserveHeaderWhenEmpty={false}')
-    expect(source).toContain(
-      "className='min-h-0 flex-1 overflow-y-auto' tabIndex={0}"
-    )
-    expect(source).toContain('isPricingAnalysisTab(search.tab)')
+    expect(source).not.toContain('isPricingAnalysisTab(search.tab)')
     expect(source).toContain('statisticsQuery.isError')
     expect(source).toContain('canonicalizedSearch.current')
-    expect(source).toContain("<div className='grid gap-3 sm:grid-cols-3'>")
+    expect(source).toContain(
+      "<div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>"
+    )
     expect(source).toContain('<dl>')
     expect(source).not.toContain("<dl className='grid gap-3 sm:grid-cols-3'>")
   })

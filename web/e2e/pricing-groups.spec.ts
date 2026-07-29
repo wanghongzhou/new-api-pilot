@@ -77,8 +77,11 @@ async function seedAuth(page: Page, testInfo: TestInfo) {
 }
 
 const pricingItem = {
+  ability_available: true,
   audio_completion_ratio: null,
   audio_ratio: null,
+  billing_expr: 'tokens <= 100 ? 1 : 2',
+  billing_mode: 'tiered_expr',
   cache_ratio: '0.5000000000',
   collected_at: 1_784_348_700,
   completion_ratio: '2.0000000000',
@@ -94,59 +97,62 @@ const pricingItem = {
   model_price: f10Pricing.input_price,
   model_ratio: '1.2500000000',
   owner_by: 'openai',
+  pricing_source: 'tiered_expr',
   pricing_version: 'pinned',
   quota_type: '1',
   remote_state: 'normal',
-  root_visible: true,
   site_id: '9007199254740997',
   site_name: '华东定价站点',
   supported_endpoint_types: ['chat_completions', 'responses'],
   tags: 'chat',
   vendor_id: '9007199254740995',
-  vendor_key: f10Pricing.vendor,
+  vendor_name: f10Pricing.vendor,
 }
 
 const groupItem = {
+  active_pricing_count: '1',
+  auto_priority: 1,
   collected_at: 1_784_348_700,
   data_status: 'complete',
+  default_use_auto_group: true,
   description: '尚无用量但已配置',
   id: '9007199254740811',
+  hidden_from_groups: ['blocked'],
+  incoming_overrides: { default: '0.8500000000' },
   missing_count: 0,
+  missing_model_names: [],
+  missing_pricing_count: '0',
+  model_names: [f10Pricing.model_name],
   name: f10ZeroUsageGroup.group_name,
+  outgoing_overrides: { default: '0.8500000000' },
   ratio: f10Pricing.group_ratios[f10ZeroUsageGroup.group_name],
   remote_state: 'normal',
-  root_visible: true,
   site_id: '9007199254740997',
   site_name: '华东定价站点',
+  topup_ratio: '1.0000000000',
+  user_selectable: true,
+  visible_to_groups: { default: 'VIP visible' },
 }
 
 const statistics = {
   data_status: 'partial',
-  group_total: '9007199254740993',
-  group_breakdown: [
-    { group_name: 'vip-zero-usage', model_count: '9007199254740994' },
-  ],
-  group_catalog_breakdown: [
-    { count: '9007199254740993', ratio_available: true, root_visible: true },
-  ],
-  missing: '1',
-  site_breakdown: [
+  group_active: '9007199254740993',
+  group_missing: '0',
+  pricing_active: '9007199254740994',
+  pricing_missing: '1',
+  site_count: '1',
+  sites: [
     {
-      as_of: 1_784_348_700,
-      data_status: 'partial',
-      missing: '1',
+      group_active: '9007199254740993',
+      group_as_of: 1_784_348_700,
+      group_data_status: 'complete',
+      group_missing: '0',
+      pricing_active: '9007199254740994',
+      pricing_as_of: 1_784_348_700,
+      pricing_data_status: 'partial',
+      pricing_missing: '1',
       site_id: '9007199254740997',
       site_name: '华东定价站点',
-      total: '9007199254740995',
-    },
-  ],
-  total: '9007199254740995',
-  vendor_breakdown: [
-    {
-      missing: '1',
-      total: '9007199254740995',
-      vendor_id: '9007199254740995',
-      vendor_key: 'openai',
     },
   ],
 }
@@ -165,7 +171,7 @@ test('A99 keeps pricing and configured groups exact, passive, private and respon
     items: [item],
     page: 1,
     page_size: 20,
-    site_breakdown: statistics.site_breakdown,
+    site_breakdown: [],
     total: 1,
   })
   const fulfill = async (route: Route, data: unknown) => {
@@ -225,11 +231,12 @@ test('A99 keeps pricing and configured groups exact, passive, private and respon
   })
 
   await page.goto(
-    '/pricing-groups?siteIds=9007199254740997&keyword=gpt&group=vip&states=normal'
+    '/pricing-groups?tab=pricing&siteIds=9007199254740997&keyword=gpt&group=vip&states=normal'
   )
   await expect(
     page.getByRole('heading', { exact: true, name: '定价与分组' })
   ).toBeVisible()
+  expect(await page.locator('body').innerText()).not.toContain('pricingGroups.')
   await expect(
     page.getByText('1.2500000000').filter({ visible: true }).first()
   ).toBeVisible()
@@ -243,7 +250,10 @@ test('A99 keeps pricing and configured groups exact, passive, private and respon
     page.getByText('responses').filter({ visible: true }).first()
   ).toBeVisible()
   await expect(
-    page.getByText('root 可见').filter({ visible: true }).first()
+    page.getByText('有可用渠道能力').filter({ visible: true }).first()
+  ).toBeVisible()
+  await expect(
+    page.getByText('tokens <= 100 ? 1 : 2').filter({ visible: true }).first()
   ).toBeVisible()
   expect(
     reads
@@ -262,28 +272,20 @@ test('A99 keeps pricing and configured groups exact, passive, private and respon
   ])
   expect(pricingRead?.searchParams.get('group')).toBe('vip')
   expect(pricingStatisticsRead?.search).toBe('?p=1&page_size=20')
-  await page.getByRole('tab', { name: '供应商定价' }).click()
-  await expect(
-    page.getByRole('heading', { name: '供应商定价情况' })
-  ).toBeVisible()
-  await page.getByRole('tab', { name: '分组模型' }).click()
-  await expect(
-    page.getByRole('heading', { name: '分组模型情况' })
-  ).toBeVisible()
-  await page.getByRole('tab', { name: '分组完整性' }).click()
-  await expect(
-    page.getByRole('heading', { name: '分组可见性与 Ratio 完整性' })
-  ).toBeVisible()
-  await expect(
-    page.getByText('Ratio 可用').filter({ visible: true }).first()
-  ).toBeVisible()
-  await page.getByRole('tab', { name: '已配置分组' }).click()
-  await expect(page).toHaveURL(/tab=groups/)
+  await page.getByRole('tab', { name: '分组配置' }).click()
+  await expect(page.getByRole('tab', { name: '分组配置' })).toHaveAttribute(
+    'aria-selected',
+    'true'
+  )
+  expect(new URL(page.url()).searchParams.has('tab')).toBe(false)
   await expect(
     page.getByText('vip-zero-usage').filter({ visible: true }).first()
   ).toBeVisible()
   await expect(
     page.getByText('0.8500000000').filter({ visible: true }).first()
+  ).toBeVisible()
+  await expect(
+    page.getByText('VIP visible').filter({ visible: true }).first()
   ).toBeVisible()
   await page.getByRole('button', { name: '导出 CSV' }).click()
   await expect.poll(() => exportBodies.length).toBe(1)

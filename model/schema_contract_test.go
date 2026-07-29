@@ -62,14 +62,14 @@ func TestPricingGroupCatalogSchemaContract(t *testing.T) {
 	if !reflect.DeepEqual(group.Indexes["uk_site_group_catalog_name"].Columns, []string{"site_id", "group_name"}) {
 		t.Fatalf("group identity index=%#v", group.Indexes["uk_site_group_catalog_name"])
 	}
-	if !reflect.DeepEqual(pricing.Indexes["uk_site_pricing_catalog_identity"].Columns, []string{"site_id", "model_name", "vendor_key"}) {
+	if !reflect.DeepEqual(pricing.Indexes["uk_site_pricing_catalog_identity"].Columns, []string{"site_id", "model_name"}) {
 		t.Fatalf("pricing identity index=%#v", pricing.Indexes["uk_site_pricing_catalog_identity"])
 	}
 	if !reflect.DeepEqual(state.Indexes["PRIMARY"].Columns, []string{"site_id", "resource_kind"}) {
 		t.Fatalf("state identity index=%#v", state.Indexes["PRIMARY"])
 	}
 	for table, columns := range map[string][]string{
-		"site_group_catalog":   {"ratio_decimal"},
+		"site_group_catalog":   {"ratio_decimal", "topup_ratio_decimal"},
 		"site_pricing_catalog": {"model_ratio", "model_price", "completion_ratio", "cache_ratio", "create_cache_ratio", "image_ratio", "audio_ratio", "audio_completion_ratio"},
 	} {
 		byName := make(map[string]ColumnContract)
@@ -79,6 +79,20 @@ func TestPricingGroupCatalogSchemaContract(t *testing.T) {
 		for _, name := range columns {
 			if byName[name].ColumnType != "decimal(38,18)" {
 				t.Fatalf("%s.%s=%#v", table, name, byName[name])
+			}
+		}
+	}
+	for table, columns := range map[string][]string{
+		"site_group_catalog":   {"user_selectable", "default_use_auto_group", "auto_priority", "outgoing_overrides_json", "incoming_overrides_json", "visible_to_groups_json", "hidden_from_groups_json"},
+		"site_pricing_catalog": {"billing_mode", "billing_expr", "pricing_source", "ability_available"},
+	} {
+		byName := make(map[string]ColumnContract)
+		for _, column := range contracts[table].Columns {
+			byName[column.Name] = column
+		}
+		for _, name := range columns {
+			if _, exists := byName[name]; !exists {
+				t.Fatalf("%s.%s is missing", table, name)
 			}
 		}
 	}

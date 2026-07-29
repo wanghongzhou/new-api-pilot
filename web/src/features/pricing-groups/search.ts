@@ -1,6 +1,10 @@
 import { isIdString, parseIdString } from '@/lib/api-types'
 
-import type { PricingCatalogState, PricingCatalogTab } from './types'
+import type {
+  PricingBillingMode,
+  PricingCatalogState,
+  PricingCatalogTab,
+} from './types'
 
 export interface PricingGroupSearch {
   tab: PricingCatalogTab
@@ -10,6 +14,7 @@ export interface PricingGroupSearch {
   states: PricingCatalogState[]
   keyword: string
   group: string
+  billingMode?: PricingBillingMode
   exportId?: ReturnType<typeof parseIdString>
 }
 
@@ -28,15 +33,14 @@ function safeText(value: unknown, maxBytes: number) {
 }
 
 export function buildPricingGroupSearch(raw: SearchInput): PricingGroupSearch {
-  const validTabs: PricingCatalogTab[] = [
-    'pricing',
-    'groups',
-    'site-analysis',
-    'vendor-analysis',
-    'group-model-analysis',
-    'group-availability-analysis',
-  ]
+  const validTabs: PricingCatalogTab[] = ['groups', 'pricing']
   return {
+    billingMode:
+      raw.billingMode === 'token' ||
+      raw.billingMode === 'fixed' ||
+      raw.billingMode === 'tiered_expr'
+        ? raw.billingMode
+        : undefined,
     exportId:
       typeof raw.exportId === 'string' && isIdString(raw.exportId)
         ? parseIdString(raw.exportId)
@@ -65,54 +69,28 @@ export function buildPricingGroupSearch(raw: SearchInput): PricingGroupSearch {
       typeof raw.tab === 'string' &&
       validTabs.includes(raw.tab as PricingCatalogTab)
         ? (raw.tab as PricingCatalogTab)
-        : 'pricing',
+        : 'groups',
   }
-}
-
-export function isPricingAnalysisTab(tab: PricingCatalogTab) {
-  return tab !== 'pricing' && tab !== 'groups'
 }
 
 export function changePricingGroupTab(
   tab: PricingCatalogTab
 ): Partial<PricingGroupSearch> {
-  if (isPricingAnalysisTab(tab)) {
-    return {
-      exportId: undefined,
-      group: '',
-      keyword: '',
-      page: 1,
-      pageSize: 20,
-      siteIds: [],
-      states: [],
-      tab,
-    }
-  }
-  return tab === 'groups' ? { group: '', page: 1, tab } : { page: 1, tab }
-}
-
-export function hasPricingAnalysisFilters(search: PricingGroupSearch) {
-  return (
-    search.group !== '' ||
-    search.keyword !== '' ||
-    search.page !== 1 ||
-    search.pageSize !== 20 ||
-    search.siteIds.length > 0 ||
-    search.states.length > 0
-  )
+  return tab === 'groups'
+    ? { billingMode: undefined, group: '', page: 1, tab }
+    : { page: 1, tab }
 }
 
 export function serializePricingGroupSearch(search: PricingGroupSearch) {
-  const analysis = isPricingAnalysisTab(search.tab)
   return {
+    billingMode: search.tab === 'pricing' ? search.billingMode : undefined,
     exportId: search.exportId,
-    group: !analysis && search.group ? search.group : undefined,
-    keyword: !analysis && search.keyword ? search.keyword : undefined,
-    page: !analysis && search.page !== 1 ? search.page : undefined,
-    pageSize: !analysis && search.pageSize !== 20 ? search.pageSize : undefined,
-    siteIds:
-      !analysis && search.siteIds.length > 0 ? search.siteIds : undefined,
-    states: !analysis && search.states.length > 0 ? search.states : undefined,
-    tab: search.tab === 'pricing' ? undefined : search.tab,
+    group: search.group || undefined,
+    keyword: search.keyword || undefined,
+    page: search.page !== 1 ? search.page : undefined,
+    pageSize: search.pageSize !== 20 ? search.pageSize : undefined,
+    siteIds: search.siteIds.length > 0 ? search.siteIds : undefined,
+    states: search.states.length > 0 ? search.states : undefined,
+    tab: search.tab === 'groups' ? undefined : search.tab,
   }
 }

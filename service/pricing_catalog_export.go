@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"strconv"
@@ -50,9 +51,9 @@ func GeneratePricingCatalogExport(ctx context.Context, o PricingCatalogExportOpt
 		return ExportGenerateResult{}, err
 	}
 	if o.Kind == "pricing" {
-		err = w.WriteHeader([]string{"site_id", "site_name", "model_name", "vendor_key", "vendor_id", "quota_type", "model_ratio", "model_price", "completion_ratio", "cache_ratio", "create_cache_ratio", "image_ratio", "audio_ratio", "audio_completion_ratio", "owner_by", "enable_groups", "supported_endpoint_types", "pricing_version", "root_visible", "remote_state", "missing_count", "collected_at", "data_snapshot_at", "exported_at"})
+		err = w.WriteHeader([]string{"site_id", "site_name", "model_name", "vendor_name", "vendor_id", "quota_type", "billing_mode", "billing_expr", "pricing_source", "ability_available", "model_ratio", "model_price", "completion_ratio", "cache_ratio", "create_cache_ratio", "image_ratio", "audio_ratio", "audio_completion_ratio", "owner_by", "enable_groups", "supported_endpoint_types", "pricing_version", "remote_state", "missing_count", "collected_at", "data_snapshot_at", "exported_at"})
 	} else {
-		err = w.WriteHeader([]string{"site_id", "site_name", "name", "ratio", "description", "root_visible", "remote_state", "missing_count", "collected_at", "data_snapshot_at", "exported_at"})
+		err = w.WriteHeader([]string{"site_id", "site_name", "name", "ratio", "topup_ratio", "description", "user_selectable", "default_use_auto_group", "auto_priority", "outgoing_overrides", "incoming_overrides", "visible_to_groups", "hidden_from_groups", "remote_state", "missing_count", "active_pricing_count", "missing_pricing_count", "model_names", "missing_model_names", "collected_at", "data_snapshot_at", "exported_at"})
 	}
 	if err != nil {
 		return ExportGenerateResult{}, err
@@ -81,7 +82,7 @@ func GeneratePricingCatalogExport(ctx context.Context, o PricingCatalogExportOpt
 					}
 					return pricingOutputDecimal(raw)
 				}
-				values := []string{strconv.FormatInt(r.SiteID, 10), r.SiteName, r.ModelName, r.VendorKey, strconv.FormatInt(r.VendorID, 10), strconv.FormatInt(r.QuotaType, 10), pricingOutputDecimal(r.ModelRatio), pricingOutputDecimal(r.ModelPrice), pricingOutputDecimal(r.CompletionRatio), decimalPtr(r.CacheRatio), decimalPtr(r.CreateCacheRatio), decimalPtr(r.ImageRatio), decimalPtr(r.AudioRatio), decimalPtr(r.AudioCompletionRatio), r.OwnerBy, strings.Join(pricingStrings(r.EnableGroupsJSON), "|"), strings.Join(pricingStrings(r.SupportedEndpointTypesJSON), "|"), r.PricingVersion, strconv.FormatBool(r.RootVisible), r.RemoteState, strconv.Itoa(r.MissingCount), strconv.FormatInt(r.CollectedAt, 10), strconv.FormatInt(o.DataSnapshotAt, 10), strconv.FormatInt(o.ExportedAt, 10)}
+				values := []string{strconv.FormatInt(r.SiteID, 10), r.SiteName, r.ModelName, r.VendorKey, strconv.FormatInt(r.VendorID, 10), strconv.FormatInt(r.QuotaType, 10), r.BillingMode, r.BillingExpr, r.PricingSource, strconv.FormatBool(r.AbilityAvailable), pricingOutputDecimal(r.ModelRatio), pricingOutputDecimal(r.ModelPrice), pricingOutputDecimal(r.CompletionRatio), decimalPtr(r.CacheRatio), decimalPtr(r.CreateCacheRatio), decimalPtr(r.ImageRatio), decimalPtr(r.AudioRatio), decimalPtr(r.AudioCompletionRatio), r.OwnerBy, strings.Join(pricingStrings(r.EnableGroupsJSON), "|"), strings.Join(pricingStrings(r.SupportedEndpointTypesJSON), "|"), r.PricingVersion, r.RemoteState, strconv.Itoa(r.MissingCount), strconv.FormatInt(r.CollectedAt, 10), strconv.FormatInt(o.DataSnapshotAt, 10), strconv.FormatInt(o.ExportedAt, 10)}
 				if e = w.WriteRow(values); e != nil {
 					return ExportGenerateResult{}, e
 				}
@@ -98,12 +99,46 @@ func GeneratePricingCatalogExport(ctx context.Context, o PricingCatalogExportOpt
 			if e != nil {
 				return ExportGenerateResult{}, e
 			}
+			associationRows, e := repo.GroupAssociations(ctx, rows)
+			if e != nil {
+				return ExportGenerateResult{}, e
+			}
+			associations := map[string]pricingGroupAssociation{}
+			for _, associationRow := range associationRows {
+				key := strconv.FormatInt(associationRow.SiteID, 10) + "\x00" + associationRow.GroupName
+				association := associations[key]
+				if association.models == nil {
+					association.models = map[string]struct{}{}
+					association.missingModels = map[string]struct{}{}
+				}
+				if associationRow.RemoteState == "missing" {
+					association.missing++
+					association.missingModels[associationRow.ModelName] = struct{}{}
+				} else {
+					association.active++
+					association.models[associationRow.ModelName] = struct{}{}
+				}
+				associations[key] = association
+			}
 			for _, r := range rows {
 				ratio := ""
 				if r.RatioDecimal != nil {
 					ratio = pricingOutputDecimal(*r.RatioDecimal)
 				}
-				values := []string{strconv.FormatInt(r.SiteID, 10), r.SiteName, r.GroupName, ratio, r.Description, strconv.FormatBool(r.RootVisible), r.RemoteState, strconv.Itoa(r.MissingCount), strconv.FormatInt(r.CollectedAt, 10), strconv.FormatInt(o.DataSnapshotAt, 10), strconv.FormatInt(o.ExportedAt, 10)}
+				topupRatio := ""
+				if r.TopupRatioDecimal != nil {
+					topupRatio = pricingOutputDecimal(*r.TopupRatioDecimal)
+				}
+				autoPriority := ""
+				if r.AutoPriority != nil {
+					autoPriority = strconv.Itoa(*r.AutoPriority)
+				}
+				jsonMap := func(raw string) string {
+					value, _ := json.Marshal(pricingStringMap(raw))
+					return string(value)
+				}
+				association := associations[strconv.FormatInt(r.SiteID, 10)+"\x00"+r.GroupName]
+				values := []string{strconv.FormatInt(r.SiteID, 10), r.SiteName, r.GroupName, ratio, topupRatio, r.Description, strconv.FormatBool(r.UserSelectable), strconv.FormatBool(r.DefaultUseAutoGroup), autoPriority, jsonMap(r.OutgoingOverridesJSON), jsonMap(r.IncomingOverridesJSON), jsonMap(r.VisibleToGroupsJSON), strings.Join(pricingStrings(r.HiddenFromGroupsJSON), "|"), r.RemoteState, strconv.Itoa(r.MissingCount), strconv.FormatInt(association.active, 10), strconv.FormatInt(association.missing, 10), strings.Join(sortedPricingKeys(association.models), "|"), strings.Join(sortedPricingKeys(association.missingModels), "|"), strconv.FormatInt(r.CollectedAt, 10), strconv.FormatInt(o.DataSnapshotAt, 10), strconv.FormatInt(o.ExportedAt, 10)}
 				if e = w.WriteRow(values); e != nil {
 					return ExportGenerateResult{}, e
 				}

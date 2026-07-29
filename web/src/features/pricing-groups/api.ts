@@ -21,6 +21,7 @@ function params(values: PricingCatalogQueryParams, forcedSite = false) {
   for (const state of values.states ?? []) result.append('states', state)
   if (values.keyword) result.set('keyword', values.keyword)
   if (values.group) result.set('group', values.group)
+  if (values.billing_mode) result.set('billing_mode', values.billing_mode)
   return result
 }
 
@@ -32,7 +33,12 @@ function requestCatalog<T>(
 ) {
   return requestApiData<T>({
     method: 'get',
-    params: params(values, siteId != null),
+    params: params(
+      resource === 'pricing-catalog'
+        ? values
+        : { ...values, billing_mode: undefined },
+      siteId != null
+    ),
     url: `${siteId ? `/api/sites/${siteId}` : '/api'}/${resource}${statistics ? '/statistics' : ''}`,
   })
 }
@@ -59,7 +65,7 @@ export const getPricingCatalogStatistics = (
 ) =>
   requestCatalog<PricingCatalogStatistics>(
     'pricing-catalog',
-    values,
+    { p: values.p, page_size: values.page_size, site_ids: values.site_ids },
     undefined,
     true
   )
@@ -69,7 +75,7 @@ export const getSitePricingCatalogStatistics = (
 ) =>
   requestCatalog<PricingCatalogStatistics>(
     'pricing-catalog',
-    values,
+    { p: values.p, page_size: values.page_size },
     siteId,
     true
   )

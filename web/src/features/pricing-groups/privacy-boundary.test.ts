@@ -13,7 +13,6 @@ describe('pricing/group privacy and passive rendering boundary', () => {
       .join('\n')
       .toLowerCase()
     for (const field of [
-      ['billing', 'expr'].join('_'),
       ['custom', 'path'].join('_'),
       ['channel', 'key'].join('_'),
       ['authorization'].join('_'),
@@ -24,6 +23,9 @@ describe('pricing/group privacy and passive rendering boundary', () => {
     ]) {
       expect(source).not.toContain(field)
     }
+    expect(source).toContain(['billing', 'expr'].join('_'))
+    expect(source).toContain('<pre')
+    expect(source).not.toMatch(/dangerouslysetinnerhtml|\beval\(|new function/)
     expect(source).not.toMatch(/<img|src=|href=.*endpoint|window\.open/)
   })
 })

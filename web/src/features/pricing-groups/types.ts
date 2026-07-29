@@ -6,14 +6,9 @@ import type {
   Timestamp,
 } from '@/lib/api-types'
 
-export type PricingCatalogTab =
-  | 'pricing'
-  | 'groups'
-  | 'site-analysis'
-  | 'vendor-analysis'
-  | 'group-model-analysis'
-  | 'group-availability-analysis'
+export type PricingCatalogTab = 'groups' | 'pricing'
 export type PricingCatalogState = 'normal' | 'missing'
+export type PricingBillingMode = 'token' | 'fixed' | 'tiered_expr'
 
 export interface PricingCatalogItem {
   id: IdString
@@ -22,7 +17,7 @@ export interface PricingCatalogItem {
   quota_type: MetricString
   site_name: string
   model_name: string
-  vendor_key: string
+  vendor_name: string
   description: string
   icon: string
   tags: string
@@ -35,10 +30,13 @@ export interface PricingCatalogItem {
   image_ratio: DecimalString | null
   audio_ratio: DecimalString | null
   audio_completion_ratio: DecimalString | null
+  billing_mode: string
+  billing_expr: string
+  pricing_source: 'token_default' | 'token_explicit' | 'fixed' | 'tiered_expr'
+  ability_available: boolean
   enable_groups: string[]
   supported_endpoint_types: string[]
   pricing_version: string
-  root_visible: boolean
   remote_state: PricingCatalogState
   missing_count: number
   collected_at: Timestamp
@@ -51,10 +49,21 @@ export interface PricingGroupItem {
   site_name: string
   name: string
   ratio: DecimalString | null
+  topup_ratio: DecimalString | null
   description: string
-  root_visible: boolean
+  user_selectable: boolean
+  default_use_auto_group: boolean
+  auto_priority: number | null
+  outgoing_overrides: Record<string, DecimalString>
+  incoming_overrides: Record<string, DecimalString>
+  visible_to_groups: Record<string, string>
+  hidden_from_groups: string[]
   remote_state: PricingCatalogState
   missing_count: number
+  active_pricing_count: MetricString
+  missing_pricing_count: MetricString
+  model_names: string[]
+  missing_model_names: string[]
   collected_at: Timestamp
   data_status: DataStatus
 }
@@ -82,32 +91,26 @@ export interface PricingCatalogSiteBreakdown {
 }
 
 export interface PricingCatalogStatistics {
-  total: MetricString
-  missing: MetricString
-  group_total: MetricString
+  site_count: MetricString
+  pricing_active: MetricString
+  pricing_missing: MetricString
+  group_active: MetricString
+  group_missing: MetricString
   data_status: DataStatus
-  site_breakdown: PricingCatalogSiteBreakdown[]
-  vendor_breakdown: PricingVendorBreakdown[]
-  group_breakdown: PricingModelGroupBreakdown[]
-  group_catalog_breakdown: GroupCatalogAvailabilityBreakdown[]
+  sites: PricingCatalogSiteOverview[]
 }
 
-export interface PricingVendorBreakdown {
-  vendor_key: string
-  vendor_id: IdString
-  total: MetricString
-  missing: MetricString
-}
-
-export interface PricingModelGroupBreakdown {
-  group_name: string
-  model_count: MetricString
-}
-
-export interface GroupCatalogAvailabilityBreakdown {
-  root_visible: boolean
-  ratio_available: boolean
-  count: MetricString
+export interface PricingCatalogSiteOverview {
+  site_id: IdString
+  site_name: string
+  pricing_active: MetricString
+  pricing_missing: MetricString
+  group_active: MetricString
+  group_missing: MetricString
+  pricing_data_status: DataStatus
+  group_data_status: DataStatus
+  pricing_as_of: Timestamp | null
+  group_as_of: Timestamp | null
 }
 
 export interface PricingCatalogQueryParams {
@@ -117,4 +120,5 @@ export interface PricingCatalogQueryParams {
   states?: PricingCatalogState[]
   keyword?: string
   group?: string
+  billing_mode?: PricingBillingMode
 }

@@ -16,10 +16,12 @@ import (
 type fakePricingCatalogApplication struct {
 	err    error
 	called bool
+	query  dto.PricingCatalogQuery
 }
 
-func (application *fakePricingCatalogApplication) List(context.Context, dto.PricingCatalogQuery) (dto.PricingCatalogPageResponse, error) {
+func (application *fakePricingCatalogApplication) List(_ context.Context, query dto.PricingCatalogQuery) (dto.PricingCatalogPageResponse, error) {
 	application.called = true
+	application.query = query
 	return dto.PricingCatalogPageResponse{}, application.err
 }
 func (application *fakePricingCatalogApplication) ListGroups(context.Context, dto.PricingCatalogQuery) (dto.PricingGroupPageResponse, error) {
@@ -54,5 +56,27 @@ func TestPricingCatalogServiceFailureIsInternalError(t *testing.T) {
 	engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/pricing", nil))
 	if response.Code != http.StatusInternalServerError {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestPricingCatalogParsesBillingModeAndRejectsVendorDrilldown(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	application := &fakePricingCatalogApplication{}
+	engine := gin.New()
+	controller := NewPricingCatalogController(application)
+	engine.GET("/pricing", controller.Global)
+	engine.GET("/statistics", controller.GlobalStatistics)
+
+	response := httptest.NewRecorder()
+	engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/pricing?billing_mode=tiered_expr", nil))
+	if response.Code != http.StatusOK || application.query.BillingMode != "tiered_expr" {
+		t.Fatalf("status=%d query=%#v body=%s", response.Code, application.query, response.Body.String())
+	}
+
+	application.called = false
+	response = httptest.NewRecorder()
+	engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/pricing?vendor_id=9", nil))
+	if response.Code != http.StatusBadRequest || application.called {
+		t.Fatalf("status=%d called=%v body=%s", response.Code, application.called, response.Body.String())
 	}
 }

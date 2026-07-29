@@ -234,8 +234,31 @@ type upstreamPricingItemWire struct {
 	ImageRatio             *json.Number `json:"image_ratio"`
 	AudioRatio             *json.Number `json:"audio_ratio"`
 	AudioCompletionRatio   *json.Number `json:"audio_completion_ratio"`
+	BillingMode            *string      `json:"billing_mode"`
+	BillingExpr            *string      `json:"billing_expr"`
 	EnableGroups           *[]string    `json:"enable_groups"`
 	SupportedEndpointTypes *[]string    `json:"supported_endpoint_types"`
+}
+
+type upstreamOptionWire struct {
+	Key   *string `json:"key"`
+	Value any     `json:"value"`
+}
+
+type upstreamOptionsResponseWire struct {
+	Success *bool                 `json:"success"`
+	Message *string               `json:"message"`
+	Data    *[]upstreamOptionWire `json:"data"`
+}
+
+func (wire *upstreamOptionsResponseWire) decodeUpstreamResponse(payload []byte) error {
+	if err := validateStrictJSON(payload); err != nil {
+		return invalidUpstreamResponse()
+	}
+	if err := json.Unmarshal(payload, wire); err != nil || wire.Success == nil || !*wire.Success || wire.Data == nil || len(*wire.Data) > 10000 {
+		return invalidUpstreamResponse()
+	}
+	return nil
 }
 
 func (wire *upstreamPricingItemWire) UnmarshalJSON(data []byte) error {
@@ -401,7 +424,7 @@ func validatePricing(wire upstreamPricingResponseWire) (dto.UpstreamPricingOnlyS
 			}
 			ratio = canonical
 		}
-		result.Groups = append(result.Groups, dto.UpstreamPricingGroup{Name: group, Ratio: ratio, Description: description, RootVisible: visible})
+		result.Groups = append(result.Groups, dto.UpstreamPricingGroup{Name: group, Ratio: ratio, Description: description, UserSelectable: visible})
 	}
 	seenModels := make(map[string]struct{}, len(*wire.Data))
 	for _, item := range *wire.Data {
@@ -455,26 +478,240 @@ func validatePricing(wire upstreamPricingResponseWire) (dto.UpstreamPricingOnlyS
 				vendorKey = "id:" + strconv.FormatInt(vendorID, 10)
 			}
 		}
-		identity := *item.ModelName + "\x00" + vendorKey
+		billingMode, billingExpr := "", ""
+		if item.BillingMode != nil {
+			billingMode = strings.TrimSpace(*item.BillingMode)
+		}
+		if item.BillingExpr != nil {
+			billingExpr = strings.TrimSpace(*item.BillingExpr)
+		}
+		if (billingMode != "" && billingMode != "tiered_expr") || !validUpstreamString(billingExpr, 0, 65535) {
+			return dto.UpstreamPricingOnlySnapshot{}, invalidUpstreamResponse()
+		}
+		identity := *item.ModelName
 		if _, duplicate := seenModels[identity]; duplicate {
 			return dto.UpstreamPricingOnlySnapshot{}, invalidUpstreamResponse()
 		}
 		seenModels[identity] = struct{}{}
 		result.Items = append(result.Items, dto.UpstreamPricingItem{
-			ModelName: *item.ModelName, VendorKey: vendorKey, Description: description, Icon: icon, Tags: tags, OwnerBy: *item.OwnerBy,
+			ModelName: *item.ModelName, VendorName: vendorKey, Description: description, Icon: icon, Tags: tags, OwnerBy: *item.OwnerBy,
 			ModelRatio: *modelRatio, ModelPrice: *modelPrice, CompletionRatio: *completionRatio,
 			CacheRatio: cacheRatio, CreateCacheRatio: createCacheRatio, ImageRatio: imageRatio,
 			AudioRatio: audioRatio, AudioCompletionRatio: audioCompletionRatio, VendorID: vendorID,
-			QuotaType: *item.QuotaType, RootVisible: true, EnableGroups: enableGroups, SupportedEndpointTypes: endpointTypes,
+			QuotaType: *item.QuotaType, BillingMode: billingMode, BillingExpr: billingExpr, AbilityAvailable: true,
+			EnableGroups: enableGroups, SupportedEndpointTypes: endpointTypes,
 		})
 	}
-	sort.Slice(result.Items, func(i, j int) bool {
-		if result.Items[i].ModelName != result.Items[j].ModelName {
-			return result.Items[i].ModelName < result.Items[j].ModelName
-		}
-		return result.Items[i].VendorKey < result.Items[j].VendorKey
-	})
+	sort.Slice(result.Items, func(i, j int) bool { return result.Items[i].ModelName < result.Items[j].ModelName })
 	return result, nil
+}
+
+var pricingOptionAllowlist = map[string]struct{}{
+	"ModelPrice": {}, "ModelRatio": {}, "CompletionRatio": {}, "CacheRatio": {}, "CreateCacheRatio": {},
+	"ImageRatio": {}, "AudioRatio": {}, "AudioCompletionRatio": {}, "billing_setting.billing_mode": {},
+	"billing_setting.billing_expr": {}, "GroupRatio": {}, "TopupGroupRatio": {}, "UserUsableGroups": {},
+	"GroupGroupRatio": {}, "AutoGroups": {}, "DefaultUseAutoGroup": {},
+	"group_ratio_setting.group_special_usable_group": {},
+}
+
+func pricingOptionString(value any) (string, bool) {
+	switch typed := value.(type) {
+	case string:
+		return typed, true
+	case bool:
+		return strconv.FormatBool(typed), true
+	default:
+		return "", false
+	}
+}
+
+func parsePricingDecimalMap(raw string, limit int) (map[string]string, bool) {
+	if validateStrictJSON([]byte(raw)) != nil {
+		return nil, false
+	}
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.UseNumber()
+	values := map[string]json.Number{}
+	if decoder.Decode(&values) != nil || len(values) > limit {
+		return nil, false
+	}
+	result := make(map[string]string, len(values))
+	for key, number := range values {
+		if !validUpstreamString(key, 1, 255) {
+			return nil, false
+		}
+		canonical, ok := canonicalPricingDecimal(&number)
+		if !ok || canonical == nil {
+			return nil, false
+		}
+		result[key] = *canonical
+	}
+	return result, true
+}
+
+func parsePricingStringMap(raw string, limit, valueLimit int) (map[string]string, bool) {
+	if validateStrictJSON([]byte(raw)) != nil {
+		return nil, false
+	}
+	values := map[string]string{}
+	if json.Unmarshal([]byte(raw), &values) != nil || len(values) > limit {
+		return nil, false
+	}
+	for key, value := range values {
+		if !validUpstreamString(key, 1, 255) || !validUpstreamString(value, 0, valueLimit) {
+			return nil, false
+		}
+	}
+	return values, true
+}
+
+func parsePricingNestedDecimalMap(raw string) (map[string]map[string]string, bool) {
+	if validateStrictJSON([]byte(raw)) != nil {
+		return nil, false
+	}
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.UseNumber()
+	values := map[string]map[string]json.Number{}
+	if decoder.Decode(&values) != nil || len(values) > 10000 {
+		return nil, false
+	}
+	result := make(map[string]map[string]string, len(values))
+	for source, targets := range values {
+		if !validUpstreamString(source, 1, 128) || len(targets) > 10000 {
+			return nil, false
+		}
+		result[source] = make(map[string]string, len(targets))
+		for target, number := range targets {
+			if !validUpstreamString(target, 1, 128) {
+				return nil, false
+			}
+			canonical, ok := canonicalPricingDecimal(&number)
+			if !ok || canonical == nil {
+				return nil, false
+			}
+			result[source][target] = *canonical
+		}
+	}
+	return result, true
+}
+
+func parsePricingNestedStringMap(raw string) (map[string]map[string]string, bool) {
+	if validateStrictJSON([]byte(raw)) != nil {
+		return nil, false
+	}
+	values := map[string]map[string]string{}
+	if json.Unmarshal([]byte(raw), &values) != nil || len(values) > 10000 {
+		return nil, false
+	}
+	for source, targets := range values {
+		if !validUpstreamString(source, 1, 128) || len(targets) > 10000 {
+			return nil, false
+		}
+		for target, description := range targets {
+			trimmed := strings.TrimPrefix(strings.TrimPrefix(target, "+:"), "-:")
+			if !validUpstreamString(trimmed, 1, 128) || !validUpstreamString(description, 0, 255) {
+				return nil, false
+			}
+		}
+	}
+	return values, true
+}
+
+func validatePricingConfiguration(options []upstreamOptionWire) (dto.UpstreamPricingConfiguration, error) {
+	values := map[string]string{}
+	for _, option := range options {
+		if option.Key == nil {
+			return dto.UpstreamPricingConfiguration{}, invalidUpstreamResponse()
+		}
+		if _, allowed := pricingOptionAllowlist[*option.Key]; !allowed {
+			continue
+		}
+		value, ok := pricingOptionString(option.Value)
+		if !ok || len(value) > 4<<20 {
+			return dto.UpstreamPricingConfiguration{}, invalidUpstreamResponse()
+		}
+		if _, duplicate := values[*option.Key]; duplicate {
+			return dto.UpstreamPricingConfiguration{}, invalidUpstreamResponse()
+		}
+		values[*option.Key] = value
+	}
+	decimalKeys := []string{"ModelPrice", "ModelRatio", "CompletionRatio", "CacheRatio", "CreateCacheRatio", "ImageRatio", "AudioRatio", "AudioCompletionRatio", "GroupRatio", "TopupGroupRatio"}
+	decimalMaps := map[string]map[string]string{}
+	for _, key := range decimalKeys {
+		raw := values[key]
+		if raw == "" {
+			raw = "{}"
+		}
+		parsed, ok := parsePricingDecimalMap(raw, 100000)
+		if !ok {
+			return dto.UpstreamPricingConfiguration{}, invalidUpstreamResponse()
+		}
+		decimalMaps[key] = parsed
+	}
+	billingMode, ok := parsePricingStringMap(defaultPricingJSON(values["billing_setting.billing_mode"], "{}"), 100000, 32)
+	if !ok {
+		return dto.UpstreamPricingConfiguration{}, invalidUpstreamResponse()
+	}
+	for _, mode := range billingMode {
+		if mode != "tiered_expr" {
+			return dto.UpstreamPricingConfiguration{}, invalidUpstreamResponse()
+		}
+	}
+	billingExpr, ok := parsePricingStringMap(defaultPricingJSON(values["billing_setting.billing_expr"], "{}"), 100000, 65535)
+	if !ok {
+		return dto.UpstreamPricingConfiguration{}, invalidUpstreamResponse()
+	}
+	usable, ok := parsePricingStringMap(defaultPricingJSON(values["UserUsableGroups"], "{}"), 10000, 255)
+	if !ok {
+		return dto.UpstreamPricingConfiguration{}, invalidUpstreamResponse()
+	}
+	overrides, ok := parsePricingNestedDecimalMap(defaultPricingJSON(values["GroupGroupRatio"], "{}"))
+	if !ok {
+		return dto.UpstreamPricingConfiguration{}, invalidUpstreamResponse()
+	}
+	special, ok := parsePricingNestedStringMap(defaultPricingJSON(values["group_ratio_setting.group_special_usable_group"], "{}"))
+	if !ok {
+		return dto.UpstreamPricingConfiguration{}, invalidUpstreamResponse()
+	}
+	var autoGroups []string
+	if json.Unmarshal([]byte(defaultPricingJSON(values["AutoGroups"], "[]")), &autoGroups) != nil {
+		return dto.UpstreamPricingConfiguration{}, invalidUpstreamResponse()
+	}
+	seenAutoGroups := map[string]struct{}{}
+	for _, group := range autoGroups {
+		if !validUpstreamString(group, 1, 128) {
+			return dto.UpstreamPricingConfiguration{}, invalidUpstreamResponse()
+		}
+		if _, duplicate := seenAutoGroups[group]; duplicate {
+			return dto.UpstreamPricingConfiguration{}, invalidUpstreamResponse()
+		}
+		seenAutoGroups[group] = struct{}{}
+	}
+	if len(autoGroups) > 10000 {
+		return dto.UpstreamPricingConfiguration{}, invalidUpstreamResponse()
+	}
+	defaultAuto := false
+	if raw := values["DefaultUseAutoGroup"]; raw != "" {
+		parsed, err := strconv.ParseBool(raw)
+		if err != nil {
+			return dto.UpstreamPricingConfiguration{}, invalidUpstreamResponse()
+		}
+		defaultAuto = parsed
+	}
+	return dto.UpstreamPricingConfiguration{
+		ModelPrice: decimalMaps["ModelPrice"], ModelRatio: decimalMaps["ModelRatio"], CompletionRatio: decimalMaps["CompletionRatio"],
+		CacheRatio: decimalMaps["CacheRatio"], CreateCacheRatio: decimalMaps["CreateCacheRatio"], ImageRatio: decimalMaps["ImageRatio"],
+		AudioRatio: decimalMaps["AudioRatio"], AudioCompletionRatio: decimalMaps["AudioCompletionRatio"], BillingMode: billingMode, BillingExpr: billingExpr,
+		GroupRatio: decimalMaps["GroupRatio"], TopupGroupRatio: decimalMaps["TopupGroupRatio"], UserUsableGroups: usable,
+		GroupGroupRatio: overrides, AutoGroups: autoGroups, DefaultUseAutoGroup: defaultAuto, GroupSpecialUsableGroup: special,
+	}, nil
+}
+
+func defaultPricingJSON(value, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return value
 }
 
 func validateSubscriptionPlans(w []upstreamSubscriptionPlanDTO) (dto.UpstreamSubscriptionPlanSnapshot, error) {

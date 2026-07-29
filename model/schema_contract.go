@@ -90,7 +90,62 @@ func AuthoritativeSchemaContracts() (map[string]TableContract, error) {
 			return nil, err
 		}
 	}
+	if _, err := readMigrationStatements("0004_pricing_group_configuration.sql"); err != nil {
+		return nil, err
+	}
+	groupColumns := []struct {
+		after  string
+		column ColumnContract
+	}{
+		{"ratio_decimal", ColumnContract{Name: "topup_ratio_decimal", ColumnType: "decimal(38,18)", IsNullable: "YES"}},
+		{"description", ColumnContract{Name: "user_selectable", ColumnType: "tinyint(1)", IsNullable: "NO", Default: sql.NullString{String: "0", Valid: true}}},
+		{"user_selectable", ColumnContract{Name: "default_use_auto_group", ColumnType: "tinyint(1)", IsNullable: "NO", Default: sql.NullString{String: "0", Valid: true}}},
+		{"default_use_auto_group", ColumnContract{Name: "auto_priority", ColumnType: "int", IsNullable: "YES"}},
+		{"auto_priority", ColumnContract{Name: "outgoing_overrides_json", ColumnType: "json", IsNullable: "NO"}},
+		{"outgoing_overrides_json", ColumnContract{Name: "incoming_overrides_json", ColumnType: "json", IsNullable: "NO"}},
+		{"incoming_overrides_json", ColumnContract{Name: "visible_to_groups_json", ColumnType: "json", IsNullable: "NO"}},
+		{"visible_to_groups_json", ColumnContract{Name: "hidden_from_groups_json", ColumnType: "json", IsNullable: "NO"}},
+	}
+	for _, addition := range groupColumns {
+		if err := insertSchemaColumnAfter(contracts, "site_group_catalog", addition.after, addition.column); err != nil {
+			return nil, err
+		}
+	}
+	pricingColumns := []struct {
+		after  string
+		column ColumnContract
+	}{
+		{"pricing_version", ColumnContract{Name: "billing_mode", ColumnType: "varchar(16)", IsNullable: "NO", Default: sql.NullString{String: "token", Valid: true}, CharacterSet: sql.NullString{String: "ascii", Valid: true}, Collation: sql.NullString{String: "ascii_bin", Valid: true}}},
+		{"billing_mode", ColumnContract{Name: "billing_expr", ColumnType: "mediumtext", IsNullable: "NO", CharacterSet: sql.NullString{String: "utf8mb4", Valid: true}, Collation: sql.NullString{String: "utf8mb4_bin", Valid: true}}},
+		{"billing_expr", ColumnContract{Name: "pricing_source", ColumnType: "varchar(32)", IsNullable: "NO", Default: sql.NullString{String: "token_default", Valid: true}, CharacterSet: sql.NullString{String: "ascii", Valid: true}, Collation: sql.NullString{String: "ascii_bin", Valid: true}}},
+		{"pricing_source", ColumnContract{Name: "ability_available", ColumnType: "tinyint(1)", IsNullable: "NO", Default: sql.NullString{String: "0", Valid: true}}},
+	}
+	for _, addition := range pricingColumns {
+		if err := insertSchemaColumnAfter(contracts, "site_pricing_catalog", addition.after, addition.column); err != nil {
+			return nil, err
+		}
+	}
+	pricing := contracts["site_pricing_catalog"]
+	pricing.Indexes["uk_site_pricing_catalog_identity"] = IndexContract{Unique: true, Columns: []string{"site_id", "model_name"}}
+	contracts["site_pricing_catalog"] = pricing
 	return contracts, nil
+}
+
+func insertSchemaColumnAfter(contracts map[string]TableContract, table, after string, column ColumnContract) error {
+	contract, exists := contracts[table]
+	if !exists {
+		return fmt.Errorf("schema contract table %s is missing", table)
+	}
+	for index, existing := range contract.Columns {
+		if existing.Name == after {
+			contract.Columns = append(contract.Columns, ColumnContract{})
+			copy(contract.Columns[index+2:], contract.Columns[index+1:])
+			contract.Columns[index+1] = column
+			contracts[table] = contract
+			return nil
+		}
+	}
+	return fmt.Errorf("schema contract column %s.%s is missing", table, after)
 }
 
 func replaceSchemaColumnType(

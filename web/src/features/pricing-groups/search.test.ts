@@ -47,13 +47,14 @@ describe('pricing/group URL search', () => {
       pageSize: 20,
       siteIds: [],
       states: [],
-      tab: 'pricing',
+      tab: 'groups',
     })
   })
 
   test('keeps the default route URL empty', () => {
     expect(pricingGroupSearchSchema.parse({})).toEqual({})
     expect(serializePricingGroupSearch(buildPricingGroupSearch({}))).toEqual({
+      billingMode: undefined,
       exportId: undefined,
       group: undefined,
       keyword: undefined,
@@ -65,37 +66,36 @@ describe('pricing/group URL search', () => {
     })
   })
 
-  test('keeps analysis tabs filter-free and serializes only the tab', () => {
-    const changes = changePricingGroupTab('vendor-analysis')
+  test('clears pricing-only filters when switching to groups', () => {
+    const changes = changePricingGroupTab('groups')
     expect(changes).toMatchObject({
+      billingMode: undefined,
       group: '',
-      keyword: '',
       page: 1,
-      pageSize: 20,
-      siteIds: [],
-      states: [],
-      tab: 'vendor-analysis',
+      tab: 'groups',
     })
     expect(
       serializePricingGroupSearch(
         buildPricingGroupSearch({
+          billingMode: 'tiered_expr',
           group: 'vip',
           keyword: 'gpt',
           page: 3,
           siteIds: ['1'],
           states: ['missing'],
-          tab: 'vendor-analysis',
+          tab: 'pricing',
         })
       )
     ).toEqual({
+      billingMode: 'tiered_expr',
       exportId: undefined,
-      group: undefined,
-      keyword: undefined,
-      page: undefined,
+      group: 'vip',
+      keyword: 'gpt',
+      page: 3,
       pageSize: undefined,
-      siteIds: undefined,
-      states: undefined,
-      tab: 'vendor-analysis',
+      siteIds: [parseIdString('1')],
+      states: ['missing'],
+      tab: 'pricing',
     })
   })
 })

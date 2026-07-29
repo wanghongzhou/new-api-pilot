@@ -283,9 +283,11 @@ Dashboard 是登录后的默认首页，只展示最重要的汇总信息，不�
 `subscription_plans` CSV/XLSX 仅导出安全计划核心和 missing 状态，不包含 provider product ID、支付 payload 或策略配置。
 # D138 定价与分组目录统计和导出
 
-全局与强制站点视图分别提供 pricing/group 两个目录。pricing 支持 site、model、vendor、group、endpoint、remote_state 筛选；group 支持 site、精确/模糊组名和 remote_state 筛选。统计返回 catalog/missing 计数、vendor/group/endpoint/site breakdown、逐站 `data_status/as_of`；所有计数和 ID 为十进制字符串，所有价格与 ratio 为 decimal string，不计算跨站价格总额、平均价格或货币换算。
+全局与强制站点视图分别提供 model-pricing/group-configuration 两个目录。模型定价身份固定为 `(site_id,model_name)`；new-api `vendor_id` 仅是模型元数据厂商标签，不是独立价格来源，厂商变化只能更新同一模型记录，不能制造一条 missing 历史定价。model pricing 支持 site、model、group、billing mode 与 remote_state 筛选；group configuration 支持 site、精确/模糊组名和 remote_state 筛选。统计总览必须把当前模型、当前分组与历史 missing 分开，禁止用记录行数或厂商标签变化冒充模型增减。
 
-CSV/XLSX 使用 `statistics_type=pricing_catalog|group_catalog`，冻结除分页外的当前安全筛选。导出只包含 D138 白名单及 completeness，不包含原始响应、凭据、billing expression、override 或 mutation 参数。
+分组详情以 root `/api/option/` 的安全白名单配置为权威来源，覆盖 `GroupRatio`、`TopupGroupRatio`、`UserUsableGroups`、`GroupGroupRatio`、`AutoGroups`、`DefaultUseAutoGroup` 和 `group_ratio_setting.group_special_usable_group`，并结合 `/api/group/`、`/api/pricing` 返回关联模型。响应直接给出基础计费倍率、充值倍率、用户可选状态与说明、自动分组顺序、用户组到计费组的覆盖倍率、特殊可见/隐藏规则和具体模型名称。模型定价展示固定价格、Token 各价格维度、表达式计费模式和表达式文本、模型厂商元数据、可用分组及端点；表达式只按普通文本保存和展示，禁止执行。所有计数和 ID 为十进制字符串，价格与 ratio 为 decimal string，不计算跨站价格总额、平均价格或货币换算。
+
+CSV/XLSX 使用 `statistics_type=pricing_catalog|group_catalog`，冻结除分页外的当前安全筛选。导出只包含 D138 明确列出的配置字段及 completeness；允许导出 billing expression、分组覆盖倍率和特殊可见规则，但禁止原始响应、凭据、secret/token/key 类 option、header 值、渠道密钥或 mutation 参数。
 
 # D139 system-task 统计、完整性与导出
 

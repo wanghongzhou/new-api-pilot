@@ -20,6 +20,8 @@ export function buildPricingGroupExportRequest(
       model_names: [],
       node_names: [],
       pricing_group: search.group,
+      pricing_billing_mode:
+        search.tab === 'pricing' ? search.billingMode : undefined,
       site_ids: forcedSiteId ? [forcedSiteId] : search.siteIds,
       sort_by: 'name',
       sort_order: 'asc',

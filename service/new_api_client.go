@@ -684,16 +684,19 @@ func (client *NewAPIClient) SnapshotPricingCatalog(ctx context.Context, requestI
 	if err != nil {
 		return dto.UpstreamPricingSnapshot{}, err
 	}
-	enrichment := make(map[string]dto.UpstreamPricingGroup, len(pricing.Groups))
-	for _, group := range pricing.Groups {
-		enrichment[group.Name] = group
+	configuration, err := client.SnapshotPricingConfiguration(ctx, requestID+"_configuration")
+	if err != nil {
+		return dto.UpstreamPricingSnapshot{}, err
 	}
-	for index := range groups.Groups {
-		if enriched, exists := enrichment[groups.Groups[index].Name]; exists {
-			groups.Groups[index] = enriched
-		}
+	return mergePricingConfiguration(groups, pricing, configuration), nil
+}
+
+func (client *NewAPIClient) SnapshotPricingConfiguration(ctx context.Context, requestID string) (dto.UpstreamPricingConfiguration, error) {
+	var options upstreamOptionsResponseWire
+	if _, err := client.get(ctx, client.httpClient, "/api/option/", nil, requestID, upstreamAuthManagement, client.requestTimeout, &options, false); err != nil {
+		return dto.UpstreamPricingConfiguration{}, err
 	}
-	return dto.UpstreamPricingSnapshot{PricingVersion: pricing.PricingVersion, Items: pricing.Items, Groups: groups.Groups}, nil
+	return validatePricingConfiguration(*options.Data)
 }
 
 func (client *NewAPIClient) SnapshotPricingGroups(ctx context.Context, requestID string) (dto.UpstreamPricingGroupSnapshot, error) {

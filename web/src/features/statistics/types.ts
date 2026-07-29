@@ -322,6 +322,7 @@ export interface StatisticsExportFilters {
   inventory_states?: string[]
   subscription_plan_enabled?: boolean
   pricing_group?: string
+  pricing_billing_mode?: 'token' | 'fixed' | 'tiered_expr'
   types?: string[]
   statuses?: string[]
   error_present?: boolean

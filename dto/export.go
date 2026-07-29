@@ -40,6 +40,7 @@ type ExportFilters struct {
 	InventoryStates         []string `json:"inventory_states,omitempty"`
 	SubscriptionPlanEnabled *bool    `json:"subscription_plan_enabled,omitempty"`
 	PricingGroup            string   `json:"pricing_group,omitempty"`
+	PricingBillingMode      string   `json:"pricing_billing_mode,omitempty"`
 	Keyword                 string   `json:"keyword,omitempty"`
 	RemoteUserID            *string  `json:"remote_user_id,omitempty"`
 	MinBalance              *string  `json:"min_balance,omitempty"`
@@ -119,6 +120,7 @@ func (filters *ExportFilters) Normalize() {
 	filters.RequestID = strings.TrimSpace(filters.RequestID)
 	filters.UpstreamRequestID = strings.TrimSpace(filters.UpstreamRequestID)
 	filters.Keyword = strings.TrimSpace(filters.Keyword)
+	filters.PricingBillingMode = strings.ToLower(strings.TrimSpace(filters.PricingBillingMode))
 	if filters.RemoteUserID != nil {
 		value := strings.TrimSpace(*filters.RemoteUserID)
 		filters.RemoteUserID = &value
@@ -383,7 +385,7 @@ func (filters ExportFilters) SubscriptionPlanQuery() (SubscriptionPlanQuery, map
 
 func (filters ExportFilters) PricingCatalogQuery() (PricingCatalogQuery, map[string]string) {
 	e := map[string]string{}
-	q := PricingCatalogQuery{Page: 1, PageSize: 100, SiteIDs: parseExportIDs(filters.SiteIDs, "site_ids", e), States: append([]string{}, filters.InventoryStates...), Keyword: filters.Keyword, Group: filters.PricingGroup}
+	q := PricingCatalogQuery{Page: 1, PageSize: 100, SiteIDs: parseExportIDs(filters.SiteIDs, "site_ids", e), States: append([]string{}, filters.InventoryStates...), Keyword: filters.Keyword, Group: filters.PricingGroup, BillingMode: filters.PricingBillingMode}
 	q.Normalize()
 	return q, nilIfEmpty(e)
 }

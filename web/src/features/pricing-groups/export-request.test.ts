@@ -13,6 +13,7 @@ describe('pricing/group export contract', () => {
       siteIds: ['9007199254740993'],
       states: ['missing'],
       tab: 'pricing',
+      billingMode: 'tiered_expr',
     })
     const pricing = buildPricingGroupExportRequest('xlsx', search)
     expect(pricing.statistics_type).toBe('pricing_catalog')
@@ -20,6 +21,7 @@ describe('pricing/group export contract', () => {
       inventory_states: ['missing'],
       keyword: 'gpt',
       pricing_group: 'vip',
+      pricing_billing_mode: 'tiered_expr',
       site_ids: [parseIdString('9007199254740993')],
     })
     const groups = buildPricingGroupExportRequest('csv', {

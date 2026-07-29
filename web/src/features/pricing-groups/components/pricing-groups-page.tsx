@@ -53,22 +53,20 @@ import { pricingGroupKeys } from '../query-keys'
 import {
   buildPricingGroupSearch,
   changePricingGroupTab,
-  hasPricingAnalysisFilters,
-  isPricingAnalysisTab,
   type PricingGroupSearch,
 } from '../search'
 import type {
-  PricingCatalogTab,
+  PricingBillingMode,
   PricingCatalogItem,
   PricingCatalogQueryParams,
-  PricingCatalogSiteBreakdown,
-  PricingCatalogStatistics,
   PricingCatalogState,
+  PricingCatalogStatistics,
   PricingGroupItem,
 } from '../types'
 
 function params(search: PricingGroupSearch): PricingCatalogQueryParams {
   return {
+    billing_mode: search.billingMode,
     group: search.group || undefined,
     keyword: search.keyword || undefined,
     p: search.page,
@@ -95,28 +93,92 @@ function StateBadge({ state }: { state: PricingCatalogState }) {
   )
 }
 
-function VisibilityBadge({ visible }: { visible: boolean }) {
-  const { t } = useTranslation()
+function BooleanBadge({
+  value,
+  yes,
+  no,
+}: {
+  value: boolean
+  yes: string
+  no: string
+}) {
   return (
-    <Badge variant={visible ? 'success' : 'neutral'}>
-      {visible
-        ? t('pricingGroups.visibility.root')
-        : t('pricingGroups.visibility.restricted')}
-    </Badge>
+    <Badge variant={value ? 'success' : 'neutral'}>{value ? yes : no}</Badge>
   )
 }
 
-function TextBadges({ values }: { values: string[] }) {
+function BillingModeBadge({ mode }: { mode: string }) {
+  const { t } = useTranslation()
+  let label = t('pricingGroups.billingMode.token')
+  if (mode === 'fixed') {
+    label = t('pricingGroups.billingMode.fixed')
+  } else if (mode === 'tiered_expr') {
+    label = t('pricingGroups.billingMode.tieredExpr')
+  }
+  return <Badge variant='secondary'>{label}</Badge>
+}
+
+function PricingSourceLabel({ source }: { source: string }) {
+  const { t } = useTranslation()
+  if (source === 'fixed') {
+    return t('pricingGroups.pricingSource.fixed')
+  }
+  if (source === 'tiered_expr') {
+    return t('pricingGroups.pricingSource.tiered_expr')
+  }
+  if (source === 'token_explicit') {
+    return t('pricingGroups.pricingSource.token_explicit')
+  }
+  return t('pricingGroups.pricingSource.token_default')
+}
+
+function TextBadges({
+  values,
+  emptyLabel,
+}: {
+  values: string[]
+  emptyLabel?: string
+}) {
   const { t } = useTranslation()
   if (values.length === 0) {
-    return <span className='text-muted-foreground'>{t('common.none')}</span>
+    return (
+      <span className='text-muted-foreground'>
+        {emptyLabel ?? t('common.none')}
+      </span>
+    )
   }
   return (
-    <div className='flex max-w-72 flex-wrap gap-1'>
+    <div className='flex max-w-80 flex-wrap gap-1'>
       {values.map((value) => (
         <Badge key={value} variant='neutral'>
           {value}
         </Badge>
+      ))}
+    </div>
+  )
+}
+
+function MappingList({
+  values,
+  emptyLabel,
+}: {
+  values: Record<string, string>
+  emptyLabel: string
+}) {
+  const entries = Object.entries(values).sort(([left], [right]) =>
+    left.localeCompare(right)
+  )
+  if (entries.length === 0) {
+    return <span className='text-muted-foreground'>{emptyLabel}</span>
+  }
+  return (
+    <div className='grid gap-1'>
+      {entries.map(([name, value]) => (
+        <div className='flex flex-wrap items-center gap-1 text-xs' key={name}>
+          <Badge variant='neutral'>{name}</Badge>
+          <span className='text-muted-foreground'>→</span>
+          <code>{value}</code>
+        </div>
       ))}
     </div>
   )
@@ -134,24 +196,22 @@ function Filters({
   sites: SiteListItem[]
 }) {
   const { t } = useTranslation()
-  const setState = (value: string) =>
-    onChange({
-      page: 1,
-      states:
-        value === 'normal' || value === 'missing'
-          ? [value as PricingCatalogState]
-          : [],
-    })
   const reset = buildPricingGroupSearch({
     pageSize: search.pageSize,
     tab: search.tab,
   })
   const hasActiveFilters = hasFilterChanges(search, reset, [
+    'billingMode',
     'group',
     'keyword',
     'siteIds',
     'states',
   ])
+  const billingModes: { label: string; value: PricingBillingMode }[] = [
+    { label: t('pricingGroups.billingMode.token'), value: 'token' },
+    { label: t('pricingGroups.billingMode.fixed'), value: 'fixed' },
+    { label: t('pricingGroups.billingMode.tieredExpr'), value: 'tiered_expr' },
+  ]
   return (
     <section
       aria-label={t('pricingGroups.filters.title')}
@@ -180,13 +240,31 @@ function Filters({
         />
       </label>
       {search.tab === 'pricing' && (
-        <Input
-          aria-label={t('pricingGroups.filters.group')}
-          className='h-10 w-36 sm:h-8'
-          onChange={(event) => onChange({ group: event.target.value, page: 1 })}
-          placeholder={t('pricingGroups.filters.group')}
-          value={search.group}
-        />
+        <>
+          <Input
+            aria-label={t('pricingGroups.filters.group')}
+            className='h-10 w-36 sm:h-8'
+            onChange={(event) =>
+              onChange({ group: event.target.value, page: 1 })
+            }
+            placeholder={t('pricingGroups.filters.group')}
+            value={search.group}
+          />
+          <FacetedFilter
+            clearLabel={t('pricingGroups.filters.allBillingModes')}
+            onChange={(value) =>
+              onChange({
+                billingMode: billingModes.some((item) => item.value === value)
+                  ? (value as PricingBillingMode)
+                  : undefined,
+                page: 1,
+              })
+            }
+            options={billingModes}
+            title={t('pricingGroups.filters.billingMode')}
+            value={search.billingMode ?? ''}
+          />
+        </>
       )}
       {global && (
         <FacetedFilter
@@ -204,7 +282,12 @@ function Filters({
       )}
       <FacetedFilter
         clearLabel={t('pricingGroups.filters.allStates')}
-        onChange={setState}
+        onChange={(value) =>
+          onChange({
+            page: 1,
+            states: value === 'normal' || value === 'missing' ? [value] : [],
+          })
+        }
         options={[
           { label: t('pricingGroups.state.normal'), value: 'normal' },
           { label: t('pricingGroups.state.missing'), value: 'missing' },
@@ -227,151 +310,6 @@ function Filters({
   )
 }
 
-function SiteBreakdown({
-  items,
-  kind,
-}: {
-  items: PricingCatalogSiteBreakdown[]
-  kind: 'groups' | 'pricing'
-}) {
-  const { t } = useTranslation()
-  return (
-    <section className='grid gap-3'>
-      <h2 className='font-semibold'>
-        {kind === 'pricing'
-          ? t('pricingGroups.breakdown.pricingSite')
-          : t('pricingGroups.breakdown.groupSite')}
-      </h2>
-      {items.length === 0 ? (
-        <p className='text-muted-foreground text-sm'>{t('common.none')}</p>
-      ) : (
-        <div className='grid gap-2 md:grid-cols-2 xl:grid-cols-3'>
-          {items.map((item) => (
-            <article
-              className='border-border grid gap-2 rounded-lg border p-3'
-              key={item.site_id}
-            >
-              <div className='flex items-start justify-between gap-2'>
-                <div>
-                  <p className='font-medium'>{item.site_name}</p>
-                  <code className='text-muted-foreground text-xs'>
-                    {item.site_id}
-                  </code>
-                </div>
-                <DataStatusBadge status={item.data_status} />
-              </div>
-              <p className='text-muted-foreground text-xs'>
-                {kind === 'pricing'
-                  ? t('pricingGroups.breakdown.values', {
-                      missing: item.missing,
-                      total: item.total,
-                    })
-                  : t('pricingGroups.breakdown.groupSiteValues', {
-                      missing: item.missing,
-                      total: item.total,
-                    })}
-              </p>
-              <p className='text-muted-foreground text-xs'>
-                {t('pricingGroups.asOf', { time: timestamp(item.as_of) })}
-              </p>
-            </article>
-          ))}
-        </div>
-      )}
-    </section>
-  )
-}
-
-function TypedBreakdown({
-  tab,
-  statistics,
-}: {
-  tab: PricingCatalogTab
-  statistics: Awaited<ReturnType<typeof getPricingCatalogStatistics>>
-}) {
-  const { t } = useTranslation()
-  if (tab === 'vendor-analysis') {
-    return (
-      <section className='grid content-start gap-2'>
-        <h2 className='font-semibold'>{t('pricingGroups.breakdown.vendor')}</h2>
-        {statistics.vendor_breakdown.length === 0 && (
-          <p className='text-muted-foreground text-sm'>{t('common.none')}</p>
-        )}
-        {statistics.vendor_breakdown.map((item) => (
-          <article
-            className='border-border rounded-lg border p-3 text-sm'
-            key={`${item.vendor_key}:${item.vendor_id}`}
-          >
-            <p className='font-medium'>{item.vendor_key || '-'}</p>
-            <code className='text-muted-foreground text-xs'>
-              {item.vendor_id}
-            </code>
-            <p className='text-muted-foreground mt-1 text-xs'>
-              {t('pricingGroups.breakdown.vendorValues', {
-                missing: item.missing,
-                total: item.total,
-              })}
-            </p>
-          </article>
-        ))}
-      </section>
-    )
-  }
-  if (tab === 'group-model-analysis') {
-    return (
-      <section className='grid content-start gap-2'>
-        <h2 className='font-semibold'>{t('pricingGroups.breakdown.group')}</h2>
-        {statistics.group_breakdown.length === 0 && (
-          <p className='text-muted-foreground text-sm'>{t('common.none')}</p>
-        )}
-        {statistics.group_breakdown.map((item) => (
-          <article
-            className='border-border rounded-lg border p-3 text-sm'
-            key={item.group_name}
-          >
-            <p className='font-medium'>{item.group_name}</p>
-            <p className='text-muted-foreground text-xs'>
-              {t('pricingGroups.breakdown.groupValues', {
-                count: item.model_count,
-              })}
-            </p>
-          </article>
-        ))}
-      </section>
-    )
-  }
-  return (
-    <section className='grid content-start gap-2'>
-      <h2 className='font-semibold'>
-        {t('pricingGroups.breakdown.availability')}
-      </h2>
-      {statistics.group_catalog_breakdown.length === 0 && (
-        <p className='text-muted-foreground text-sm'>{t('common.none')}</p>
-      )}
-      {statistics.group_catalog_breakdown.map((item) => (
-        <article
-          className='border-border rounded-lg border p-3 text-sm'
-          key={`${item.root_visible}:${item.ratio_available}`}
-        >
-          <div className='flex flex-wrap gap-2'>
-            <VisibilityBadge visible={item.root_visible} />
-            <Badge variant={item.ratio_available ? 'success' : 'neutral'}>
-              {item.ratio_available
-                ? t('pricingGroups.ratio.available')
-                : t('pricingGroups.ratio.unavailable')}
-            </Badge>
-          </div>
-          <p className='text-muted-foreground mt-2 text-xs'>
-            {t('pricingGroups.breakdown.availabilityValues', {
-              count: item.count,
-            })}
-          </p>
-        </article>
-      ))}
-    </section>
-  )
-}
-
 function SummaryGrid({
   statistics,
 }: {
@@ -381,22 +319,27 @@ function SummaryGrid({
   const items = [
     {
       icon: Database01Icon,
-      label: t('pricingGroups.metric.pricing'),
-      value: statistics?.total,
+      label: t('pricingGroups.metric.sites'),
+      value: statistics?.site_count,
+    },
+    {
+      icon: Database01Icon,
+      label: t('pricingGroups.metric.pricingActive'),
+      value: statistics?.pricing_active,
     },
     {
       icon: Chart01Icon,
-      label: t('pricingGroups.metric.groups'),
-      value: statistics?.group_total,
+      label: t('pricingGroups.metric.groupActive'),
+      value: statistics?.group_active,
     },
     {
       icon: Alert02Icon,
-      label: t('pricingGroups.metric.missing'),
-      value: statistics?.missing,
+      label: t('pricingGroups.metric.pricingMissing'),
+      value: statistics?.pricing_missing,
     },
   ] as const
   return (
-    <div className='grid gap-3 sm:grid-cols-3'>
+    <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
       {items.map(({ icon, label, value }) => (
         <div
           className='bg-card text-card-foreground ring-foreground/10 flex items-center gap-3 rounded-xl p-4 ring-1'
@@ -411,6 +354,30 @@ function SummaryGrid({
               {value == null ? '-' : <MetricValue value={value} />}
             </dd>
           </dl>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function PriceDimensions({ item }: { item: PricingCatalogItem }) {
+  const { t } = useTranslation()
+  const values = [
+    [t('pricingGroups.ratio.model'), item.model_ratio],
+    [t('pricingGroups.ratio.price'), item.model_price],
+    [t('pricingGroups.ratio.completion'), item.completion_ratio],
+    [t('pricingGroups.ratio.cache'), item.cache_ratio],
+    [t('pricingGroups.ratio.createCache'), item.create_cache_ratio],
+    [t('pricingGroups.ratio.image'), item.image_ratio],
+    [t('pricingGroups.ratio.audio'), item.audio_ratio],
+    [t('pricingGroups.ratio.audioCompletion'), item.audio_completion_ratio],
+  ] as const
+  return (
+    <div className='grid min-w-52 gap-1 text-xs'>
+      {values.map(([label, value]) => (
+        <div className='flex justify-between gap-4' key={label}>
+          <span className='text-muted-foreground'>{label}</span>
+          <code>{formatNumericDisplayValue(value)}</code>
         </div>
       ))}
     </div>
@@ -432,8 +399,6 @@ export function PricingGroupsPage({
   const validSiteId = siteId == null || isIdString(siteId)
   const currentParams = useMemo(() => params(search), [search])
   const overviewParams = useMemo(() => params(buildPricingGroupSearch({})), [])
-  const groupsParams =
-    search.tab === 'site-analysis' ? overviewParams : currentParams
   const siteParams = useMemo(
     () => ({
       p: 1,
@@ -445,16 +410,19 @@ export function PricingGroupsPage({
   )
   const parsedSiteId =
     siteId && isIdString(siteId) ? parseIdString(siteId) : undefined
+
   useEffect(() => {
-    if (isPricingAnalysisTab(search.tab) && hasPricingAnalysisFilters(search)) {
-      onSearchChange(changePricingGroupTab(search.tab))
-    } else if (search.tab === 'groups' && search.group !== '') {
-      onSearchChange({ group: '', page: 1 })
+    if (
+      search.tab === 'groups' &&
+      (search.group !== '' || search.billingMode != null)
+    ) {
+      onSearchChange({ billingMode: undefined, group: '', page: 1 })
     } else if (!canonicalizedSearch.current) {
       canonicalizedSearch.current = true
       onSearchChange({})
     }
   }, [onSearchChange, search])
+
   const sitesQuery = useQuery({
     enabled: siteId == null,
     queryFn: () => listSites(siteParams),
@@ -473,17 +441,15 @@ export function PricingGroupsPage({
       : pricingGroupKeys.global('pricing', currentParams),
   })
   const groupsQuery = useQuery({
-    enabled:
-      validSiteId &&
-      (search.tab === 'groups' || search.tab === 'site-analysis'),
+    enabled: validSiteId && search.tab === 'groups',
     placeholderData: keepPreviousData,
     queryFn: () =>
       parsedSiteId
-        ? listSitePricingGroups(parsedSiteId, groupsParams)
-        : listPricingGroups(groupsParams),
+        ? listSitePricingGroups(parsedSiteId, currentParams)
+        : listPricingGroups(currentParams),
     queryKey: parsedSiteId
-      ? pricingGroupKeys.site(siteId ?? '', 'groups', groupsParams)
-      : pricingGroupKeys.global('groups', groupsParams),
+      ? pricingGroupKeys.site(siteId ?? '', 'groups', currentParams)
+      : pricingGroupKeys.global('groups', currentParams),
   })
   const statisticsQuery = useQuery({
     enabled: validSiteId,
@@ -508,6 +474,7 @@ export function PricingGroupsPage({
       onSearchChange({ exportId: job.id })
     },
   })
+
   const pricingColumns = useMemo<ColumnDef<PricingCatalogItem, unknown>[]>(
     () => [
       {
@@ -518,7 +485,8 @@ export function PricingGroupsPage({
               {row.original.site_name} · {row.original.site_id}
             </span>
             <span className='text-muted-foreground text-xs'>
-              {row.original.vendor_key || '-'} · {row.original.vendor_id}
+              {t('pricingGroups.pricing.vendorName')}：
+              {row.original.vendor_name || '-'}
             </span>
             <span className='text-muted-foreground text-xs'>
               {row.original.description || '-'}
@@ -530,48 +498,64 @@ export function PricingGroupsPage({
       },
       {
         cell: ({ row }) => (
-          <div className='grid min-w-44 gap-1 text-xs'>
-            <dl>
-              <dt className='inline'>{t('pricingGroups.ratio.model')}：</dt>
-              <dd className='inline'>{row.original.model_ratio}</dd>
-            </dl>
-            <dl>
-              <dt className='inline'>{t('pricingGroups.ratio.price')}：</dt>
-              <dd className='inline'>{row.original.model_price}</dd>
-            </dl>
-            <dl>
-              <dt className='inline'>
-                {t('pricingGroups.ratio.completion')}：
-              </dt>
-              <dd className='inline'>{row.original.completion_ratio}</dd>
-            </dl>
-            <dl>
-              <dt className='inline'>{t('pricingGroups.ratio.cache')}：</dt>
-              <dd className='inline'>
-                {formatNumericDisplayValue(row.original.cache_ratio)}
-              </dd>
-            </dl>
+          <div className='grid min-w-40 gap-2 text-xs'>
+            <BillingModeBadge mode={row.original.billing_mode} />
+            <span>
+              {t('pricingGroups.pricing.source')}：
+              <PricingSourceLabel source={row.original.pricing_source} />
+            </span>
+            <BooleanBadge
+              value={row.original.ability_available}
+              yes={t('pricingGroups.pricing.abilityAvailable')}
+              no={t('pricingGroups.pricing.abilityUnavailable')}
+            />
           </div>
         ),
+        header: t('pricingGroups.pricing.billing'),
+        id: 'billing',
+      },
+      {
+        cell: ({ row }) => <PriceDimensions item={row.original} />,
         header: t('pricingGroups.pricing.ratios'),
         id: 'ratios',
       },
       {
-        cell: ({ row }) => <TextBadges values={row.original.enable_groups} />,
-        header: t('pricingGroups.pricing.groups'),
-        id: 'groups',
+        cell: ({ row }) =>
+          row.original.billing_expr ? (
+            <pre className='bg-muted max-h-28 max-w-96 min-w-56 overflow-auto rounded-md p-2 text-xs whitespace-pre-wrap'>
+              {row.original.billing_expr}
+            </pre>
+          ) : (
+            <span className='text-muted-foreground'>
+              {t('pricingGroups.pricing.noExpression')}
+            </span>
+          ),
+        header: t('pricingGroups.pricing.expression'),
+        id: 'expression',
       },
       {
         cell: ({ row }) => (
-          <TextBadges values={row.original.supported_endpoint_types} />
+          <div className='grid min-w-44 gap-3'>
+            <div>
+              <p className='text-muted-foreground mb-1 text-xs'>
+                {t('pricingGroups.pricing.groups')}
+              </p>
+              <TextBadges values={row.original.enable_groups} />
+            </div>
+            <div>
+              <p className='text-muted-foreground mb-1 text-xs'>
+                {t('pricingGroups.pricing.endpoints')}
+              </p>
+              <TextBadges values={row.original.supported_endpoint_types} />
+            </div>
+          </div>
         ),
-        header: t('pricingGroups.pricing.endpoints'),
-        id: 'endpoints',
+        header: t('pricingGroups.pricing.availability'),
+        id: 'availability',
       },
       {
         cell: ({ row }) => (
           <div className='grid min-w-32 gap-1'>
-            <VisibilityBadge visible={row.original.root_visible} />
             <StateBadge state={row.original.remote_state} />
             <DataStatusBadge status={row.original.data_status} />
             <span className='text-muted-foreground text-xs'>
@@ -585,17 +569,26 @@ export function PricingGroupsPage({
     ],
     [t]
   )
+
   const groupColumns = useMemo<ColumnDef<PricingGroupItem, unknown>[]>(
     () => [
       {
         cell: ({ row }) => (
-          <div className='grid min-w-48 gap-1'>
-            <strong>{row.original.name}</strong>
+          <div className='grid min-w-48 gap-2'>
+            <div>
+              <strong>{row.original.name}</strong>
+              <p className='text-muted-foreground text-xs'>
+                {row.original.site_name} · {row.original.site_id}
+              </p>
+            </div>
+            <BooleanBadge
+              value={row.original.user_selectable}
+              yes={t('pricingGroups.groups.userSelectable')}
+              no={t('pricingGroups.groups.userNotSelectable')}
+            />
             <span className='text-muted-foreground text-xs'>
-              {row.original.site_name} · {row.original.site_id}
-            </span>
-            <span className='text-muted-foreground text-xs'>
-              {row.original.description || '-'}
+              {row.original.description ||
+                t('pricingGroups.groups.noDescription')}
             </span>
           </div>
         ),
@@ -604,15 +597,119 @@ export function PricingGroupsPage({
       },
       {
         cell: ({ row }) => (
-          <code>{formatNumericDisplayValue(row.original.ratio)}</code>
+          <div className='grid min-w-40 gap-2 text-xs'>
+            <div className='flex justify-between gap-3'>
+              <span className='text-muted-foreground'>
+                {t('pricingGroups.groups.ratio')}
+              </span>
+              <code>{formatNumericDisplayValue(row.original.ratio)}</code>
+            </div>
+            <div className='flex justify-between gap-3'>
+              <span className='text-muted-foreground'>
+                {t('pricingGroups.groups.topupRatio')}
+              </span>
+              <code>{formatNumericDisplayValue(row.original.topup_ratio)}</code>
+            </div>
+            <div>
+              {t('pricingGroups.groups.autoPriority')}：
+              {row.original.auto_priority ??
+                t('pricingGroups.groups.notAutoGroup')}
+            </div>
+            <BooleanBadge
+              value={row.original.default_use_auto_group}
+              yes={t('pricingGroups.groups.defaultAutoEnabled')}
+              no={t('pricingGroups.groups.defaultAutoDisabled')}
+            />
+          </div>
         ),
-        header: t('pricingGroups.groups.ratio'),
-        id: 'ratio',
+        header: t('pricingGroups.groups.billing'),
+        id: 'billing',
+      },
+      {
+        cell: ({ row }) => (
+          <div className='grid min-w-72 gap-3'>
+            <div>
+              <p className='text-muted-foreground mb-1 text-xs'>
+                {t('pricingGroups.groups.activePricing', {
+                  count: row.original.active_pricing_count,
+                })}
+              </p>
+              <TextBadges
+                emptyLabel={t('pricingGroups.groups.noModels')}
+                values={row.original.model_names}
+              />
+            </div>
+            <div>
+              <p className='text-muted-foreground mb-1 text-xs'>
+                {t('pricingGroups.groups.missingPricing', {
+                  count: row.original.missing_pricing_count,
+                })}
+              </p>
+              <TextBadges
+                emptyLabel={t('pricingGroups.groups.noMissingModels')}
+                values={row.original.missing_model_names}
+              />
+            </div>
+          </div>
+        ),
+        header: t('pricingGroups.groups.models'),
+        id: 'models',
+      },
+      {
+        cell: ({ row }) => (
+          <div className='grid min-w-64 gap-3'>
+            <div>
+              <p className='text-muted-foreground mb-1 text-xs'>
+                {t('pricingGroups.groups.outgoingOverrides')}
+              </p>
+              <MappingList
+                emptyLabel={t('pricingGroups.groups.noOverrides')}
+                values={row.original.outgoing_overrides}
+              />
+            </div>
+            <div>
+              <p className='text-muted-foreground mb-1 text-xs'>
+                {t('pricingGroups.groups.incomingOverrides')}
+              </p>
+              <MappingList
+                emptyLabel={t('pricingGroups.groups.noOverrides')}
+                values={row.original.incoming_overrides}
+              />
+            </div>
+          </div>
+        ),
+        header: t('pricingGroups.groups.overrides'),
+        id: 'overrides',
+      },
+      {
+        cell: ({ row }) => (
+          <div className='grid min-w-64 gap-3'>
+            <div>
+              <p className='text-muted-foreground mb-1 text-xs'>
+                {t('pricingGroups.groups.visibleTo')}
+              </p>
+              <MappingList
+                emptyLabel={t('pricingGroups.groups.noVisibilityRules')}
+                values={row.original.visible_to_groups}
+              />
+            </div>
+            <div>
+              <p className='text-muted-foreground mb-1 text-xs'>
+                {t('pricingGroups.groups.hiddenFrom')}
+              </p>
+              <TextBadges
+                emptyLabel={t('pricingGroups.groups.noVisibilityRules')}
+                values={row.original.hidden_from_groups}
+              />
+            </div>
+          </div>
+        ),
+        header: t('pricingGroups.groups.visibilityRules'),
+        id: 'visibility',
       },
       {
         cell: ({ row }) => (
           <div className='grid min-w-32 gap-1'>
-            <VisibilityBadge visible={row.original.root_visible} />
             <StateBadge state={row.original.remote_state} />
             <DataStatusBadge status={row.original.data_status} />
             <span className='text-muted-foreground text-xs'>
@@ -623,96 +720,76 @@ export function PricingGroupsPage({
         header: t('common.status'),
         id: 'status',
       },
+      {
+        cell: ({ row }) => (
+          <Button
+            onClick={() =>
+              onSearchChange({
+                billingMode: undefined,
+                group: row.original.name,
+                keyword: '',
+                page: 1,
+                siteIds: siteId ? [] : [row.original.site_id],
+                states: [],
+                tab: 'pricing',
+              })
+            }
+            size='sm'
+            variant='outline'
+          >
+            {t('pricingGroups.inspectPricing')}
+          </Button>
+        ),
+        header: t('common.actions'),
+        id: 'actions',
+      },
     ],
-    [t]
+    [onSearchChange, siteId, t]
   )
+
   const statistics = statisticsQuery.data
-  const listTab = search.tab === 'pricing' || search.tab === 'groups'
   const tabs = [
     {
-      count: statistics?.total,
-      icon: Database01Icon,
-      label: t('pricingGroups.tabs.pricing'),
-      value: 'pricing',
-    },
-    {
-      count: statistics?.group_total,
+      count: statistics?.group_active,
       icon: Chart01Icon,
       label: t('pricingGroups.tabs.groups'),
       value: 'groups',
     },
     {
-      icon: Chart01Icon,
-      label: t('pricingGroups.tabs.siteAnalysis'),
-      value: 'site-analysis',
-    },
-    {
-      icon: Chart01Icon,
-      label: t('pricingGroups.tabs.vendorAnalysis'),
-      value: 'vendor-analysis',
-    },
-    {
-      icon: Chart01Icon,
-      label: t('pricingGroups.tabs.groupModelAnalysis'),
-      value: 'group-model-analysis',
-    },
-    {
-      icon: Chart01Icon,
-      label: t('pricingGroups.tabs.groupAvailabilityAnalysis'),
-      value: 'group-availability-analysis',
+      count: statistics?.pricing_active,
+      icon: Database01Icon,
+      label: t('pricingGroups.tabs.pricing'),
+      value: 'pricing',
     },
   ] as const
-  const purpose = {
-    'group-availability-analysis': {
-      description: t(
-        'pricingGroups.purpose.groupAvailabilityAnalysis.description'
-      ),
-      title: t('pricingGroups.purpose.groupAvailabilityAnalysis.title'),
-    },
-    'group-model-analysis': {
-      description: t('pricingGroups.purpose.groupModelAnalysis.description'),
-      title: t('pricingGroups.purpose.groupModelAnalysis.title'),
-    },
-    groups: {
-      description: t('pricingGroups.purpose.groups.description'),
-      title: t('pricingGroups.purpose.groups.title'),
-    },
-    pricing: {
-      description: t('pricingGroups.purpose.pricing.description'),
-      title: t('pricingGroups.purpose.pricing.title'),
-    },
-    'site-analysis': {
-      description: t('pricingGroups.purpose.siteAnalysis.description'),
-      title: t('pricingGroups.purpose.siteAnalysis.title'),
-    },
-    'vendor-analysis': {
-      description: t('pricingGroups.purpose.vendorAnalysis.description'),
-      title: t('pricingGroups.purpose.vendorAnalysis.title'),
-    },
-  }[search.tab]
-  let activeDataStatus = statistics?.data_status
-  if (search.tab === 'pricing') {
-    activeDataStatus = pricingQuery.data?.data_status
-  } else if (search.tab === 'groups') {
-    activeDataStatus = groupsQuery.data?.data_status
-  }
+  const purpose =
+    search.tab === 'groups'
+      ? {
+          description: t('pricingGroups.purpose.groups.description'),
+          title: t('pricingGroups.purpose.groups.title'),
+        }
+      : {
+          description: t('pricingGroups.purpose.pricing.description'),
+          title: t('pricingGroups.purpose.pricing.title'),
+        }
+  const activeDataStatus =
+    search.tab === 'groups'
+      ? groupsQuery.data?.data_status
+      : pricingQuery.data?.data_status
+
   return (
     <SectionPageLayout
-      actions={
-        listTab
-          ? (['xlsx', 'csv'] as const).map((format) => (
-              <Button
-                disabled={exportMutation.isPending || !validSiteId}
-                key={format}
-                onClick={() => exportMutation.mutate(format)}
-                variant='outline'
-              >
-                <HugeiconsIcon icon={FileExportIcon} strokeWidth={2} />
-                {t('pricingGroups.export', { format: format.toUpperCase() })}
-              </Button>
-            ))
-          : undefined
-      }
+      actions={(['xlsx', 'csv'] as const).map((format) => (
+        <Button
+          disabled={exportMutation.isPending || !validSiteId}
+          key={format}
+          onClick={() => exportMutation.mutate(format)}
+          variant='outline'
+        >
+          <HugeiconsIcon icon={FileExportIcon} strokeWidth={2} />
+          {t('pricingGroups.export', { format: format.toUpperCase() })}
+        </Button>
+      ))}
       description={
         siteId
           ? t('pricingGroups.siteDescription', { id: siteId })
@@ -747,7 +824,7 @@ export function PricingGroupsPage({
               <TabsTrigger key={tab.value} value={tab.value}>
                 <HugeiconsIcon icon={tab.icon} size={15} strokeWidth={2} />
                 {tab.label}
-                {'count' in tab && tab.count != null && (
+                {tab.count != null && (
                   <Badge className='px-1.5 font-mono' variant='secondary'>
                     {tab.count}
                   </Badge>
@@ -776,14 +853,12 @@ export function PricingGroupsPage({
             </p>
           </div>
         </section>
-        {listTab && (
-          <Filters
-            global={!siteId}
-            onChange={onSearchChange}
-            search={search}
-            sites={sitesQuery.data?.items ?? []}
-          />
-        )}
+        <Filters
+          global={!siteId}
+          onChange={onSearchChange}
+          search={search}
+          sites={sitesQuery.data?.items ?? []}
+        />
         {statisticsQuery.isError && (
           <Button
             className='justify-self-start'
@@ -810,24 +885,33 @@ export function PricingGroupsPage({
             onRetry={() => void pricingQuery.refetch()}
             page={search.page}
             pageSize={search.pageSize}
+            total={pricingQuery.data?.total ?? 0}
             renderMobileCard={(item) => (
               <article className='bg-card text-card-foreground ring-foreground/10 grid gap-3 rounded-xl p-4 ring-1'>
-                <div className='flex items-start justify-between gap-2'>
-                  <div>
-                    <strong>{item.model_name}</strong>
-                    <p className='text-muted-foreground text-xs'>
-                      {item.site_name} · {item.site_id}
-                    </p>
-                  </div>
-                  <VisibilityBadge visible={item.root_visible} />
+                <div>
+                  <strong>{item.model_name}</strong>
+                  <p className='text-muted-foreground text-xs'>
+                    {item.site_name} · {item.site_id}
+                  </p>
+                  <p className='text-muted-foreground text-xs'>
+                    {t('pricingGroups.pricing.vendorName')}：
+                    {item.vendor_name || '-'}
+                  </p>
                 </div>
-                <p className='text-sm'>
-                  {item.vendor_key || '-'} · {item.vendor_id}
-                </p>
-                <code className='text-xs'>
-                  {t('pricingGroups.ratio.model')} {item.model_ratio} ·{' '}
-                  {t('pricingGroups.ratio.price')} {item.model_price}
-                </code>
+                <div className='flex flex-wrap gap-2'>
+                  <BillingModeBadge mode={item.billing_mode} />
+                  <BooleanBadge
+                    value={item.ability_available}
+                    yes={t('pricingGroups.pricing.abilityAvailable')}
+                    no={t('pricingGroups.pricing.abilityUnavailable')}
+                  />
+                </div>
+                <PriceDimensions item={item} />
+                {item.billing_expr && (
+                  <pre className='bg-muted overflow-auto rounded-md p-2 text-xs whitespace-pre-wrap'>
+                    {item.billing_expr}
+                  </pre>
+                )}
                 <TextBadges values={item.enable_groups} />
                 <TextBadges values={item.supported_endpoint_types} />
                 <div className='flex flex-wrap gap-2'>
@@ -836,7 +920,6 @@ export function PricingGroupsPage({
                 </div>
               </article>
             )}
-            total={pricingQuery.data?.total ?? 0}
           />
         )}
         {search.tab === 'groups' && (
@@ -856,50 +939,128 @@ export function PricingGroupsPage({
             onRetry={() => void groupsQuery.refetch()}
             page={search.page}
             pageSize={search.pageSize}
+            total={groupsQuery.data?.total ?? 0}
             renderMobileCard={(item) => (
               <article className='bg-card text-card-foreground ring-foreground/10 grid gap-3 rounded-xl p-4 ring-1'>
-                <div className='flex items-start justify-between gap-2'>
-                  <div>
-                    <strong>{item.name}</strong>
-                    <p className='text-muted-foreground text-xs'>
-                      {item.site_name} · {item.site_id}
-                    </p>
-                  </div>
-                  <VisibilityBadge visible={item.root_visible} />
+                <div>
+                  <strong>{item.name}</strong>
+                  <p className='text-muted-foreground text-xs'>
+                    {item.site_name} · {item.site_id}
+                  </p>
                 </div>
-                <p>{item.description || '-'}</p>
-                <code>{formatNumericDisplayValue(item.ratio)}</code>
+                <BooleanBadge
+                  value={item.user_selectable}
+                  yes={t('pricingGroups.groups.userSelectable')}
+                  no={t('pricingGroups.groups.userNotSelectable')}
+                />
+                <p>
+                  {item.description || t('pricingGroups.groups.noDescription')}
+                </p>
+                <div className='flex gap-4 text-xs'>
+                  <span>
+                    {t('pricingGroups.groups.ratio')}：
+                    <code>{formatNumericDisplayValue(item.ratio)}</code>
+                  </span>
+                  <span>
+                    {t('pricingGroups.groups.topupRatio')}：
+                    <code>{formatNumericDisplayValue(item.topup_ratio)}</code>
+                  </span>
+                </div>
+                <div className='text-xs'>
+                  {t('pricingGroups.groups.autoPriority')}：
+                  {item.auto_priority ?? t('pricingGroups.groups.notAutoGroup')}
+                </div>
+                <BooleanBadge
+                  value={item.default_use_auto_group}
+                  yes={t('pricingGroups.groups.defaultAutoEnabled')}
+                  no={t('pricingGroups.groups.defaultAutoDisabled')}
+                />
+                <div className='grid gap-3'>
+                  <div>
+                    <p className='text-muted-foreground mb-1 text-xs'>
+                      {t('pricingGroups.groups.activePricing', {
+                        count: item.active_pricing_count,
+                      })}
+                    </p>
+                    <TextBadges
+                      emptyLabel={t('pricingGroups.groups.noModels')}
+                      values={item.model_names}
+                    />
+                  </div>
+                  <div>
+                    <p className='text-muted-foreground mb-1 text-xs'>
+                      {t('pricingGroups.groups.missingPricing', {
+                        count: item.missing_pricing_count,
+                      })}
+                    </p>
+                    <TextBadges
+                      emptyLabel={t('pricingGroups.groups.noMissingModels')}
+                      values={item.missing_model_names}
+                    />
+                  </div>
+                  <div>
+                    <p className='text-muted-foreground mb-1 text-xs'>
+                      {t('pricingGroups.groups.outgoingOverrides')}
+                    </p>
+                    <MappingList
+                      emptyLabel={t('pricingGroups.groups.noOverrides')}
+                      values={item.outgoing_overrides}
+                    />
+                  </div>
+                  <div>
+                    <p className='text-muted-foreground mb-1 text-xs'>
+                      {t('pricingGroups.groups.incomingOverrides')}
+                    </p>
+                    <MappingList
+                      emptyLabel={t('pricingGroups.groups.noOverrides')}
+                      values={item.incoming_overrides}
+                    />
+                  </div>
+                  <div>
+                    <p className='text-muted-foreground mb-1 text-xs'>
+                      {t('pricingGroups.groups.visibleTo')}
+                    </p>
+                    <MappingList
+                      emptyLabel={t('pricingGroups.groups.noVisibilityRules')}
+                      values={item.visible_to_groups}
+                    />
+                  </div>
+                  <div>
+                    <p className='text-muted-foreground mb-1 text-xs'>
+                      {t('pricingGroups.groups.hiddenFrom')}
+                    </p>
+                    <TextBadges
+                      emptyLabel={t('pricingGroups.groups.noVisibilityRules')}
+                      values={item.hidden_from_groups}
+                    />
+                  </div>
+                </div>
                 <div className='flex flex-wrap gap-2'>
                   <StateBadge state={item.remote_state} />
                   <DataStatusBadge status={item.data_status} />
                 </div>
+                <span className='text-muted-foreground text-xs'>
+                  {timestamp(item.collected_at)}
+                </span>
+                <Button
+                  onClick={() =>
+                    onSearchChange({
+                      billingMode: undefined,
+                      group: item.name,
+                      keyword: '',
+                      page: 1,
+                      siteIds: siteId ? [] : [item.site_id],
+                      states: [],
+                      tab: 'pricing',
+                    })
+                  }
+                  variant='outline'
+                >
+                  {t('pricingGroups.inspectPricing')}
+                </Button>
               </article>
             )}
-            total={groupsQuery.data?.total ?? 0}
           />
-        )}
-        {isPricingAnalysisTab(search.tab) && (
-          <div className='min-h-0 flex-1 overflow-y-auto' tabIndex={0}>
-            {search.tab === 'site-analysis' && (
-              <div className='grid gap-5'>
-                {statistics && (
-                  <SiteBreakdown
-                    items={statistics.site_breakdown}
-                    kind='pricing'
-                  />
-                )}
-                {groupsQuery.data && (
-                  <SiteBreakdown
-                    items={groupsQuery.data.site_breakdown}
-                    kind='groups'
-                  />
-                )}
-              </div>
-            )}
-            {statistics && search.tab !== 'site-analysis' && (
-              <TypedBreakdown statistics={statistics} tab={search.tab} />
-            )}
-          </div>
         )}
       </div>
       <ExportTaskSheet

@@ -43,6 +43,7 @@ describe('pricing/group API contract', () => {
       keyword: 'gpt',
       p: 2,
       page_size: 20,
+      billing_mode: 'tiered_expr' as const,
       site_ids: [parseIdString('9007199254740993')],
       states: ['missing' as const],
     }
@@ -54,12 +55,30 @@ describe('pricing/group API contract', () => {
       '/api/pricing-catalog/statistics',
       '/api/group-catalog',
     ])
-    for (const request of requests) {
+    for (const request of [requests[0], requests[2]]) {
+      if (!request) throw new Error('catalog request missing')
       const params = request.params as URLSearchParams
       expect(params.getAll('site_ids')).toEqual(['9007199254740993'])
       expect(params.get('group')).toBe('vip')
       expect(params.get('keyword')).toBe('gpt')
     }
+    const pricingParams = requests[0]?.params
+    const statisticsParams = requests[1]?.params
+    if (!(pricingParams instanceof URLSearchParams)) {
+      throw new Error('pricing params missing')
+    }
+    if (!(statisticsParams instanceof URLSearchParams)) {
+      throw new Error('statistics params missing')
+    }
+    expect(pricingParams.get('billing_mode')).toBe('tiered_expr')
+    const groupParams = requests[2]?.params
+    if (!(groupParams instanceof URLSearchParams)) {
+      throw new Error('group params missing')
+    }
+    expect(groupParams.has('billing_mode')).toBe(false)
+    expect(statisticsParams.toString()).toBe(
+      'p=2&page_size=20&site_ids=9007199254740993'
+    )
   })
 
   test('uses forced site routes without site_ids', async () => {

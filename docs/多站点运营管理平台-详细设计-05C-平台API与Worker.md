@@ -1448,7 +1448,11 @@ API：`GET /api/performance-history`、`GET /api/performance-history/statistics`
 新增 `/api/subscription-plans`、`/api/subscription-plans/statistics` 与对应站点接口；无用户订阅/订单全局聚合端点。订阅计划查询最多接受 100 个站点、2 个库存状态和 128 UTF-8 字节关键词；定价与分组查询最多接受 100 个站点、2 个库存状态、255 UTF-8 字节关键词和 128 UTF-8 字节精确分组。两类接口均拒绝未知参数，并在进入数据库前完成校验。
 # D138 定价与分组目录 API/Worker
 
-提供 `GET /api/pricing-catalog`、`GET /api/pricing-catalog/statistics`、`GET /api/group-catalog`，以及三个对应的 `/api/sites/:id/...` 强制站点端点。全局端点可接收 `site_ids`，站点端点拒绝 `site_ids`；列表统一服务端分页，pricing statistics 与 pricing list 使用同一安全筛选语义，group 的计数与 completeness 随 catalog 响应返回。pricing item 仅包含 site identity、model/vendor、exact decimal pricing/group ratio、usable groups、supported endpoints、remote state 与采集元数据；group item 仅包含 site identity、group name、remote state 与采集元数据。
+提供 `GET /api/pricing-catalog`、`GET /api/pricing-catalog/statistics`、`GET /api/group-catalog`，以及三个对应的 `/api/sites/:id/...` 强制站点端点。全局端点可接收 `site_ids`，站点端点拒绝 `site_ids`；列表统一服务端分页。statistics 固定读取完整 scope，不接受或继承列表关键词、状态、分组与 billing-mode 筛选。pricing item 的身份是 `(site_id,model_name)`，包含模型厂商元数据、固定价格或 Token 各价格维度、`billing_mode/billing_expr`、可用分组、supported endpoints、remote state 与采集元数据；禁止把 vendor 当作价格身份或提供“供应商定价”聚合。
+
+Worker 除 `/api/group/` 与 `/api/pricing` 外，使用 RootAuth 调用 `/api/option/`，只接受 D138 固定 option allowlist：`ModelPrice`、`ModelRatio`、`CompletionRatio`、`CacheRatio`、`CreateCacheRatio`、`ImageRatio`、`AudioRatio`、`AudioCompletionRatio`、`billing_setting.billing_mode`、`billing_setting.billing_expr`、`GroupRatio`、`TopupGroupRatio`、`UserUsableGroups`、`GroupGroupRatio`、`AutoGroups`、`DefaultUseAutoGroup`、`group_ratio_setting.group_special_usable_group`。未知 option 一律忽略；allowlist 值执行严格 JSON、长度、数量和 decimal 校验。group item 返回基础倍率、充值倍率、用户可选状态与说明、自动顺序、默认自动分组开关、入向/出向覆盖倍率、特殊可见/隐藏规则及当前/历史模型名。
+
+statistics 返回 `pricing_active/pricing_missing/group_active/group_missing` 汇总和逐站双资源完整性；pricing 计数按 `(site_id,model_name)`，group 计数按 `(site_id,group_name)`。逐站与顶层计数以已知目录行为全集，`active + missing = known total`；partial/unavailable 时保留已知事实但不得把未知事实补成 0。厂商分布只能作为模型元数据辅助信息，不得命名为供应商定价或参与价格记录去重。
 
 顶层返回 `data_status/as_of/site_breakdown`，partial/unavailable 保留已知 facts；不存在记录只有在完整快照证明后才是 missing，不能以空数组代替不可用。导出创建复用 `pricing_catalog|group_catalog`，请求体禁止携带分页或任何远端 mutation 字段。
 

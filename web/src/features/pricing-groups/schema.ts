@@ -25,15 +25,9 @@ export const pricingGroupSearchSchema = z.object({
         .optional()
     )
     .catch(undefined),
-  tab: z
-    .enum([
-      'pricing',
-      'groups',
-      'site-analysis',
-      'vendor-analysis',
-      'group-model-analysis',
-      'group-availability-analysis',
-    ])
+  billingMode: z
+    .enum(['token', 'fixed', 'tiered_expr'])
     .optional()
     .catch(undefined),
+  tab: z.enum(['groups', 'pricing']).optional().catch(undefined),
 })

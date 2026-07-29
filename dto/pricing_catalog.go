@@ -1,17 +1,22 @@
 package dto
 
 type UpstreamPricingItem struct {
-	ModelName, VendorKey, Description, Icon, Tags, OwnerBy, ModelRatio, ModelPrice, CompletionRatio string
-	CacheRatio, CreateCacheRatio, ImageRatio, AudioRatio, AudioCompletionRatio                      *string
-	VendorID, QuotaType                                                                             int64
-	RootVisible                                                                                     bool
-	EnableGroups, SupportedEndpointTypes                                                            []string
+	ModelName, VendorName, Description, Icon, Tags, OwnerBy, ModelRatio, ModelPrice, CompletionRatio string
+	BillingMode, BillingExpr, PricingSource                                                          string
+	CacheRatio, CreateCacheRatio, ImageRatio, AudioRatio, AudioCompletionRatio                       *string
+	VendorID, QuotaType                                                                              int64
+	AbilityAvailable                                                                                 bool
+	EnableGroups, SupportedEndpointTypes                                                             []string
 }
 
 type UpstreamPricingGroup struct {
-	Name, Description string
-	Ratio             *string
-	RootVisible       bool
+	Name, Description                    string
+	Ratio, TopupRatio                    *string
+	UserSelectable, DefaultUseAutoGroup  bool
+	AutoPriority                         *int
+	OutgoingOverrides, IncomingOverrides map[string]string
+	VisibleToGroups                      map[string]string
+	HiddenFromGroups                     []string
 }
 
 type UpstreamPricingSnapshot struct {
@@ -26,12 +31,25 @@ type UpstreamPricingOnlySnapshot struct {
 	Groups         []UpstreamPricingGroup
 }
 
+type UpstreamPricingConfiguration struct {
+	ModelPrice, ModelRatio, CompletionRatio, CacheRatio, CreateCacheRatio map[string]string
+	ImageRatio, AudioRatio, AudioCompletionRatio                          map[string]string
+	BillingMode, BillingExpr                                              map[string]string
+	GroupRatio, TopupGroupRatio                                           map[string]string
+	UserUsableGroups                                                      map[string]string
+	GroupGroupRatio                                                       map[string]map[string]string
+	AutoGroups                                                            []string
+	DefaultUseAutoGroup                                                   bool
+	GroupSpecialUsableGroup                                               map[string]map[string]string
+}
+
 type PricingCatalogQuery struct {
 	Page, PageSize int
 	SiteIDs        []int64
 	States         []string
 	Keyword        string
 	Group          string
+	BillingMode    string
 }
 
 func (q *PricingCatalogQuery) Normalize() {
@@ -55,6 +73,9 @@ func (q PricingCatalogQuery) Validate() map[string]string {
 	if len(q.Keyword) > 255 || len(q.Group) > 128 {
 		e["keyword"] = "invalid"
 	}
+	if q.BillingMode != "" && q.BillingMode != "token" && q.BillingMode != "fixed" && q.BillingMode != "tiered_expr" {
+		e["billing_mode"] = "invalid"
+	}
 	return nilIfEmpty(e)
 }
 
@@ -70,7 +91,7 @@ type PricingCatalogItem struct {
 	QuotaType              string   `json:"quota_type"`
 	SiteName               string   `json:"site_name"`
 	ModelName              string   `json:"model_name"`
-	VendorKey              string   `json:"vendor_key"`
+	VendorName             string   `json:"vendor_name"`
 	Description            string   `json:"description"`
 	Icon                   string   `json:"icon"`
 	Tags                   string   `json:"tags"`
@@ -83,10 +104,13 @@ type PricingCatalogItem struct {
 	ImageRatio             *string  `json:"image_ratio"`
 	AudioRatio             *string  `json:"audio_ratio"`
 	AudioCompletionRatio   *string  `json:"audio_completion_ratio"`
+	BillingMode            string   `json:"billing_mode"`
+	BillingExpr            string   `json:"billing_expr"`
+	PricingSource          string   `json:"pricing_source"`
+	AbilityAvailable       bool     `json:"ability_available"`
 	EnableGroups           []string `json:"enable_groups"`
 	SupportedEndpointTypes []string `json:"supported_endpoint_types"`
 	PricingVersion         string   `json:"pricing_version"`
-	RootVisible            bool     `json:"root_visible"`
 	RemoteState            string   `json:"remote_state"`
 	MissingCount           int      `json:"missing_count"`
 	CollectedAt            int64    `json:"collected_at"`
@@ -104,17 +128,28 @@ type PricingCatalogPageResponse struct {
 }
 
 type PricingGroupItem struct {
-	ID           string  `json:"id"`
-	SiteID       string  `json:"site_id"`
-	SiteName     string  `json:"site_name"`
-	Name         string  `json:"name"`
-	Ratio        *string `json:"ratio"`
-	Description  string  `json:"description"`
-	RootVisible  bool    `json:"root_visible"`
-	RemoteState  string  `json:"remote_state"`
-	MissingCount int     `json:"missing_count"`
-	CollectedAt  int64   `json:"collected_at"`
-	DataStatus   string  `json:"data_status"`
+	ID                  string            `json:"id"`
+	SiteID              string            `json:"site_id"`
+	SiteName            string            `json:"site_name"`
+	Name                string            `json:"name"`
+	Ratio               *string           `json:"ratio"`
+	TopupRatio          *string           `json:"topup_ratio"`
+	Description         string            `json:"description"`
+	UserSelectable      bool              `json:"user_selectable"`
+	DefaultUseAutoGroup bool              `json:"default_use_auto_group"`
+	AutoPriority        *int              `json:"auto_priority"`
+	OutgoingOverrides   map[string]string `json:"outgoing_overrides"`
+	IncomingOverrides   map[string]string `json:"incoming_overrides"`
+	VisibleToGroups     map[string]string `json:"visible_to_groups"`
+	HiddenFromGroups    []string          `json:"hidden_from_groups"`
+	RemoteState         string            `json:"remote_state"`
+	MissingCount        int               `json:"missing_count"`
+	ActivePricingCount  string            `json:"active_pricing_count"`
+	MissingPricingCount string            `json:"missing_pricing_count"`
+	ModelNames          []string          `json:"model_names"`
+	MissingModelNames   []string          `json:"missing_model_names"`
+	CollectedAt         int64             `json:"collected_at"`
+	DataStatus          string            `json:"data_status"`
 }
 
 type PricingGroupPageResponse struct {
@@ -137,27 +172,23 @@ type PricingCatalogSiteBreakdown struct {
 }
 
 type PricingCatalogStatistics struct {
-	Total                 string                              `json:"total"`
-	Missing               string                              `json:"missing"`
-	GroupTotal            string                              `json:"group_total"`
-	DataStatus            string                              `json:"data_status"`
-	SiteBreakdown         []PricingCatalogSiteBreakdown       `json:"site_breakdown"`
-	VendorBreakdown       []PricingVendorBreakdown            `json:"vendor_breakdown"`
-	GroupBreakdown        []PricingModelGroupBreakdown        `json:"group_breakdown"`
-	GroupCatalogBreakdown []GroupCatalogAvailabilityBreakdown `json:"group_catalog_breakdown"`
+	SiteCount      string                       `json:"site_count"`
+	PricingActive  string                       `json:"pricing_active"`
+	PricingMissing string                       `json:"pricing_missing"`
+	GroupActive    string                       `json:"group_active"`
+	GroupMissing   string                       `json:"group_missing"`
+	DataStatus     string                       `json:"data_status"`
+	Sites          []PricingCatalogSiteOverview `json:"sites"`
 }
-type PricingVendorBreakdown struct {
-	VendorKey string `json:"vendor_key"`
-	VendorID  string `json:"vendor_id"`
-	Total     string `json:"total"`
-	Missing   string `json:"missing"`
-}
-type PricingModelGroupBreakdown struct {
-	GroupName  string `json:"group_name"`
-	ModelCount string `json:"model_count"`
-}
-type GroupCatalogAvailabilityBreakdown struct {
-	RootVisible    bool   `json:"root_visible"`
-	RatioAvailable bool   `json:"ratio_available"`
-	Count          string `json:"count"`
+type PricingCatalogSiteOverview struct {
+	SiteID            string `json:"site_id"`
+	SiteName          string `json:"site_name"`
+	PricingActive     string `json:"pricing_active"`
+	PricingMissing    string `json:"pricing_missing"`
+	GroupActive       string `json:"group_active"`
+	GroupMissing      string `json:"group_missing"`
+	PricingDataStatus string `json:"pricing_data_status"`
+	GroupDataStatus   string `json:"group_data_status"`
+	PricingAsOf       *int64 `json:"pricing_as_of"`
+	GroupAsOf         *int64 `json:"group_as_of"`
 }

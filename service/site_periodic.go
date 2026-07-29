@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"new-api-pilot/constant"
 	"new-api-pilot/dto"
@@ -75,8 +74,7 @@ type subscriptionPlanSnapshotClient interface {
 	SnapshotSubscriptionPlans(context.Context, string) (dto.UpstreamSubscriptionPlanSnapshot, error)
 }
 type pricingCatalogSnapshotClient interface {
-	SnapshotPricingGroups(context.Context, string) (dto.UpstreamPricingGroupSnapshot, error)
-	SnapshotPricing(context.Context, string) (dto.UpstreamPricingOnlySnapshot, error)
+	SnapshotPricingCatalog(context.Context, string) (dto.UpstreamPricingSnapshot, error)
 }
 type systemTaskSnapshotClient interface {
 	SnapshotSystemTasks(context.Context, string) (dto.UpstreamSystemTaskSnapshot, error)
@@ -134,38 +132,28 @@ func (service *SiteService) executePeriodicPricing(ctx context.Context, siteID i
 		return 0, 0, model.ErrCollectionRunContract
 	}
 	now := service.clock.Now().Unix()
-	groups, groupErr := source.SnapshotPricingGroups(ctx, requestID+"_groups")
-	pricing, pricingErr := source.SnapshotPricing(ctx, requestID+"_pricing")
-	var fetched, written int64
-	commit := func(kind string, apply func(*model.SiteRepository, model.Site) (int64, error), sourceErr error) error {
-		if sourceErr != nil {
-			_ = service.sites.WithTransaction(ctx, func(r *model.SiteRepository) error {
-				return r.MarkPricingResourceFailure(ctx, site, now, kind, "PRICING_"+strings.ToUpper(kind)+"_UPSTREAM_UNAVAILABLE")
-			})
-			return service.periodicTaskError(ctx, site.ID, expectedConfigVersion, sourceErr)
-		}
-		return service.sites.WithTransaction(ctx, func(r *model.SiteRepository) error {
-			current, err := r.FindByIDForUpdate(ctx, site.ID)
-			if err != nil {
-				return err
-			}
-			if err = validatePeriodicCommit(current, site, expectedConfigVersion); err != nil {
-				return err
-			}
-			count, err := apply(r, current)
-			written += count
-			return err
+	snapshot, snapshotErr := source.SnapshotPricingCatalog(ctx, requestID)
+	if snapshotErr != nil {
+		_ = service.sites.WithTransaction(ctx, func(r *model.SiteRepository) error {
+			groupErr := r.MarkPricingResourceFailure(ctx, site, now, "group", "PRICING_CONFIGURATION_UPSTREAM_UNAVAILABLE")
+			pricingErr := r.MarkPricingResourceFailure(ctx, site, now, "pricing", "PRICING_CONFIGURATION_UPSTREAM_UNAVAILABLE")
+			return errors.Join(groupErr, pricingErr)
 		})
+		return 0, 0, service.periodicTaskError(ctx, site.ID, expectedConfigVersion, snapshotErr)
 	}
-	groupCommitErr := commit("group", func(r *model.SiteRepository, current model.Site) (int64, error) {
-		fetched += int64(len(groups.Groups))
-		return r.SyncPricingGroups(ctx, current, now, groups)
-	}, groupErr)
-	pricingCommitErr := commit("pricing", func(r *model.SiteRepository, current model.Site) (int64, error) {
-		fetched += int64(len(pricing.Items))
-		return r.SyncPricingItems(ctx, current, now, pricing)
-	}, pricingErr)
-	return fetched, written, errors.Join(groupCommitErr, pricingCommitErr)
+	var written int64
+	err = service.sites.WithTransaction(ctx, func(r *model.SiteRepository) error {
+		current, err := r.FindByIDForUpdate(ctx, site.ID)
+		if err != nil {
+			return err
+		}
+		if err = validatePeriodicCommit(current, site, expectedConfigVersion); err != nil {
+			return err
+		}
+		written, err = r.SyncPricingCatalog(ctx, current, now, snapshot)
+		return err
+	})
+	return int64(len(snapshot.Groups) + len(snapshot.Items)), written, err
 }
 
 func (service *SiteService) executePeriodicPlans(ctx context.Context, siteID int64, expectedConfigVersion int, requestID string) (int64, int64, error) {

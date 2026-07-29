@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"sort"
 	"strconv"
 
 	"gorm.io/gorm"
@@ -29,6 +30,13 @@ func pricingStrings(raw string) []string {
 	}
 	return values
 }
+func pricingStringMap(raw string) map[string]string {
+	values := map[string]string{}
+	if json.Unmarshal([]byte(raw), &values) != nil {
+		return map[string]string{}
+	}
+	return values
+}
 func pricingOutputDecimal(raw string) string {
 	number := json.Number(raw)
 	value, ok := canonicalPricingDecimal(&number)
@@ -45,10 +53,25 @@ func pricingOutputDecimalPointer(raw *string) *string {
 	return &value
 }
 func pricingItem(row model.PricingCatalogReadRow, status string) dto.PricingCatalogItem {
-	return dto.PricingCatalogItem{ID: strconv.FormatInt(row.ID, 10), SiteID: strconv.FormatInt(row.SiteID, 10), VendorID: strconv.FormatInt(row.VendorID, 10), VendorKey: row.VendorKey, QuotaType: strconv.FormatInt(row.QuotaType, 10), SiteName: row.SiteName, ModelName: row.ModelName, Description: row.Description, Icon: row.Icon, Tags: row.Tags, OwnerBy: row.OwnerBy, ModelRatio: pricingOutputDecimal(row.ModelRatio), ModelPrice: pricingOutputDecimal(row.ModelPrice), CompletionRatio: pricingOutputDecimal(row.CompletionRatio), CacheRatio: pricingOutputDecimalPointer(row.CacheRatio), CreateCacheRatio: pricingOutputDecimalPointer(row.CreateCacheRatio), ImageRatio: pricingOutputDecimalPointer(row.ImageRatio), AudioRatio: pricingOutputDecimalPointer(row.AudioRatio), AudioCompletionRatio: pricingOutputDecimalPointer(row.AudioCompletionRatio), EnableGroups: pricingStrings(row.EnableGroupsJSON), SupportedEndpointTypes: pricingStrings(row.SupportedEndpointTypesJSON), PricingVersion: row.PricingVersion, RootVisible: row.RootVisible, RemoteState: row.RemoteState, MissingCount: row.MissingCount, CollectedAt: row.CollectedAt, DataStatus: status}
+	return dto.PricingCatalogItem{ID: strconv.FormatInt(row.ID, 10), SiteID: strconv.FormatInt(row.SiteID, 10), VendorID: strconv.FormatInt(row.VendorID, 10), VendorName: row.VendorKey, QuotaType: strconv.FormatInt(row.QuotaType, 10), SiteName: row.SiteName, ModelName: row.ModelName, Description: row.Description, Icon: row.Icon, Tags: row.Tags, OwnerBy: row.OwnerBy, ModelRatio: pricingOutputDecimal(row.ModelRatio), ModelPrice: pricingOutputDecimal(row.ModelPrice), CompletionRatio: pricingOutputDecimal(row.CompletionRatio), CacheRatio: pricingOutputDecimalPointer(row.CacheRatio), CreateCacheRatio: pricingOutputDecimalPointer(row.CreateCacheRatio), ImageRatio: pricingOutputDecimalPointer(row.ImageRatio), AudioRatio: pricingOutputDecimalPointer(row.AudioRatio), AudioCompletionRatio: pricingOutputDecimalPointer(row.AudioCompletionRatio), BillingMode: row.BillingMode, BillingExpr: row.BillingExpr, PricingSource: row.PricingSource, AbilityAvailable: row.AbilityAvailable, EnableGroups: pricingStrings(row.EnableGroupsJSON), SupportedEndpointTypes: pricingStrings(row.SupportedEndpointTypesJSON), PricingVersion: row.PricingVersion, RemoteState: row.RemoteState, MissingCount: row.MissingCount, CollectedAt: row.CollectedAt, DataStatus: status}
 }
-func pricingGroupItem(row model.PricingGroupReadRow, status string) dto.PricingGroupItem {
-	return dto.PricingGroupItem{ID: strconv.FormatInt(row.ID, 10), SiteID: strconv.FormatInt(row.SiteID, 10), SiteName: row.SiteName, Name: row.GroupName, Ratio: pricingOutputDecimalPointer(row.RatioDecimal), Description: row.Description, RootVisible: row.RootVisible, RemoteState: row.RemoteState, MissingCount: row.MissingCount, CollectedAt: row.CollectedAt, DataStatus: status}
+
+type pricingGroupAssociation struct {
+	active, missing       int64
+	models, missingModels map[string]struct{}
+}
+
+func sortedPricingKeys(values map[string]struct{}) []string {
+	result := make([]string, 0, len(values))
+	for value := range values {
+		result = append(result, value)
+	}
+	sort.Strings(result)
+	return result
+}
+
+func pricingGroupItem(row model.PricingGroupReadRow, status string, association pricingGroupAssociation) dto.PricingGroupItem {
+	return dto.PricingGroupItem{ID: strconv.FormatInt(row.ID, 10), SiteID: strconv.FormatInt(row.SiteID, 10), SiteName: row.SiteName, Name: row.GroupName, Ratio: pricingOutputDecimalPointer(row.RatioDecimal), TopupRatio: pricingOutputDecimalPointer(row.TopupRatioDecimal), Description: row.Description, UserSelectable: row.UserSelectable, DefaultUseAutoGroup: row.DefaultUseAutoGroup, AutoPriority: row.AutoPriority, OutgoingOverrides: pricingStringMap(row.OutgoingOverridesJSON), IncomingOverrides: pricingStringMap(row.IncomingOverridesJSON), VisibleToGroups: pricingStringMap(row.VisibleToGroupsJSON), HiddenFromGroups: pricingStrings(row.HiddenFromGroupsJSON), RemoteState: row.RemoteState, MissingCount: row.MissingCount, ActivePricingCount: strconv.FormatInt(association.active, 10), MissingPricingCount: strconv.FormatInt(association.missing, 10), ModelNames: sortedPricingKeys(association.models), MissingModelNames: sortedPricingKeys(association.missingModels), CollectedAt: row.CollectedAt, DataStatus: status}
 }
 func pricingResourceStatus(complete, failure *int64) string {
 	if complete != nil && (failure == nil || *complete >= *failure) {
@@ -151,6 +174,27 @@ func (s *PricingCatalogService) ListGroups(ctx context.Context, q dto.PricingCat
 		if err != nil {
 			return err
 		}
+		associationRows, err := repo.GroupAssociations(ctx, rows)
+		if err != nil {
+			return err
+		}
+		associations := map[string]pricingGroupAssociation{}
+		for _, associationRow := range associationRows {
+			key := strconv.FormatInt(associationRow.SiteID, 10) + "\x00" + associationRow.GroupName
+			association := associations[key]
+			if association.models == nil {
+				association.models = map[string]struct{}{}
+				association.missingModels = map[string]struct{}{}
+			}
+			if associationRow.RemoteState == "missing" {
+				association.missing++
+				association.missingModels[associationRow.ModelName] = struct{}{}
+			} else {
+				association.active++
+				association.models[associationRow.ModelName] = struct{}{}
+			}
+			associations[key] = association
+		}
 		metrics, err := repo.SiteMetrics(ctx, q)
 		if err != nil {
 			return err
@@ -167,7 +211,12 @@ func (s *PricingCatalogService) ListGroups(ctx context.Context, q dto.PricingCat
 		}
 		items := make([]dto.PricingGroupItem, 0, len(rows))
 		for _, row := range rows {
-			items = append(items, pricingGroupItem(row, bySite[row.SiteID]))
+			key := strconv.FormatInt(row.SiteID, 10) + "\x00" + row.GroupName
+			association := associations[key]
+			if association.models == nil {
+				association = pricingGroupAssociation{models: map[string]struct{}{}, missingModels: map[string]struct{}{}}
+			}
+			items = append(items, pricingGroupItem(row, bySite[row.SiteID], association))
 		}
 		out = dto.PricingGroupPageResponse{Items: items, Total: total, Page: q.Page, PageSize: q.PageSize, DataStatus: pricingOverall(metrics, "group"), AsOf: asOf, SiteBreakdown: breakdown}
 		return nil
@@ -187,42 +236,20 @@ func (s *PricingCatalogService) Statistics(ctx context.Context, q dto.PricingCat
 		if err != nil {
 			return err
 		}
-		vendors, err := repo.VendorMetrics(ctx, q)
-		if err != nil {
-			return err
-		}
-		pricingGroups, err := repo.PricingGroupMetrics(ctx, q)
-		if err != nil {
-			return err
-		}
-		availability, err := repo.GroupAvailabilityMetrics(ctx, q)
-		if err != nil {
-			return err
-		}
-		out = dto.PricingCatalogStatistics{DataStatus: pricingOverall(rows, "combined"), SiteBreakdown: []dto.PricingCatalogSiteBreakdown{}, VendorBreakdown: []dto.PricingVendorBreakdown{}, GroupBreakdown: []dto.PricingModelGroupBreakdown{}, GroupCatalogBreakdown: []dto.GroupCatalogAvailabilityBreakdown{}}
-		var total, missing, groups int64
+		out = dto.PricingCatalogStatistics{DataStatus: pricingOverall(rows, "combined"), Sites: []dto.PricingCatalogSiteOverview{}}
+		out.SiteCount = strconv.Itoa(len(rows))
+		var pricingActive, pricingMissing, groupActive, groupMissing int64
 		for _, row := range rows {
-			total += row.Total
-			missing += row.Missing
-			groups += row.GroupTotal
-			asOf := row.PricingAsOf
-			if row.GroupAsOf != nil && (asOf == nil || *row.GroupAsOf > *asOf) {
-				asOf = row.GroupAsOf
-			}
-			out.SiteBreakdown = append(out.SiteBreakdown, dto.PricingCatalogSiteBreakdown{SiteID: strconv.FormatInt(row.SiteID, 10), SiteName: row.SiteName, Total: strconv.FormatInt(row.Total, 10), Missing: strconv.FormatInt(row.Missing, 10), DataStatus: pricingCombinedStatus(row), AsOf: asOf})
+			pricingActive += row.Total - row.Missing
+			pricingMissing += row.Missing
+			groupActive += row.GroupTotal - row.GroupMissing
+			groupMissing += row.GroupMissing
+			out.Sites = append(out.Sites, dto.PricingCatalogSiteOverview{SiteID: strconv.FormatInt(row.SiteID, 10), SiteName: row.SiteName, PricingActive: strconv.FormatInt(row.Total-row.Missing, 10), PricingMissing: strconv.FormatInt(row.Missing, 10), GroupActive: strconv.FormatInt(row.GroupTotal-row.GroupMissing, 10), GroupMissing: strconv.FormatInt(row.GroupMissing, 10), PricingDataStatus: pricingStatus(row, "pricing"), GroupDataStatus: pricingStatus(row, "group"), PricingAsOf: row.PricingAsOf, GroupAsOf: row.GroupAsOf})
 		}
-		out.Total = strconv.FormatInt(total, 10)
-		out.Missing = strconv.FormatInt(missing, 10)
-		out.GroupTotal = strconv.FormatInt(groups, 10)
-		for _, row := range vendors {
-			out.VendorBreakdown = append(out.VendorBreakdown, dto.PricingVendorBreakdown{VendorKey: row.VendorKey, VendorID: strconv.FormatInt(row.VendorID, 10), Total: strconv.FormatInt(row.Total, 10), Missing: strconv.FormatInt(row.Missing, 10)})
-		}
-		for _, row := range pricingGroups {
-			out.GroupBreakdown = append(out.GroupBreakdown, dto.PricingModelGroupBreakdown{GroupName: row.GroupName, ModelCount: strconv.FormatInt(row.ModelCount, 10)})
-		}
-		for _, row := range availability {
-			out.GroupCatalogBreakdown = append(out.GroupCatalogBreakdown, dto.GroupCatalogAvailabilityBreakdown{RootVisible: row.RootVisible, RatioAvailable: row.RatioAvailable, Count: strconv.FormatInt(row.Count, 10)})
-		}
+		out.PricingActive = strconv.FormatInt(pricingActive, 10)
+		out.PricingMissing = strconv.FormatInt(pricingMissing, 10)
+		out.GroupActive = strconv.FormatInt(groupActive, 10)
+		out.GroupMissing = strconv.FormatInt(groupMissing, 10)
 		return nil
 	}, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	return out, err

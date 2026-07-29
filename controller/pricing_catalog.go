@@ -45,7 +45,15 @@ func (c *PricingCatalogController) run(g *gin.Context, sites []int64, kind strin
 		common.AbortInternalError(g)
 		return
 	}
-	allowed := map[string]bool{"p": true, "page_size": true, "states": true, "keyword": true, "group": true}
+	allowed := map[string]bool{"p": true, "page_size": true}
+	if kind != "statistics" {
+		allowed["states"] = true
+		allowed["keyword"] = true
+		allowed["group"] = true
+	}
+	if kind == "pricing" {
+		allowed["billing_mode"] = true
+	}
 	if sites == nil {
 		allowed["site_ids"] = true
 	}
@@ -57,7 +65,7 @@ func (c *PricingCatalogController) run(g *gin.Context, sites []int64, kind strin
 	}
 	p, _ := strconv.Atoi(g.DefaultQuery("p", "1"))
 	size, _ := strconv.Atoi(g.DefaultQuery("page_size", "20"))
-	q := dto.PricingCatalogQuery{Page: p, PageSize: size, SiteIDs: sites, States: inventoryQueryValues(g, "states"), Keyword: g.Query("keyword"), Group: g.Query("group")}
+	q := dto.PricingCatalogQuery{Page: p, PageSize: size, SiteIDs: sites, States: inventoryQueryValues(g, "states"), Keyword: g.Query("keyword"), Group: g.Query("group"), BillingMode: g.Query("billing_mode")}
 	if sites == nil {
 		var invalid bool
 		q.SiteIDs, invalid = parseLogIDList(g.QueryArray("site_ids"))

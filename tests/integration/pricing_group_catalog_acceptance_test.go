@@ -41,9 +41,10 @@ func TestA99PricingAndGroupCatalog(t *testing.T) {
 	now := fixture.Clock.NowUnix
 	site := createCoreAuthorizedSite(t, db, newCoreCipher(t), now)
 	repo := model.NewSiteRepository(db)
-	item := dto.UpstreamPricingItem{ModelName: fixture.Pricing[0].ModelName, VendorKey: "openai", ModelRatio: fixture.Pricing[0].InputPrice, ModelPrice: fixture.Pricing[0].OutputPrice, CompletionRatio: "1", RootVisible: true, EnableGroups: []string{"default", "vip-zero-usage"}, SupportedEndpointTypes: []string{"chat_completions", "responses"}}
+	item := dto.UpstreamPricingItem{ModelName: fixture.Pricing[0].ModelName, VendorName: "openai", ModelRatio: fixture.Pricing[0].InputPrice, ModelPrice: fixture.Pricing[0].OutputPrice, CompletionRatio: "1", BillingMode: "token", PricingSource: "token_explicit", AbilityAvailable: true, EnableGroups: []string{"default", "vip-zero-usage"}, SupportedEndpointTypes: []string{"chat_completions", "responses"}}
 	one, discount := "1", "0.85"
-	groups := []dto.UpstreamPricingGroup{{Name: "default", Ratio: &one, RootVisible: true}, {Name: "vip-zero-usage", Ratio: &discount, RootVisible: true}}
+	priority := 1
+	groups := []dto.UpstreamPricingGroup{{Name: "default", Ratio: &one, UserSelectable: true, DefaultUseAutoGroup: true, AutoPriority: &priority}, {Name: "vip-zero-usage", Ratio: &discount, TopupRatio: &one, UserSelectable: true, OutgoingOverrides: map[string]string{"default": "0.9"}, VisibleToGroups: map[string]string{"default": "VIP"}}}
 	if written, err := repo.SyncPricingCatalog(context.Background(), site, now, dto.UpstreamPricingSnapshot{PricingVersion: "pinned", Items: []dto.UpstreamPricingItem{item}, Groups: groups}); err != nil || written != 3 {
 		t.Fatalf("sync written=%d err=%v", written, err)
 	}
@@ -57,18 +58,27 @@ func TestA99PricingAndGroupCatalog(t *testing.T) {
 	if err != nil || page.Total != 1 || page.Items[0].ModelRatio != wantRatio {
 		t.Fatalf("page=%#v err=%v", page, err)
 	}
+	changedVendor := item
+	changedVendor.VendorName = "updated-metadata-vendor"
+	if written, err := repo.SyncPricingCatalog(context.Background(), site, now+1, dto.UpstreamPricingSnapshot{PricingVersion: "pinned", Items: []dto.UpstreamPricingItem{changedVendor}, Groups: groups}); err != nil || written != 1 {
+		t.Fatalf("vendor metadata update written=%d err=%v", written, err)
+	}
+	page, err = svc.List(context.Background(), q)
+	if err != nil || page.Total != 1 || page.Items[0].VendorName != "updated-metadata-vendor" || page.Items[0].RemoteState != "normal" {
+		t.Fatalf("vendor metadata page=%#v err=%v", page, err)
+	}
 	groupPage, err := svc.ListGroups(context.Background(), q)
-	if err != nil || groupPage.Total != 2 || groupPage.Items[1].Name != "vip-zero-usage" || !groupPage.Items[1].RootVisible {
+	if err != nil || groupPage.Total != 2 || groupPage.Items[1].Name != "vip-zero-usage" || !groupPage.Items[1].UserSelectable || len(groupPage.Items[1].ModelNames) != 1 || groupPage.Items[1].ModelNames[0] != item.ModelName || groupPage.Items[1].OutgoingOverrides["default"] != "0.9" {
 		t.Fatalf("groups=%#v err=%v", groupPage, err)
 	}
-	if written, err := repo.SyncPricingCatalog(context.Background(), site, now+1, dto.UpstreamPricingSnapshot{PricingVersion: "pinned", Items: nil, Groups: groups[:1]}); err != nil || written != 2 {
+	if written, err := repo.SyncPricingCatalog(context.Background(), site, now+2, dto.UpstreamPricingSnapshot{PricingVersion: "pinned", Items: nil, Groups: groups[:1]}); err != nil || written != 2 {
 		t.Fatalf("missing written=%d err=%v", written, err)
 	}
 	stats, err := svc.Statistics(context.Background(), q)
-	if err != nil || stats.Total != "1" || stats.Missing != "1" {
+	if err != nil || stats.PricingActive != "0" || stats.PricingMissing != "1" || stats.GroupActive != "1" || stats.GroupMissing != "1" {
 		t.Fatalf("stats=%#v err=%v", stats, err)
 	}
-	if _, err := repo.SyncPricingCatalog(context.Background(), site, now+2, dto.UpstreamPricingSnapshot{PricingVersion: "pinned", Items: []dto.UpstreamPricingItem{item}, Groups: groups}); err != nil {
+	if _, err := repo.SyncPricingCatalog(context.Background(), site, now+3, dto.UpstreamPricingSnapshot{PricingVersion: "pinned", Items: []dto.UpstreamPricingItem{item}, Groups: groups}); err != nil {
 		t.Fatal(err)
 	}
 	for _, kind := range []string{"pricing", "group"} {
@@ -78,11 +88,15 @@ func TestA99PricingAndGroupCatalog(t *testing.T) {
 			t.Fatalf("kind=%s result=%+v err=%v", kind, result, err)
 		}
 	}
-	for _, forbidden := range []string{"billing_expr", "custom_path", "channel_key", "base_url"} {
+	for _, forbidden := range []string{"custom_path", "channel_key", "base_url"} {
 		var count int64
 		err := db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name IN ('site_pricing_catalog','site_group_catalog') AND column_name=?", forbidden).Scan(&count).Error
 		if err != nil || count != 0 {
 			t.Fatalf("forbidden=%s count=%d err=%v", forbidden, count, err)
 		}
+	}
+	var billingExprColumns int64
+	if err := db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='site_pricing_catalog' AND column_name='billing_expr'").Scan(&billingExprColumns).Error; err != nil || billingExprColumns != 1 {
+		t.Fatalf("billing_expr columns=%d err=%v", billingExprColumns, err)
 	}
 }
