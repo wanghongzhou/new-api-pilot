@@ -62,6 +62,8 @@ var defaultSettings = []settingSeed{
 	{Key: "collector.probe_interval_seconds", Value: "60", Type: "int"},
 	{Key: "collector.realtime_interval_seconds", Value: "60", Type: "int"},
 	{Key: "collector.resource_interval_seconds", Value: "60", Type: "int"},
+	{Key: "collector.operational_interval_seconds", Value: "300", Type: "int"},
+	{Key: "collector.catalog_interval_seconds", Value: "600", Type: "int"},
 	{Key: "collector.usage_delay_minutes", Value: "5", Type: "int"},
 	{Key: "collector.minute_retention_days", Value: "90", Type: "int"},
 	{Key: "logs.retention_days", Value: "90", Type: "int"},

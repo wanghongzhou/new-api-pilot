@@ -4,6 +4,7 @@ import {
   Chart01Icon,
   Database01Icon,
   FileExportIcon,
+  TableIcon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
@@ -16,6 +17,7 @@ import { toast } from 'sonner'
 import { DataStatusBadge } from '@/components/data/data-status'
 import { FacetedFilter } from '@/components/data/faceted-filter'
 import { FilterPanel } from '@/components/data/filter-panel'
+import { InventoryTrendChart } from '@/components/data/inventory-trend-chart'
 import { MetricValue } from '@/components/data/metric-value'
 import { ErrorState } from '@/components/error-state'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
@@ -323,6 +325,8 @@ function InventoryFilters({
   const reset = buildChannelInventorySearch({
     pageSize: search.pageSize,
     tab: search.tab,
+    trendPageSize: search.trendPageSize,
+    trendView: search.trendView,
   })
   const advancedCount = [
     search.types.length > 0,
@@ -518,68 +522,152 @@ function InventoryFilters({
   )
 }
 
-function TrendTable({ points }: { points: ChannelInventoryTrendPoint[] }) {
+function TrendTable({
+  onPageChange,
+  onPageSizeChange,
+  page,
+  pageSize,
+  points,
+}: {
+  onPageChange: (page: number) => void
+  onPageSizeChange: (pageSize: number) => void
+  page: number
+  pageSize: number
+  points: ChannelInventoryTrendPoint[]
+}) {
   const { t } = useTranslation()
+  const ordered = useMemo(
+    () =>
+      [...points].sort((left, right) => right.bucket_start - left.bucket_start),
+    [points]
+  )
+  const offset = (page - 1) * pageSize
+  const columns = useMemo<ColumnDef<ChannelInventoryTrendPoint, unknown>[]>(
+    () => [
+      {
+        accessorFn: (point) => timestamp(point.bucket_start),
+        header: t('channelInventory.trend.bucket'),
+        id: 'bucket',
+      },
+      {
+        accessorKey: 'channel_count',
+        header: t('channelInventory.metric.channelCount'),
+      },
+      {
+        accessorKey: 'available_count',
+        header: t('channelInventory.metric.available'),
+      },
+      {
+        accessorKey: 'unavailable_count',
+        header: t('channelInventory.metric.unavailable'),
+      },
+      {
+        accessorKey: 'balance_total',
+        header: t('channelInventory.metric.balance'),
+      },
+      {
+        accessorKey: 'response_time_avg_ms',
+        header: t('channelInventory.metric.responseAvg'),
+      },
+      {
+        accessorKey: 'availability_rate',
+        header: t('channelInventory.metric.availability'),
+      },
+      {
+        cell: ({ row }) => (
+          <DataStatusBadge status={row.original.data_status} />
+        ),
+        header: t('common.status'),
+        id: 'status',
+      },
+    ],
+    [t]
+  )
   return (
-    <section
-      aria-labelledby='channel-inventory-trend-title'
-      className='grid gap-3'
-    >
-      <h2 className='text-lg font-semibold' id='channel-inventory-trend-title'>
-        {t('channelInventory.trend.title')}
-      </h2>
-      {points.length === 0 ? (
-        <p className='text-muted-foreground text-sm'>
-          {t('channelInventory.trend.empty')}
-        </p>
+    <DataTable
+      ariaLabel={t('channelInventory.trend.table')}
+      columns={columns}
+      data={ordered.slice(offset, offset + pageSize)}
+      emptyTitle={t('channelInventory.trend.empty')}
+      onPageChange={onPageChange}
+      onPageSizeChange={onPageSizeChange}
+      page={page}
+      pageSize={pageSize}
+      total={ordered.length}
+    />
+  )
+}
+
+function TrendView({
+  onSearchChange,
+  points,
+  search,
+}: {
+  onSearchChange: (changes: Partial<ChannelInventorySearch>) => void
+  points: ChannelInventoryTrendPoint[]
+  search: ChannelInventorySearch
+}) {
+  const { t } = useTranslation()
+  const series = useMemo(
+    () => [
+      {
+        key: 'channel_count',
+        label: t('channelInventory.metric.channelCount'),
+      },
+      { key: 'available_count', label: t('channelInventory.metric.available') },
+      {
+        key: 'unavailable_count',
+        label: t('channelInventory.metric.unavailable'),
+      },
+    ],
+    [t]
+  )
+  return (
+    <section className='flex min-h-0 flex-1 flex-col gap-3'>
+      <Tabs
+        onValueChange={(trendView) =>
+          onSearchChange({
+            trendPage: 1,
+            trendView: trendView as ChannelInventorySearch['trendView'],
+          })
+        }
+        value={search.trendView}
+      >
+        <TabsList aria-label={t('channelInventory.trend.views.label')}>
+          <TabsTrigger value='chart'>
+            <HugeiconsIcon icon={Chart01Icon} strokeWidth={2} />
+            {t('channelInventory.trend.views.chart')}
+          </TabsTrigger>
+          <TabsTrigger value='table'>
+            <HugeiconsIcon icon={TableIcon} strokeWidth={2} />
+            {t('channelInventory.trend.views.table')}
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+      {search.trendView === 'chart' ? (
+        <InventoryTrendChart
+          ariaLabel={t('channelInventory.trend.chart')}
+          emptyText={t('channelInventory.trend.empty')}
+          points={points.map((point) => ({
+            bucketStart: point.bucket_start,
+            values: {
+              available_count: point.available_count,
+              channel_count: point.channel_count,
+              unavailable_count: point.unavailable_count,
+            },
+          }))}
+          series={series}
+        />
       ) : (
-        <div className='overflow-x-auto rounded-lg border'>
-          <table className='w-full min-w-4xl text-sm'>
-            <thead className='bg-[var(--table-header)] text-left'>
-              <tr>
-                <th className='px-3 py-2'>
-                  {t('channelInventory.trend.bucket')}
-                </th>
-                <th className='px-3 py-2'>
-                  {t('channelInventory.metric.channelCount')}
-                </th>
-                <th className='px-3 py-2'>
-                  {t('channelInventory.metric.available')}
-                </th>
-                <th className='px-3 py-2'>
-                  {t('channelInventory.metric.balance')}
-                </th>
-                <th className='px-3 py-2'>
-                  {t('channelInventory.metric.responseAvg')}
-                </th>
-                <th className='px-3 py-2'>
-                  {t('channelInventory.metric.availability')}
-                </th>
-                <th className='px-3 py-2'>{t('common.status')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {points.map((point) => (
-                <tr
-                  className='border-t transition-colors hover:bg-[var(--table-header-hover)]'
-                  key={point.bucket_start}
-                >
-                  <td className='px-3 py-2 whitespace-nowrap'>
-                    {timestamp(point.bucket_start)}
-                  </td>
-                  <td className='px-3 py-2'>{point.channel_count}</td>
-                  <td className='px-3 py-2'>{point.available_count}</td>
-                  <td className='px-3 py-2'>{point.balance_total}</td>
-                  <td className='px-3 py-2'>{point.response_time_avg_ms}</td>
-                  <td className='px-3 py-2'>{point.availability_rate}</td>
-                  <td className='px-3 py-2'>
-                    <DataStatusBadge status={point.data_status} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <TrendTable
+          onPageChange={(trendPage) => onSearchChange({ trendPage })}
+          onPageSizeChange={(trendPageSize) =>
+            onSearchChange({ trendPage: 1, trendPageSize })
+          }
+          page={search.trendPage}
+          pageSize={search.trendPageSize}
+          points={points}
+        />
       )}
     </section>
   )
@@ -913,7 +1001,7 @@ export function ChannelInventoryPage({
         </section>
         <InventoryFilters
           global={!siteId}
-          onChange={onSearchChange}
+          onChange={(changes) => onSearchChange({ ...changes, trendPage: 1 })}
           search={search}
           sites={sitesQuery.data?.items ?? []}
         />
@@ -989,7 +1077,13 @@ export function ChannelInventoryPage({
         )}
         {statistics && search.tab !== 'list' && (
           <div className='min-h-0 flex-1 overflow-y-auto pr-1' tabIndex={0}>
-            {search.tab === 'trend' && <TrendTable points={statistics.trend} />}
+            {search.tab === 'trend' && (
+              <TrendView
+                onSearchChange={onSearchChange}
+                points={statistics.trend}
+                search={search}
+              />
+            )}
             {search.tab === 'dimensions' && (
               <div className='grid gap-6 sm:grid-cols-2 xl:grid-cols-4'>
                 <BreakdownSection

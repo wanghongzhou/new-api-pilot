@@ -1,4 +1,9 @@
-import { ArrowLeft01Icon, FileExportIcon } from '@hugeicons/core-free-icons'
+import {
+  ArrowLeft01Icon,
+  Chart01Icon,
+  Database01Icon,
+  FileExportIcon,
+} from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
@@ -8,14 +13,21 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { DataStatusBadge } from '@/components/data/data-status'
+import { FacetedFilter } from '@/components/data/faceted-filter'
 import { FilterPanel } from '@/components/data/filter-panel'
-import { MetricValue } from '@/components/data/metric-value'
+import { ErrorState } from '@/components/error-state'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
+import { LoadingState } from '@/components/loading-state'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
-import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  OperationsAnalyticsNavigation,
+  OperationsViewPurpose,
+} from '@/features/operations-analytics/components/operations-analytics-workspace'
+import { listSites } from '@/features/sites/api'
+import { siteKeys } from '@/features/sites/query-keys'
 import { createStatisticsExport } from '@/features/statistics/api'
 import { ExportTaskSheet } from '@/features/statistics/components/export-task-sheet'
 import type {
@@ -34,14 +46,25 @@ import { hasFilterChanges } from '@/lib/filter-state'
 
 import { getRankings, getSiteRankings } from '../api'
 import { buildRankingExportRequest } from '../export-request'
+import { ratioToPercent } from '../presentation'
 import { rankingKeys } from '../query-keys'
 import { buildRankingSearch, type RankingSearch } from '../search'
-import type { RankingItem, RankingPeriod } from '../types'
+import type {
+  RankingHistoryPoint,
+  RankingItem,
+  RankingPeriod,
+  RankingSiteBreakdown,
+} from '../types'
 
 function time(value: number | null) {
   return value == null || value <= 0
     ? '-'
     : fromUnixSeconds(value).format('YYYY-MM-DD HH:mm:ss')
+}
+
+function pageItems<T>(items: T[], page: number, pageSize: number) {
+  const start = (page - 1) * pageSize
+  return items.slice(start, start + pageSize)
 }
 
 function periodText(period: RankingPeriod, t: (key: string) => string) {
@@ -65,6 +88,12 @@ function name(item: RankingItem, vendors: boolean, t: (key: string) => string) {
     : item.dimension_name || item.dimension_id
 }
 
+function movementText(item: RankingItem, t: (key: string) => string) {
+  if (item.movement_type === 'new') return t('rankings.movement.new')
+  if (item.movement_type === 'removed') return t('rankings.movement.removed')
+  return ratioToPercent(item.growth) ?? t('data.unavailable')
+}
+
 function RankingList({
   items,
   title,
@@ -78,6 +107,11 @@ function RankingList({
   return (
     <section className='grid gap-2'>
       <h3 className='font-semibold'>{title}</h3>
+      {items.length === 0 && (
+        <p className='text-muted-foreground rounded-lg border border-dashed p-4 text-sm'>
+          {t('rankings.emptyMovement')}
+        </p>
+      )}
       {items.slice(0, 10).map((item) => (
         <article
           className='border-border grid gap-1 rounded-lg border p-3'
@@ -85,15 +119,14 @@ function RankingList({
         >
           <div className='flex justify-between gap-2'>
             <span className='font-medium'>
-              #{item.rank} {name(item, vendors, t)}
+              {item.movement_type === 'removed' ? '' : `#${item.rank} `}
+              {name(item, vendors, t)}
             </span>
-            <span>
-              {item.growth == null ? t('data.unavailableValue') : item.growth}
-            </span>
+            <span>{movementText(item, t)}</span>
           </div>
           <span className='text-muted-foreground text-xs'>
             {t('rankings.itemValues', {
-              share: item.share,
+              share: ratioToPercent(item.share),
               tokens: item.token_used,
             })}
           </span>
@@ -119,6 +152,21 @@ export function RankingsPage({
     () => ({ period: search.period, site_ids: search.siteIds }),
     [search.period, search.siteIds]
   )
+  const siteParams = useMemo(
+    () => ({
+      p: 1,
+      page_size: 100,
+      sort_by: 'name',
+      sort_order: 'asc' as const,
+    }),
+    []
+  )
+  const sitesQuery = useQuery({
+    enabled: siteId == null,
+    queryFn: () => listSites(siteParams),
+    queryKey: siteKeys.list(siteParams),
+    staleTime: 5 * 60_000,
+  })
   const rankingQuery = useQuery({
     enabled: validSite,
     queryFn: () =>
@@ -185,41 +233,121 @@ export function RankingsPage({
         id: 'totals',
       },
       {
-        cell: ({ row }) => row.original.share,
+        cell: ({ row }) => ratioToPercent(row.original.share),
         header: t('rankings.share'),
         id: 'share',
       },
       {
-        cell: ({ row }) => <MetricValue value={row.original.growth} />,
+        cell: ({ row }) =>
+          ratioToPercent(row.original.growth) ?? t('data.unavailable'),
         header: t('rankings.growth'),
         id: 'growth',
       },
     ],
     [t, vendors]
   )
+  const historyColumns = useMemo<ColumnDef<RankingHistoryPoint, unknown>[]>(
+    () => [
+      {
+        cell: ({ row }) => <time>{time(row.original.bucket_start)}</time>,
+        header: t('rankings.bucket'),
+        id: 'bucket',
+      },
+      {
+        accessorKey: 'dimension_id',
+        header: t('rankings.dimension'),
+      },
+      {
+        accessorKey: 'token_used',
+        header: t('rankings.tokens'),
+      },
+    ],
+    [t]
+  )
+  const siteColumns = useMemo<ColumnDef<RankingSiteBreakdown, unknown>[]>(
+    () => [
+      {
+        cell: ({ row }) => (
+          <div className='min-w-36'>
+            <span className='block'>{row.original.site_name}</span>
+            <code className='text-muted-foreground text-xs'>
+              {row.original.site_id}
+            </code>
+          </div>
+        ),
+        header: t('rankings.filters.site'),
+        id: 'site',
+      },
+      {
+        accessorKey: 'dimension_id',
+        header: t('rankings.dimension'),
+      },
+      {
+        accessorKey: 'token_used',
+        header: t('rankings.tokens'),
+      },
+      {
+        cell: ({ row }) => (
+          <DataStatusBadge status={row.original.data_status} />
+        ),
+        header: t('rankings.dataStatus'),
+        id: 'dataStatus',
+      },
+      {
+        cell: ({ row }) => time(row.original.as_of),
+        header: t('rankings.asOfLabel'),
+        id: 'asOf',
+      },
+    ],
+    [t]
+  )
   const periods: RankingPeriod[] = ['today', 'week', 'month', 'year']
-  const reset = buildRankingSearch({ tab: search.tab })
+  const reset = buildRankingSearch({
+    pageSize: search.pageSize,
+    tab: search.tab,
+    view: search.view,
+  })
+  const purpose = {
+    history: [
+      t('rankings.views.history'),
+      t('rankings.views.historyDescription'),
+    ],
+    movement: [
+      t('rankings.views.movement'),
+      t('rankings.views.movementDescription'),
+    ],
+    ranking: [
+      t('rankings.views.ranking'),
+      t('rankings.views.rankingDescription'),
+    ],
+    sites: [t('rankings.views.sites'), t('rankings.views.sitesDescription')],
+  }[search.view]
   return (
     <SectionPageLayout
-      actions={(['xlsx', 'csv'] as const).map((format) => (
-        <Button
-          disabled={exportMutation.isPending || !validSite}
-          key={format}
-          onClick={() => exportMutation.mutate(format)}
-          variant='outline'
-        >
-          <HugeiconsIcon icon={FileExportIcon} strokeWidth={2} />
-          {t('rankings.export', { format: format.toUpperCase() })}
-        </Button>
-      ))}
+      actions={
+        search.view === 'ranking'
+          ? (['xlsx', 'csv'] as const).map((format) => (
+              <Button
+                disabled={exportMutation.isPending || !validSite}
+                key={format}
+                onClick={() => exportMutation.mutate(format)}
+                variant='outline'
+              >
+                <HugeiconsIcon icon={FileExportIcon} strokeWidth={2} />
+                {t('rankings.export', { format: format.toUpperCase() })}
+              </Button>
+            ))
+          : undefined
+      }
       description={
         siteId
           ? t('rankings.siteDescription', { id: siteId })
           : t('rankings.description')
       }
+      fixedContent
       title={siteId ? t('rankings.siteTitle') : t('rankings.title')}
     >
-      <div className='grid min-w-0 gap-6'>
+      <div className='flex h-full min-h-0 min-w-0 flex-col gap-4'>
         {siteId && (
           <DetailBackLink
             render={<Link params={{ siteId }} to='/sites/$siteId' />}
@@ -228,15 +356,12 @@ export function RankingsPage({
             {t('rankings.backToSite')}
           </DetailBackLink>
         )}
-        <section
-          className='border-primary/30 bg-primary/5 rounded-lg border p-4'
-          role='note'
-        >
-          {t('rankings.localBoundary')}
-        </section>
+        {siteId && (
+          <OperationsAnalyticsNavigation active='rankings' siteId={siteId} />
+        )}
         <Tabs
           onValueChange={(tab) =>
-            onSearchChange({ tab: tab as RankingSearch['tab'] })
+            onSearchChange({ page: 1, tab: tab as RankingSearch['tab'] })
           }
           value={search.tab}
         >
@@ -249,6 +374,53 @@ export function RankingsPage({
             </TabsTrigger>
           </TabsList>
         </Tabs>
+        <Tabs
+          onValueChange={(view) =>
+            onSearchChange({
+              page: 1,
+              view: view as RankingSearch['view'],
+            })
+          }
+          value={search.view}
+        >
+          <TabsList
+            aria-label={t('rankings.views.label')}
+            className='max-w-full flex-wrap justify-start group-data-horizontal/tabs:h-auto'
+          >
+            <TabsTrigger value='ranking'>
+              {t('rankings.views.ranking')}
+            </TabsTrigger>
+            <TabsTrigger value='movement'>
+              {t('rankings.views.movement')}
+            </TabsTrigger>
+            <TabsTrigger value='history'>
+              {t('rankings.views.history')}
+            </TabsTrigger>
+            <TabsTrigger value='sites'>{t('rankings.views.sites')}</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <OperationsViewPurpose
+          badges={data && <DataStatusBadge status={data.data_status} />}
+          description={purpose[1]}
+          icon={search.view === 'ranking' ? Database01Icon : Chart01Icon}
+          notice={
+            data ? (
+              <>
+                {t('rankings.range', {
+                  end: time(data.end_timestamp),
+                  start: time(data.start_timestamp),
+                })}
+                {' · '}
+                {t('rankings.asOf', { time: time(data.as_of) })}
+                {' · '}
+                {t('rankings.localBoundary')}
+              </>
+            ) : (
+              t('rankings.localBoundary')
+            )
+          }
+          title={purpose[0]}
+        />
         <FilterPanel
           description={t('rankings.localBoundary')}
           hasActiveFilters={hasFilterChanges(search, reset, [
@@ -263,7 +435,7 @@ export function RankingsPage({
               <Button
                 aria-pressed={search.period === period}
                 key={period}
-                onClick={() => onSearchChange({ period })}
+                onClick={() => onSearchChange({ page: 1, period })}
                 variant={search.period === period ? 'secondary' : 'outline'}
               >
                 {periodText(period, t)}
@@ -271,67 +443,78 @@ export function RankingsPage({
             ))}
           </div>
           {!siteId && (
-            <label className='grid gap-1 text-sm'>
-              <span>{t('rankings.siteIds')}</span>
-              <Input
-                inputMode='numeric'
-                onChange={(event) =>
-                  onSearchChange({
-                    siteIds: event.target.value
-                      .split(',')
-                      .map((x) => x.trim())
-                      .filter(isIdString)
-                      .map(parseIdString),
-                  })
-                }
-                value={search.siteIds.join(',')}
-              />
-            </label>
+            <FacetedFilter
+              clearLabel={t('rankings.filters.allSites')}
+              onChange={(value) =>
+                onSearchChange({
+                  page: 1,
+                  siteIds: isIdString(value) ? [parseIdString(value)] : [],
+                })
+              }
+              options={(sitesQuery.data?.items ?? []).map((site) => ({
+                label: site.name,
+                value: site.id,
+              }))}
+              title={t('rankings.filters.site')}
+              value={search.siteIds.length === 1 ? search.siteIds[0] : ''}
+            />
           )}
         </FilterPanel>
-        {data && (
-          <div className='flex flex-wrap items-center gap-2' role='status'>
-            <DataStatusBadge status={data.data_status} />
-            <span>
-              {t('rankings.range', {
-                end: time(data.end_timestamp),
-                start: time(data.start_timestamp),
-              })}
-            </span>
-            <span>{t('rankings.asOf', { time: time(data.as_of) })}</span>
-          </div>
-        )}
-        <DataTable
-          ariaLabel={t('rankings.table')}
-          columns={columns}
-          data={data?.items ?? []}
-          emptyTitle={t('rankings.empty')}
-          error={!validSite || rankingQuery.isError}
-          loading={rankingQuery.isPending}
-          onRetry={validSite ? () => void rankingQuery.refetch() : undefined}
-          renderMobileCard={(item) => (
-            <article className='border-border grid gap-2 rounded-lg border p-4'>
-              <div className='flex justify-between gap-2'>
-                <span className='font-medium'>
-                  #{item.rank} {name(item, vendors, t)}
+        {search.view === 'ranking' && (
+          <DataTable
+            ariaLabel={t('rankings.table')}
+            columns={columns}
+            data={pageItems(data?.items ?? [], search.page, search.pageSize)}
+            emptyTitle={t('rankings.empty')}
+            error={!validSite || rankingQuery.isError}
+            loading={rankingQuery.isPending}
+            onPageChange={(page) => onSearchChange({ page })}
+            onPageSizeChange={(pageSize) =>
+              onSearchChange({ page: 1, pageSize })
+            }
+            onRetry={validSite ? () => void rankingQuery.refetch() : undefined}
+            page={search.page}
+            pageSize={search.pageSize}
+            renderMobileCard={(item) => (
+              <article className='border-border grid gap-2 rounded-lg border p-4'>
+                <div className='flex justify-between gap-2'>
+                  <span className='font-medium'>
+                    #{item.rank} {name(item, vendors, t)}
+                  </span>
+                  <span>
+                    {ratioToPercent(item.growth) ?? t('data.unavailable')}
+                  </span>
+                </div>
+                <span>
+                  {t('rankings.tokensValue', { value: item.token_used })}
                 </span>
-                <MetricValue value={item.growth} />
-              </div>
-              <span>
-                {t('rankings.tokensValue', { value: item.token_used })}
-              </span>
-              <span>
-                {t('rankings.requestsValue', {
-                  value: item.request_count,
-                })}
-              </span>
-              <span>{t('rankings.quotaValue', { value: item.quota })}</span>
-              <span>{t('rankings.shareValue', { value: item.share })}</span>
-            </article>
-          )}
-        />
-        {data && (
-          <>
+                <span>
+                  {t('rankings.requestsValue', {
+                    value: item.request_count,
+                  })}
+                </span>
+                <span>{t('rankings.quotaValue', { value: item.quota })}</span>
+                <span>
+                  {t('rankings.shareValue', {
+                    value: ratioToPercent(item.share),
+                  })}
+                </span>
+              </article>
+            )}
+            total={data?.items.length ?? 0}
+          />
+        )}
+        {search.view !== 'ranking' && rankingQuery.isPending && (
+          <LoadingState message={t('common.loading')} />
+        )}
+        {search.view !== 'ranking' && rankingQuery.isError && !data && (
+          <ErrorState
+            onRetry={validSite ? () => void rankingQuery.refetch() : undefined}
+            title={t('rankings.loadError')}
+          />
+        )}
+        {data && search.view === 'movement' && (
+          <div className='min-h-0 flex-1 overflow-y-auto pr-1' tabIndex={0}>
             <div className='grid gap-6 xl:grid-cols-2'>
               <RankingList
                 items={data.movers}
@@ -344,59 +527,66 @@ export function RankingsPage({
                 vendors={vendors}
               />
             </div>
-            <section className='grid gap-2'>
-              <h3 className='font-semibold'>{t('rankings.history')}</h3>
-              <div
-                aria-label={t('rankings.history')}
-                className='border-border overflow-x-auto rounded-lg border'
-                tabIndex={0}
-              >
-                <table className='w-full min-w-xl text-sm'>
-                  <thead className='bg-[var(--table-header)] text-left'>
-                    <tr>
-                      <th className='px-3 py-2'>{t('rankings.bucket')}</th>
-                      <th className='px-3 py-2'>{t('rankings.dimension')}</th>
-                      <th className='px-3 py-2'>{t('rankings.tokens')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.history.map((point) => (
-                      <tr
-                        className='border-t transition-colors hover:bg-[var(--table-header-hover)]'
-                        key={`${point.bucket_start}:${point.dimension_id}`}
-                      >
-                        <td className='px-3 py-2.5'>
-                          {time(point.bucket_start)}
-                        </td>
-                        <td className='px-3 py-2.5'>{point.dimension_id}</td>
-                        <td className='px-3 py-2.5'>{point.token_used}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-            <section className='grid gap-2'>
-              <h3 className='font-semibold'>{t('rankings.siteBreakdown')}</h3>
-              {data.site_breakdown.map((item) => (
-                <article
-                  className='border-border flex flex-wrap justify-between gap-2 rounded-lg border p-3'
-                  key={`${item.site_id}:${item.dimension_id}`}
-                >
-                  <span>
-                    {t('rankings.siteBreakdownIdentity', {
-                      dimension: item.dimension_id,
-                      id: item.site_id,
-                      name: item.site_name,
-                    })}
-                  </span>
-                  <span>{item.token_used}</span>
+          </div>
+        )}
+        {data && search.view === 'history' && (
+          <DataTable
+            ariaLabel={t('rankings.history')}
+            columns={historyColumns}
+            data={pageItems(data.history, search.page, search.pageSize)}
+            emptyTitle={t('rankings.emptyHistory')}
+            onPageChange={(page) => onSearchChange({ page })}
+            onPageSizeChange={(pageSize) =>
+              onSearchChange({ page: 1, pageSize })
+            }
+            page={search.page}
+            pageSize={search.pageSize}
+            renderMobileCard={(point) => (
+              <article className='border-border grid gap-2 rounded-lg border p-4'>
+                <time>{time(point.bucket_start)}</time>
+                <code className='text-muted-foreground text-xs break-all'>
+                  {point.dimension_id}
+                </code>
+                <span>
+                  {t('rankings.tokensValue', { value: point.token_used })}
+                </span>
+              </article>
+            )}
+            total={data.history.length}
+          />
+        )}
+        {data && search.view === 'sites' && (
+          <DataTable
+            ariaLabel={t('rankings.siteBreakdown')}
+            columns={siteColumns}
+            data={pageItems(data.site_breakdown, search.page, search.pageSize)}
+            emptyTitle={t('rankings.emptySites')}
+            onPageChange={(page) => onSearchChange({ page })}
+            onPageSizeChange={(pageSize) =>
+              onSearchChange({ page: 1, pageSize })
+            }
+            page={search.page}
+            pageSize={search.pageSize}
+            renderMobileCard={(item) => (
+              <article className='border-border grid gap-2 rounded-lg border p-4'>
+                <span className='font-medium'>{item.site_name}</span>
+                <code className='text-muted-foreground text-xs'>
+                  {item.site_id}
+                </code>
+                <span>{item.dimension_id}</span>
+                <span>
+                  {t('rankings.tokensValue', { value: item.token_used })}
+                </span>
+                <div className='flex flex-wrap items-center justify-between gap-2'>
                   <DataStatusBadge status={item.data_status} />
-                  <span>{time(item.as_of)}</span>
-                </article>
-              ))}
-            </section>
-          </>
+                  <span className='text-muted-foreground text-xs'>
+                    {time(item.as_of)}
+                  </span>
+                </div>
+              </article>
+            )}
+            total={data.site_breakdown.length}
+          />
         )}
       </div>
       <ExportTaskSheet

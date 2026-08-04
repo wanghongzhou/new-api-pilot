@@ -601,8 +601,8 @@ func TestMySQLMigrationSourceGate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load repository migrations: %v", err)
 	}
-	if len(repository) != 4 {
-		t.Fatalf("repository migration count = %d, want 4", len(repository))
+	if len(repository) != 6 {
+		t.Fatalf("repository migration count = %d, want 6", len(repository))
 	}
 
 	t.Run("current and idempotent rerun", func(t *testing.T) {
@@ -1271,8 +1271,8 @@ ORDER BY k.constraint_name, k.ordinal_position`, table)
 
 func assertExactDefaultSeeds(t *testing.T, ctx context.Context, db *sql.DB) {
 	t.Helper()
-	if len(defaultSettings) != 37 {
-		t.Fatalf("default setting definition count = %d, want 37", len(defaultSettings))
+	if len(defaultSettings) != 39 {
+		t.Fatalf("default setting definition count = %d, want 39", len(defaultSettings))
 	}
 	if len(defaultAlertRules) != 25 {
 		t.Fatalf("default alert rule definition count = %d, want 25", len(defaultAlertRules))

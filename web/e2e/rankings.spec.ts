@@ -53,12 +53,19 @@ function item(
   dimensionId: string,
   dimensionName: string,
   rank: number,
-  growth: string | null
+  growth: string | null,
+  movementType?: 'new' | 'up' | 'down' | 'stable' | 'removed'
 ) {
+  let resolvedMovement = movementType
+  if (resolvedMovement == null) {
+    if (growth == null) resolvedMovement = 'stable'
+    else resolvedMovement = Number(growth) > 0 ? 'up' : 'down'
+  }
   return {
     dimension_id: dimensionId,
     dimension_name: dimensionName,
     growth,
+    movement_type: resolvedMovement,
     quota: '900719925474099312345',
     rank,
     request_count: '9007199254740994',
@@ -71,31 +78,44 @@ function response(vendors = false) {
   const main = vendors
     ? item('0', 'upstream-ignored-name', 1, null)
     : item('gpt-4o', 'gpt-4o', 1, null)
+  const items = [
+    main,
+    ...Array.from({ length: 20 }, (_, index) =>
+      item(
+        `${vendors ? 'vendor' : 'model'}-${index + 2}`,
+        `${vendors ? '厂商' : '模型'} ${index + 2}`,
+        index + 2,
+        '0.125'
+      )
+    ),
+  ]
   return {
     as_of: 1_784_348_700,
     data_status: 'partial',
-    droppers: [item(vendors ? '88' : 'drop-model', '下降项', 3, '-0.25')],
+    droppers: [
+      item(vendors ? '77' : 'removed-model', '退出项', 0, null, 'removed'),
+      item(vendors ? '88' : 'drop-model', '下降项', 3, '-0.25'),
+    ],
     end_timestamp: 1_784_380_800,
-    history: [
-      {
-        bucket_start: 1_784_294_400,
-        dimension_id: main.dimension_id,
-        token_used: '900719925474099312345677',
-      },
+    history: Array.from({ length: 21 }, (_, index) => ({
+      bucket_start: 1_784_294_400 + index * 3600,
+      dimension_id: `history-${index + 1}`,
+      token_used: `${900719925474099312345677n + BigInt(index)}`,
+    })),
+    items,
+    movers: [
+      item(vendors ? '100' : 'new-model', '新增项', 1, null, 'new'),
+      item(vendors ? '99' : 'move-model', '上升项', 2, '1.5'),
     ],
-    items: [main],
-    movers: [item(vendors ? '99' : 'move-model', '上升项', 2, '1.5')],
     period: 'today',
-    site_breakdown: [
-      {
-        as_of: 1_784_348_600,
-        data_status: 'unavailable',
-        dimension_id: main.dimension_id,
-        site_id: '9007199254740997',
-        site_name: '华东统计站点',
-        token_used: '900719925474099312345676',
-      },
-    ],
+    site_breakdown: Array.from({ length: 21 }, (_, index) => ({
+      as_of: 1_784_348_600,
+      data_status: index === 0 ? 'unavailable' : 'complete',
+      dimension_id: `site-dimension-${index + 1}`,
+      site_id: `${9007199254740997n + BigInt(index)}`,
+      site_name: `华东统计站点 ${index + 1}`,
+      token_used: `${900719925474099312345676n + BigInt(index)}`,
+    })),
     start_timestamp: 1_784_294_400,
   }
 }
@@ -129,6 +149,24 @@ test('A97 keeps local rankings exact, bounded, exportable and responsive', async
   const rankingReads: URL[] = []
   const exports: ExportBody[] = []
   const rankingRequestPaths: string[] = []
+
+  await page.route(/\/api\/sites(?:\?.*)?$/, async (route) => {
+    assertAuthenticated(route)
+    await route.fulfill({
+      json: envelope({
+        items: [
+          {
+            id: '9007199254740997',
+            name: '华东统计站点',
+            status: 1,
+          },
+        ],
+        page: 1,
+        page_size: 100,
+        total: '1',
+      }),
+    })
+  })
 
   page.on('request', (request) => {
     const path = new URL(request.url()).pathname
@@ -180,6 +218,14 @@ test('A97 keeps local rankings exact, bounded, exportable and responsive', async
     })
   })
   await page.goto('/rankings?period=today&tab=models&siteIds=9007199254740997')
+  await page.addStyleTag({
+    content: `
+      button[aria-label='Open TanStack Router Devtools'],
+      button[aria-label='Open Tanstack query devtools'] {
+        display: none !important;
+      }
+    `,
+  })
   await expect(
     page.getByRole('heading', { exact: true, name: '本地排行榜' })
   ).toBeVisible()
@@ -190,15 +236,47 @@ test('A97 keeps local rankings exact, bounded, exportable and responsive', async
     page.getByText('9007199254740994').filter({ visible: true }).first()
   ).toBeVisible()
   await expect(
-    page.getByText('0.3333333333').filter({ visible: true }).first()
+    page.getByText('33.33333333%').filter({ visible: true }).first()
   ).toBeVisible()
+  await expect(page.getByText('0.3333333333')).toHaveCount(0)
   await expect(
     page.getByText('不可用').filter({ visible: true }).first()
   ).toBeVisible()
+  await page.getByRole('button', { name: '下一页' }).click()
+  await expect(page).toHaveURL(/page=2/)
+  await expect(
+    page.getByText('模型 21').filter({ visible: true }).first()
+  ).toBeVisible()
+
+  await page.getByRole('tab', { name: '升降变化' }).click()
+  await expect(page).toHaveURL(/view=movement/)
+  await expect(page).toHaveURL(/page=1/)
   await expect(page.getByText('上升项').first()).toBeVisible()
   await expect(page.getByText('下降项').first()).toBeVisible()
-  await expect(page.getByText('排名历史原值')).toBeVisible()
-  await expect(page.getByText('华东统计站点')).toBeVisible()
+  await expect(page.getByText('新增上榜').first()).toBeVisible()
+  await expect(page.getByText('退出榜单').first()).toBeVisible()
+  await expect(page.getByText('150%').first()).toBeVisible()
+  await expect(page.getByText('-25%').first()).toBeVisible()
+  await expect(page.getByRole('button', { name: '导出 CSV' })).toHaveCount(0)
+
+  await page.getByRole('tab', { name: '历史原值' }).click()
+  await expect(
+    page.getByText('history-1').filter({ visible: true }).first()
+  ).toBeVisible()
+  await page.getByRole('button', { name: '下一页' }).click()
+  await expect(page).toHaveURL(/page=2/)
+  await expect(
+    page.getByText('history-21').filter({ visible: true }).first()
+  ).toBeVisible()
+
+  await page.getByRole('tab', { name: '站点拆分' }).click()
+  await expect(page).toHaveURL(/page=1/)
+  await page.getByRole('button', { name: '下一页' }).click()
+  await expect(
+    page.getByText('华东统计站点 21').filter({ visible: true }).first()
+  ).toBeVisible()
+
+  await page.getByRole('tab', { name: '主榜' }).click()
 
   for (const [label, period] of [
     ['本周', 'week'],

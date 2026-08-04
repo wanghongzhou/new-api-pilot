@@ -23,6 +23,9 @@ test('channel inventory export freezes safe filters without pagination or key ma
     states: ['missing'],
     statuses: [3],
     tags: ['primary'],
+    trendPage: 1,
+    trendPageSize: 20,
+    trendView: 'chart',
     types: [8],
   })
   expect(request.statistics_type).toBe('channel_inventory')

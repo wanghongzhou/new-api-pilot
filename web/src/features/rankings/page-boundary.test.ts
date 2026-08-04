@@ -8,7 +8,10 @@ describe('rankings page failure and forced-site boundaries', () => {
       'utf8'
     )
 
-    expect(source).toContain('data={data?.items ?? []}')
+    expect(source).toContain(
+      'data={pageItems(data?.items ?? [], search.page, search.pageSize)}'
+    )
+    expect(source).toContain('total={data?.items.length ?? 0}')
     expect(source).toContain('error={!validSite || rankingQuery.isError}')
     expect(source).toContain(
       'onRetry={validSite ? () => void rankingQuery.refetch() : undefined}'

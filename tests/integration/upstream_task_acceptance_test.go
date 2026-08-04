@@ -55,7 +55,7 @@ func TestA95UpstreamTaskTransitionStatisticsRetentionAndPrivacy(t *testing.T) {
 	site := createCoreAuthorizedSite(t, db, newCoreCipher(t), now)
 	initial := dto.UpstreamTask{ID: fixtureInt64(t, "tasks.remote_id", task.RemoteID), CreatedAt: task.CreatedAt, UpdatedAt: task.UpdatedAt, TaskID: task.TaskID, Platform: task.Platform, UserID: fixtureInt64(t, "tasks.user_id", task.UserID), Group: task.Group, ChannelID: fixtureInt64(t, "tasks.channel_id", task.ChannelID), Quota: fixtureInt64(t, "tasks.quota", task.Quota), Action: task.Action, Status: task.Status, SubmitTime: task.SubmitTime, StartTime: task.StartTime, FinishTime: task.FinishTime, Progress: task.Progress, Properties: dto.UpstreamTaskProperties{Model: task.Properties.Model}}
 	if err := db.Transaction(func(tx *gorm.DB) error {
-		_, err := model.NewSiteRepository(tx).SyncUpstreamTasks(context.Background(), site, now, now-48*3600, dto.UpstreamTaskSnapshot{Items: []dto.UpstreamTask{initial}})
+		_, err := model.NewSiteRepository(tx).SyncUpstreamTasks(context.Background(), site, now, now-48*3600, dto.UpstreamTaskSnapshot{Items: []dto.UpstreamTask{initial}}, false)
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -66,7 +66,7 @@ func TestA95UpstreamTaskTransitionStatisticsRetentionAndPrivacy(t *testing.T) {
 	finished.FinishTime = initial.StartTime + 80
 	finished.Progress = "100%"
 	if err := db.Transaction(func(tx *gorm.DB) error {
-		_, err := model.NewSiteRepository(tx).SyncUpstreamTasks(context.Background(), site, now+2, now-48*3600, dto.UpstreamTaskSnapshot{Items: []dto.UpstreamTask{finished}})
+		_, err := model.NewSiteRepository(tx).SyncUpstreamTasks(context.Background(), site, now+2, now-48*3600, dto.UpstreamTaskSnapshot{Items: []dto.UpstreamTask{finished}}, false)
 		return err
 	}); err != nil {
 		t.Fatal(err)

@@ -131,10 +131,82 @@ func TestCollectWindowContinuesPastOverlappingPagesUntilAllStableRowsArrive(t *t
 	}
 }
 
+func TestScheduledLogTaskBackfillsToStatisticsStartThenStaysIncremental(t *testing.T) {
+	tx := openSiteTestTransaction(t)
+	clock := testsupport.NewFakeClock(time.Unix(1_752_400_800, 0))
+	now := clock.Now().Unix()
+	currentHour := now - now%3600
+	cipher, err := common.NewCipher([]byte("abcdefghijklmnopqrstuvwxyz123456"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootID := int64(1)
+	statisticsStart := currentHour - 50*3600
+	site := model.Site{
+		Name: "Log history", BaseURL: "https://log-history.example", ConfigVersion: 1,
+		ManagementStatus: constant.SiteManagementActive, AuthStatus: constant.SiteAuthAuthorized,
+		OnlineStatus: constant.SiteOnlineOnline, StatisticsStatus: constant.SiteStatisticsReady,
+		HealthStatus: constant.SiteHealthOK, RootUserID: &rootID, StatisticsStartAt: &statisticsStart,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	if err := tx.Create(&site).Error; err != nil {
+		t.Fatalf("create log history site: %v", err)
+	}
+	token, err := cipher.Encrypt([]byte("log-history-secret"), siteTokenAAD(site.ID))
+	if err != nil || tx.Model(&model.Site{}).Where("id = ?", site.ID).Update("access_token_encrypted", token).Error != nil {
+		t.Fatalf("store log history token: %v", err)
+	}
+	client := &historyLogClient{testSiteClient: authorizedTestSiteClient(now)}
+	collector, err := NewUpstreamLogService(UpstreamLogServiceOptions{
+		Database: tx, SiteRepository: model.NewSiteRepository(tx),
+		ClientFactory: &testSiteClientFactory{authenticated: client, public: client}, Cipher: cipher, Clock: clock,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fetched, written, err := collector.ExecuteScheduledLogTask(context.Background(), site.ID, site.ConfigVersion, "log-scheduled-first"); err != nil || fetched != 0 || written != 0 {
+		t.Fatalf("first scheduled log collection fetched=%d written=%d err=%v", fetched, written, err)
+	}
+	wantWindows := [][2]int64{
+		{currentHour - 2*3600, currentHour - 1},
+		{currentHour - 26*3600, currentHour - 2*3600 - 1},
+		{statisticsStart, currentHour - 26*3600 - 1},
+	}
+	if len(client.windows) != len(wantWindows) {
+		t.Fatalf("log backfill windows=%v want=%v", client.windows, wantWindows)
+	}
+	for index := range wantWindows {
+		if client.windows[index] != wantWindows[index] {
+			t.Fatalf("log backfill window[%d]=%v want=%v", index, client.windows[index], wantWindows[index])
+		}
+	}
+	state, err := model.NewUpstreamLogRepository(tx).LoadState(context.Background(), site.ID)
+	if err != nil || state.HistoryStartAt == nil || *state.HistoryStartAt != statisticsStart || state.BackfillCompletedAt == nil {
+		t.Fatalf("completed log backfill state=%#v err=%v", state, err)
+	}
+	client.windows = nil
+	if _, _, err := collector.ExecuteScheduledLogTask(context.Background(), site.ID, site.ConfigVersion, "log-scheduled-next"); err != nil {
+		t.Fatalf("incremental scheduled log collection: %v", err)
+	}
+	if len(client.windows) != 1 || client.windows[0] != wantWindows[0] {
+		t.Fatalf("incremental log windows=%v want=%v", client.windows, wantWindows[:1])
+	}
+}
+
 type overlappingLogClient struct {
 	*testSiteClient
 	pages map[int]dto.UpstreamLogPage
 	calls int
+}
+
+type historyLogClient struct {
+	*testSiteClient
+	windows [][2]int64
+}
+
+func (client *historyLogClient) LogPage(_ context.Context, _ string, start, end int64, _ int) (dto.UpstreamLogPage, error) {
+	client.windows = append(client.windows, [2]int64{start, end})
+	return dto.UpstreamLogPage{Page: 1, PageSize: 100, Total: 0, Items: []dto.UpstreamLogRow{}}, nil
 }
 
 func (client *overlappingLogClient) LogPage(_ context.Context, _ string, _, _ int64, page int) (dto.UpstreamLogPage, error) {

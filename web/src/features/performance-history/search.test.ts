@@ -20,12 +20,14 @@ describe('performance history URL state', () => {
           parseIdString('9007199254740993'),
           'invalid',
         ],
+        view: 'sites',
       },
       now
     )
     expect(search.siteIds).toEqual([parseIdString('9007199254740993')])
     expect(search.groups).toEqual(['vip'])
     expect(search.models).toEqual(['gpt-5', 'GPT-5'])
+    expect(search.view).toBe('sites')
     expect(search.end - search.start).toBe(24 * 3600)
   })
 
@@ -39,5 +41,20 @@ describe('performance history URL state', () => {
     })
     expect(performanceRangeForHours(168, end).start).toBe(end - 168 * 3600)
     expect(performanceRangeForHours(720, end).start).toBe(end - 720 * 3600)
+  })
+
+  test('falls back to the list view for unsupported values', () => {
+    expect(
+      buildPerformanceHistorySearch({ view: 'everything' as 'list' }).view
+    ).toBe('list')
+  })
+
+  test('preserves valid server pagination and normalizes invalid values', () => {
+    expect(
+      buildPerformanceHistorySearch({ page: 3, pageSize: 50 })
+    ).toMatchObject({ page: 3, pageSize: 50 })
+    expect(
+      buildPerformanceHistorySearch({ page: 0, pageSize: 101 })
+    ).toMatchObject({ page: 1, pageSize: 20 })
   })
 })

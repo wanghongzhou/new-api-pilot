@@ -4,6 +4,7 @@ import {
   Chart01Icon,
   Database01Icon,
   FileExportIcon,
+  TableIcon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
@@ -16,6 +17,7 @@ import { toast } from 'sonner'
 import { DataStatusBadge } from '@/components/data/data-status'
 import { FacetedFilter } from '@/components/data/faceted-filter'
 import { FilterPanel } from '@/components/data/filter-panel'
+import { InventoryTrendChart } from '@/components/data/inventory-trend-chart'
 import { MetricValue } from '@/components/data/metric-value'
 import { ErrorState } from '@/components/error-state'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
@@ -301,6 +303,8 @@ function InventoryFilters({
   const reset = buildUserInventorySearch({
     pageSize: search.pageSize,
     tab: search.tab,
+    trendPageSize: search.trendPageSize,
+    trendView: search.trendView,
   })
   const advancedCount = [
     search.remoteUserId != null,
@@ -497,59 +501,138 @@ function InventoryFilters({
   )
 }
 
-function TrendTable({ points }: { points: UserInventoryTrendPoint[] }) {
+function TrendTable({
+  onPageChange,
+  onPageSizeChange,
+  page,
+  pageSize,
+  points,
+}: {
+  onPageChange: (page: number) => void
+  onPageSizeChange: (pageSize: number) => void
+  page: number
+  pageSize: number
+  points: UserInventoryTrendPoint[]
+}) {
   const { t } = useTranslation()
+  const ordered = useMemo(
+    () =>
+      [...points].sort((left, right) => right.bucket_start - left.bucket_start),
+    [points]
+  )
+  const offset = (page - 1) * pageSize
+  const columns = useMemo<ColumnDef<UserInventoryTrendPoint, unknown>[]>(
+    () => [
+      {
+        accessorFn: (point) => timestamp(point.bucket_start),
+        header: t('userInventory.trend.bucket'),
+        id: 'bucket',
+      },
+      {
+        accessorKey: 'user_count',
+        header: t('userInventory.metric.userCount'),
+      },
+      {
+        accessorKey: 'new_user_count',
+        header: t('userInventory.metric.newUsers'),
+      },
+      {
+        accessorKey: 'active_user_count',
+        header: t('userInventory.metric.activeUsers'),
+      },
+      { accessorKey: 'balance', header: t('userInventory.metric.balance') },
+      {
+        cell: ({ row }) => (
+          <DataStatusBadge status={row.original.data_status} />
+        ),
+        header: t('common.status'),
+        id: 'status',
+      },
+    ],
+    [t]
+  )
   return (
-    <section aria-labelledby='inventory-trend-title' className='grid gap-3'>
-      <h2 className='text-lg font-semibold' id='inventory-trend-title'>
-        {t('userInventory.trend.title')}
-      </h2>
-      {points.length === 0 ? (
-        <p className='text-muted-foreground text-sm'>
-          {t('userInventory.trend.empty')}
-        </p>
+    <DataTable
+      ariaLabel={t('userInventory.trend.table')}
+      columns={columns}
+      data={ordered.slice(offset, offset + pageSize)}
+      emptyTitle={t('userInventory.trend.empty')}
+      onPageChange={onPageChange}
+      onPageSizeChange={onPageSizeChange}
+      page={page}
+      pageSize={pageSize}
+      total={ordered.length}
+    />
+  )
+}
+
+function TrendView({
+  onSearchChange,
+  points,
+  search,
+}: {
+  onSearchChange: (changes: Partial<UserInventorySearch>) => void
+  points: UserInventoryTrendPoint[]
+  search: UserInventorySearch
+}) {
+  const { t } = useTranslation()
+  const series = useMemo(
+    () => [
+      { key: 'user_count', label: t('userInventory.metric.userCount') },
+      { key: 'new_user_count', label: t('userInventory.metric.newUsers') },
+      {
+        key: 'active_user_count',
+        label: t('userInventory.metric.activeUsers'),
+      },
+    ],
+    [t]
+  )
+  return (
+    <section className='flex min-h-0 flex-1 flex-col gap-3'>
+      <Tabs
+        onValueChange={(trendView) =>
+          onSearchChange({
+            trendPage: 1,
+            trendView: trendView as UserInventorySearch['trendView'],
+          })
+        }
+        value={search.trendView}
+      >
+        <TabsList aria-label={t('userInventory.trend.views.label')}>
+          <TabsTrigger value='chart'>
+            <HugeiconsIcon icon={Chart01Icon} strokeWidth={2} />
+            {t('userInventory.trend.views.chart')}
+          </TabsTrigger>
+          <TabsTrigger value='table'>
+            <HugeiconsIcon icon={TableIcon} strokeWidth={2} />
+            {t('userInventory.trend.views.table')}
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+      {search.trendView === 'chart' ? (
+        <InventoryTrendChart
+          ariaLabel={t('userInventory.trend.chart')}
+          emptyText={t('userInventory.trend.empty')}
+          points={points.map((point) => ({
+            bucketStart: point.bucket_start,
+            values: {
+              active_user_count: point.active_user_count,
+              new_user_count: point.new_user_count,
+              user_count: point.user_count,
+            },
+          }))}
+          series={series}
+        />
       ) : (
-        <div className='overflow-x-auto rounded-lg border'>
-          <table className='w-full min-w-3xl text-sm'>
-            <thead className='bg-[var(--table-header)] text-left'>
-              <tr>
-                <th className='px-3 py-2'>{t('userInventory.trend.bucket')}</th>
-                <th className='px-3 py-2'>
-                  {t('userInventory.metric.userCount')}
-                </th>
-                <th className='px-3 py-2'>
-                  {t('userInventory.metric.newUsers')}
-                </th>
-                <th className='px-3 py-2'>
-                  {t('userInventory.metric.activeUsers')}
-                </th>
-                <th className='px-3 py-2'>
-                  {t('userInventory.metric.balance')}
-                </th>
-                <th className='px-3 py-2'>{t('common.status')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {points.map((point) => (
-                <tr
-                  className='border-t transition-colors hover:bg-[var(--table-header-hover)]'
-                  key={point.bucket_start}
-                >
-                  <td className='px-3 py-2 whitespace-nowrap'>
-                    {timestamp(point.bucket_start)}
-                  </td>
-                  <td className='px-3 py-2'>{point.user_count}</td>
-                  <td className='px-3 py-2'>{point.new_user_count}</td>
-                  <td className='px-3 py-2'>{point.active_user_count}</td>
-                  <td className='px-3 py-2'>{point.balance}</td>
-                  <td className='px-3 py-2'>
-                    <DataStatusBadge status={point.data_status} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <TrendTable
+          onPageChange={(trendPage) => onSearchChange({ trendPage })}
+          onPageSizeChange={(trendPageSize) =>
+            onSearchChange({ trendPage: 1, trendPageSize })
+          }
+          page={search.trendPage}
+          pageSize={search.trendPageSize}
+          points={points}
+        />
       )}
     </section>
   )
@@ -919,7 +1002,7 @@ export function UserInventoryPage({
         </section>
         <InventoryFilters
           global={!siteId}
-          onChange={onSearchChange}
+          onChange={(changes) => onSearchChange({ ...changes, trendPage: 1 })}
           search={search}
           sites={sitesQuery.data?.items ?? []}
         />
@@ -1007,7 +1090,13 @@ export function UserInventoryPage({
         )}
         {statistics && search.tab !== 'list' && (
           <div className='min-h-0 flex-1 overflow-y-auto pr-1' tabIndex={0}>
-            {search.tab === 'trend' && <TrendTable points={statistics.trend} />}
+            {search.tab === 'trend' && (
+              <TrendView
+                onSearchChange={onSearchChange}
+                points={statistics.trend}
+                search={search}
+              />
+            )}
             {search.tab === 'dimensions' && (
               <div className='grid gap-6 xl:grid-cols-3'>
                 <BreakdownSection

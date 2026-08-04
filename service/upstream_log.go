@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"unicode/utf8"
 
@@ -18,6 +19,7 @@ import (
 )
 
 const maximumLogWindowRows = 10000
+const maximumLogBackfillWindowsPerRun = 96
 
 type upstreamLogClient interface {
 	LogPage(context.Context, string, int64, int64, int) (dto.UpstreamLogPage, error)
@@ -61,7 +63,66 @@ func (service *UpstreamLogService) ExecuteScheduledLogTask(ctx context.Context, 
 	if end <= 2*3600 {
 		return 0, 0, model.ErrCollectionRunContract
 	}
-	return service.collectWindow(ctx, siteID, configVersion, end-2*3600, end, requestID)
+	fetched, written, err := service.collectWindow(ctx, siteID, configVersion, end-2*3600, end, requestID)
+	if err != nil {
+		return fetched, written, err
+	}
+	backfillFetched, backfillWritten, err := service.backfillHistory(ctx, siteID, configVersion, end)
+	return fetched + backfillFetched, written + backfillWritten, err
+}
+
+func (service *UpstreamLogService) backfillHistory(ctx context.Context, siteID int64, configVersion int, currentHour int64) (int64, int64, error) {
+	site, err := service.sites.FindByID(ctx, siteID)
+	if err != nil {
+		return 0, 0, err
+	}
+	if site.ConfigVersion != configVersion {
+		return 0, 0, model.ErrSiteRunConfigChanged
+	}
+	state, err := service.repository.LoadState(ctx, siteID)
+	if err != nil {
+		return 0, 0, err
+	}
+	if state.BackfillCompletedAt != nil {
+		return 0, 0, nil
+	}
+	retentionDays, err := service.repository.LoadRetentionDays(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+	targetStart := currentHour - int64(retentionDays)*86400
+	if site.StatisticsStartAt != nil && *site.StatisticsStartAt > targetStart {
+		targetStart = *site.StatisticsStartAt
+	}
+	targetStart -= targetStart % 3600
+	cursor := currentHour - 2*3600
+	if state.HistoryStartAt != nil && *state.HistoryStartAt < cursor {
+		cursor = *state.HistoryStartAt
+	} else if state.HistoryStartAt == nil && site.MonitoringStartAt != nil {
+		cursor = *site.MonitoringStartAt - *site.MonitoringStartAt%3600
+	}
+	var fetched, written int64
+	for window := 0; cursor > targetStart && window < maximumLogBackfillWindowsPerRun; window++ {
+		start := cursor - 24*3600
+		if start < targetStart {
+			start = targetStart
+		}
+		windowFetched, windowWritten, collectErr := service.collectWindow(
+			ctx, siteID, configVersion, start, cursor, fmt.Sprintf("logbf-%d-%d-%d", siteID, currentHour, window+1),
+		)
+		fetched += windowFetched
+		written += windowWritten
+		if collectErr != nil {
+			return fetched, written, collectErr
+		}
+		cursor = start
+	}
+	if cursor <= targetStart {
+		if err := service.repository.MarkBackfillCompleted(ctx, siteID, configVersion, targetStart, service.clock.Now().Unix()); err != nil {
+			return fetched, written, err
+		}
+	}
+	return fetched, written, nil
 }
 
 func (service *UpstreamLogService) collectWindow(ctx context.Context, siteID int64, configVersion int, start, end int64, requestID string) (fetched int64, written int64, resultErr error) {

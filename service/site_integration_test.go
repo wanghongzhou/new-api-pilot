@@ -1048,32 +1048,35 @@ func (factory *testSiteClientFactory) NewAuthenticated(string, string, string, i
 }
 
 type testSiteClient struct {
-	status           dto.UpstreamStatus
-	statusErr        error
-	self             dto.UpstreamIdentity
-	selfErr          error
-	root             dto.UpstreamUser
-	snapshot         dto.UpstreamUserSnapshot
-	channels         dto.UpstreamChannelSnapshot
-	channelsErr      error
-	instances        []dto.UpstreamInstance
-	instancesErr     error
-	realtime         dto.UpstreamLogStat
-	realtimeErr      error
-	performance      dto.UpstreamPerformanceHistory
-	performanceErr   error
-	topups           dto.UpstreamTopupSnapshot
-	topupsErr        error
-	redemptions      dto.UpstreamRedemptionSnapshot
-	redemptionsErr   error
-	upstreamTasks    dto.UpstreamTaskSnapshot
-	upstreamTasksErr error
-	snapshotErr      error
-	flowErr          error
-	dataErr          error
-	flowHours        []int64
-	dataHours        []int64
-	loginToken       string
+	status             dto.UpstreamStatus
+	statusErr          error
+	self               dto.UpstreamIdentity
+	selfErr            error
+	root               dto.UpstreamUser
+	snapshot           dto.UpstreamUserSnapshot
+	channels           dto.UpstreamChannelSnapshot
+	channelsErr        error
+	instances          []dto.UpstreamInstance
+	instancesErr       error
+	realtime           dto.UpstreamLogStat
+	realtimeErr        error
+	performance        dto.UpstreamPerformanceHistory
+	performanceErr     error
+	performanceHours   []int
+	topups             dto.UpstreamTopupSnapshot
+	topupsErr          error
+	redemptions        dto.UpstreamRedemptionSnapshot
+	redemptionsErr     error
+	upstreamTasks      dto.UpstreamTaskSnapshot
+	upstreamTasksErr   error
+	upstreamTaskStarts []int64
+	upstreamTaskEnds   []int64
+	snapshotErr        error
+	flowErr            error
+	dataErr            error
+	flowHours          []int64
+	dataHours          []int64
+	loginToken         string
 }
 
 type sitePostCommitRecorder struct {
@@ -1143,7 +1146,8 @@ func (client *testSiteClient) PerformanceSummary(context.Context, string, int) (
 	return dto.UpstreamPerformanceSummary{}, nil
 }
 
-func (client *testSiteClient) PerformanceHistory(context.Context, string, int) (dto.UpstreamPerformanceHistory, error) {
+func (client *testSiteClient) PerformanceHistory(_ context.Context, _ string, hours int) (dto.UpstreamPerformanceHistory, error) {
+	client.performanceHours = append(client.performanceHours, hours)
 	return client.performance, client.performanceErr
 }
 func (client *testSiteClient) SnapshotTopups(context.Context, string) (dto.UpstreamTopupSnapshot, error) {
@@ -1152,7 +1156,9 @@ func (client *testSiteClient) SnapshotTopups(context.Context, string) (dto.Upstr
 func (client *testSiteClient) SnapshotRedemptions(context.Context, string) (dto.UpstreamRedemptionSnapshot, error) {
 	return client.redemptions, client.redemptionsErr
 }
-func (client *testSiteClient) SnapshotUpstreamTasks(context.Context, string, int64, int64, []string) (dto.UpstreamTaskSnapshot, error) {
+func (client *testSiteClient) SnapshotUpstreamTasks(_ context.Context, _ string, start, end int64, _ []string) (dto.UpstreamTaskSnapshot, error) {
+	client.upstreamTaskStarts = append(client.upstreamTaskStarts, start)
+	client.upstreamTaskEnds = append(client.upstreamTaskEnds, end)
 	return client.upstreamTasks, client.upstreamTasksErr
 }
 

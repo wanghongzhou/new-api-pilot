@@ -128,6 +128,46 @@ func AuthoritativeSchemaContracts() (map[string]TableContract, error) {
 	pricing := contracts["site_pricing_catalog"]
 	pricing.Indexes["uk_site_pricing_catalog_identity"] = IndexContract{Unique: true, Columns: []string{"site_id", "model_name"}}
 	contracts["site_pricing_catalog"] = pricing
+	if _, err := readMigrationStatements("0005_history_backfill_state.sql"); err != nil {
+		return nil, err
+	}
+	backfillColumns := []struct {
+		table  string
+		after  string
+		column ColumnContract
+	}{
+		{"site_performance_collection_state", "last_success_at", ColumnContract{Name: "backfill_completed_at", ColumnType: "bigint", IsNullable: "YES"}},
+		{"upstream_log_collection_state", "window_end", ColumnContract{Name: "history_start_at", ColumnType: "bigint", IsNullable: "YES"}},
+		{"upstream_log_collection_state", "last_success_at", ColumnContract{Name: "backfill_completed_at", ColumnType: "bigint", IsNullable: "YES"}},
+		{"site_upstream_task_collection_state", "last_success_at", ColumnContract{Name: "backfill_completed_at", ColumnType: "bigint", IsNullable: "YES"}},
+	}
+	for _, addition := range backfillColumns {
+		if err := insertSchemaColumnAfter(contracts, addition.table, addition.after, addition.column); err != nil {
+			return nil, err
+		}
+	}
+	if _, err := readMigrationStatements("0006_channel_inventory_hourly_dimensions.sql"); err != nil {
+		return nil, err
+	}
+	channelHourlyColumns := []struct {
+		after  string
+		column ColumnContract
+	}{
+		{"site_id", ColumnContract{Name: "remote_type", ColumnType: "int", IsNullable: "NO", Default: sql.NullString{String: "-1", Valid: true}}},
+		{"remote_type", ColumnContract{Name: "remote_status", ColumnType: "int", IsNullable: "NO", Default: sql.NullString{String: "-1", Valid: true}}},
+		{"remote_status", ColumnContract{Name: "remote_group", ColumnType: "varchar(128)", IsNullable: "NO", Default: sql.NullString{String: "", Valid: true}, CharacterSet: sql.NullString{String: "utf8mb4", Valid: true}, Collation: sql.NullString{String: "utf8mb4_bin", Valid: true}}},
+		{"remote_group", ColumnContract{Name: "tag", ColumnType: "varchar(255)", IsNullable: "NO", Default: sql.NullString{String: "", Valid: true}, CharacterSet: sql.NullString{String: "utf8mb4", Valid: true}, Collation: sql.NullString{String: "utf8mb4_bin", Valid: true}}},
+		{"tag", ColumnContract{Name: "dimensions_available", ColumnType: "tinyint", IsNullable: "NO", Default: sql.NullString{String: "0", Valid: true}}},
+	}
+	for _, addition := range channelHourlyColumns {
+		if err := insertSchemaColumnAfter(contracts, "site_channel_inventory_hourly", addition.after, addition.column); err != nil {
+			return nil, err
+		}
+	}
+	channelHourly := contracts["site_channel_inventory_hourly"]
+	channelHourly.Indexes["uk_site_channel_inventory_hourly"] = IndexContract{Unique: true, Columns: []string{"site_id", "remote_type", "remote_status", "remote_group", "tag", "hour_ts"}}
+	channelHourly.Indexes["idx_site_channel_inventory_hourly_filters"] = IndexContract{Columns: []string{"site_id", "hour_ts", "dimensions_available", "remote_type", "remote_status"}}
+	contracts["site_channel_inventory_hourly"] = channelHourly
 	return contracts, nil
 }
 

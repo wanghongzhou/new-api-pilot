@@ -22,6 +22,9 @@ describe('user inventory URL normalization', () => {
         start: dayjs.tz('2026-07-16 12:00', BEIJING_TIMEZONE).unix(),
         states: ['identity_mismatch', 'missing', 'invalid'],
         statuses: [2, 1, 9],
+        trendPage: 4,
+        trendPageSize: 100,
+        trendView: 'table',
       },
       now
     )
@@ -34,6 +37,9 @@ describe('user inventory URL normalization', () => {
     expect(String(search.minBalance)).toBe('-9223372036854775808')
     expect(String(search.maxBalance)).toBe('9223372036854775807')
     expect(String(search.exportId)).toBe('9007199254740999')
+    expect(search.trendPage).toBe(4)
+    expect(search.trendPageSize).toBe(100)
+    expect(search.trendView).toBe('table')
   })
 
   test('fails closed for unaligned, oversized and reversed ranges', () => {
@@ -51,6 +57,9 @@ describe('user inventory URL normalization', () => {
     expect(buildUserInventorySearch({ tab: 'invalid' as never }, now).tab).toBe(
       'list'
     )
+    expect(
+      buildUserInventorySearch({ trendView: 'invalid' as never }, now).trendView
+    ).toBe('chart')
     expect(changeUserInventoryTab('dimensions')).toMatchObject({
       keyword: '',
       page: 1,

@@ -7,6 +7,7 @@ import {
 } from '@playwright/test'
 
 import { mockAuthenticatedShell } from './helpers/auth'
+import { clickOpenSelectOption } from './helpers/select-control'
 
 const authStorageKey = 'pilot-auth-user'
 const uidStorageKey = 'uid'
@@ -698,10 +699,10 @@ test.describe('A50 statistics pages preserve all five data states', () => {
         ).toBeVisible()
 
         const release = mock.holdDayResponse()
-        await page
-          .getByRole('region', { name: '统计筛选' })
-          .getByRole('button', { name: '日', exact: true })
-          .click()
+        await page.getByRole('button', { name: /时间范围/ }).click()
+        await page.getByRole('combobox', { name: '统计粒度' }).click()
+        await clickOpenSelectOption(page, 'day')
+        await page.getByRole('button', { name: '应用时间范围' }).click()
         await expect(
           page.getByText('正在加载新范围，当前继续展示上一范围的数据。')
         ).toBeVisible()

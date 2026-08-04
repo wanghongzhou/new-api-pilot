@@ -44,18 +44,20 @@ func TestRankingMoversDroppersOnlyContainDirectionalGrowth(t *testing.T) {
 	negativeHigh, negativeLow := "-0.1", "-0.75"
 	zero := "0"
 	items := []dto.LocalRankingItem{
-		{DimensionID: "stable", Growth: &zero},
-		{DimensionID: "up-low", Growth: &positiveLow},
+		{DimensionID: "stable", Growth: &zero, MovementType: "stable"},
+		{DimensionID: "new", MovementType: "new"},
+		{DimensionID: "up-low", Growth: &positiveLow, MovementType: "up"},
 		{DimensionID: "unknown", Growth: nil},
-		{DimensionID: "down-low", Growth: &negativeLow},
-		{DimensionID: "up-high", Growth: &positiveHigh},
-		{DimensionID: "down-high", Growth: &negativeHigh},
+		{DimensionID: "removed", MovementType: "removed"},
+		{DimensionID: "down-low", Growth: &negativeLow, MovementType: "down"},
+		{DimensionID: "up-high", Growth: &positiveHigh, MovementType: "up"},
+		{DimensionID: "down-high", Growth: &negativeHigh, MovementType: "down"},
 	}
 	movers, droppers := rankingMoversDroppers(items)
-	if len(movers) != 2 || movers[0].DimensionID != "up-high" || movers[1].DimensionID != "up-low" {
+	if len(movers) != 3 || movers[0].DimensionID != "new" || movers[1].DimensionID != "up-high" || movers[2].DimensionID != "up-low" {
 		t.Fatalf("movers=%#v", movers)
 	}
-	if len(droppers) != 2 || droppers[0].DimensionID != "down-low" || droppers[1].DimensionID != "down-high" {
+	if len(droppers) != 3 || droppers[0].DimensionID != "removed" || droppers[1].DimensionID != "down-low" || droppers[2].DimensionID != "down-high" {
 		t.Fatalf("droppers=%#v", droppers)
 	}
 }

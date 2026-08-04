@@ -40,6 +40,7 @@ type LocalRankingItem struct {
 	Quota         string  `json:"quota"`
 	Share         string  `json:"share"`
 	Growth        *string `json:"growth"`
+	MovementType  string  `json:"movement_type"`
 	Rank          int     `json:"rank"`
 }
 type LocalRankingResponse struct {

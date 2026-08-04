@@ -20,6 +20,8 @@ var platformSettingSeeds = []platformSettingSeed{
 	{key: "collector.probe_interval_seconds", value: "60", typeID: "int"},
 	{key: "collector.realtime_interval_seconds", value: "60", typeID: "int"},
 	{key: "collector.resource_interval_seconds", value: "60", typeID: "int"},
+	{key: "collector.operational_interval_seconds", value: "300", typeID: "int"},
+	{key: "collector.catalog_interval_seconds", value: "600", typeID: "int"},
 	{key: "collector.usage_delay_minutes", value: "5", typeID: "int"},
 	{key: "collector.minute_retention_days", value: "90", typeID: "int"},
 	{key: "logs.retention_days", value: "90", typeID: "int"},

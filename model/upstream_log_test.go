@@ -23,6 +23,16 @@ func TestUpstreamLogRepositoryCommitQueryFenceAndRetention(t *testing.T) {
 		[]UpstreamLogFact{fact, fact}, dto.LogCollectionComplete, "", nil); err != nil {
 		t.Fatalf("commit log window: %v", err)
 	}
+	historicalStart := now - 25*3600
+	if err := repository.CommitWindow(context.Background(), site.ID, site.ConfigVersion, historicalStart, now-3600, now+1,
+		nil, dto.LogCollectionComplete, "", nil); err != nil {
+		t.Fatalf("commit historical log window: %v", err)
+	}
+	state, err := repository.LoadState(context.Background(), site.ID)
+	if err != nil || state.WindowStart != now-3600 || state.WindowEnd != now || state.HistoryStartAt == nil ||
+		*state.HistoryStartAt != historicalStart || state.LastSuccessAt == nil || *state.LastSuccessAt != now {
+		t.Fatalf("historical log state=%#v err=%v", state, err)
+	}
 	query := dto.LogQuery{Page: 1, PageSize: 20, SiteIDs: []int64{site.ID}, StartTimestamp: now - 3600, EndTimestamp: now}
 	rows, total, err := repository.Query(context.Background(), query)
 	if err != nil || total != 1 || len(rows) != 1 || rows[0].SiteName != site.Name || rows[0].IP != "" {

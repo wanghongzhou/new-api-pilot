@@ -19,6 +19,8 @@
 
 ### 18.2 通用能力
 
+统计页面默认进入最近 24 小时、小时粒度；汇总卡片必须优先于全部分析控制展示。时间范围、指标、金额口径、图表/表格切换、对象条件和导出操作统一放在汇总下方的同一行紧凑工具栏中，空间不足时响应式换行，不得在汇总上方残留筛选或操作工具栏。全局统计只有站点一个条件，必须直接展示站点选择器，不使用“对象筛选”Dialog；其余存在多个对象条件的作用域仍可使用确认后生效的 Dialog。金额口径只在指标为 quota 时显示并允许切换 quota/USD/CNY，其他指标不得展示一个不可操作的“原始额度”控件。
+
 - 小时、日、月、年粒度；
 - 时间范围；
 - 站点、客户、账户、模型、通道等适用筛选；
@@ -253,12 +255,12 @@ Dashboard 是登录后的默认首页，只展示最重要的汇总信息，不�
 日志导出复用 `export_job`，导出行必须保留 site_id、created_at、type、用户、模型、token、channel、group、request_id 和 upstream_request_id；content 只能输出脱敏摘要。导出不改变统计汇总，也不暴露上游展示 ID、站点 Token 或密码。
 # P0-C 用户库存统计与导出
 
-新增 `GET /api/user-inventory`、`GET /api/user-inventory/statistics`、`GET /api/sites/:id/user-inventory`、`GET /api/sites/:id/user-inventory/statistics`。列表返回当前用户；统计返回 summary、trend、role/status/group breakdown、site_breakdown 和 completeness。quota、used_quota、balance、request_count、用户计数全部为 JSON string。
+新增 `GET /api/user-inventory`、`GET /api/user-inventory/statistics`、`GET /api/sites/:id/user-inventory`、`GET /api/sites/:id/user-inventory/statistics`。列表返回当前用户；统计返回 summary、trend、role/status/group breakdown、site_breakdown 和 completeness。trend 是所选左闭右开时间范围内按小时连续排序的完整序列；前端曲线视图读取完整序列，表格视图对同一响应做确定性分页，不以分页拆断或重算趋势。quota、used_quota、balance、request_count、用户计数全部为 JSON string。
 
 导出 scope `user_inventory` 复用 export_job，CSV/XLSX 只包含允许落库的库存字段和 site 身份；严禁 email、OAuth、token、密码和 setting。导出 snapshot 与查询使用同一筛选和 repeatable-read 边界。
 # P0-D 渠道运营统计与导出
 
-渠道统计提供当前汇总、小时趋势、type/status/group/tag breakdown 和 site_breakdown。当前汇总展示渠道总数、可用数、不可用数、missing 数、余额合计、used_quota 合计、平均/最大响应时间和可用率；趋势只读取 `complete` 小时事实。无成功快照、采集失败、部分站点缺失时必须用 `data_status`、`as_of` 和站点完整性表达，不能把 unavailable/partial/pending 显示为零渠道。
+渠道统计提供当前汇总、小时趋势、type/status/group/tag breakdown 和 site_breakdown。当前汇总展示渠道总数、可用数、不可用数、missing 数、余额合计、used_quota 合计、平均/最大响应时间和可用率；趋势只读取 `complete` 小时事实，并必须对 site/type/status/group/tag 使用与当前汇总相同的筛选语义。trend 是所选左闭右开时间范围内按小时连续排序的完整序列；前端曲线视图读取完整序列，表格视图对同一响应做确定性分页，不以分页拆断或重算趋势。无成功快照、采集失败、部分站点缺失或旧历史缺少可筛选维度时，必须用 `data_status`、`as_of` 和站点完整性表达，不能把 unavailable/partial/pending 显示为零渠道。
 
 `statistics_type=channel_inventory` 复用 export_job 生成 CSV/XLSX，冻结站点、关键字、type、status、group、tag、remote_state 和余额/响应范围筛选。导出只包含安全运营字段，bigint 保持字符串、balance 保持规范十进制文本，并沿用公式注入防护。任何导出列都不得包含 `key`、多 Key 状态或上游私密配置。
 # P0-E 性能历史统计与导出
@@ -269,7 +271,7 @@ Dashboard 是登录后的默认首页，只展示最重要的汇总信息，不�
 
 # F1 充值与兑换码统计、导出
 
-充值统计返回 order_count、按 status/provider/site breakdown，以及每个 `site_id+provider` 独立的 amount/money nominal totals；全局 summary 不含 money/amount 总额。兑换码统计返回 code_count、enabled/disabled/used/expired 数量、quota 名义合计和 status/site breakdown；expired 按查询 `as_of` 派生。complete/partial/pending/missing/unavailable 完整性与逐站 as_of 均保留。
+充值统计返回 order_count、按 status/provider/site breakdown，以及每个 `site_id+provider` 独立的 amount/money 原值汇总；全局 summary 不含 money/amount 总额。前端统一称为“上游金额原值”和“支付渠道”，并明确其无统一币种、不可跨站求和。兑换码统计返回 code_count、enabled/disabled/used/expired 数量、quota 名义合计和 status/site breakdown；expired 按查询 `as_of` 派生。complete/partial/pending/missing/unavailable 完整性与逐站 as_of 均保留。
 
 `statistics_type=topup_inventory|redemption_inventory` 复用 export_job，冻结同一安全筛选并输出 CSV/XLSX。导出坚持 bigint string、decimal 文本和公式注入防护，且任何表头、单元格、元数据均不得出现 `trade_no`、兑换码 `key` 或其派生值。
 
@@ -279,7 +281,7 @@ Dashboard 是登录后的默认首页，只展示最重要的汇总信息，不�
 模型目录 CSV/XLSX 只导出上游白名单字段与派生覆盖数据，支持 site/vendor/status breakdown 和 completeness，不导出 pricing、billing expression、endpoint 或 bound-channel enrich。
 ### D136 本地模型与供应商排行
 
-模型与供应商排行只从 `usage_fact_hourly`/既有聚合事实和 M1 exact 模型元数据重算，不访问任何官方 rankings endpoint。today/week/month/year 使用 Asia/Shanghai 的自然日、周一、月初和年初边界；token、份额和增长使用整数/Decimal 精确计算，零历史分母的增长为 null。跨站同名模型按站点事实守恒后再展示；供应商仅由同站点 `name_rule=exact` 元数据映射，缺失映射归 `unknown`。响应包含当前 totals/share、前期增长、history、movers/droppers、data_status、site_breakdown 与 as_of，不复制官方 Top20 截断、float、`time.Now` 缓存。
+模型与供应商排行只从 `usage_fact_hourly`/既有聚合事实和 M1 exact 模型元数据重算，不访问任何官方 rankings endpoint。today/week/month/year 使用 Asia/Shanghai 的自然日、周一、月初和年初边界；token、份额和增长使用整数/Decimal 精确计算，零历史分母的增长为 null。跨站同名模型按站点事实守恒后再展示；供应商仅由同站点 `name_rule=exact` 元数据映射，缺失映射归 `unknown`。响应包含当前 totals/share、前期增长、`movement_type=new|up|down|stable|removed`、history、movers/droppers、data_status、site_breakdown 与 as_of，不复制官方 Top20 截断、float、`time.Now` 缓存。当前窗口有值而前期为零时必须进入 movers 并标记 `new`；当前为零而前期有值时必须进入 droppers 并标记 `removed`。这两类仍保持 `growth=null`，不得伪造无限百分比，也不得因为零分母而把整个升降变化视图过滤为空。
 `subscription_plans` CSV/XLSX 仅导出安全计划核心和 missing 状态，不包含 provider product ID、支付 payload 或策略配置。
 # D138 定价与分组目录统计和导出
 

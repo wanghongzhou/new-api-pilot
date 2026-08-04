@@ -7,6 +7,16 @@ import { buildStatisticsSearch } from './search'
 const now = dayjs.tz('2026-07-13 12:34:56', BEIJING_TIMEZONE)
 
 describe('statistics URL range normalization', () => {
+  test('defaults the operations entry to the latest 24 hourly buckets', () => {
+    const search = buildStatisticsSearch({}, now)
+
+    expect(search.granularity).toBe('hour')
+    expect(search.end).toBe(
+      dayjs.tz('2026-07-13 12:00', BEIJING_TIMEZONE).unix()
+    )
+    expect(search.end - search.start).toBe(24 * 3600)
+  })
+
   test('keeps aligned Beijing bucket boundaries', () => {
     const search = buildStatisticsSearch(
       {
@@ -65,6 +75,13 @@ describe('statistics URL range normalization', () => {
     )
     expect(search.start).toBe(start.unix())
     expect(search.end).toBe(end.unix())
+  })
+
+  test('defaults the year view to five visible calendar buckets', () => {
+    const search = buildStatisticsSearch({ granularity: 'year' }, now)
+
+    expect(search.start).toBe(dayjs.tz('2022-01-01', BEIJING_TIMEZONE).unix())
+    expect(search.end).toBe(dayjs.tz('2027-01-01', BEIJING_TIMEZONE).unix())
   })
 
   test('normalizes bigint ID and option filters without Number coercion', () => {

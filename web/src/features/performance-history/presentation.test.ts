@@ -2,7 +2,11 @@ import { describe, expect, test } from 'bun:test'
 
 import { parseDecimalString, parseMetricString } from '@/lib/api-types'
 
-import { trustedWeightedSummary } from './presentation'
+import {
+  millisecondsToSeconds,
+  successRateToPercent,
+  trustedWeightedSummary,
+} from './presentation'
 import type { PerformanceHistoryStatisticsResponse } from './types'
 
 function statistics(
@@ -38,5 +42,33 @@ describe('performance history aggregation boundary', () => {
       request_count: null,
       success_rate: null,
     })
+  })
+})
+
+describe('performance history display units', () => {
+  test.each([
+    ['1000', '1'],
+    ['100.25', '0.10025'],
+    ['0', '0'],
+    ['123.4567890000', '0.123456789'],
+  ])('formats %s milliseconds as %s seconds', (value, expected) => {
+    expect(millisecondsToSeconds(value)).toBe(parseDecimalString(expected))
+  })
+
+  test('preserves unavailable values', () => {
+    expect(millisecondsToSeconds(null)).toBeNull()
+  })
+
+  test.each([
+    ['1.0000000000', '100%'],
+    ['0.9912345678', '99.12345678%'],
+    ['0.9900000000', '99%'],
+    ['0', '0%'],
+  ])('formats success rate %s as %s', (value, expected) => {
+    expect(successRateToPercent(value)).toBe(expected)
+  })
+
+  test('preserves unavailable success rates', () => {
+    expect(successRateToPercent(null)).toBeNull()
   })
 })

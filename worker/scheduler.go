@@ -53,6 +53,34 @@ type fastScheduleState struct {
 	slotStart       int64
 }
 
+type durableScheduleGroup struct {
+	intervalSeconds int
+	taskTypes       []string
+}
+
+func durableScheduleGroups(settings model.CollectorSettings) []durableScheduleGroup {
+	return []durableScheduleGroup{
+		{
+			intervalSeconds: settings.OperationalIntervalSeconds,
+			taskTypes: []string{
+				constant.TaskTypePerformanceSync,
+				constant.TaskTypeTopupSync,
+				constant.TaskTypeRedemptionSync,
+				constant.TaskTypeUpstreamTaskSync,
+			},
+		},
+		{
+			intervalSeconds: settings.CatalogIntervalSeconds,
+			taskTypes: []string{
+				constant.TaskTypeModelMetaSync,
+				constant.TaskTypePlanSync,
+				constant.TaskTypePricingSync,
+				constant.TaskTypeSystemTaskSync,
+			},
+		},
+	}
+}
+
 func NewScheduler(options SchedulerOptions) (*Scheduler, error) {
 	if options.Repository == nil || options.Settings == nil || options.Clock == nil {
 		return nil, fmt.Errorf("scheduler dependencies are required")
@@ -138,33 +166,26 @@ func (scheduler *Scheduler) runOnce(ctx context.Context, now time.Time, startup 
 			}
 		}
 	}
-	durableResourceInterval := int64(settings.ResourceIntervalSeconds)
-	durableResourceSlotStart := now.Unix() - now.Unix()%durableResourceInterval
-	for _, taskType := range []string{
-		constant.TaskTypePerformanceSync,
-		constant.TaskTypeTopupSync,
-		constant.TaskTypeRedemptionSync,
-		constant.TaskTypeUpstreamTaskSync,
-		constant.TaskTypeModelMetaSync,
-		constant.TaskTypePlanSync,
-		constant.TaskTypePricingSync,
-		constant.TaskTypeSystemTaskSync,
-	} {
-		for _, site := range sites {
-			if !schedulerSiteEligible(site, taskType) {
-				continue
-			}
-			jitter := stableSiteJitterSeconds(site.ID)
-			if jitter >= durableResourceInterval {
-				jitter = durableResourceInterval - 1
-			}
-			if !forceFastStartup && now.Unix() < durableResourceSlotStart+jitter {
-				continue
-			}
-			if err := scheduler.enqueueNonWindowForSite(
-				ctx, site, taskType, durableResourceSlotStart, now.Unix(),
-			); err != nil {
-				return err
+	for _, group := range durableScheduleGroups(settings) {
+		interval := int64(group.intervalSeconds)
+		slotStart := now.Unix() - now.Unix()%interval
+		for _, taskType := range group.taskTypes {
+			for _, site := range sites {
+				if !schedulerSiteEligible(site, taskType) {
+					continue
+				}
+				jitter := stableSiteJitterSeconds(site.ID)
+				if jitter >= interval {
+					jitter = interval - 1
+				}
+				if !forceFastStartup && now.Unix() < slotStart+jitter {
+					continue
+				}
+				if err := scheduler.enqueueNonWindowForSite(
+					ctx, site, taskType, slotStart, now.Unix(),
+				); err != nil {
+					return err
+				}
 			}
 		}
 	}

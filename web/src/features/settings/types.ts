@@ -5,6 +5,8 @@ export const platformSettingKeys = [
   'collector.probe_interval_seconds',
   'collector.realtime_interval_seconds',
   'collector.resource_interval_seconds',
+  'collector.operational_interval_seconds',
+  'collector.catalog_interval_seconds',
   'collector.usage_delay_minutes',
   'collector.minute_retention_days',
   'logs.retention_days',
@@ -93,6 +95,8 @@ export interface SettingsFormValues {
   probeIntervalMinutes: string
   realtimeIntervalMinutes: string
   resourceIntervalMinutes: string
+  operationalIntervalMinutes: string
+  catalogIntervalMinutes: string
   usageDelayMinutes: string
   minuteRetentionDays: string
   logRetentionDays: string

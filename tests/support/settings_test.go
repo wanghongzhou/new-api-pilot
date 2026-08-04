@@ -3,8 +3,8 @@ package testsupport
 import "testing"
 
 func TestPlatformSettingSeedsMatchRequiredBaseline(t *testing.T) {
-	if len(platformSettingSeeds) != 37 {
-		t.Fatalf("platform setting seed count = %d, want 37", len(platformSettingSeeds))
+	if len(platformSettingSeeds) != 39 {
+		t.Fatalf("platform setting seed count = %d, want 39", len(platformSettingSeeds))
 	}
 	seen := make(map[string]struct{}, len(platformSettingSeeds))
 	for _, setting := range platformSettingSeeds {

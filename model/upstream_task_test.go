@@ -42,7 +42,7 @@ func TestUpstreamTaskTransitionIdempotencyAndRetention(t *testing.T) {
 	repo := NewSiteRepository(db.GORM)
 	initial := dto.UpstreamTaskSnapshot{Items: []dto.UpstreamTask{taskFixture(1, 11, "IN_PROGRESS"), taskFixture(2, 11, "IN_PROGRESS")}}
 	if err := db.GORM.Transaction(func(tx *gorm.DB) error {
-		_, err := NewSiteRepository(tx).SyncUpstreamTasks(context.Background(), site, now, now-48*3600, initial)
+		_, err := NewSiteRepository(tx).SyncUpstreamTasks(context.Background(), site, now, now-48*3600, initial, false)
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -53,7 +53,7 @@ func TestUpstreamTaskTransitionIdempotencyAndRetention(t *testing.T) {
 	}
 	updatedAt := row.UpdatedAt
 	if err := db.GORM.Transaction(func(tx *gorm.DB) error {
-		written, err := NewSiteRepository(tx).SyncUpstreamTasks(context.Background(), site, now+1, now-48*3600, initial)
+		written, err := NewSiteRepository(tx).SyncUpstreamTasks(context.Background(), site, now+1, now-48*3600, initial, false)
 		if err == nil && written != 0 {
 			t.Fatalf("idempotent written=%d", written)
 		}
@@ -68,7 +68,7 @@ func TestUpstreamTaskTransitionIdempotencyAndRetention(t *testing.T) {
 	finished := taskFixture(1, 12, "SUCCESS")
 	finished.FinishTime = 20
 	if err := db.GORM.Transaction(func(tx *gorm.DB) error {
-		written, err := NewSiteRepository(tx).SyncUpstreamTasks(context.Background(), site, now+2, now-48*3600, dto.UpstreamTaskSnapshot{Items: []dto.UpstreamTask{finished}})
+		written, err := NewSiteRepository(tx).SyncUpstreamTasks(context.Background(), site, now+2, now-48*3600, dto.UpstreamTaskSnapshot{Items: []dto.UpstreamTask{finished}}, false)
 		if err == nil && written != 1 {
 			t.Fatalf("transition written=%d", written)
 		}
@@ -94,6 +94,28 @@ func TestUpstreamTaskTransitionIdempotencyAndRetention(t *testing.T) {
 	}
 }
 
+func TestUpstreamTaskBackfillCompletionIsDurable(t *testing.T) {
+	db := openLockedSiteRunDatabase(t)
+	now := int64(2101200500)
+	site := createRunnableSite(t, db, fmt.Sprintf("task-backfill-%d", time.Now().UnixNano()), now)
+	repository := NewSiteRepository(db.GORM)
+	required, err := repository.UpstreamTaskBackfillRequired(context.Background(), site.ID)
+	if err != nil || !required {
+		t.Fatalf("initial task backfill required=%v err=%v", required, err)
+	}
+	if _, err := repository.SyncUpstreamTasks(context.Background(), site, now, now-7*86400, dto.UpstreamTaskSnapshot{}, true); err != nil {
+		t.Fatalf("complete task backfill: %v", err)
+	}
+	required, err = repository.UpstreamTaskBackfillRequired(context.Background(), site.ID)
+	if err != nil || required {
+		t.Fatalf("completed task backfill required=%v err=%v", required, err)
+	}
+	var state SiteUpstreamTaskCollectionState
+	if err := db.GORM.Where("site_id = ?", site.ID).Take(&state).Error; err != nil || state.BackfillCompletedAt == nil || *state.BackfillCompletedAt != now {
+		t.Fatalf("task backfill state=%#v err=%v", state, err)
+	}
+}
+
 func TestUpstreamTaskStatisticsUseExactDenominators(t *testing.T) {
 	db := openLockedSiteRunDatabase(t)
 	now := int64(2101201000)
@@ -103,7 +125,7 @@ func TestUpstreamTaskStatisticsUseExactDenominators(t *testing.T) {
 	items[1].FinishTime = 30
 	items[2].StartTime = 15
 	if err := db.GORM.Transaction(func(tx *gorm.DB) error {
-		_, err := NewSiteRepository(tx).SyncUpstreamTasks(context.Background(), site, now, now-48*3600, dto.UpstreamTaskSnapshot{Items: items})
+		_, err := NewSiteRepository(tx).SyncUpstreamTasks(context.Background(), site, now, now-48*3600, dto.UpstreamTaskSnapshot{Items: items}, false)
 		return err
 	}); err != nil {
 		t.Fatal(err)

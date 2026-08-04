@@ -88,6 +88,14 @@ func rankingMoversDroppers(items []dto.LocalRankingItem) ([]dto.LocalRankingItem
 	movers := make([]dto.LocalRankingItem, 0, len(items))
 	droppers := make([]dto.LocalRankingItem, 0, len(items))
 	for _, item := range items {
+		if item.MovementType == "new" {
+			movers = append(movers, item)
+			continue
+		}
+		if item.MovementType == "removed" {
+			droppers = append(droppers, item)
+			continue
+		}
 		if item.Growth == nil {
 			continue
 		}
@@ -103,6 +111,21 @@ func rankingMoversDroppers(items []dto.LocalRankingItem) ([]dto.LocalRankingItem
 		}
 	}
 	compareGrowth := func(left, right dto.LocalRankingItem) int {
+		if left.MovementType == right.MovementType && (left.MovementType == "new" || left.MovementType == "removed") {
+			if left.DimensionID < right.DimensionID {
+				return 1
+			}
+			if left.DimensionID > right.DimensionID {
+				return -1
+			}
+			return 0
+		}
+		if left.MovementType == "new" || right.MovementType == "removed" {
+			return 1
+		}
+		if right.MovementType == "new" || left.MovementType == "removed" {
+			return -1
+		}
 		a, _ := new(big.Rat).SetString(*left.Growth)
 		b, _ := new(big.Rat).SetString(*right.Growth)
 		return a.Cmp(b)
@@ -147,8 +170,10 @@ func (r *LocalRankingService) Query(ctx context.Context, q dto.LocalRankingQuery
 	for _, x := range rows {
 		total += x.TokenUsed
 	}
+	comparisonItems := make([]dto.LocalRankingItem, 0, len(rows))
 	items := make([]dto.LocalRankingItem, 0, len(rows))
-	for i, x := range rows {
+	currentRank := 0
+	for _, x := range rows {
 		share := decimalRatio(x.TokenUsed, total)
 		growth := func() *string {
 			if x.PreviousTokenUsed == 0 {
@@ -160,9 +185,30 @@ func (r *LocalRankingService) Query(ctx context.Context, q dto.LocalRankingQuery
 		if share != nil {
 			s = *share
 		}
-		items = append(items, dto.LocalRankingItem{DimensionID: x.DimensionID, DimensionName: x.DimensionName, TokenUsed: strconv.FormatInt(x.TokenUsed, 10), RequestCount: strconv.FormatInt(x.RequestCount, 10), Quota: strconv.FormatInt(x.Quota, 10), Share: s, Growth: growth, Rank: i + 1})
+		movementType := "stable"
+		switch {
+		case x.TokenUsed > 0 && x.PreviousTokenUsed == 0:
+			movementType = "new"
+		case x.TokenUsed == 0 && x.PreviousTokenUsed > 0:
+			movementType = "removed"
+		case growth != nil:
+			parsed, ok := new(big.Rat).SetString(*growth)
+			if ok && parsed.Sign() > 0 {
+				movementType = "up"
+			} else if ok && parsed.Sign() < 0 {
+				movementType = "down"
+			}
+		}
+		if x.TokenUsed > 0 {
+			currentRank++
+		}
+		item := dto.LocalRankingItem{DimensionID: x.DimensionID, DimensionName: x.DimensionName, TokenUsed: strconv.FormatInt(x.TokenUsed, 10), RequestCount: strconv.FormatInt(x.RequestCount, 10), Quota: strconv.FormatInt(x.Quota, 10), Share: s, Growth: growth, MovementType: movementType, Rank: currentRank}
+		comparisonItems = append(comparisonItems, item)
+		if x.TokenUsed > 0 {
+			items = append(items, item)
+		}
 	}
-	movers, droppers := rankingMoversDroppers(items)
+	movers, droppers := rankingMoversDroppers(comparisonItems)
 	statusBy := map[int64]string{}
 	asOfBy := map[int64]*int64{}
 	overall := "pending"

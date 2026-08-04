@@ -55,7 +55,7 @@ func TestA97LocalModelAndVendorRankings(t *testing.T) {
 	if err != nil || len(models.Items) != 2 || models.Items[0].DimensionID != "gpt" || models.Items[0].TokenUsed != "150" || models.Items[0].RequestCount != "15" || models.Items[0].Quota != "1500" || models.Items[0].Share != "0.75" || models.Items[0].Growth == nil || *models.Items[0].Growth != "0.5" || models.Items[1].TokenUsed != "50" || models.Items[1].Share != "0.25" || models.Items[1].Growth != nil || models.DataStatus != "partial" {
 		t.Fatalf("models=%#v err=%v", models, err)
 	}
-	if len(models.Movers) != 1 || models.Movers[0].DimensionID != "gpt" || len(models.Droppers) != 0 {
+	if len(models.Movers) != 2 || models.Movers[0].DimensionID != "unknown-model" || models.Movers[0].MovementType != "new" || models.Movers[1].DimensionID != "gpt" || models.Movers[1].MovementType != "up" || len(models.Droppers) != 0 {
 		t.Fatalf("directional movers/droppers=%#v/%#v", models.Movers, models.Droppers)
 	}
 	vendors, err := svc.Query(context.Background(), q, "vendor")

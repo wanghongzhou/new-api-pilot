@@ -49,13 +49,14 @@ type SitePerformanceMetricBucket struct {
 func (SitePerformanceMetricBucket) TableName() string { return "site_performance_metric_bucket" }
 
 type SitePerformanceCollectionState struct {
-	SiteID           int64  `gorm:"column:site_id;primaryKey"`
-	CapabilityStatus string `gorm:"column:capability_status"`
-	LastSuccessAt    *int64 `gorm:"column:last_success_at"`
-	LastFailureAt    *int64 `gorm:"column:last_failure_at"`
-	LastErrorCode    string `gorm:"column:last_error_code"`
-	ConfigVersion    int    `gorm:"column:config_version"`
-	UpdatedAt        int64  `gorm:"column:updated_at"`
+	SiteID              int64  `gorm:"column:site_id;primaryKey"`
+	CapabilityStatus    string `gorm:"column:capability_status"`
+	LastSuccessAt       *int64 `gorm:"column:last_success_at"`
+	BackfillCompletedAt *int64 `gorm:"column:backfill_completed_at"`
+	LastFailureAt       *int64 `gorm:"column:last_failure_at"`
+	LastErrorCode       string `gorm:"column:last_error_code"`
+	ConfigVersion       int    `gorm:"column:config_version"`
+	UpdatedAt           int64  `gorm:"column:updated_at"`
 }
 
 func (SitePerformanceCollectionState) TableName() string { return "site_performance_collection_state" }
@@ -131,9 +132,29 @@ func (r *SiteRepository) ApplyPerformanceHistorySnapshot(ctx context.Context, ex
 			status = "available"
 		}
 		state := SitePerformanceCollectionState{SiteID: site.ID, CapabilityStatus: status, LastSuccessAt: &now, LastErrorCode: "", ConfigVersion: site.ConfigVersion, UpdatedAt: now}
-		return tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "site_id"}}, DoUpdates: clause.AssignmentColumns([]string{"capability_status", "last_success_at", "last_error_code", "config_version", "updated_at"})}).Create(&state).Error
+		assignments := []string{"capability_status", "last_success_at", "last_error_code", "config_version", "updated_at"}
+		if end-start > 24*3600 {
+			state.BackfillCompletedAt = &now
+			assignments = append(assignments, "backfill_completed_at")
+		}
+		return tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "site_id"}}, DoUpdates: clause.AssignmentColumns(assignments)}).Create(&state).Error
 	})
 	return int64(len(rows)), err
+}
+
+func (r *SiteRepository) PerformanceBackfillRequired(ctx context.Context, siteID int64) (bool, error) {
+	if r == nil || r.db == nil || siteID <= 0 {
+		return false, errors.New("invalid performance backfill lookup")
+	}
+	var state SitePerformanceCollectionState
+	err := r.db.WithContext(ctx).Where("site_id = ?", siteID).Take(&state).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return state.BackfillCompletedAt == nil, nil
 }
 func (r *SiteRepository) MarkPerformanceUnavailable(ctx context.Context, expected Site, observedAt int64, code string) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -154,11 +175,39 @@ type PerformanceHistoryReadRow struct {
 	SitePerformanceMetricBucket
 	SiteName string `gorm:"column:site_name"`
 }
+
+type PerformanceCollectionCoverage struct {
+	SiteCount        int64  `gorm:"column:site_count"`
+	SuccessfulSites  int64  `gorm:"column:successful_sites"`
+	UnavailableSites int64  `gorm:"column:unavailable_sites"`
+	AsOf             *int64 `gorm:"column:as_of"`
+}
+
 type PerformanceHistoryRepository struct{ db *gorm.DB }
 
 func NewPerformanceHistoryRepository(db *gorm.DB) *PerformanceHistoryRepository {
 	return &PerformanceHistoryRepository{db: db}
 }
+
+func (r *PerformanceHistoryRepository) CollectionCoverage(ctx context.Context, siteIDs []int64) (PerformanceCollectionCoverage, error) {
+	if r == nil || r.db == nil {
+		return PerformanceCollectionCoverage{}, errors.New("performance history repository is required")
+	}
+	query := r.db.WithContext(ctx).Table("site AS s").
+		Joins("LEFT JOIN site_performance_collection_state AS p ON p.site_id=s.id AND p.config_version=s.config_version").
+		Where("s.management_status=? AND s.auth_status=?", constant.SiteManagementActive, constant.SiteAuthAuthorized)
+	if len(siteIDs) > 0 {
+		query = query.Where("s.id IN ?", siteIDs)
+	}
+	var coverage PerformanceCollectionCoverage
+	err := query.Select(`COUNT(*) AS site_count,
+		COALESCE(SUM(CASE WHEN p.capability_status IN ('available','average_only') AND p.last_success_at IS NOT NULL THEN 1 ELSE 0 END),0) AS successful_sites,
+		COALESCE(SUM(CASE WHEN p.capability_status='unavailable' THEN 1 ELSE 0 END),0) AS unavailable_sites,
+		MAX(CASE WHEN p.capability_status IN ('available','average_only') THEN p.last_success_at ELSE NULL END) AS as_of`).
+		Scan(&coverage).Error
+	return coverage, err
+}
+
 func (r *PerformanceHistoryRepository) List(ctx context.Context, q dto.PerformanceHistoryQuery) ([]PerformanceHistoryReadRow, int64, error) {
 	db := r.db.WithContext(ctx).Table("site_performance_metric_bucket AS p").Joins("JOIN site AS s ON s.id=p.site_id").Where("p.bucket_ts>=? AND p.bucket_ts<?", q.StartTimestamp, q.EndTimestamp)
 	if len(q.SiteIDs) > 0 {

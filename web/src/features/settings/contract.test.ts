@@ -22,6 +22,8 @@ const validValues: SettingsFormValues = {
   probeIntervalMinutes: '1',
   realtimeIntervalMinutes: '1',
   resourceIntervalMinutes: '1',
+  operationalIntervalMinutes: '5',
+  catalogIntervalMinutes: '10',
   usageDelayMinutes: '5',
   minuteRetentionDays: '90',
   logRetentionDays: '90',
@@ -84,13 +86,13 @@ function groupsFixture(retentionValue: unknown = 90): SettingGroup[] {
 }
 
 describe('settings frontend contract', () => {
-  test('covers each of the 37 persisted settings exactly once', () => {
-    expect(platformSettingKeys).toHaveLength(37)
-    expect(new Set(platformSettingKeys).size).toBe(37)
+  test('covers each persisted setting exactly once', () => {
+    expect(platformSettingKeys).toHaveLength(39)
+    expect(new Set(platformSettingKeys).size).toBe(39)
     const renderedPersistedKeys = settingFieldDefinitions
       .map((definition) => definition.key)
       .filter((key) => key !== 'system.public_origin')
-    expect(new Set(renderedPersistedKeys).size).toBe(37)
+    expect(new Set(renderedPersistedKeys).size).toBe(39)
     expect([...renderedPersistedKeys].sort()).toEqual(
       [...platformSettingKeys].sort()
     )

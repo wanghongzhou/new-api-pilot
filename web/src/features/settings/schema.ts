@@ -85,6 +85,8 @@ export function createSettingsFormSchema(secretState: SettingsSecretState) {
       probeIntervalMinutes: positiveInteger(1, 60),
       realtimeIntervalMinutes: positiveInteger(1, 60),
       resourceIntervalMinutes: positiveInteger(1, 60),
+      operationalIntervalMinutes: positiveInteger(1, 60),
+      catalogIntervalMinutes: positiveInteger(1, 60),
       usageDelayMinutes: positiveInteger(1, 59),
       minuteRetentionDays: positiveInteger(1, 3650),
       logRetentionDays: positiveInteger(1, 3650),

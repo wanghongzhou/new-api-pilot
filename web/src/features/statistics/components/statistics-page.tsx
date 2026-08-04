@@ -1,3 +1,4 @@
+import { Chart01Icon } from '@hugeicons/core-free-icons'
 import {
   keepPreviousData,
   useQuery,
@@ -20,6 +21,7 @@ import { Badge } from '@/components/ui/badge'
 import { DataTable } from '@/components/ui/data-table'
 import { Spinner } from '@/components/ui/spinner'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { OperationsViewPurpose } from '@/features/operations-analytics/components/operations-analytics-workspace'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import { formatBeijingTimestamp } from '@/lib/dayjs'
@@ -104,6 +106,7 @@ function ScopeNavigation({ scope }: { scope: StatisticsScope }) {
           <TabsTrigger
             className='statistics-scope-link'
             key={value}
+            nativeButton={false}
             render={<Link search={buildStatisticsSearch({})} to={to} />}
             value={value}
           >
@@ -676,7 +679,6 @@ export function StatisticsPage({
             {t('statistics.staleData')}
           </p>
         )}
-        <StatisticsSummary data={data} search={search} />
         {resultContent}
         <CompletenessAlert completeness={data.completeness} />
       </div>
@@ -686,22 +688,33 @@ export function StatisticsPage({
   return (
     <SectionPageLayout
       description={t('statistics.page.description')}
+      fixedContent
       title={t(dynamicI18nKey('statistics', `statistics.page.${scope}.title`))}
     >
-      <div className='grid min-w-0 gap-6'>
+      <div className='flex h-full min-h-0 min-w-0 flex-col gap-4'>
         <ScopeNavigation scope={scope} />
+        <OperationsViewPurpose
+          description={t('operationsAnalytics.statistics.purpose.description')}
+          icon={Chart01Icon}
+          title={t('operationsAnalytics.statistics.purpose.title')}
+        />
+        {data && <StatisticsSummary data={data} search={search} />}
         <StatisticsToolbar
           exportDisabled={!data || rangeTransition}
+          filterAction={
+            <StatisticsFilters
+              onApply={onSearchChange}
+              scope={scope}
+              search={search}
+            />
+          }
           onExportOpen={() => data && setExportDraft(true)}
           onSearchChange={onSearchChange}
           search={search}
         />
-        <StatisticsFilters
-          onApply={onSearchChange}
-          scope={scope}
-          search={search}
-        />
-        {body}
+        <div className='min-h-0 flex-1 overflow-y-auto pr-1' tabIndex={0}>
+          {body}
+        </div>
       </div>
       {exportDraft && data && (
         <ExportDialog

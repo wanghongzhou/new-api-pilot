@@ -11,18 +11,20 @@ import (
 // CollectorSettings is loaded at runtime so scheduler cadence and queue limits
 // can change without restarting the process.
 type CollectorSettings struct {
-	ProbeIntervalSeconds    int
-	RealtimeIntervalSeconds int
-	ResourceIntervalSeconds int
-	UsageDelayMinutes       int
-	MinuteRetentionDays     int
-	ProbeConcurrency        int
-	RealtimeConcurrency     int
-	ResourceConcurrency     int
-	MetadataConcurrency     int
-	UsageConcurrency        int
-	BackfillConcurrency     int
-	ManualBackfillMaxDays   int
+	ProbeIntervalSeconds       int
+	RealtimeIntervalSeconds    int
+	ResourceIntervalSeconds    int
+	OperationalIntervalSeconds int
+	CatalogIntervalSeconds     int
+	UsageDelayMinutes          int
+	MinuteRetentionDays        int
+	ProbeConcurrency           int
+	RealtimeConcurrency        int
+	ResourceConcurrency        int
+	MetadataConcurrency        int
+	UsageConcurrency           int
+	BackfillConcurrency        int
+	ManualBackfillMaxDays      int
 }
 
 type CollectorSettingRepository struct {
@@ -41,6 +43,8 @@ func (repository *CollectorSettingRepository) Load(ctx context.Context) (Collect
 		"collector.probe_interval_seconds",
 		"collector.realtime_interval_seconds",
 		"collector.resource_interval_seconds",
+		"collector.operational_interval_seconds",
+		"collector.catalog_interval_seconds",
 		"collector.usage_delay_minutes",
 		"collector.minute_retention_days",
 		"collector.probe_concurrency",
@@ -77,18 +81,20 @@ func (repository *CollectorSettingRepository) Load(ctx context.Context) (Collect
 		}
 	}
 	settings := CollectorSettings{
-		ProbeIntervalSeconds:    values["collector.probe_interval_seconds"],
-		RealtimeIntervalSeconds: values["collector.realtime_interval_seconds"],
-		ResourceIntervalSeconds: values["collector.resource_interval_seconds"],
-		UsageDelayMinutes:       values["collector.usage_delay_minutes"],
-		MinuteRetentionDays:     values["collector.minute_retention_days"],
-		ProbeConcurrency:        values["collector.probe_concurrency"],
-		RealtimeConcurrency:     values["collector.realtime_concurrency"],
-		ResourceConcurrency:     values["collector.resource_concurrency"],
-		MetadataConcurrency:     values["collector.metadata_concurrency"],
-		UsageConcurrency:        values["collector.usage_concurrency"],
-		BackfillConcurrency:     values["collector.backfill_concurrency"],
-		ManualBackfillMaxDays:   values["collector.manual_backfill_max_days"],
+		ProbeIntervalSeconds:       values["collector.probe_interval_seconds"],
+		RealtimeIntervalSeconds:    values["collector.realtime_interval_seconds"],
+		ResourceIntervalSeconds:    values["collector.resource_interval_seconds"],
+		OperationalIntervalSeconds: values["collector.operational_interval_seconds"],
+		CatalogIntervalSeconds:     values["collector.catalog_interval_seconds"],
+		UsageDelayMinutes:          values["collector.usage_delay_minutes"],
+		MinuteRetentionDays:        values["collector.minute_retention_days"],
+		ProbeConcurrency:           values["collector.probe_concurrency"],
+		RealtimeConcurrency:        values["collector.realtime_concurrency"],
+		ResourceConcurrency:        values["collector.resource_concurrency"],
+		MetadataConcurrency:        values["collector.metadata_concurrency"],
+		UsageConcurrency:           values["collector.usage_concurrency"],
+		BackfillConcurrency:        values["collector.backfill_concurrency"],
+		ManualBackfillMaxDays:      values["collector.manual_backfill_max_days"],
 	}
 	if err := validateCollectorSettings(settings); err != nil {
 		return CollectorSettings{}, err
@@ -98,9 +104,11 @@ func (repository *CollectorSettingRepository) Load(ctx context.Context) (Collect
 
 func validateCollectorSettings(settings CollectorSettings) error {
 	for name, value := range map[string]int{
-		"probe_interval_seconds":    settings.ProbeIntervalSeconds,
-		"realtime_interval_seconds": settings.RealtimeIntervalSeconds,
-		"resource_interval_seconds": settings.ResourceIntervalSeconds,
+		"probe_interval_seconds":       settings.ProbeIntervalSeconds,
+		"realtime_interval_seconds":    settings.RealtimeIntervalSeconds,
+		"resource_interval_seconds":    settings.ResourceIntervalSeconds,
+		"operational_interval_seconds": settings.OperationalIntervalSeconds,
+		"catalog_interval_seconds":     settings.CatalogIntervalSeconds,
 	} {
 		if value < 60 || value > 3600 || value%60 != 0 {
 			return fmt.Errorf("collector setting %s is outside the supported range", name)

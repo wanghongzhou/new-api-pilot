@@ -280,6 +280,34 @@ func TestPeriodicSiteTasksCommitMetadataBehindConfigFence(t *testing.T) {
 	if err := tx.Where("site_id=? AND remote_id=13", site.ID).Take(&upstreamTask).Error; err != nil || upstreamTask.RemoteStatus != "IN_PROGRESS" {
 		t.Fatalf("periodic upstream task=%#v err=%v", upstreamTask, err)
 	}
+	var performanceState model.SitePerformanceCollectionState
+	if err := tx.Where("site_id = ?", site.ID).Take(&performanceState).Error; err != nil || performanceState.BackfillCompletedAt == nil {
+		t.Fatalf("periodic performance backfill state=%#v err=%v", performanceState, err)
+	}
+	var upstreamTaskState model.SiteUpstreamTaskCollectionState
+	if err := tx.Where("site_id = ?", site.ID).Take(&upstreamTaskState).Error; err != nil || upstreamTaskState.BackfillCompletedAt == nil {
+		t.Fatalf("periodic upstream task backfill state=%#v err=%v", upstreamTaskState, err)
+	}
+	if len(client.performanceHours) != 1 || client.performanceHours[0] != 720 {
+		t.Fatalf("initial performance hours=%v, want [720]", client.performanceHours)
+	}
+	if len(client.upstreamTaskStarts) != 1 || client.upstreamTaskStarts[0] != statisticsStart ||
+		len(client.upstreamTaskEnds) != 1 || client.upstreamTaskEnds[0] != now+1 {
+		t.Fatalf("initial upstream task windows starts=%v ends=%v want=[%d,%d)", client.upstreamTaskStarts, client.upstreamTaskEnds, statisticsStart, now+1)
+	}
+	if _, _, err := sites.ExecutePeriodicSiteTask(context.Background(), constant.TaskTypePerformanceSync, site.ID, site.ConfigVersion, "req_periodic_performance_incremental"); err != nil {
+		t.Fatalf("execute incremental performance: %v", err)
+	}
+	if _, _, err := sites.ExecutePeriodicSiteTask(context.Background(), constant.TaskTypeUpstreamTaskSync, site.ID, site.ConfigVersion, "req_periodic_upstream_task_incremental"); err != nil {
+		t.Fatalf("execute incremental upstream task: %v", err)
+	}
+	if len(client.performanceHours) != 2 || client.performanceHours[1] != 24 {
+		t.Fatalf("incremental performance hours=%v, want second call 24", client.performanceHours)
+	}
+	if len(client.upstreamTaskStarts) != 2 || client.upstreamTaskStarts[1] != now-48*3600 ||
+		len(client.upstreamTaskEnds) != 2 || client.upstreamTaskEnds[1] != now+1 {
+		t.Fatalf("incremental upstream task windows starts=%v ends=%v", client.upstreamTaskStarts, client.upstreamTaskEnds)
+	}
 	var synced model.Account
 	if err := tx.First(&synced, account.ID).Error; err != nil || synced.RemoteState != model.AccountRemoteStateNormal ||
 		synced.RemoteMissingCount != 0 || synced.Username != client.root.Username {

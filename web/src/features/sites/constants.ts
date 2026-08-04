@@ -103,7 +103,8 @@ export type CollectionTaskCategory =
 
 export type CollectionTaskTriggerClass =
   | 'fast_interval'
-  | 'resource_interval'
+  | 'operational_interval'
+  | 'catalog_interval'
   | 'hour_boundary'
   | 'usage_delay'
   | 'event_backfill'
@@ -140,49 +141,49 @@ export const collectionTaskCatalog = {
     category: 'durable',
     purposeKey: 'siteTasks.purpose.performanceSync',
     targetType: 'site',
-    triggerClass: 'resource_interval',
+    triggerClass: 'operational_interval',
   },
   topup_sync: {
     category: 'durable',
     purposeKey: 'siteTasks.purpose.topupSync',
     targetType: 'site',
-    triggerClass: 'resource_interval',
+    triggerClass: 'operational_interval',
   },
   redemption_sync: {
     category: 'durable',
     purposeKey: 'siteTasks.purpose.redemptionSync',
     targetType: 'site',
-    triggerClass: 'resource_interval',
+    triggerClass: 'operational_interval',
   },
   upstream_task_sync: {
     category: 'durable',
     purposeKey: 'siteTasks.purpose.upstreamTaskSync',
     targetType: 'site',
-    triggerClass: 'resource_interval',
+    triggerClass: 'operational_interval',
   },
   model_meta_sync: {
     category: 'durable',
     purposeKey: 'siteTasks.purpose.modelMetaSync',
     targetType: 'site',
-    triggerClass: 'resource_interval',
+    triggerClass: 'catalog_interval',
   },
   plan_sync: {
     category: 'durable',
     purposeKey: 'siteTasks.purpose.planSync',
     targetType: 'site',
-    triggerClass: 'resource_interval',
+    triggerClass: 'catalog_interval',
   },
   pricing_group_sync: {
     category: 'durable',
     purposeKey: 'siteTasks.purpose.pricingGroupSync',
     targetType: 'site',
-    triggerClass: 'resource_interval',
+    triggerClass: 'catalog_interval',
   },
   system_task_sync: {
     category: 'durable',
     purposeKey: 'siteTasks.purpose.systemTaskSync',
     targetType: 'site',
-    triggerClass: 'resource_interval',
+    triggerClass: 'catalog_interval',
   },
   user_sync: {
     category: 'hourly',

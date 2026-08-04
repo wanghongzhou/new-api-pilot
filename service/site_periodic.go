@@ -239,6 +239,20 @@ func (service *SiteService) executePeriodicUpstreamTasks(ctx context.Context, si
 	}
 	now := service.clock.Now().Unix()
 	overlap := now - 48*3600
+	retention, err := service.sites.IntSetting(ctx, "task.retention_days", 1, 3650)
+	if err != nil {
+		return 0, 0, err
+	}
+	backfill, err := service.sites.UpstreamTaskBackfillRequired(ctx, site.ID)
+	if err != nil {
+		return 0, 0, err
+	}
+	if backfill {
+		overlap = now - int64(retention)*86400
+		if site.StatisticsStartAt != nil && *site.StatisticsStartAt > overlap {
+			overlap = *site.StatisticsStartAt
+		}
+	}
 	snapshot, err := source.SnapshotUpstreamTasks(ctx, requestID, overlap, now+1, unfinished)
 	if err != nil {
 		_ = service.sites.MarkUpstreamTaskCollectionFailure(ctx, site, now, "UPSTREAM_TASK_UNAVAILABLE")
@@ -253,15 +267,11 @@ func (service *SiteService) executePeriodicUpstreamTasks(ctx context.Context, si
 		if err := validatePeriodicCommit(current, site, expectedConfigVersion); err != nil {
 			return err
 		}
-		written, err = repository.SyncUpstreamTasks(ctx, current, now, overlap, snapshot)
+		written, err = repository.SyncUpstreamTasks(ctx, current, now, overlap, snapshot, backfill)
 		return err
 	})
 	if err != nil {
 		return int64(len(snapshot.Items)), 0, err
-	}
-	retention, err := service.sites.IntSetting(ctx, "task.retention_days", 1, 3650)
-	if err != nil {
-		return int64(len(snapshot.Items)), written, err
 	}
 	if err := service.sites.DeleteTerminalUpstreamTasksBefore(ctx, now-int64(retention)*86400); err != nil {
 		return int64(len(snapshot.Items)), written, err
@@ -349,20 +359,31 @@ func (service *SiteService) executePeriodicPerformance(ctx context.Context, site
 		_ = service.sites.MarkPerformanceUnavailable(ctx, site, now, "PERFORMANCE_COUNTER_API_UNAVAILABLE")
 		return 0, 0, model.ErrCollectionRunContract
 	}
-	history, err := historyClient.PerformanceHistory(ctx, requestID, 24)
+	retention, err := service.sites.IntSetting(ctx, "performance.retention_days", 1, 3650)
+	if err != nil {
+		return 0, 0, err
+	}
+	backfill, err := service.sites.PerformanceBackfillRequired(ctx, site.ID)
+	if err != nil {
+		return 0, 0, err
+	}
+	hours := 24
+	if backfill {
+		hours = retention * 24
+		if hours > 720 {
+			hours = 720
+		}
+	}
+	history, err := historyClient.PerformanceHistory(ctx, requestID, hours)
 	now := service.clock.Now().Unix()
 	if err != nil {
 		_ = service.sites.MarkPerformanceUnavailable(ctx, site, now, "PERFORMANCE_UPSTREAM_UNAVAILABLE")
 		return 0, 0, service.periodicTaskError(ctx, site.ID, expectedConfigVersion, err)
 	}
-	start := floorHour(now - 24*3600)
+	start := floorHour(now - int64(hours)*3600)
 	written, err := service.sites.ApplyPerformanceHistorySnapshot(ctx, site, now, start, now+1, history)
 	if err != nil {
 		return int64(len(history.Models)), 0, err
-	}
-	retention, settingErr := service.sites.IntSetting(ctx, "performance.retention_days", 1, 3650)
-	if settingErr != nil {
-		return int64(len(history.Models)), written, settingErr
 	}
 	if err := service.sites.DeletePerformanceBefore(ctx, now-int64(retention)*86400); err != nil {
 		return int64(len(history.Models)), written, err

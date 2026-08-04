@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"math/big"
 	"strconv"
 	"strings"
 	"testing"
@@ -227,10 +228,14 @@ func TestChannelAlertRepositoryLoadsLatestAndExactCommittedHourlySnapshot(t *tes
 	hour2 := hour1 + 3600
 	collected1, collected2 := now, now+3600
 	rows := []model.SiteChannelInventoryHourly{
-		{SiteID: site.ID, HourTS: hour1, ChannelCount: 2, AvailableCount: 1, UnavailableCount: 1,
-			BalanceTotal: "75", ResponseTimeAvgMS: "1500", ResponseTimeMaxMS: 2000, AvailabilityRate: "0.5", DataStatus: "complete", ConfigVersion: 1, CollectedAt: collected1},
-		{SiteID: site.ID, HourTS: hour2, ChannelCount: 4, AvailableCount: 4, UnavailableCount: 0,
-			BalanceTotal: "200", ResponseTimeAvgMS: "500", ResponseTimeMaxMS: 700, AvailabilityRate: "1", DataStatus: "complete", ConfigVersion: 1, CollectedAt: collected2},
+		{SiteID: site.ID, RemoteType: 1, RemoteStatus: 1, RemoteGroup: "default", Tag: "primary", DimensionsAvailable: true, HourTS: hour1, ChannelCount: 1, AvailableCount: 1,
+			BalanceTotal: "50", ResponseTimeAvgMS: "1000", ResponseTimeMaxMS: 1000, AvailabilityRate: "1", DataStatus: "complete", ConfigVersion: 1, CollectedAt: collected1},
+		{SiteID: site.ID, RemoteType: 2, RemoteStatus: 2, RemoteGroup: "vip", Tag: "backup", DimensionsAvailable: true, HourTS: hour1, ChannelCount: 1, UnavailableCount: 1,
+			BalanceTotal: "25", ResponseTimeAvgMS: "2000", ResponseTimeMaxMS: 2000, AvailabilityRate: "0", DataStatus: "complete", ConfigVersion: 1, CollectedAt: collected1},
+		{SiteID: site.ID, RemoteType: 1, RemoteStatus: 1, RemoteGroup: "default", Tag: "primary", DimensionsAvailable: true, HourTS: hour2, ChannelCount: 3, AvailableCount: 3,
+			BalanceTotal: "150", ResponseTimeAvgMS: "400", ResponseTimeMaxMS: 600, AvailabilityRate: "1", DataStatus: "complete", ConfigVersion: 1, CollectedAt: collected2},
+		{SiteID: site.ID, RemoteType: 2, RemoteStatus: 1, RemoteGroup: "vip", Tag: "backup", DimensionsAvailable: true, HourTS: hour2, ChannelCount: 1, AvailableCount: 1,
+			BalanceTotal: "50", ResponseTimeAvgMS: "800", ResponseTimeMaxMS: 800, AvailabilityRate: "1", DataStatus: "complete", ConfigVersion: 1, CollectedAt: collected2},
 	}
 	if err := tx.Create(&rows).Error; err != nil {
 		t.Fatalf("create channel hourly snapshots: %v", err)
@@ -248,12 +253,15 @@ func TestChannelAlertRepositoryLoadsLatestAndExactCommittedHourlySnapshot(t *tes
 		}
 	}
 	if latest == nil || latest.HourTS == nil || *latest.HourTS != hour2 || latest.CollectedAt == nil || *latest.CollectedAt != collected2 ||
-		latest.BalanceTotal == nil || *latest.BalanceTotal != "200.0000000000" {
+		latest.BalanceTotal == nil || *latest.BalanceTotal != "200.0000000000" ||
+		latest.ResponseTimeAvgMS == nil || *latest.ResponseTimeAvgMS != "500.0000000000" ||
+		latest.AvailabilityRate == nil || *latest.AvailabilityRate != "1.0000000000" {
 		t.Fatalf("latest channel alert snapshot = %#v", latest)
 	}
 	exact, err := repository.LoadChannelAlertSnapshot(context.Background(), site.ID, hour1, collected1)
 	if err != nil || len(exact.Channels) != 1 || exact.Channels[0].HourTS == nil || *exact.Channels[0].HourTS != hour1 ||
-		exact.Channels[0].AvailabilityRate == nil || *exact.Channels[0].AvailabilityRate != "0.5000000000" {
+		exact.Channels[0].AvailabilityRate == nil || *exact.Channels[0].AvailabilityRate != "0.5000000000" ||
+		exact.Channels[0].ResponseTimeAvgMS == nil || *exact.Channels[0].ResponseTimeAvgMS != "1500.0000000000" {
 		t.Fatalf("exact channel alert snapshot = %#v, %v", exact.Channels, err)
 	}
 	missing, err := repository.LoadChannelAlertSnapshot(context.Background(), site.ID, hour1, collected1+1)
@@ -265,6 +273,11 @@ func TestChannelAlertRepositoryLoadsLatestAndExactCommittedHourlySnapshot(t *tes
 		t.Fatalf("build missing exact channel evaluations: %v", err)
 	}
 	assertChannelAlertStates(t, evaluations, AlertSampleUnknown)
+}
+
+func channelAlertDecimalEquals(value string, numerator, denominator int64) bool {
+	parsed, ok := new(big.Rat).SetString(value)
+	return ok && parsed.Cmp(new(big.Rat).SetFrac(big.NewInt(numerator), big.NewInt(denominator))) == 0
 }
 
 func assertChannelAlertStates(t *testing.T, evaluations []AlertEvaluation, state AlertSampleState) {

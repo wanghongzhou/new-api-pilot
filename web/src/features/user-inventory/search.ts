@@ -9,6 +9,7 @@ import { BEIJING_TIMEZONE, dayjs, fromUnixSeconds } from '@/lib/dayjs'
 import type { UserInventoryState } from './types'
 
 export type UserInventoryTab = 'dimensions' | 'list' | 'sites' | 'trend'
+export type UserInventoryTrendView = 'chart' | 'table'
 
 export interface UserInventorySearch {
   tab: UserInventoryTab
@@ -25,6 +26,9 @@ export interface UserInventorySearch {
   maxBalance?: ReturnType<typeof parseMetricString>
   start: number
   end: number
+  trendPage: number
+  trendPageSize: number
+  trendView: UserInventoryTrendView
   exportId?: ReturnType<typeof parseIdString>
 }
 
@@ -145,6 +149,17 @@ export function buildUserInventorySearch(
       raw.tab === 'trend' || raw.tab === 'dimensions' || raw.tab === 'sites'
         ? raw.tab
         : 'list',
+    trendPage:
+      Number.isInteger(raw.trendPage) && Number(raw.trendPage) > 0
+        ? Number(raw.trendPage)
+        : 1,
+    trendPageSize:
+      Number.isInteger(raw.trendPageSize) &&
+      Number(raw.trendPageSize) > 0 &&
+      Number(raw.trendPageSize) <= 100
+        ? Number(raw.trendPageSize)
+        : 20,
+    trendView: raw.trendView === 'table' ? 'table' : 'chart',
   }
 }
 

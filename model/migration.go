@@ -441,6 +441,26 @@ func verifyMigrationDDLPostcondition(ctx context.Context, connection *sql.Conn, 
 		default:
 			return false, fmt.Errorf("no postcondition for DDL statement %d", index+1)
 		}
+	case "0005_history_backfill_state":
+		switch index {
+		case 0:
+			return verifyMigrationColumns(ctx, connection, "site_performance_collection_state", []string{"backfill_completed_at"}, false)
+		case 1:
+			return verifyMigrationColumns(ctx, connection, "upstream_log_collection_state", []string{"history_start_at", "backfill_completed_at"}, false)
+		case 2:
+			return verifyMigrationColumns(ctx, connection, "site_upstream_task_collection_state", []string{"backfill_completed_at"}, false)
+		default:
+			return false, fmt.Errorf("no postcondition for DDL statement %d", index+1)
+		}
+	case "0006_channel_inventory_hourly_dimensions":
+		if index != 0 {
+			return false, fmt.Errorf("no postcondition for DDL statement %d", index+1)
+		}
+		columnsReady, err := verifyMigrationColumns(ctx, connection, "site_channel_inventory_hourly", []string{"remote_type", "remote_status", "remote_group", "tag", "dimensions_available"}, true)
+		if err != nil || !columnsReady {
+			return columnsReady, err
+		}
+		return verifyMigrationIndexColumns(ctx, connection, "site_channel_inventory_hourly", "uk_site_channel_inventory_hourly", []string{"site_id", "remote_type", "remote_status", "remote_group", "tag", "hour_ts"})
 	default:
 		return false, fmt.Errorf("migration %s has no registered DDL postconditions", version)
 	}

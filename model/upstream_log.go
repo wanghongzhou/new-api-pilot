@@ -44,15 +44,17 @@ type UpstreamLogFact struct {
 func (UpstreamLogFact) TableName() string { return "upstream_log_fact" }
 
 type UpstreamLogCollectionState struct {
-	SiteID          int64  `gorm:"column:site_id;primaryKey"`
-	ConfigVersion   int    `gorm:"column:config_version"`
-	Status          string `gorm:"column:status"`
-	WindowStart     int64  `gorm:"column:window_start"`
-	WindowEnd       int64  `gorm:"column:window_end"`
-	LastSuccessAt   *int64 `gorm:"column:last_success_at"`
-	LastErrorCode   string `gorm:"column:last_error_code"`
-	LastErrorParams []byte `gorm:"column:last_error_params"`
-	UpdatedAt       int64  `gorm:"column:updated_at"`
+	SiteID              int64  `gorm:"column:site_id;primaryKey"`
+	ConfigVersion       int    `gorm:"column:config_version"`
+	Status              string `gorm:"column:status"`
+	WindowStart         int64  `gorm:"column:window_start"`
+	WindowEnd           int64  `gorm:"column:window_end"`
+	HistoryStartAt      *int64 `gorm:"column:history_start_at"`
+	LastSuccessAt       *int64 `gorm:"column:last_success_at"`
+	BackfillCompletedAt *int64 `gorm:"column:backfill_completed_at"`
+	LastErrorCode       string `gorm:"column:last_error_code"`
+	LastErrorParams     []byte `gorm:"column:last_error_params"`
+	UpdatedAt           int64  `gorm:"column:updated_at"`
 }
 
 func (UpstreamLogCollectionState) TableName() string { return "upstream_log_collection_state" }
@@ -102,12 +104,68 @@ func (repository *UpstreamLogRepository) CommitWindow(
 		}
 		state := UpstreamLogCollectionState{SiteID: siteID, ConfigVersion: expectedConfigVersion, Status: status,
 			WindowStart: start, WindowEnd: end, LastErrorCode: errorCode, LastErrorParams: errorParams, UpdatedAt: now}
+		var existing UpstreamLogCollectionState
+		findErr := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("site_id = ?", siteID).Take(&existing).Error
+		if findErr == nil {
+			state.HistoryStartAt = existing.HistoryStartAt
+			state.BackfillCompletedAt = existing.BackfillCompletedAt
+			state.LastSuccessAt = existing.LastSuccessAt
+			if end < existing.WindowEnd {
+				state.Status = existing.Status
+				state.WindowStart = existing.WindowStart
+				state.WindowEnd = existing.WindowEnd
+				state.LastErrorCode = existing.LastErrorCode
+				state.LastErrorParams = existing.LastErrorParams
+			}
+		} else if !errors.Is(findErr, gorm.ErrRecordNotFound) {
+			return findErr
+		}
 		if status == dto.LogCollectionComplete {
-			state.LastSuccessAt = &now
+			if state.HistoryStartAt == nil || start < *state.HistoryStartAt {
+				value := start
+				state.HistoryStartAt = &value
+			}
+			if findErr != nil || end >= existing.WindowEnd {
+				state.LastSuccessAt = &now
+			}
 		}
 		return tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "site_id"}}, DoUpdates: clause.AssignmentColumns([]string{
-			"config_version", "status", "window_start", "window_end", "last_success_at", "last_error_code", "last_error_params", "updated_at",
+			"config_version", "status", "window_start", "window_end", "history_start_at", "last_success_at", "backfill_completed_at", "last_error_code", "last_error_params", "updated_at",
 		})}).Create(&state).Error
+	})
+}
+
+func (repository *UpstreamLogRepository) LoadState(ctx context.Context, siteID int64) (UpstreamLogCollectionState, error) {
+	if repository == nil || repository.db == nil || siteID <= 0 {
+		return UpstreamLogCollectionState{}, ErrCollectionRunContract
+	}
+	var state UpstreamLogCollectionState
+	err := repository.db.WithContext(ctx).Where("site_id = ?", siteID).Take(&state).Error
+	return state, err
+}
+
+func (repository *UpstreamLogRepository) MarkBackfillCompleted(ctx context.Context, siteID int64, expectedConfigVersion int, targetStart, now int64) error {
+	if repository == nil || repository.db == nil || siteID <= 0 || expectedConfigVersion <= 0 || targetStart <= 0 || now <= 0 {
+		return ErrCollectionRunContract
+	}
+	return repository.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var site Site
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&site, siteID).Error; err != nil {
+			return err
+		}
+		if site.ConfigVersion != expectedConfigVersion {
+			return ErrUpstreamLogFence
+		}
+		var state UpstreamLogCollectionState
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("site_id = ?", siteID).Take(&state).Error; err != nil {
+			return err
+		}
+		if state.HistoryStartAt == nil || *state.HistoryStartAt > targetStart {
+			return ErrCollectionRunContract
+		}
+		state.BackfillCompletedAt = &now
+		state.UpdatedAt = now
+		return tx.Save(&state).Error
 	})
 }
 

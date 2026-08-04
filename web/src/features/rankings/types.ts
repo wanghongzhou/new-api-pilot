@@ -9,6 +9,7 @@ import type {
 
 export type RankingPeriod = 'today' | 'week' | 'month' | 'year'
 export type RankingTab = 'models' | 'vendors'
+export type RankingMovementType = 'new' | 'up' | 'down' | 'stable' | 'removed'
 
 export interface RankingItem {
   dimension_id: string
@@ -18,6 +19,7 @@ export interface RankingItem {
   quota: MetricString
   share: DecimalString
   growth: DecimalString | null
+  movement_type: RankingMovementType
   rank: number
 }
 

@@ -950,6 +950,36 @@ type upstreamPerformanceHistoryWire struct {
 	Groups       *[]upstreamPerformanceGroupWire `json:"groups"`
 }
 
+func (wire *upstreamPerformanceHistoryWire) decodeUpstreamResponse(payload []byte) error {
+	var envelope struct {
+		Success *bool           `json:"success"`
+		Message *string         `json:"message"`
+		Data    json.RawMessage `json:"data"`
+	}
+	if err := validateStrictJSONFor(payload, envelope); err != nil {
+		return newUpstreamRequestErrorWithDetail(UpstreamErrorResponseInvalid, "invalid_envelope_json")
+	}
+	if err := json.Unmarshal(payload, &envelope); err != nil {
+		return newUpstreamRequestErrorWithDetail(UpstreamErrorEnvelopeInvalid, "invalid_envelope_json")
+	}
+	if envelope.Success == nil {
+		return newUpstreamRequestErrorWithDetail(UpstreamErrorEnvelopeInvalid, "missing_success")
+	}
+	if !*envelope.Success {
+		return newUpstreamRequestErrorWithDetail(UpstreamErrorEnvelopeInvalid, "success_false")
+	}
+	if len(envelope.Data) == 0 || bytes.Equal(bytes.TrimSpace(envelope.Data), []byte("null")) {
+		return newUpstreamRequestErrorWithDetail(UpstreamErrorEnvelopeInvalid, "missing_data")
+	}
+	if err := validateStrictJSONFor(envelope.Data, upstreamPerformanceHistoryWire{}); err != nil {
+		return newUpstreamRequestErrorWithDetail(UpstreamErrorResponseInvalid, "invalid_data_json")
+	}
+	if err := json.Unmarshal(envelope.Data, wire); err != nil {
+		return newUpstreamRequestErrorWithDetail(UpstreamErrorResponseInvalid, "invalid_data_schema")
+	}
+	return nil
+}
+
 type upstreamFlowRowWire struct {
 	UserID       *int64          `json:"user_id"`
 	Username     *string         `json:"username"`
@@ -1226,6 +1256,34 @@ func canonicalNonNegativeDecimal(raw string) (string, bool) {
 	return canonicalPositiveDecimal(raw)
 }
 
+func canonicalPerformanceDecimal(raw string) (string, bool) {
+	value, ok := new(big.Rat).SetString(raw)
+	if !ok || value.Sign() < 0 {
+		return "", false
+	}
+	normalized := strings.TrimRight(strings.TrimRight(value.FloatString(10), "0"), ".")
+	if normalized == "" {
+		normalized = "0"
+	}
+	return canonicalNonNegativeDecimal(normalized)
+}
+
+func canonicalPerformanceSuccessRate(raw string) (string, bool) {
+	value, ok := new(big.Rat).SetString(raw)
+	if !ok || value.Cmp(big.NewRat(100, 1)) > 0 {
+		return "", false
+	}
+	if value.Sign() < 0 {
+		return "", false
+	}
+	value.Quo(value, big.NewRat(100, 1))
+	normalized := strings.TrimRight(strings.TrimRight(value.FloatString(10), "0"), ".")
+	if normalized == "" {
+		normalized = "0"
+	}
+	return canonicalNonNegativeDecimal(normalized)
+}
+
 func validatePerformanceHistory(w upstreamPerformanceHistoryWire, expectedModel string, now int64) (dto.UpstreamPerformanceModelHistory, bool, error) {
 	if w.ModelName == nil || w.SeriesSchema == nil || w.Groups == nil || *w.ModelName != expectedModel || !validUpstreamString(*w.ModelName, 1, 255) || !validUpstreamString(*w.SeriesSchema, 1, 64) {
 		return dto.UpstreamPerformanceModelHistory{}, false, invalidUpstreamResponse()
@@ -1247,15 +1305,11 @@ func validatePerformanceHistory(w upstreamPerformanceHistoryWire, expectedModel 
 			if b.Ts == nil || b.AvgTTFTMS == nil || b.AvgLatencyMS == nil || b.SuccessRate == nil || b.AvgTPS == nil || *b.Ts <= 0 || *b.Ts > now+5 {
 				return out, false, invalidUpstreamResponse()
 			}
-			ttft, ok1 := canonicalNonNegativeDecimal(b.AvgTTFTMS.String())
-			latency, ok2 := canonicalNonNegativeDecimal(b.AvgLatencyMS.String())
-			rate, ok3 := canonicalNonNegativeDecimal(b.SuccessRate.String())
-			tps, ok4 := canonicalNonNegativeDecimal(b.AvgTPS.String())
+			ttft, ok1 := canonicalPerformanceDecimal(b.AvgTTFTMS.String())
+			latency, ok2 := canonicalPerformanceDecimal(b.AvgLatencyMS.String())
+			rate, ok3 := canonicalPerformanceSuccessRate(b.SuccessRate.String())
+			tps, ok4 := canonicalPerformanceDecimal(b.AvgTPS.String())
 			if !ok1 || !ok2 || !ok3 || !ok4 {
-				return out, false, invalidUpstreamResponse()
-			}
-			rateRat, ok := new(big.Rat).SetString(rate)
-			if !ok || rateRat.Cmp(big.NewRat(1, 1)) > 0 {
 				return out, false, invalidUpstreamResponse()
 			}
 			if _, ok := seenTS[*b.Ts]; ok {

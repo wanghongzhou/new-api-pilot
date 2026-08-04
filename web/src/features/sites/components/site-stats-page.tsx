@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next'
 import { ErrorState } from '@/components/error-state'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
+import { OperationsAnalyticsNavigation } from '@/features/operations-analytics/components/operations-analytics-workspace'
 import { EntityStatistics } from '@/features/statistics/components/entity-statistics'
 import type {
   EntityStatisticsParams,
@@ -68,39 +69,43 @@ export function SiteStatsPage({
   return (
     <SectionPageLayout
       description={t('site.stats.description')}
+      fixedContent
       title={
         detailQuery.data
           ? t('site.stats.namedTitle', { name: detailQuery.data.name })
           : t('site.stats.title')
       }
     >
-      <div className='grid min-w-0 gap-8'>
+      <div className='flex h-full min-h-0 min-w-0 flex-col gap-4'>
         <DetailBackLink
           render={<Link params={{ siteId }} to='/sites/$siteId' />}
         >
           <HugeiconsIcon icon={ArrowLeft01Icon} strokeWidth={2} />
           {t('site.stats.backToDetail')}
         </DetailBackLink>
+        <OperationsAnalyticsNavigation active='statistics' siteId={siteId} />
         {!validSiteId ? (
           <ErrorState title={t('site.detail.invalidId')} />
         ) : (
-          <EntityStatistics
-            data={data}
-            entityId={parseIdString(siteId)}
-            error={
-              statisticsQuery.isError ||
-              (!contractValid &&
-                !rangeTransition &&
-                !statisticsQuery.isFetching)
-            }
-            fetching={statisticsQuery.isFetching}
-            loading={statisticsQuery.isPending}
-            onRetry={() => void statisticsQuery.refetch()}
-            onSearchChange={onSearchChange}
-            rangeTransition={rangeTransition}
-            scope='site'
-            search={search}
-          />
+          <div className='min-h-0 flex-1 overflow-y-auto pr-1' tabIndex={0}>
+            <EntityStatistics
+              data={data}
+              entityId={parseIdString(siteId)}
+              error={
+                statisticsQuery.isError ||
+                (!contractValid &&
+                  !rangeTransition &&
+                  !statisticsQuery.isFetching)
+              }
+              fetching={statisticsQuery.isFetching}
+              loading={statisticsQuery.isPending}
+              onRetry={() => void statisticsQuery.refetch()}
+              onSearchChange={onSearchChange}
+              rangeTransition={rangeTransition}
+              scope='site'
+              search={search}
+            />
+          </div>
         )}
       </div>
     </SectionPageLayout>

@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -37,6 +38,34 @@ func TestSchedulerDefaultTickIsOneMinute(t *testing.T) {
 	}
 	if scheduler.tick != time.Minute {
 		t.Fatalf("default scheduler tick = %s, want %s", scheduler.tick, time.Minute)
+	}
+}
+
+func TestDurableScheduleGroupsSeparateOperationalAndCatalogCadence(t *testing.T) {
+	groups := durableScheduleGroups(model.CollectorSettings{
+		OperationalIntervalSeconds: 300,
+		CatalogIntervalSeconds:     600,
+	})
+	if len(groups) != 2 {
+		t.Fatalf("durable schedule groups = %#v", groups)
+	}
+	if groups[0].intervalSeconds != 300 || groups[1].intervalSeconds != 600 {
+		t.Fatalf("durable schedule intervals = %d/%d", groups[0].intervalSeconds, groups[1].intervalSeconds)
+	}
+	operational := []string{
+		constant.TaskTypePerformanceSync,
+		constant.TaskTypeTopupSync,
+		constant.TaskTypeRedemptionSync,
+		constant.TaskTypeUpstreamTaskSync,
+	}
+	catalog := []string{
+		constant.TaskTypeModelMetaSync,
+		constant.TaskTypePlanSync,
+		constant.TaskTypePricingSync,
+		constant.TaskTypeSystemTaskSync,
+	}
+	if !slices.Equal(groups[0].taskTypes, operational) || !slices.Equal(groups[1].taskTypes, catalog) {
+		t.Fatalf("durable schedule task groups = %#v", groups)
 	}
 }
 

@@ -108,7 +108,7 @@ func TestStatusAllowsEmptyVersionForInternalFork(t *testing.T) {
 		_, _ = writer.Write([]byte(`{"success":true,"message":"","data":{"version":"","system_name":"Internal Fork","quota_per_unit":500000,"usd_exchange_rate":6.82,"enable_data_export":true}}`))
 	}))
 	defer server.Close()
-	client := testClientForServer(t, server, false, testClientSettings{})
+	client := testClientForServer(t, server, true, testClientSettings{})
 	status, err := client.Status(context.Background(), "empty-version")
 	if err != nil {
 		t.Fatalf("empty upstream version rejected: %v", err)
@@ -161,11 +161,18 @@ func TestPerformanceSummaryAllowsOfficialEnvelopeWithoutMessage(t *testing.T) {
 }
 
 func TestPerformanceSummaryOptionalMessageDoesNotRelaxOtherEndpoints(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/api/perf-metrics/summary" {
+			_, _ = writer.Write([]byte(`{"success":true,"data":{"models":[]}}`))
+			return
+		}
 		_, _ = writer.Write([]byte(`{"success":true,"data":{"version":"v1","system_name":"Test","quota_per_unit":1,"usd_exchange_rate":1,"enable_data_export":true}}`))
 	}))
 	defer server.Close()
-	client := testClientForServer(t, server, false, testClientSettings{})
+	client := testClientForServer(t, server, true, testClientSettings{})
+	if summary, err := client.PerformanceSummary(context.Background(), "performance-no-message", 24); err != nil || len(summary.Models) != 0 {
+		t.Fatalf("performance summary missing message=%#v err=%v", summary, err)
+	}
 	if _, err := client.Status(context.Background(), "status-no-message"); !errors.Is(err, ErrUpstreamEnvelopeInvalid) {
 		t.Fatalf("non-performance endpoint accepted missing message: %v", err)
 	}
@@ -186,12 +193,12 @@ func TestPerformanceHistoryPreservesOfficialAverageSeriesWithoutInventingCounter
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
 		case "/api/perf-metrics/summary":
-			_, _ = writer.Write([]byte(`{"success":true,"message":"","data":{"models":[{"model_name":"gpt-4o","avg_latency_ms":100,"success_rate":0.9,"avg_tps":20,"request_count":10}]}}`))
+			_, _ = writer.Write([]byte(`{"success":true,"data":{"models":[{"model_name":"gpt-4o","avg_latency_ms":100,"success_rate":0.9,"avg_tps":20,"request_count":10}]}}`))
 		case "/api/perf-metrics":
 			if request.URL.Query().Get("model") != "gpt-4o" || request.URL.Query().Get("hours") != "24" {
 				t.Fatalf("performance detail query=%s", request.URL.RawQuery)
 			}
-			_, _ = writer.Write([]byte(`{"success":true,"message":"","data":{"model_name":"gpt-4o","series_schema":"ts,avg_ttft_ms,avg_latency_ms,success_rate,avg_tps","groups":[{"group":"default","avg_ttft_ms":50,"avg_latency_ms":100,"success_rate":0.9,"avg_tps":20,"series":[{"ts":1,"avg_ttft_ms":50.5,"avg_latency_ms":100.25,"success_rate":0.9,"avg_tps":20.125}]}]}}`))
+			_, _ = writer.Write([]byte(`{"success":true,"data":{"model_name":"gpt-4o","series_schema":"ts,avg_ttft_ms,avg_latency_ms,success_rate,avg_tps","groups":[{"group":"default","avg_ttft_ms":50,"avg_latency_ms":100,"success_rate":90,"avg_tps":20,"series":[{"ts":1,"avg_ttft_ms":50.5,"avg_latency_ms":100.25,"success_rate":52.63157894736842,"avg_tps":38.728718536943724}]}]}}`))
 		default:
 			t.Fatalf("unexpected performance path %s", request.URL.Path)
 		}
@@ -199,7 +206,7 @@ func TestPerformanceHistoryPreservesOfficialAverageSeriesWithoutInventingCounter
 	defer server.Close()
 	client := testClientForServer(t, server, true, testClientSettings{})
 	history, err := client.PerformanceHistory(context.Background(), "performance-history", 24)
-	if err != nil || history.CounterReady || len(history.Models) != 1 || len(history.Models[0].Groups) != 1 || history.Models[0].Groups[0].Series[0].AvgLatencyMS != "100.25" || history.Models[0].Groups[0].Series[0].Counters.RequestCount != nil {
+	if err != nil || history.CounterReady || len(history.Models) != 1 || len(history.Models[0].Groups) != 1 || history.Models[0].Groups[0].Series[0].AvgLatencyMS != "100.25" || history.Models[0].Groups[0].Series[0].SuccessRate != "0.5263157895" || history.Models[0].Groups[0].Series[0].AvgTPS != "38.7287185369" || history.Models[0].Groups[0].Series[0].Counters.RequestCount != nil {
 		t.Fatalf("performance history=%#v err=%v", history, err)
 	}
 }

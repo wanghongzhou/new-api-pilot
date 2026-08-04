@@ -33,5 +33,6 @@ export const performanceHistorySearchSchema = z
       .catch(undefined),
     siteIds: stringArray(z.string().refine(isIdString)),
     start: z.coerce.number().int().optional().catch(undefined),
+    view: z.enum(['list', 'trend', 'sites']).optional().catch(undefined),
   })
   .transform((search) => buildPerformanceHistorySearch(search))

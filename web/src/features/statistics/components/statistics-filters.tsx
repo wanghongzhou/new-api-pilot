@@ -5,8 +5,19 @@ import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { z } from 'zod'
 
-import { FilterPanel } from '@/components/data/filter-panel'
+import { FacetedFilter } from '@/components/data/faceted-filter'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { listAccounts } from '@/features/accounts/api'
 import { accountKeys } from '@/features/accounts/query-keys'
@@ -14,7 +25,7 @@ import { listCustomers } from '@/features/customers/api'
 import { customerKeys } from '@/features/customers/query-keys'
 import { listSites } from '@/features/sites/api'
 import { siteKeys } from '@/features/sites/query-keys'
-import { parseIdString } from '@/lib/api-types'
+import { isIdString, parseIdString } from '@/lib/api-types'
 
 import {
   listChannelOptions,
@@ -134,6 +145,7 @@ export function StatisticsFilters({
   search: StatisticsSearch
 }) {
   const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
   const [keyword, setKeyword] = useState('')
   const debouncedKeyword = useDebouncedValue(keyword.trim(), 500)
   const form = useForm<FilterValues>({
@@ -166,19 +178,19 @@ export function StatisticsFilters({
   const customerParams = useMemo(() => ({ p: 1, page_size: 100 }), [])
   const accountParams = useMemo(() => ({ p: 1, page_size: 100 }), [])
   const siteQuery = useQuery({
-    enabled: true,
+    enabled: scope === 'global' || open,
     queryFn: () => listSites(siteParams),
     queryKey: siteKeys.list(siteParams),
     staleTime: 5 * 60_000,
   })
   const customerQuery = useQuery({
-    enabled: supports(scope, 'customerIds'),
+    enabled: open && supports(scope, 'customerIds'),
     queryFn: () => listCustomers(customerParams),
     queryKey: customerKeys.list(customerParams),
     staleTime: 5 * 60_000,
   })
   const accountQuery = useQuery({
-    enabled: supports(scope, 'accountIds'),
+    enabled: open && supports(scope, 'accountIds'),
     queryFn: () => listAccounts(accountParams),
     queryKey: accountKeys.list(accountParams),
     staleTime: 5 * 60_000,
@@ -194,31 +206,31 @@ export function StatisticsFilters({
     [debouncedKeyword, siteIds]
   )
   const modelQuery = useQuery({
-    enabled: scope === 'model',
+    enabled: open && scope === 'model',
     queryFn: () => listModelOptions(optionParams),
     queryKey: statisticsKeys.options('models', optionParams),
     staleTime: 5 * 60_000,
   })
   const channelQuery = useQuery({
-    enabled: scope === 'channel',
+    enabled: open && scope === 'channel',
     queryFn: () => listChannelOptions(optionParams),
     queryKey: statisticsKeys.options('channels', optionParams),
     staleTime: 5 * 60_000,
   })
   const groupQuery = useQuery({
-    enabled: scope === 'group',
+    enabled: open && scope === 'group',
     queryFn: () => listGroupOptions(optionParams),
     queryKey: statisticsKeys.options('groups', optionParams),
     staleTime: 5 * 60_000,
   })
   const tokenQuery = useQuery({
-    enabled: scope === 'token',
+    enabled: open && scope === 'token',
     queryFn: () => listTokenOptions(optionParams),
     queryKey: statisticsKeys.options('tokens', optionParams),
     staleTime: 5 * 60_000,
   })
   const nodeQuery = useQuery({
-    enabled: scope === 'node',
+    enabled: open && scope === 'node',
     queryFn: () => listNodeOptions(optionParams),
     queryKey: statisticsKeys.options('nodes', optionParams),
     staleTime: 5 * 60_000,
@@ -339,120 +351,191 @@ export function StatisticsFilters({
       tokenKeys: values.tokenKeys,
       useGroups: values.useGroups,
     })
+    setOpen(false)
   })
 
-  return (
-    <FilterPanel
-      description={t('statistics.filter.description')}
-      hasAdvancedActive={count > 0}
-      hasActiveFilters={count > 0}
-      onApply={() => void submit()}
-      onReset={() => {
-        const reset = {
-          accountIds: [],
-          channelKeys: [],
-          customerIds: [],
-          models: [],
-          nodeNames: [],
-          siteIds: [],
-          tokenKeys: [],
-          useGroups: [],
-        }
-        form.reset(reset)
-        onApply({ ...reset, page: 1 })
-      }}
-      title={t('statistics.filter.title')}
-    >
-      <form
-        className='grid min-w-0 gap-5'
-        onSubmit={(event) => {
-          event.preventDefault()
-          void submit()
-        }}
-      >
-        <FilterGroup
-          emptyLabel={t('statistics.filter.noOptions')}
-          label={t('statistics.filter.sites')}
-          onChange={(values) => setValues('siteIds', values)}
+  const reset = () => {
+    const values: FilterValues = {
+      accountIds: [],
+      channelKeys: [],
+      customerIds: [],
+      models: [],
+      nodeNames: [],
+      siteIds: [],
+      tokenKeys: [],
+      useGroups: [],
+    }
+    form.reset(values)
+    onApply({
+      accountIds: [],
+      channelKeys: [],
+      customerIds: [],
+      models: [],
+      nodeNames: [],
+      page: 1,
+      siteIds: [],
+      tokenKeys: [],
+      useGroups: [],
+    })
+    setOpen(false)
+  }
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) {
+      form.reset({
+        accountIds: search.accountIds,
+        channelKeys: search.channelKeys,
+        customerIds: search.customerIds,
+        models: search.models,
+        nodeNames: search.nodeNames,
+        siteIds: search.siteIds,
+        tokenKeys: search.tokenKeys,
+        useGroups: search.useGroups,
+      })
+      setKeyword('')
+    }
+    setOpen(nextOpen)
+  }
+
+  if (scope === 'global') {
+    return (
+      <div className='flex min-w-0 flex-wrap items-center gap-2'>
+        <FacetedFilter
+          clearLabel={t('common.all')}
+          onChange={(value) =>
+            onApply({
+              page: 1,
+              siteIds: isIdString(value) ? [parseIdString(value)] : [],
+            })
+          }
           options={siteOptions}
-          values={siteIds}
+          title={t('statistics.filter.sites')}
+          value={siteIds.length === 1 ? siteIds[0] : ''}
         />
-        {supports(scope, 'customerIds') && (
-          <FilterGroup
-            emptyLabel={t('statistics.filter.noOptions')}
-            label={t('statistics.filter.customers')}
-            onChange={(values) => setValues('customerIds', values)}
-            options={customerOptions}
-            values={customerIds}
-          />
+        {siteIds.length > 1 && (
+          <>
+            <Badge variant='secondary'>{siteIds.length}</Badge>
+            <Button onClick={reset} size='sm' type='button' variant='ghost'>
+              {t('common.reset')}
+            </Button>
+          </>
         )}
-        {supports(scope, 'accountIds') && (
-          <FilterGroup
-            emptyLabel={t('statistics.filter.noOptions')}
-            label={t('statistics.filter.accounts')}
-            onChange={(values) => setValues('accountIds', values)}
-            options={accountOptions}
-            values={accountIds}
-          />
-        )}
-        {(['model', 'channel', 'group', 'token', 'node'] as const).includes(
-          scope as 'model' | 'channel' | 'group' | 'token' | 'node'
-        ) && (
-          <label className='grid gap-1 text-sm'>
-            <span>{t('statistics.filter.optionSearch')}</span>
-            <Input
-              onChange={(event) => setKeyword(event.target.value)}
-              placeholder={t('statistics.filter.optionSearchPlaceholder')}
-              value={keyword}
+      </div>
+    )
+  }
+
+  return (
+    <Dialog onOpenChange={handleOpenChange} open={open}>
+      <DialogTrigger render={<Button type='button' variant='outline' />}>
+        {t('statistics.filter.open')}
+        {count > 0 && <Badge variant='secondary'>{count}</Badge>}
+      </DialogTrigger>
+      <DialogContent className='max-h-[calc(100dvh-2rem)] sm:max-w-2xl'>
+        <DialogHeader>
+          <DialogTitle>{t('statistics.filter.title')}</DialogTitle>
+          <DialogDescription>
+            {t('statistics.filter.description')}
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          className='grid min-h-0 gap-4'
+          onSubmit={(event) => {
+            event.preventDefault()
+            void submit()
+          }}
+        >
+          <div className='grid max-h-[min(62dvh,620px)] min-w-0 gap-5 overflow-y-auto pr-1 sm:grid-cols-2'>
+            <FilterGroup
+              emptyLabel={t('statistics.filter.noOptions')}
+              label={t('statistics.filter.sites')}
+              onChange={(values) => setValues('siteIds', values)}
+              options={siteOptions}
+              values={siteIds}
             />
-          </label>
-        )}
-        {scope === 'model' && (
-          <FilterGroup
-            emptyLabel={t('statistics.filter.noOptions')}
-            label={t('statistics.filter.models')}
-            onChange={(values) => setValues('models', values)}
-            options={modelOptions}
-            values={models}
-          />
-        )}
-        {scope === 'channel' && (
-          <FilterGroup
-            emptyLabel={t('statistics.filter.noOptions')}
-            label={t('statistics.filter.channels')}
-            onChange={(values) => setValues('channelKeys', values)}
-            options={channelOptions}
-            values={channelKeys}
-          />
-        )}
-        {scope === 'group' && (
-          <FilterGroup
-            emptyLabel={t('statistics.filter.noOptions')}
-            label={t('statistics.filter.groups')}
-            onChange={(values) => setValues('useGroups', values)}
-            options={groupOptions}
-            values={useGroups}
-          />
-        )}
-        {scope === 'token' && (
-          <FilterGroup
-            emptyLabel={t('statistics.filter.noOptions')}
-            label={t('statistics.filter.tokens')}
-            onChange={(values) => setValues('tokenKeys', values)}
-            options={tokenOptions}
-            values={tokenKeys}
-          />
-        )}
-        {scope === 'node' && (
-          <FilterGroup
-            emptyLabel={t('statistics.filter.noOptions')}
-            label={t('statistics.filter.nodes')}
-            onChange={(values) => setValues('nodeNames', values)}
-            options={nodeOptions}
-            values={nodeNames}
-          />
-        )}
-      </form>
-    </FilterPanel>
+            {supports(scope, 'customerIds') && (
+              <FilterGroup
+                emptyLabel={t('statistics.filter.noOptions')}
+                label={t('statistics.filter.customers')}
+                onChange={(values) => setValues('customerIds', values)}
+                options={customerOptions}
+                values={customerIds}
+              />
+            )}
+            {supports(scope, 'accountIds') && (
+              <FilterGroup
+                emptyLabel={t('statistics.filter.noOptions')}
+                label={t('statistics.filter.accounts')}
+                onChange={(values) => setValues('accountIds', values)}
+                options={accountOptions}
+                values={accountIds}
+              />
+            )}
+            {(['model', 'channel', 'group', 'token', 'node'] as const).includes(
+              scope as 'model' | 'channel' | 'group' | 'token' | 'node'
+            ) && (
+              <label className='grid gap-1 text-sm'>
+                <span>{t('statistics.filter.optionSearch')}</span>
+                <Input
+                  onChange={(event) => setKeyword(event.target.value)}
+                  placeholder={t('statistics.filter.optionSearchPlaceholder')}
+                  value={keyword}
+                />
+              </label>
+            )}
+            {scope === 'model' && (
+              <FilterGroup
+                emptyLabel={t('statistics.filter.noOptions')}
+                label={t('statistics.filter.models')}
+                onChange={(values) => setValues('models', values)}
+                options={modelOptions}
+                values={models}
+              />
+            )}
+            {scope === 'channel' && (
+              <FilterGroup
+                emptyLabel={t('statistics.filter.noOptions')}
+                label={t('statistics.filter.channels')}
+                onChange={(values) => setValues('channelKeys', values)}
+                options={channelOptions}
+                values={channelKeys}
+              />
+            )}
+            {scope === 'group' && (
+              <FilterGroup
+                emptyLabel={t('statistics.filter.noOptions')}
+                label={t('statistics.filter.groups')}
+                onChange={(values) => setValues('useGroups', values)}
+                options={groupOptions}
+                values={useGroups}
+              />
+            )}
+            {scope === 'token' && (
+              <FilterGroup
+                emptyLabel={t('statistics.filter.noOptions')}
+                label={t('statistics.filter.tokens')}
+                onChange={(values) => setValues('tokenKeys', values)}
+                options={tokenOptions}
+                values={tokenKeys}
+              />
+            )}
+            {scope === 'node' && (
+              <FilterGroup
+                emptyLabel={t('statistics.filter.noOptions')}
+                label={t('statistics.filter.nodes')}
+                onChange={(values) => setValues('nodeNames', values)}
+                options={nodeOptions}
+                values={nodeNames}
+              />
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={reset} type='button' variant='outline'>
+              {t('common.reset')}
+            </Button>
+            <Button type='submit'>{t('common.search')}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }

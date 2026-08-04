@@ -1184,7 +1184,10 @@ test('does not present stale statistics as an error while granularity changes', 
   await expect(
     page.getByText('42', { exact: true }).filter({ visible: true }).first()
   ).toBeVisible()
-  await page.getByRole('button', { name: '日' }).click()
+  await page.getByRole('button', { name: /时间范围/ }).click()
+  await page.getByRole('combobox', { name: '统计粒度' }).click()
+  await clickOpenSelectOption(page, 'day')
+  await page.getByRole('button', { name: '应用时间范围' }).click()
   try {
     await expect(
       page.getByText('正在加载新范围，当前继续展示上一范围的数据。')

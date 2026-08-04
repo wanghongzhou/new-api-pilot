@@ -125,14 +125,12 @@ function statisticsResponse(url: URL, status = 'partial') {
       { ...metric, dimension_id: '1', dimension_name: '1', site_id: '' },
     ],
     summary: metric,
-    trend: [
-      {
-        ...metric,
-        bucket_end: start + 3600,
-        bucket_start: start,
-        data_status: status,
-      },
-    ],
+    trend: Array.from({ length: 25 }, (_, index) => ({
+      ...metric,
+      bucket_end: start + (index + 1) * 3600,
+      bucket_start: start + index * 3600,
+      data_status: status,
+    })),
   }
 }
 
@@ -287,6 +285,16 @@ test('keeps upstream inventory distinct, bigint-safe, filterable, exportable and
   })
   expect(exportBody?.filters).not.toHaveProperty('p')
   expect(exportBody?.filters).not.toHaveProperty('page_size')
+  await page.getByRole('tab', { name: '趋势分析' }).click()
+  await expect(
+    page.getByRole('img', { name: '用户库存小时趋势曲线图' })
+  ).toBeVisible()
+  await page.getByRole('tab', { name: '数据列表' }).click()
+  await expect(
+    page.getByRole('table', { name: '用户库存小时趋势数据列表' })
+  ).toBeVisible()
+  await page.getByRole('button', { name: '下一页' }).click()
+  await expect(page).toHaveURL(/trendPage=2/)
   const bodyText = await page.locator('body').innerText()
   expect(bodyText).not.toMatch(/email|oauth|password|access[_ ]?token/i)
   const accessibility = await new AxeBuilder({ page })

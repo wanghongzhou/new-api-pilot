@@ -56,8 +56,7 @@ export function defaultStatisticsRange(
     return { end: end.unix(), start: end.subtract(12, 'month').unix() }
   }
   const end = now.startOf('year').add(1, 'year')
-  const start = dayjs.tz('1971-01-01', 'YYYY-MM-DD', BEIJING_TIMEZONE)
-  return { end: end.unix(), start: start.unix() }
+  return { end: end.unix(), start: end.subtract(5, 'year').unix() }
 }
 
 export function buildStatisticsSearch(

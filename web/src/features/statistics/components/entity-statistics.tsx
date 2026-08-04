@@ -19,7 +19,6 @@ import { ErrorState } from '@/components/error-state'
 import { LoadingState } from '@/components/loading-state'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
-import { Input } from '@/components/ui/input'
 import { SelectControl as Select } from '@/components/ui/select-control'
 import { Spinner } from '@/components/ui/spinner'
 import { useTheme } from '@/context/theme-provider'
@@ -27,12 +26,7 @@ import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { calculateCrossSiteQuotaAmount, formatDecimal } from '@/lib/amount'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import type { IdString } from '@/lib/api-types'
-import {
-  BEIJING_TIMEZONE,
-  dayjs,
-  formatBeijingTimestamp,
-  fromUnixSeconds,
-} from '@/lib/dayjs'
+import { formatBeijingTimestamp, fromUnixSeconds } from '@/lib/dayjs'
 import { translateMessageRef } from '@/lib/message-ref'
 
 import { createStatisticsExport } from '../api'
@@ -43,7 +37,6 @@ import {
 } from '../chart-data'
 import { buildEntityExportRequest } from '../export-request'
 import { statisticsKeys } from '../query-keys'
-import { defaultStatisticsRange } from '../search'
 import type {
   AccountStatisticsBreakdown,
   SiteQuotaBreakdown,
@@ -59,6 +52,7 @@ import type {
 } from '../types'
 import { ExportDialog } from './export-dialog'
 import { ExportTaskSheet } from './export-task-sheet'
+import { StatisticsTimeRangePicker } from './statistics-time-range-picker'
 
 const LazyVChart = lazy(() =>
   import('@visactor/react-vchart').then((module) => ({
@@ -150,30 +144,6 @@ export function AmountValue({
   )
 }
 
-function inputType(granularity: StatisticsGranularity) {
-  if (granularity === 'hour') return 'datetime-local'
-  if (granularity === 'month') return 'month'
-  if (granularity === 'year') return 'number'
-  return 'date'
-}
-
-function inputValue(timestamp: number, granularity: StatisticsGranularity) {
-  const value = fromUnixSeconds(timestamp)
-  if (granularity === 'hour') return value.format('YYYY-MM-DDTHH:00')
-  if (granularity === 'month') return value.format('YYYY-MM')
-  if (granularity === 'year') return value.format('YYYY')
-  return value.format('YYYY-MM-DD')
-}
-
-function parseInput(value: string, granularity: StatisticsGranularity) {
-  let format = 'YYYY-MM-DD'
-  if (granularity === 'hour') format = 'YYYY-MM-DDTHH:mm'
-  else if (granularity === 'month') format = 'YYYY-MM'
-  else if (granularity === 'year') format = 'YYYY'
-  const parsed = dayjs.tz(value, format, BEIJING_TIMEZONE)
-  return parsed.isValid() ? parsed.startOf(granularity).unix() : null
-}
-
 export function StatisticsToolbar({
   exportDisabled,
   filterAction,
@@ -188,101 +158,38 @@ export function StatisticsToolbar({
   search: StatisticsSearch
 }) {
   const { t } = useTranslation()
-  const granularities: StatisticsGranularity[] = [
-    'hour',
-    'day',
-    'month',
-    'year',
-  ]
   return (
     <section
       aria-label={t('statistics.filters')}
-      className='grid gap-4 border-b pb-5'
+      className='flex flex-wrap items-center gap-2 border-b pb-4'
     >
-      <div className='flex flex-wrap items-center gap-2' role='group'>
-        {granularities.map((granularity) => (
-          <Button
-            aria-pressed={search.granularity === granularity}
-            className='min-h-10 min-w-10'
-            key={granularity}
-            onClick={() =>
-              onSearchChange({
-                ...defaultStatisticsRange(granularity),
-                granularity,
-                page: 1,
-              })
-            }
-            size='sm'
-            variant={
-              search.granularity === granularity ? 'secondary' : 'outline'
-            }
-          >
-            {t(
-              dynamicI18nKey(
-                'statistics',
-                `statistics.granularity.${granularity}`
-              )
-            )}
-          </Button>
-        ))}
-      </div>
-      <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
-        <label className='grid gap-1 text-sm'>
-          <span>{t('statistics.start')}</span>
-          <Input
-            className='min-h-10 sm:min-h-8'
-            max={inputValue(search.end, search.granularity)}
-            onChange={(event) => {
-              const start = parseInput(event.target.value, search.granularity)
-              if (start != null && start < search.end) {
-                onSearchChange({ page: 1, start })
-              }
-            }}
-            type={inputType(search.granularity)}
-            value={inputValue(search.start, search.granularity)}
-          />
-        </label>
-        <label className='grid gap-1 text-sm'>
-          <span>{t('statistics.end')}</span>
-          <Input
-            className='min-h-10 sm:min-h-8'
-            min={inputValue(search.start, search.granularity)}
-            onChange={(event) => {
-              const end = parseInput(event.target.value, search.granularity)
-              if (end != null && end > search.start) {
-                onSearchChange({ end, page: 1 })
-              }
-            }}
-            type={inputType(search.granularity)}
-            value={inputValue(search.end, search.granularity)}
-          />
-        </label>
-        <label className='grid gap-1 text-sm'>
-          <span>{t('statistics.metric')}</span>
+      <StatisticsTimeRangePicker onChange={onSearchChange} search={search} />
+      <label className='min-w-40 flex-1 sm:max-w-52'>
+        <span className='sr-only'>{t('statistics.metric')}</span>
+        <Select
+          className='min-h-10 sm:min-h-8'
+          onChange={(event) =>
+            onSearchChange({
+              metric: event.target.value as StatisticsMetric,
+              page: 1,
+            })
+          }
+          value={search.metric}
+        >
+          {(
+            ['request_count', 'quota', 'token_used', 'active_users'] as const
+          ).map((metric) => (
+            <option key={metric} value={metric}>
+              {t(dynamicI18nKey('statistics', `statistics.metric.${metric}`))}
+            </option>
+          ))}
+        </Select>
+      </label>
+      {search.metric === 'quota' && (
+        <label className='min-w-40 flex-1 sm:max-w-52'>
+          <span className='sr-only'>{t('statistics.amountDisplay')}</span>
           <Select
             className='min-h-10 sm:min-h-8'
-            onChange={(event) =>
-              onSearchChange({
-                metric: event.target.value as StatisticsMetric,
-                page: 1,
-              })
-            }
-            value={search.metric}
-          >
-            {(
-              ['request_count', 'quota', 'token_used', 'active_users'] as const
-            ).map((metric) => (
-              <option key={metric} value={metric}>
-                {t(dynamicI18nKey('statistics', `statistics.metric.${metric}`))}
-              </option>
-            ))}
-          </Select>
-        </label>
-        <label className='grid gap-1 text-sm'>
-          <span>{t('statistics.amountDisplay')}</span>
-          <Select
-            className='min-h-10 sm:min-h-8'
-            disabled={search.metric !== 'quota'}
             onChange={(event) =>
               onSearchChange({
                 display: event.target.value as StatisticsDisplay,
@@ -299,47 +206,44 @@ export function StatisticsToolbar({
             ))}
           </Select>
         </label>
-      </div>
-      <div className='flex flex-wrap items-center justify-between gap-3'>
-        <div className='flex flex-wrap items-center gap-2'>
-          <div
-            className='border-border flex w-fit rounded-md border p-0.5'
-            role='group'
-          >
-            <Button
-              aria-label={t('statistics.chartView')}
-              aria-pressed={search.view === 'chart'}
-              className='size-10 sm:size-8'
-              onClick={() => onSearchChange({ view: 'chart' })}
-              size='icon'
-              title={t('statistics.chartView')}
-              variant={search.view === 'chart' ? 'secondary' : 'ghost'}
-            >
-              <HugeiconsIcon icon={Chart01Icon} strokeWidth={2} />
-            </Button>
-            <Button
-              aria-label={t('statistics.tableView')}
-              aria-pressed={search.view === 'table'}
-              className='size-10 sm:size-8'
-              onClick={() => onSearchChange({ view: 'table' })}
-              size='icon'
-              title={t('statistics.tableView')}
-              variant={search.view === 'table' ? 'secondary' : 'ghost'}
-            >
-              <HugeiconsIcon icon={TableIcon} strokeWidth={2} />
-            </Button>
-          </div>
-          {filterAction}
-        </div>
+      )}
+      <div
+        className='border-border flex w-fit rounded-md border p-0.5'
+        role='group'
+      >
         <Button
-          disabled={exportDisabled}
-          onClick={onExportOpen}
-          variant='outline'
+          aria-label={t('statistics.chartView')}
+          aria-pressed={search.view === 'chart'}
+          className='size-10 sm:size-8'
+          onClick={() => onSearchChange({ view: 'chart' })}
+          size='icon'
+          title={t('statistics.chartView')}
+          variant={search.view === 'chart' ? 'secondary' : 'ghost'}
         >
-          <HugeiconsIcon icon={FileExportIcon} strokeWidth={2} />
-          {t('statistics.export.open')}
+          <HugeiconsIcon icon={Chart01Icon} strokeWidth={2} />
+        </Button>
+        <Button
+          aria-label={t('statistics.tableView')}
+          aria-pressed={search.view === 'table'}
+          className='size-10 sm:size-8'
+          onClick={() => onSearchChange({ view: 'table' })}
+          size='icon'
+          title={t('statistics.tableView')}
+          variant={search.view === 'table' ? 'secondary' : 'ghost'}
+        >
+          <HugeiconsIcon icon={TableIcon} strokeWidth={2} />
         </Button>
       </div>
+      {filterAction}
+      <Button
+        className='ms-auto'
+        disabled={exportDisabled}
+        onClick={onExportOpen}
+        variant='outline'
+      >
+        <HugeiconsIcon icon={FileExportIcon} strokeWidth={2} />
+        {t('statistics.export.open')}
+      </Button>
     </section>
   )
 }
@@ -501,6 +405,10 @@ export function MetricTrendChart({
     )
   }
   const scaled = model.baseline !== '0' || model.scale !== '1'
+  const hasIncomplete = data.some((point) => point.data_status !== 'complete')
+  const hasProvisional = data.some(
+    (point) => point.data_status === 'complete' && !point.is_final
+  )
   return (
     <figure className='grid min-w-0 gap-2'>
       <div
@@ -517,10 +425,18 @@ export function MetricTrendChart({
         </Suspense>
       </div>
       <figcaption className='text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-xs'>
-        <span className='inline-flex items-center gap-2'>
-          <span className='border-foreground block w-6 border-t border-dashed' />
-          {t('statistics.chart.partialLegend')}
-        </span>
+        {hasIncomplete && (
+          <span className='inline-flex items-center gap-2'>
+            <span className='border-foreground block w-6 border-t border-dashed' />
+            {t('statistics.chart.partialLegend')}
+          </span>
+        )}
+        {hasProvisional && (
+          <span className='inline-flex items-center gap-2'>
+            <span className='border-foreground block w-6 border-t border-dashed' />
+            {t('statistics.chart.provisionalLegend')}
+          </span>
+        )}
         {scaled && (
           <span data-testid='statistics-chart-scale'>
             {t('statistics.chart.scale', {
@@ -586,7 +502,7 @@ export function StatisticsSummary({
           <DataStatusBadge status={data.summary.data_status} />
         </div>
       )}
-      <div className='border-border grid overflow-hidden rounded-lg border sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5 [&_dd]:leading-tight [&_dd]:break-all [&_dd]:tabular-nums [&>dl]:min-w-0 [&>dl]:border-r [&>dl]:border-b'>
+      <div className='border-border grid overflow-hidden rounded-lg border sm:grid-cols-2 lg:grid-cols-5 [&_dd]:leading-tight [&_dd]:break-all [&_dd]:tabular-nums [&>dl]:min-w-0 [&>dl]:border-r [&>dl]:border-b'>
         <dl className='p-4'>
           <dt className='text-muted-foreground text-xs'>
             {t('statistics.metric.request_count')}

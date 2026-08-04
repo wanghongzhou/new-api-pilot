@@ -20,6 +20,9 @@ test('user inventory export freezes only safe list filters without pagination', 
     start: 1_784_176_000,
     states: ['missing'],
     statuses: [1],
+    trendPage: 1,
+    trendPageSize: 20,
+    trendView: 'chart',
   })
   expect(request.statistics_type).toBe('user_inventory')
   expect(request.filters).toMatchObject({

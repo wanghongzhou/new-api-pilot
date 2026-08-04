@@ -33,6 +33,7 @@ func (SiteUpstreamTask) TableName() string { return "site_upstream_task" }
 type SiteUpstreamTaskCollectionState struct {
 	SiteID, OverlapStart         int64
 	LastSuccessAt, LastFailureAt *int64
+	BackfillCompletedAt          *int64
 	LastErrorCode                string
 	ObservedCount                int64
 	ConfigVersion                int
@@ -74,6 +75,21 @@ func (r *SiteRepository) ListUnfinishedUpstreamTaskIDs(ctx context.Context, site
 	}
 	return ids, nil
 }
+
+func (r *SiteRepository) UpstreamTaskBackfillRequired(ctx context.Context, siteID int64) (bool, error) {
+	if r == nil || r.db == nil || siteID <= 0 {
+		return false, errors.New("invalid upstream task backfill lookup")
+	}
+	var state SiteUpstreamTaskCollectionState
+	err := r.db.WithContext(ctx).Where("site_id = ?", siteID).Take(&state).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return state.BackfillCompletedAt == nil, nil
+}
 func taskSourceHash(item dto.UpstreamTask) (string, error) {
 	payload, err := json.Marshal(item)
 	if err != nil {
@@ -85,7 +101,7 @@ func taskSourceHash(item dto.UpstreamTask) (string, error) {
 func validTaskText(v string, max int, required bool) bool {
 	return utf8.ValidString(v) && len(v) <= max && (!required || v != "")
 }
-func (r *SiteRepository) SyncUpstreamTasks(ctx context.Context, site Site, observedAt, overlapStart int64, snapshot dto.UpstreamTaskSnapshot) (int64, error) {
+func (r *SiteRepository) SyncUpstreamTasks(ctx context.Context, site Site, observedAt, overlapStart int64, snapshot dto.UpstreamTaskSnapshot, backfill bool) (int64, error) {
 	if r == nil || r.db == nil || site.ID <= 0 || observedAt <= 0 || overlapStart <= 0 || overlapStart >= observedAt || len(snapshot.Items) > 100000 {
 		return 0, errors.New("invalid upstream task snapshot")
 	}
@@ -126,7 +142,12 @@ func (r *SiteRepository) SyncUpstreamTasks(ctx context.Context, site Site, obser
 		written++
 	}
 	state := SiteUpstreamTaskCollectionState{SiteID: site.ID, OverlapStart: overlapStart, LastSuccessAt: &observedAt, ObservedCount: int64(len(items)), ConfigVersion: site.ConfigVersion, UpdatedAt: observedAt}
-	if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "site_id"}}, DoUpdates: clause.AssignmentColumns([]string{"overlap_start", "last_success_at", "last_error_code", "observed_count", "config_version", "updated_at"})}).Create(&state).Error; err != nil {
+	assignments := []string{"overlap_start", "last_success_at", "last_error_code", "observed_count", "config_version", "updated_at"}
+	if backfill {
+		state.BackfillCompletedAt = &observedAt
+		assignments = append(assignments, "backfill_completed_at")
+	}
+	if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "site_id"}}, DoUpdates: clause.AssignmentColumns(assignments)}).Create(&state).Error; err != nil {
 		return 0, err
 	}
 	return written, nil

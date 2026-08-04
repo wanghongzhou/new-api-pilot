@@ -52,3 +52,67 @@ func TestA63PerformanceHistoryAverageBoundaryAndWeightedCounters(t *testing.T) {
 		t.Fatalf("weighted stats=%#v err=%v", weighted, err)
 	}
 }
+
+func TestPerformanceHistorySuccessfulEmptySnapshotIsComplete(t *testing.T) {
+	if strings.TrimSpace(os.Getenv("TEST_DATABASE_DSN")) == "" {
+		t.Skip("TEST_DATABASE_DSN is not configured")
+	}
+	db := openCoreAcceptanceTransaction(t)
+	now := int64(2101000000)
+	cipher := newCoreCipher(t)
+	site := createCoreAuthorizedSite(t, db, cipher, now)
+	if written, err := model.NewSiteRepository(db).ApplyPerformanceHistorySnapshot(
+		context.Background(), site, now, now-24*3600, now, dto.UpstreamPerformanceHistory{},
+	); err != nil || written != 0 {
+		t.Fatalf("apply empty performance snapshot=%d err=%v", written, err)
+	}
+	svc, err := service.NewPerformanceHistoryService(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	query := dto.PerformanceHistoryQuery{
+		Page: 1, PageSize: 100, StartTimestamp: now - 24*3600, EndTimestamp: now, SiteIDs: []int64{site.ID},
+	}
+	page, err := svc.List(context.Background(), query)
+	if err != nil || page.Total != 0 || page.DataStatus != "complete" || page.AsOf == nil || *page.AsOf != now {
+		t.Fatalf("empty performance page=%#v err=%v", page, err)
+	}
+	statistics, err := svc.Statistics(context.Background(), query)
+	if err != nil || statistics.DataStatus != "complete" || len(statistics.Trend) != 0 {
+		t.Fatalf("empty performance statistics=%#v err=%v", statistics, err)
+	}
+
+	pendingSite := createCoreAuthorizedSite(t, db, cipher, now+1)
+	query.SiteIDs = []int64{pendingSite.ID}
+	pending, err := svc.List(context.Background(), query)
+	if err != nil || pending.DataStatus != "pending" || pending.AsOf != nil {
+		t.Fatalf("pending performance page=%#v err=%v", pending, err)
+	}
+}
+
+func TestPerformanceHistoryBackfillCompletionIsDurable(t *testing.T) {
+	if strings.TrimSpace(os.Getenv("TEST_DATABASE_DSN")) == "" {
+		t.Skip("TEST_DATABASE_DSN is not configured")
+	}
+	db := openCoreAcceptanceTransaction(t)
+	now := int64(2101001000)
+	site := createCoreAuthorizedSite(t, db, newCoreCipher(t), now)
+	repository := model.NewSiteRepository(db)
+	required, err := repository.PerformanceBackfillRequired(context.Background(), site.ID)
+	if err != nil || !required {
+		t.Fatalf("initial performance backfill required=%v err=%v", required, err)
+	}
+	if _, err := repository.ApplyPerformanceHistorySnapshot(
+		context.Background(), site, now, now-720*3600, now+1, dto.UpstreamPerformanceHistory{},
+	); err != nil {
+		t.Fatalf("complete performance backfill: %v", err)
+	}
+	required, err = repository.PerformanceBackfillRequired(context.Background(), site.ID)
+	if err != nil || required {
+		t.Fatalf("completed performance backfill required=%v err=%v", required, err)
+	}
+	var state model.SitePerformanceCollectionState
+	if err := db.Where("site_id = ?", site.ID).Take(&state).Error; err != nil || state.BackfillCompletedAt == nil || *state.BackfillCompletedAt != now {
+		t.Fatalf("performance backfill state=%#v err=%v", state, err)
+	}
+}

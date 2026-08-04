@@ -814,15 +814,19 @@ test('nine statistics scopes preserve URL filters, partial and null contracts', 
   )
   await expect(page.getByRole('heading', { name: '全局统计' })).toBeVisible()
   const statisticsFilters = page.getByRole('region', { name: '统计筛选' })
-  for (const granularity of ['小时', '日', '月', '年']) {
-    const button = statisticsFilters.getByRole('button', {
-      exact: true,
-      name: granularity,
-    })
+  await statisticsFilters.getByRole('button', { name: /时间范围/ }).click()
+  for (const quickRange of [
+    '近 24 小时',
+    '近 7 天',
+    '近 30 天',
+    '近 12 个月',
+  ]) {
+    const button = page.getByRole('button', { exact: true, name: quickRange })
     const box = await button.boundingBox()
-    expect(box?.height ?? 0).toBeGreaterThanOrEqual(40)
-    expect(box?.width ?? 0).toBeGreaterThanOrEqual(40)
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(32)
   }
+  await expect(page.getByRole('combobox', { name: '统计粒度' })).toBeVisible()
+  await page.keyboard.press('Escape')
   await expect(
     page.getByText(
       '当前结果包含未完成或不可用的时间桶，金额与指标仅代表可用数据。'
@@ -833,6 +837,40 @@ test('nine statistics scopes preserve URL filters, partial and null contracts', 
       .getByRole('region', { name: '范围汇总' })
       .getByText('不可用', { exact: true })
   ).toBeVisible()
+  await expect(page.getByLabel('金额显示')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '对象筛选' })).toHaveCount(0)
+  const summaryBox = await page
+    .getByRole('region', { name: '范围汇总' })
+    .boundingBox()
+  const toolbarBox = await statisticsFilters.boundingBox()
+  expect(summaryBox?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(
+    toolbarBox?.y ?? Number.NEGATIVE_INFINITY
+  )
+  const siteFilterButton = page.getByRole('button', { name: '站点' })
+  const siteButtonBox = await siteFilterButton.boundingBox()
+  if (!testInfo.project.name.includes('mobile')) {
+    expect(
+      Math.abs((toolbarBox?.y ?? 0) - (siteButtonBox?.y ?? 0))
+    ).toBeLessThan(8)
+  }
+  const objectFilterRegion = page.locator('section').filter({
+    has: siteFilterButton,
+  })
+  const objectFilterBox = await objectFilterRegion.boundingBox()
+  expect(summaryBox?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(
+    objectFilterBox?.y ?? Number.NEGATIVE_INFINITY
+  )
+  await siteFilterButton.click()
+  await page
+    .getByRole('button', {
+      name: '华东超长名称生产站点用于验证移动端不会横向溢出（ID 9007199254740993）',
+    })
+    .click()
+  await expect
+    .poll(() =>
+      JSON.parse(new URL(page.url()).searchParams.get('siteIds') ?? '[]')
+    )
+    .toEqual(['9007199254740993'])
   await expect(page.getByTestId('statistics-chart-exact-values')).toContainText(
     '-'
   )
@@ -841,7 +879,8 @@ test('nine statistics scopes preserve URL filters, partial and null contracts', 
   await scopeNavigation.getByRole('tab', { name: '模型' }).click()
   await expect(page.getByRole('heading', { name: '模型统计' })).toBeVisible()
 
-  const filter = page.getByRole('region', { name: '统计对象筛选' })
+  await page.getByRole('button', { name: '对象筛选' }).click()
+  const filter = page.getByRole('dialog', { name: '统计对象筛选' })
   await expect(filter).toBeVisible()
   await filter
     .getByRole('checkbox', {
@@ -1010,7 +1049,8 @@ test('group token and node pages preserve identity filters, states, export and m
     await expect(
       page.getByRole('button', { name: '导出', exact: true })
     ).toBeVisible()
-    const filter = page.getByRole('region', { name: '统计对象筛选' })
+    await page.getByRole('button', { name: '对象筛选' }).click()
+    const filter = page.getByRole('dialog', { name: '统计对象筛选' })
     await expect(filter.getByText(item.filterLabel)).toBeVisible()
     await filter.getByRole('button', { name: '搜索', exact: true }).click()
     await expect

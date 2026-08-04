@@ -12,6 +12,8 @@ const validValues: SettingsFormValues = {
   probeIntervalMinutes: '1',
   realtimeIntervalMinutes: '1',
   resourceIntervalMinutes: '1',
+  operationalIntervalMinutes: '5',
+  catalogIntervalMinutes: '10',
   usageDelayMinutes: '5',
   minuteRetentionDays: '90',
   logRetentionDays: '90',

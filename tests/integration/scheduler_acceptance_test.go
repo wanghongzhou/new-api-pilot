@@ -18,6 +18,8 @@ func TestA30A84SchedulerCadenceAndRealtimePriority(t *testing.T) {
 		model.PlatformSetting{Key: "collector.probe_interval_seconds", Value: "60", ValueType: "int"},
 		model.PlatformSetting{Key: "collector.realtime_interval_seconds", Value: "60", ValueType: "int"},
 		model.PlatformSetting{Key: "collector.resource_interval_seconds", Value: "60", ValueType: "int"},
+		model.PlatformSetting{Key: "collector.operational_interval_seconds", Value: "300", ValueType: "int"},
+		model.PlatformSetting{Key: "collector.catalog_interval_seconds", Value: "600", ValueType: "int"},
 		model.PlatformSetting{Key: "collector.usage_delay_minutes", Value: "5", ValueType: "int"},
 		model.PlatformSetting{Key: "collector.minute_retention_days", Value: "90", ValueType: "int"},
 		model.PlatformSetting{Key: "collector.probe_concurrency", Value: "20", ValueType: "int"},

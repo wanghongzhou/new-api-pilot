@@ -26,6 +26,9 @@ describe('channel inventory URL normalization', () => {
         states: ['missing', 'normal', 'invalid'],
         statuses: [3, 1, 99],
         tags: [' primary ', 'primary'],
+        trendPage: 3,
+        trendPageSize: 50,
+        trendView: 'table',
         types: [8, 1, -1],
       },
       now
@@ -40,6 +43,9 @@ describe('channel inventory URL normalization', () => {
     expect(String(search.maxBalance)).toBe('9007199254740993.1234567890')
     expect(String(search.maxResponseTime)).toBe('9223372036854775807')
     expect(String(search.exportId)).toBe('9007199254740999')
+    expect(search.trendPage).toBe(3)
+    expect(search.trendPageSize).toBe(50)
+    expect(search.trendView).toBe('table')
   })
 
   test('fails closed for reversed values and unaligned ranges', () => {
@@ -68,6 +74,10 @@ describe('channel inventory URL normalization', () => {
     expect(
       buildChannelInventorySearch({ tab: 'invalid' as never }, now).tab
     ).toBe('list')
+    expect(
+      buildChannelInventorySearch({ trendView: 'invalid' as never }, now)
+        .trendView
+    ).toBe('chart')
     expect(changeChannelInventoryTab('trend')).toMatchObject({
       keyword: '',
       page: 1,

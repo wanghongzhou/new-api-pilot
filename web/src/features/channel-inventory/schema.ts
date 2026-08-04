@@ -55,5 +55,14 @@ export const channelInventorySearchSchema = z
       .enum(['list', 'trend', 'dimensions', 'sites'])
       .optional()
       .catch(undefined),
+    trendPage: z.coerce.number().int().min(1).optional().catch(undefined),
+    trendPageSize: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(100)
+      .optional()
+      .catch(undefined),
+    trendView: z.enum(['chart', 'table']).optional().catch(undefined),
   })
   .transform((search) => buildChannelInventorySearch(search))

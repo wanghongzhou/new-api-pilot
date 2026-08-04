@@ -66,6 +66,8 @@ var settingDefinitions = []settingDefinition{
 	{Key: "collector.probe_interval_seconds", Group: "collector", ValueType: "int", Minimum: 60, Maximum: 3600},
 	{Key: "collector.realtime_interval_seconds", Group: "collector", ValueType: "int", Minimum: 60, Maximum: 3600},
 	{Key: "collector.resource_interval_seconds", Group: "collector", ValueType: "int", Minimum: 60, Maximum: 3600},
+	{Key: "collector.operational_interval_seconds", Group: "collector", ValueType: "int", Minimum: 60, Maximum: 3600},
+	{Key: "collector.catalog_interval_seconds", Group: "collector", ValueType: "int", Minimum: 60, Maximum: 3600},
 	{Key: "collector.usage_delay_minutes", Group: "collector", ValueType: "int", Minimum: 1, Maximum: 59},
 	{Key: "collector.minute_retention_days", Group: "collector", ValueType: "int", Minimum: 1, Maximum: 3650},
 	{Key: "logs.retention_days", Group: "collector", ValueType: "int", Minimum: 1, Maximum: 3650},
@@ -375,7 +377,8 @@ func (service *SettingService) normalizePatches(
 
 func isCollectorIntervalSetting(key string) bool {
 	switch key {
-	case "collector.probe_interval_seconds", "collector.realtime_interval_seconds", "collector.resource_interval_seconds":
+	case "collector.probe_interval_seconds", "collector.realtime_interval_seconds", "collector.resource_interval_seconds",
+		"collector.operational_interval_seconds", "collector.catalog_interval_seconds":
 		return true
 	default:
 		return false

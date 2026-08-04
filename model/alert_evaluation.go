@@ -209,9 +209,20 @@ CAST(h.balance_total AS CHAR) AS balance_total,
 CAST(h.response_time_avg_ms AS CHAR) AS response_time_avg_ms,
 CAST(h.availability_rate AS CHAR) AS availability_rate
 FROM site s
-LEFT JOIN site_channel_inventory_hourly h
-  ON h.site_id = s.id
- AND h.hour_ts = (SELECT MAX(latest.hour_ts) FROM site_channel_inventory_hourly latest WHERE latest.site_id = s.id)
+LEFT JOIN (
+  SELECT hourly.site_id, hourly.hour_ts, MAX(hourly.collected_at) AS collected_at,
+    SUM(hourly.channel_count) AS channel_count, 'complete' AS data_status, MAX(hourly.config_version) AS config_version,
+	    CAST(SUM(hourly.balance_total) AS DECIMAL(30,10)) AS balance_total,
+	    CAST(COALESCE(SUM(hourly.response_time_avg_ms * hourly.channel_count) / NULLIF(SUM(hourly.channel_count), 0), 0) AS DECIMAL(30,10)) AS response_time_avg_ms,
+	    CAST(COALESCE(SUM(hourly.available_count) / NULLIF(SUM(hourly.channel_count), 0), 0) AS DECIMAL(20,10)) AS availability_rate
+  FROM site_channel_inventory_hourly hourly
+  JOIN (
+    SELECT site_id, MAX(hour_ts) AS hour_ts
+    FROM site_channel_inventory_hourly
+    GROUP BY site_id
+  ) latest ON latest.site_id = hourly.site_id AND latest.hour_ts = hourly.hour_ts
+  GROUP BY hourly.site_id, hourly.hour_ts
+) h ON h.site_id = s.id
 ORDER BY s.id`).Scan(&rows).Error
 	if err != nil {
 		return nil, fmt.Errorf("load alert channel snapshots: %w", err)

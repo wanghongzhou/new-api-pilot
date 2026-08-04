@@ -25,11 +25,12 @@ func TestSiteChannelInventorySnapshotDecimalMissingAndAtomicity(t *testing.T) {
 	if len(rows) != 2 || rows[0].Balance != "9007199254740993.1234567890" || rows[0].RemoteState != SiteChannelInventoryNormal {
 		t.Fatalf("channel inventory=%+v", rows)
 	}
-	var hourly SiteChannelInventoryHourly
-	if err := database.GORM.Where("site_id=?", site.ID).Take(&hourly).Error; err != nil {
+	var hourly []SiteChannelInventoryHourly
+	if err := database.GORM.Where("site_id=?", site.ID).Order("remote_type").Find(&hourly).Error; err != nil {
 		t.Fatal(err)
 	}
-	if hourly.ChannelCount != 2 || hourly.AvailableCount != 1 || hourly.BalanceTotal != "9007199254740993.2234567890" {
+	if len(hourly) != 2 || hourly[0].ChannelCount != 1 || hourly[0].AvailableCount != 1 || hourly[0].BalanceTotal != "9007199254740993.1234567890" ||
+		hourly[1].ChannelCount != 1 || hourly[1].UnavailableCount != 1 || hourly[1].BalanceTotal != "0.1000000000" || !hourly[0].DimensionsAvailable {
 		t.Fatalf("channel hourly=%+v", hourly)
 	}
 	if err := database.GORM.Transaction(func(tx *gorm.DB) error {

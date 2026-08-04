@@ -95,12 +95,19 @@ func (s *ChannelInventoryService) Statistics(ctx context.Context, q dto.ChannelI
 	if err != nil {
 		return dto.ChannelInventoryStatisticsResponse{}, err
 	}
+	legacyTrend, err := s.repository.HasLegacyTrend(ctx, q)
+	if err != nil {
+		return dto.ChannelInventoryStatisticsResponse{}, err
+	}
 	out := dto.ChannelInventoryStatisticsResponse{Trend: channelTrend(trend), TypeBreakdown: channelBreakdown(types), StatusBreakdown: channelBreakdown(statuses), GroupBreakdown: channelBreakdown(groups), TagBreakdown: channelBreakdown(tags), SiteBreakdown: channelBreakdown(sites), DataStatus: "complete"}
 	if len(summary) > 0 {
 		out.Summary = channelMetric(summary[0])
 	} else {
 		out.Summary = emptyChannelMetric()
 		out.DataStatus = "pending"
+	}
+	if legacyTrend && out.DataStatus == "complete" {
+		out.DataStatus = "partial"
 	}
 	return out, nil
 }

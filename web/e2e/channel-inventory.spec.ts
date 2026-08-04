@@ -143,14 +143,12 @@ function statisticsResponse(url: URL, status = 'partial') {
     tag_breakdown: [
       { ...breakdown, dimension_id: 'primary', dimension_name: 'primary' },
     ],
-    trend: [
-      {
-        ...metric,
-        bucket_end: start + 3600,
-        bucket_start: start,
-        data_status: status,
-      },
-    ],
+    trend: Array.from({ length: 25 }, (_, index) => ({
+      ...metric,
+      bucket_end: start + (index + 1) * 3600,
+      bucket_start: start + index * 3600,
+      data_status: status,
+    })),
     type_breakdown: [breakdown],
   }
 }
@@ -290,6 +288,16 @@ test('keeps channel inventory exact, filterable, exportable, secure and responsi
   })
   expect(exportBody?.filters).not.toHaveProperty('key')
   expect(exportBody?.filters).not.toHaveProperty('multi_key')
+  await page.getByRole('tab', { name: '趋势分析' }).click()
+  await expect(
+    page.getByRole('img', { name: '渠道库存小时趋势曲线图' })
+  ).toBeVisible()
+  await page.getByRole('tab', { name: '数据列表' }).click()
+  await expect(
+    page.getByRole('table', { name: '渠道库存小时趋势数据列表' })
+  ).toBeVisible()
+  await page.getByRole('button', { name: '下一页' }).click()
+  await expect(page).toHaveURL(/trendPage=2/)
   const bodyText = await page.locator('body').innerText()
   expect(bodyText).not.toMatch(/sk-[a-z0-9]|authorization:|base_url/i)
   const accessibility = await new AxeBuilder({ page })

@@ -61,7 +61,7 @@ async function seedAuth(page: Page, testInfo: TestInfo) {
   })
 }
 
-const officialRow = {
+const upstreamRow = {
   avg_latency_ms: '123.4567890000',
   avg_tps: '9.8765432100',
   avg_ttft_ms: '45.6789000000',
@@ -85,7 +85,7 @@ const officialRow = {
 }
 
 const counterRow = {
-  ...officialRow,
+  ...upstreamRow,
   generation_ms: '100000',
   id: '9007199254740994',
   metric_source: 'counter_ready',
@@ -97,20 +97,26 @@ const counterRow = {
   ttft_sum_ms: '411567467108923000',
 }
 
-function listResponse(site: boolean) {
-  const row = site ? counterRow : officialRow
+function listResponse(site: boolean, page = 1) {
+  const row = site
+    ? counterRow
+    : {
+        ...upstreamRow,
+        id: page === 1 ? upstreamRow.id : '9007199254740996',
+        model_name: page === 1 ? upstreamRow.model_name : 'gpt-5-page-2',
+      }
   return {
     as_of: 1_784_266_000,
     data_status: 'complete',
     items: [row],
-    page: 1,
+    page,
     page_size: 20,
-    total: 1,
+    total: 25,
   }
 }
 
 function statisticsResponse(site: boolean) {
-  const row = site ? counterRow : officialRow
+  const row = site ? counterRow : upstreamRow
   return {
     aggregation_status: site ? 'complete' : 'unavailable',
     data_status: 'complete',
@@ -135,7 +141,7 @@ function statisticsResponse(site: boolean) {
   }
 }
 
-test('preserves official performance values, URL filters, weighted boundary, export and accessibility', async ({
+test('shows upstream values in seconds with compact filters, server pagination and weighted boundary', async ({
   page,
 }, testInfo) => {
   test.setTimeout(60_000)
@@ -143,10 +149,83 @@ test('preserves official performance values, URL filters, weighted boundary, exp
   const globalReads: URL[] = []
   let exportBody: ExportBody | undefined
 
+  await page.route(/\/api\/sites(?:\?.*)?$/, async (route) => {
+    assertAuthenticated(route)
+    await route.fulfill({
+      json: envelope({
+        items: [
+          {
+            auth_status: 'authorized',
+            base_url: 'https://east.example.com',
+            completeness_rate: 1,
+            data_export_enabled: true,
+            disabled_at: null,
+            health_status: 'ok',
+            id: '9007199254740995',
+            management_status: 'active',
+            name: '华东生产站点',
+            online_status: 'online',
+            performance: {
+              avg_latency_ms: 123.456789,
+              avg_tps: 9.87654321,
+              data_status: 'complete',
+              hours: 24,
+              models: [],
+              request_count: '1',
+              sampled_at: 1_784_266_000,
+              success_rate: 0.99,
+            },
+            rate: {
+              quota_per_unit: '500000',
+              source: 'site',
+              updated_at: 1_784_266_000,
+              usd_exchange_rate: '7.3',
+            },
+            realtime: {
+              expired: false,
+              rpm: '1',
+              tpm: '1',
+              updated_at: 1_784_266_000,
+            },
+            resource: {
+              cpu_max_percent: 1,
+              data_status: 'complete',
+              disk_max_used_percent: 1,
+              instance_count: 1,
+              memory_max_percent: 1,
+              online_instance_count: 1,
+              updated_at: 1_784_266_000,
+            },
+            statistics_status: 'ready',
+            system_name: 'New API',
+            today: {
+              active_users: '1',
+              as_of: 1_784_266_000,
+              data_status: 'complete',
+              is_final: false,
+              quota: '1',
+              request_count: '1',
+              token_used: '1',
+            },
+            updated_at: 1_784_266_000,
+            version: 'v1.0.0',
+          },
+        ],
+        page: 1,
+        page_size: 100,
+        total: 1,
+      }),
+    })
+  })
   await page.route(/\/api\/performance-history(?:\?.*)?$/, async (route) => {
     assertAuthenticated(route)
-    globalReads.push(new URL(route.request().url()))
-    await route.fulfill({ json: envelope(listResponse(false)) })
+    const url = new URL(route.request().url())
+    globalReads.push(url)
+    await route.fulfill({
+      json: envelope(
+        listResponse(false, Number(url.searchParams.get('p') ?? 1))
+      ),
+    })
   })
   await page.route(
     /\/api\/performance-history\/statistics(?:\?.*)?$/,
@@ -219,30 +298,44 @@ test('preserves official performance values, URL filters, weighted boundary, exp
   })
 
   await page.goto('/performance-history')
+  await page.addStyleTag({
+    content: `
+      button[aria-label='Open TanStack Router Devtools'],
+      button[aria-label='Open Tanstack query devtools'] {
+        display: none !important;
+      }
+    `,
+  })
   const globalHeading = page.getByRole('heading', { name: '全局性能历史' })
   await expect(globalHeading).toBeVisible()
-  await expect(page.getByText('跨站总值不可用，逐站原值仍可查看')).toBeVisible()
+  await expect(page.getByText('总值不可用', { exact: true })).toBeVisible()
   await expect(
-    page
-      .getByText('123.4567890000', { exact: true })
-      .filter({ visible: true })
-      .first()
+    page.getByText('当前无法安全计算汇总指标', { exact: true })
   ).toBeVisible()
+  const globalText = await page.locator('main').innerText()
+  expect(globalText).toContain('0.123456789')
+  expect(globalText).toContain('99.12345678%')
   await expect(
-    page
-      .getByText('0.9912345678', { exact: true })
-      .filter({ visible: true })
-      .first()
+    page.getByText('上游平均值').filter({ visible: true }).first()
   ).toBeVisible()
+  await expect(page.getByText('官方性能原值')).toHaveCount(0)
+  await expect(page.getByText('官方平均原值')).toHaveCount(0)
+
+  await page.getByRole('button', { name: '下一页' }).click()
+  await expect.poll(() => globalReads.at(-1)?.searchParams.get('p')).toBe('2')
+  await expect(page).toHaveURL(/page=2/)
   await expect(
-    page.getByText('官方平均原值').filter({ visible: true }).first()
+    page.getByText('gpt-5-page-2').filter({ visible: true }).first()
   ).toBeVisible()
 
+  await page.getByRole('button', { name: /更多筛选/ }).click()
   await page.getByRole('textbox', { exact: true, name: '模型' }).fill('gpt-5')
   await page.getByRole('textbox', { exact: true, name: '分组' }).fill('vip')
-  await page
-    .getByRole('textbox', { exact: true, name: '站点 ID' })
-    .fill('9007199254740995')
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('button', { name: /更多筛选 2/ })).toBeVisible()
+  await page.getByRole('button', { exact: true, name: '站点' }).click()
+  await page.getByRole('button', { exact: true, name: '华东生产站点' }).click()
+  await page.getByRole('button', { name: /时间范围/ }).click()
   await page.getByRole('button', { name: '7 天' }).click()
   await expect
     .poll(() => globalReads.at(-1)?.searchParams.getAll('model_names'))
@@ -262,6 +355,9 @@ test('preserves official performance values, URL filters, weighted boundary, exp
   await expect
     .poll(() => new URL(page.url()).searchParams.get('hours'))
     .toBe('168')
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get('page'))
+    .toBe('1')
 
   await page.getByRole('button', { name: '导出 CSV' }).click()
   await expect
@@ -270,6 +366,20 @@ test('preserves official performance values, URL filters, weighted boundary, exp
   expect(exportBody?.filters.site_ids).toEqual(['9007199254740995'])
   expect(exportBody?.filters.model_names).toEqual(['gpt-5'])
   expect(exportBody?.filters.use_groups).toEqual(['vip'])
+  await page.getByRole('button', { name: '关闭' }).click()
+
+  await page.getByRole('tab', { name: '接口原值趋势' }).click()
+  await expect(
+    page.getByRole('img', {
+      name: '逐站逐模型延迟与 TTFT 秒值趋势曲线图',
+    })
+  ).toBeVisible()
+  await page.getByRole('tab', { name: '站点拆分' }).click()
+  await expect(
+    page.getByRole('region', {
+      name: '华东生产站点（9007199254740995）性能原值表',
+    })
+  ).toBeVisible()
 
   const accessibilityScan = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa'])
@@ -287,7 +397,13 @@ test('preserves official performance values, URL filters, weighted boundary, exp
   ).toBeVisible()
   await expect(page.getByText('计数器加权值可用')).toBeVisible()
   await expect(page.getByText('9,007,199,254,740,993')).toBeVisible()
-  await expect(page.getByText('0.9900000000')).toBeVisible()
+  await expect(page.getByText('99%')).toBeVisible()
+  await expect(
+    page
+      .getByText('0.123456789', { exact: true })
+      .filter({ visible: true })
+      .first()
+  ).toBeVisible()
   await expect(
     page.getByText('计数器完整').filter({ visible: true }).first()
   ).toBeVisible()

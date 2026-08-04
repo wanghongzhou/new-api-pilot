@@ -239,7 +239,8 @@ func settingTestRows(t *testing.T) map[string]model.PlatformSetting {
 	t.Helper()
 	defaults := map[string]string{
 		"collector.probe_interval_seconds": "60", "collector.realtime_interval_seconds": "60",
-		"collector.resource_interval_seconds": "60", "collector.usage_delay_minutes": "5",
+		"collector.resource_interval_seconds": "60", "collector.operational_interval_seconds": "300",
+		"collector.catalog_interval_seconds": "600", "collector.usage_delay_minutes": "5",
 		"collector.minute_retention_days": "90", "logs.retention_days": "90",
 		"collector.probe_concurrency":         "20",
 		"system_task_terminal_retention_days": "90",

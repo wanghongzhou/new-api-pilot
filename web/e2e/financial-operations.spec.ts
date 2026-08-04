@@ -315,16 +315,16 @@ test('keeps finance operations exact, non-reconciling, secret-free, exportable a
       .filter({ visible: true })
       .first()
   ).toBeVisible()
-  await expect(page.getByText(/不能称为钱包对账/)).toBeVisible()
+  await expect(page.getByText(/不能作为实际收款/)).toBeVisible()
 
-  await page.getByRole('button', { name: /站点 ID/ }).click()
+  await page.getByRole('button', { exact: true, name: '站点' }).click()
   await page.getByRole('button', { name: '华东充值站点' }).click()
   await page.getByRole('button', { name: /更多筛选/ }).click()
   await page
     .getByRole('textbox', { exact: true, name: '远端用户 ID' })
     .fill('0')
   await page
-    .getByRole('textbox', { exact: true, name: '支付 Provider' })
+    .getByRole('textbox', { exact: true, name: '支付渠道' })
     .fill('provider-a')
   await page
     .getByRole('textbox', { exact: true, name: '支付方式' })

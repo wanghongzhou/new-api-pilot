@@ -68,6 +68,24 @@ export const settingFieldDefinitions: readonly SettingFieldDefinition[] = [
     step: '1',
   },
   {
+    key: 'collector.operational_interval_seconds',
+    section: 'collection',
+    labelKey: 'settings.field.operationalInterval',
+    descriptionKey: 'settings.field.operationalIntervalDescription',
+    kind: 'integer',
+    formName: 'operationalIntervalMinutes',
+    step: '1',
+  },
+  {
+    key: 'collector.catalog_interval_seconds',
+    section: 'collection',
+    labelKey: 'settings.field.catalogInterval',
+    descriptionKey: 'settings.field.catalogIntervalDescription',
+    kind: 'integer',
+    formName: 'catalogIntervalMinutes',
+    step: '1',
+  },
+  {
     key: 'collector.usage_delay_minutes',
     section: 'collection',
     labelKey: 'settings.field.usageDelay',
@@ -427,6 +445,8 @@ export const emptySettingsFormValues: SettingsFormValues = {
   probeIntervalMinutes: '',
   realtimeIntervalMinutes: '',
   resourceIntervalMinutes: '',
+  operationalIntervalMinutes: '',
+  catalogIntervalMinutes: '',
   usageDelayMinutes: '',
   minuteRetentionDays: '',
   logRetentionDays: '',
@@ -480,11 +500,15 @@ export function isCollectorIntervalKey(
 ): key is
   | 'collector.probe_interval_seconds'
   | 'collector.realtime_interval_seconds'
-  | 'collector.resource_interval_seconds' {
+  | 'collector.resource_interval_seconds'
+  | 'collector.operational_interval_seconds'
+  | 'collector.catalog_interval_seconds' {
   return (
     key === 'collector.probe_interval_seconds' ||
     key === 'collector.realtime_interval_seconds' ||
-    key === 'collector.resource_interval_seconds'
+    key === 'collector.resource_interval_seconds' ||
+    key === 'collector.operational_interval_seconds' ||
+    key === 'collector.catalog_interval_seconds'
   )
 }
 

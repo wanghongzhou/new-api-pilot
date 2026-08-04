@@ -1,5 +1,4 @@
 import {
-  Alert02Icon,
   ArrowLeft01Icon,
   Chart01Icon,
   Database01Icon,
@@ -25,6 +24,10 @@ import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  OperationsAnalyticsNavigation,
+  OperationsViewPurpose,
+} from '@/features/operations-analytics/components/operations-analytics-workspace'
 import { listSites } from '@/features/sites/api'
 import { siteKeys } from '@/features/sites/query-keys'
 import type { SiteListItem } from '@/features/sites/types'
@@ -834,6 +837,9 @@ export function FinancialOperationsPage({
             {t('financialOperations.backToSite')}
           </DetailBackLink>
         )}
+        {siteId && (
+          <OperationsAnalyticsNavigation active='financial' siteId={siteId} />
+        )}
         {statistics && (
           <Summary
             metric={statistics.summary}
@@ -869,41 +875,26 @@ export function FinancialOperationsPage({
             </TabsTrigger>
           </TabsList>
         </Tabs>
-        <section className='border-border bg-muted/20 flex items-start gap-3 rounded-xl border p-4'>
-          <span className='bg-background text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-lg border'>
-            <HugeiconsIcon
-              icon={search.view === 'list' ? Database01Icon : Chart01Icon}
-              size={18}
-              strokeWidth={2}
-            />
-          </span>
-          <div className='min-w-0 flex-1'>
-            <div className='flex flex-wrap items-center gap-2'>
-              <p className='font-medium'>{purpose.title}</p>
+        <OperationsViewPurpose
+          badges={
+            <>
               {statistics && (
                 <DataStatusBadge status={statistics.data_status} />
               )}
               {search.view === 'list' && currentPage && (
                 <DataStatusBadge status={currentPage.data_status} />
               )}
-            </div>
-            <p className='text-muted-foreground mt-1 text-sm'>
-              {purpose.description}
-            </p>
-            <p className='text-muted-foreground mt-1 flex items-start gap-1.5 text-xs'>
-              <HugeiconsIcon
-                className='mt-0.5 shrink-0'
-                icon={Alert02Icon}
-                size={14}
-              />
-              <span>
-                {search.tab === 'topups'
-                  ? t('financialOperations.nominalNotice.description')
-                  : t('financialOperations.security.description')}
-              </span>
-            </p>
-          </div>
-        </section>
+            </>
+          }
+          description={purpose.description}
+          icon={search.view === 'list' ? Database01Icon : Chart01Icon}
+          notice={
+            search.tab === 'topups'
+              ? t('financialOperations.nominalNotice.description')
+              : t('financialOperations.security.description')
+          }
+          title={purpose.title}
+        />
         <Filters
           global={!siteId}
           onChange={onSearchChange}

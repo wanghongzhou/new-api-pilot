@@ -49,19 +49,24 @@ type SiteChannelInventory struct {
 func (SiteChannelInventory) TableName() string { return "site_channel_inventory" }
 
 type SiteChannelInventoryHourly struct {
-	ID                int64  `gorm:"column:id;primaryKey;autoIncrement"`
-	SiteID            int64  `gorm:"column:site_id"`
-	HourTS            int64  `gorm:"column:hour_ts"`
-	ChannelCount      int64  `gorm:"column:channel_count"`
-	AvailableCount    int64  `gorm:"column:available_count"`
-	UnavailableCount  int64  `gorm:"column:unavailable_count"`
-	BalanceTotal      string `gorm:"column:balance_total"`
-	ResponseTimeAvgMS string `gorm:"column:response_time_avg_ms"`
-	ResponseTimeMaxMS int64  `gorm:"column:response_time_max_ms"`
-	AvailabilityRate  string `gorm:"column:availability_rate"`
-	DataStatus        string `gorm:"column:data_status"`
-	ConfigVersion     int    `gorm:"column:config_version"`
-	CollectedAt       int64  `gorm:"column:collected_at"`
+	ID                  int64  `gorm:"column:id;primaryKey;autoIncrement"`
+	SiteID              int64  `gorm:"column:site_id"`
+	RemoteType          int    `gorm:"column:remote_type"`
+	RemoteStatus        int32  `gorm:"column:remote_status"`
+	RemoteGroup         string `gorm:"column:remote_group"`
+	Tag                 string `gorm:"column:tag"`
+	DimensionsAvailable bool   `gorm:"column:dimensions_available"`
+	HourTS              int64  `gorm:"column:hour_ts"`
+	ChannelCount        int64  `gorm:"column:channel_count"`
+	AvailableCount      int64  `gorm:"column:available_count"`
+	UnavailableCount    int64  `gorm:"column:unavailable_count"`
+	BalanceTotal        string `gorm:"column:balance_total"`
+	ResponseTimeAvgMS   string `gorm:"column:response_time_avg_ms"`
+	ResponseTimeMaxMS   int64  `gorm:"column:response_time_max_ms"`
+	AvailabilityRate    string `gorm:"column:availability_rate"`
+	DataStatus          string `gorm:"column:data_status"`
+	ConfigVersion       int    `gorm:"column:config_version"`
+	CollectedAt         int64  `gorm:"column:collected_at"`
 }
 
 func (SiteChannelInventoryHourly) TableName() string { return "site_channel_inventory_hourly" }
@@ -94,8 +99,20 @@ func applySiteChannelInventorySnapshot(ctx context.Context, db *gorm.DB, siteID,
 		Updates(map[string]any{"remote_state": SiteChannelInventoryMissing, "missing_count": gorm.Expr("missing_count + 1"), "last_seen_at": nil, "updated_at": syncedAt}).Error; err != nil {
 		return err
 	}
-	balanceTotal := new(big.Rat)
-	var responseTotal, responseMax, available int64
+	type hourlyKey struct {
+		RemoteType   int
+		RemoteStatus int32
+		RemoteGroup  string
+		Tag          string
+	}
+	type hourlyMetric struct {
+		BalanceTotal  *big.Rat
+		ChannelCount  int64
+		Available     int64
+		ResponseTotal int64
+		ResponseMax   int64
+	}
+	hourlyMetrics := make(map[hourlyKey]*hourlyMetric)
 	for _, channel := range channels {
 		seen := syncedAt
 		row := SiteChannelInventory{SiteID: siteID, RemoteChannelID: channel.RemoteChannelID, Name: channel.Name,
@@ -111,25 +128,58 @@ func applySiteChannelInventorySnapshot(ctx context.Context, db *gorm.DB, siteID,
 		if err := db.WithContext(ctx).Model(&SiteChannelInventory{}).Where("site_id = ? AND remote_channel_id = ?", siteID, channel.RemoteChannelID).Update("missing_count", 0).Error; err != nil {
 			return err
 		}
+		key := hourlyKey{RemoteType: channel.RemoteType, RemoteStatus: channel.RemoteStatus, RemoteGroup: channel.RemoteGroup, Tag: channel.Tag}
+		metric := hourlyMetrics[key]
+		if metric == nil {
+			metric = &hourlyMetric{BalanceTotal: new(big.Rat)}
+			hourlyMetrics[key] = metric
+		}
 		value, _ := new(big.Rat).SetString(channel.Balance)
-		balanceTotal.Add(balanceTotal, value)
-		responseTotal += channel.ResponseTimeMS
-		if channel.ResponseTimeMS > responseMax {
-			responseMax = channel.ResponseTimeMS
+		metric.BalanceTotal.Add(metric.BalanceTotal, value)
+		metric.ChannelCount++
+		metric.ResponseTotal += channel.ResponseTimeMS
+		if channel.ResponseTimeMS > metric.ResponseMax {
+			metric.ResponseMax = channel.ResponseTimeMS
 		}
 		if channel.RemoteStatus == 1 {
-			available++
+			metric.Available++
 		}
 	}
 	hour := syncedAt - syncedAt%3600
 	if err := db.WithContext(ctx).Where("site_id = ? AND hour_ts = ?", siteID, hour).Delete(&SiteChannelInventoryHourly{}).Error; err != nil {
 		return err
 	}
-	count := int64(len(channels))
-	hourly := SiteChannelInventoryHourly{SiteID: siteID, HourTS: hour, ChannelCount: count, AvailableCount: available,
-		UnavailableCount: count - available, BalanceTotal: ratDecimal(balanceTotal, 10), ResponseTimeMaxMS: responseMax,
-		ResponseTimeAvgMS: ratioDecimal(responseTotal, count, 10), AvailabilityRate: ratioDecimal(available, count, 10),
-		DataStatus: "complete", ConfigVersion: site.ConfigVersion, CollectedAt: syncedAt}
+	keys := make([]hourlyKey, 0, len(hourlyMetrics))
+	for key := range hourlyMetrics {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].RemoteType != keys[j].RemoteType {
+			return keys[i].RemoteType < keys[j].RemoteType
+		}
+		if keys[i].RemoteStatus != keys[j].RemoteStatus {
+			return keys[i].RemoteStatus < keys[j].RemoteStatus
+		}
+		if keys[i].RemoteGroup != keys[j].RemoteGroup {
+			return keys[i].RemoteGroup < keys[j].RemoteGroup
+		}
+		return keys[i].Tag < keys[j].Tag
+	})
+	hourly := make([]SiteChannelInventoryHourly, 0, len(keys))
+	for _, key := range keys {
+		metric := hourlyMetrics[key]
+		hourly = append(hourly, SiteChannelInventoryHourly{SiteID: siteID, RemoteType: key.RemoteType, RemoteStatus: key.RemoteStatus,
+			RemoteGroup: key.RemoteGroup, Tag: key.Tag, DimensionsAvailable: true, HourTS: hour, ChannelCount: metric.ChannelCount,
+			AvailableCount: metric.Available, UnavailableCount: metric.ChannelCount - metric.Available,
+			BalanceTotal: ratDecimal(metric.BalanceTotal, 10), ResponseTimeMaxMS: metric.ResponseMax,
+			ResponseTimeAvgMS: ratioDecimal(metric.ResponseTotal, metric.ChannelCount, 10), AvailabilityRate: ratioDecimal(metric.Available, metric.ChannelCount, 10),
+			DataStatus: "complete", ConfigVersion: site.ConfigVersion, CollectedAt: syncedAt})
+	}
+	if len(hourly) == 0 {
+		hourly = append(hourly, SiteChannelInventoryHourly{SiteID: siteID, RemoteType: -1, RemoteStatus: -1, DimensionsAvailable: true,
+			HourTS: hour, BalanceTotal: "0", ResponseTimeAvgMS: "0", AvailabilityRate: "0", DataStatus: "complete",
+			ConfigVersion: site.ConfigVersion, CollectedAt: syncedAt})
+	}
 	return db.WithContext(ctx).Create(&hourly).Error
 }
 
@@ -252,12 +302,30 @@ func (r *SiteChannelInventoryRepository) Current(ctx context.Context, q dto.Chan
 }
 func (r *SiteChannelInventoryRepository) Trend(ctx context.Context, q dto.ChannelInventoryStatisticsQuery) ([]SiteChannelInventoryMetricRow, error) {
 	db := r.db.WithContext(ctx).Table("site_channel_inventory_hourly AS h").Where("h.hour_ts>=? AND h.hour_ts<?", q.StartTimestamp, q.EndTimestamp)
-	if len(q.SiteIDs) > 0 {
-		db = db.Where("h.site_id IN ?", q.SiteIDs)
+	db = applyChannelMetricFilters(db, q, "h")
+	if channelTrendHasDimensionFilters(q) {
+		db = db.Where("h.dimensions_available=1")
 	}
 	var rows []SiteChannelInventoryMetricRow
 	err := db.Select(`h.hour_ts AS bucket_start,SUM(h.channel_count) AS channel_count,SUM(h.available_count) AS available_count,SUM(h.unavailable_count) AS unavailable_count,SUM(h.balance_total) AS balance_total,0 AS used_quota,SUM(h.response_time_avg_ms*h.channel_count)/NULLIF(SUM(h.channel_count),0) AS response_time_avg_ms,MAX(h.response_time_max_ms) AS response_time_max_ms,SUM(h.available_count)/NULLIF(SUM(h.channel_count),0) AS availability_rate,MAX(h.collected_at) AS as_of`).Group("h.hour_ts").Order("h.hour_ts").Scan(&rows).Error
 	return rows, err
+}
+
+func (r *SiteChannelInventoryRepository) HasLegacyTrend(ctx context.Context, q dto.ChannelInventoryStatisticsQuery) (bool, error) {
+	if !channelTrendHasDimensionFilters(q) {
+		return false, nil
+	}
+	db := r.db.WithContext(ctx).Table("site_channel_inventory_hourly AS h").Where("h.hour_ts>=? AND h.hour_ts<? AND h.dimensions_available=0", q.StartTimestamp, q.EndTimestamp)
+	if len(q.SiteIDs) > 0 {
+		db = db.Where("h.site_id IN ?", q.SiteIDs)
+	}
+	var count int64
+	err := db.Limit(1).Count(&count).Error
+	return count > 0, err
+}
+
+func channelTrendHasDimensionFilters(q dto.ChannelInventoryStatisticsQuery) bool {
+	return len(q.Types) > 0 || len(q.Statuses) > 0 || len(q.Groups) > 0 || len(q.Tags) > 0
 }
 func applyChannelMetricFilters(db *gorm.DB, q dto.ChannelInventoryStatisticsQuery, a string) *gorm.DB {
 	if len(q.SiteIDs) > 0 {

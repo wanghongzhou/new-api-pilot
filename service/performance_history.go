@@ -30,20 +30,12 @@ func (s *PerformanceHistoryService) List(ctx context.Context, q dto.PerformanceH
 	if err != nil {
 		return dto.PerformanceHistoryPage{}, err
 	}
+	coverage, err := s.repository.CollectionCoverage(ctx, q.SiteIDs)
+	if err != nil {
+		return dto.PerformanceHistoryPage{}, err
+	}
 	items := performanceHistoryItems(rows)
-	var asOf *int64
-	for _, r := range rows {
-		v := r.CollectedAt
-		if asOf == nil || v > *asOf {
-			copy := v
-			asOf = &copy
-		}
-	}
-	status := "complete"
-	if total == 0 {
-		status = "pending"
-	}
-	return dto.PerformanceHistoryPage{Items: items, Total: total, Page: q.Page, PageSize: q.PageSize, DataStatus: status, AsOf: asOf}, nil
+	return dto.PerformanceHistoryPage{Items: items, Total: total, Page: q.Page, PageSize: q.PageSize, DataStatus: performanceCollectionStatus(coverage), AsOf: coverage.AsOf}, nil
 }
 func (s *PerformanceHistoryService) Statistics(ctx context.Context, q dto.PerformanceHistoryQuery) (dto.PerformanceHistoryStatisticsResponse, error) {
 	q.Normalize()
@@ -58,10 +50,13 @@ func (s *PerformanceHistoryService) Statistics(ctx context.Context, q dto.Perfor
 		}
 		return dto.PerformanceHistoryStatisticsResponse{}, err
 	}
+	coverage, err := s.repository.CollectionCoverage(ctx, q.SiteIDs)
+	if err != nil {
+		return dto.PerformanceHistoryStatisticsResponse{}, err
+	}
 	items := performanceHistoryItems(rows)
-	out := dto.PerformanceHistoryStatisticsResponse{Trend: items, SiteBreakdown: items, AggregationStatus: "unavailable", DataStatus: "complete", UnavailableReason: "upstream_standard_api_missing_counters"}
+	out := dto.PerformanceHistoryStatisticsResponse{Trend: items, SiteBreakdown: items, AggregationStatus: "unavailable", DataStatus: performanceCollectionStatus(coverage), UnavailableReason: "upstream_standard_api_missing_counters"}
 	if len(rows) == 0 {
-		out.DataStatus = "pending"
 		return out, nil
 	}
 	success, latency, ttft, tps, requests, ok := model.WeightedPerformance(rows)
@@ -71,6 +66,19 @@ func (s *PerformanceHistoryService) Statistics(ctx context.Context, q dto.Perfor
 		out.UnavailableReason = ""
 	}
 	return out, nil
+}
+
+func performanceCollectionStatus(coverage model.PerformanceCollectionCoverage) string {
+	if coverage.SiteCount == 0 || coverage.SuccessfulSites == coverage.SiteCount {
+		return "complete"
+	}
+	if coverage.UnavailableSites == coverage.SiteCount {
+		return "unavailable"
+	}
+	if coverage.SuccessfulSites > 0 || coverage.UnavailableSites > 0 {
+		return "partial"
+	}
+	return "pending"
 }
 func performanceHistoryItems(rows []model.PerformanceHistoryReadRow) []dto.PerformanceHistoryItem {
 	out := make([]dto.PerformanceHistoryItem, 0, len(rows))

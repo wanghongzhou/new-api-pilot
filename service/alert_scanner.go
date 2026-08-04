@@ -101,7 +101,28 @@ func (scanner *AlertEvaluationScanner) RunOnce(ctx context.Context) (AlertScanRe
 		}
 		outcome, err := scanner.evaluator.Evaluate(ctx, evaluation)
 		if err != nil {
-			return result, err
+			var validationErr *AlertValidationError
+			if errors.As(err, &validationErr) {
+				return result, fmt.Errorf(
+					"evaluate alert sample rule=%s target_type=%s target_key=%s state=%s observed_at=%d validation=%v: %w",
+					evaluation.RuleKey,
+					evaluation.TargetType,
+					evaluation.TargetKey,
+					evaluation.State,
+					evaluation.ObservedAt,
+					validationErr.Fields,
+					err,
+				)
+			}
+			return result, fmt.Errorf(
+				"evaluate alert sample rule=%s target_type=%s target_key=%s state=%s observed_at=%d: %w",
+				evaluation.RuleKey,
+				evaluation.TargetType,
+				evaluation.TargetKey,
+				evaluation.State,
+				evaluation.ObservedAt,
+				err,
+			)
 		}
 		switch outcome.Transition {
 		case "firing":
