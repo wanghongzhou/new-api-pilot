@@ -62,7 +62,11 @@ services:
       api:
         condition: service_healthy
     healthcheck:
-      test: ['CMD-SHELL', 'wget -q -O - http://127.0.0.1:5173/ >/dev/null || exit 1']
+      test:
+        [
+          'CMD-SHELL',
+          'unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy; wget -q -O - http://127.0.0.1:5173/ >/dev/null || exit 1',
+        ]
       interval: 5s
       timeout: 3s
       retries: 20

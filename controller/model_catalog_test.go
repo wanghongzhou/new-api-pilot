@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -36,15 +37,24 @@ func TestModelCatalogRejectsUnsupportedViewFilters(t *testing.T) {
 	application := &fakeModelCatalogApplication{}
 	engine := gin.New()
 	controller := NewModelCatalogController(application)
+	engine.GET("/catalog", controller.Global)
 	engine.GET("/missing", controller.GlobalMissing)
 	engine.GET("/coverage", controller.GlobalCoverage)
+	engine.GET("/sites/:id/catalog", controller.Site)
 
-	for _, path := range []string{"/missing?statuses=1", "/coverage?site_ids=1", "/coverage?keyword=model"} {
+	for _, path := range []string{"/missing?statuses=1", "/coverage?site_ids=1", "/coverage?keyword=model", "/coverage?p=1", "/catalog?p=1&p=2", "/catalog?site_ids=-1", "/sites/2/catalog?site_ids=2"} {
 		response := httptest.NewRecorder()
+		application.called = false
 		engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 		if response.Code != http.StatusBadRequest || application.called {
 			t.Fatalf("path=%s status=%d called=%v body=%s", path, response.Code, application.called, response.Body.String())
 		}
+	}
+	response := httptest.NewRecorder()
+	application.called = false
+	engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/catalog", strings.NewReader(`{}`)))
+	if response.Code != http.StatusBadRequest || application.called {
+		t.Fatalf("non-empty body status=%d called=%v body=%s", response.Code, application.called, response.Body.String())
 	}
 }
 

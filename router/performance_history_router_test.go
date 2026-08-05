@@ -30,7 +30,7 @@ func TestPerformanceHistoryRoutesAuthentication(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	e := gin.New()
 	RegisterPerformanceHistoryRoutes(e, controller.NewPerformanceHistoryController(routePerformanceHistoryApp{}), routePerformanceResolver{})
-	for _, target := range []string{"/api/performance-history?start_timestamp=100&end_timestamp=200&p=1&page_size=20", "/api/performance-history/statistics?start_timestamp=100&end_timestamp=200", "/api/sites/2/performance-history?start_timestamp=100&end_timestamp=200&p=1&page_size=20", "/api/sites/2/performance-history/statistics?start_timestamp=100&end_timestamp=200"} {
+	for _, target := range []string{"/api/performance-history?start_timestamp=3600&end_timestamp=7200&p=1&page_size=20", "/api/performance-history/statistics?start_timestamp=3600&end_timestamp=7200", "/api/sites/2/performance-history?start_timestamp=3600&end_timestamp=7200&p=1&page_size=20", "/api/sites/2/performance-history/statistics?start_timestamp=3600&end_timestamp=7200"} {
 		r := httptest.NewRecorder()
 		e.ServeHTTP(r, httptest.NewRequest(http.MethodGet, target, nil))
 		if r.Code != 401 {

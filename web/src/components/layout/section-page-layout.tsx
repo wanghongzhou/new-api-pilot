@@ -54,6 +54,7 @@ export type SectionPageLayoutProps = {
   children: ReactNode
   description?: ReactNode
   fixedContent?: boolean
+  mobileScrollableContent?: boolean
   title?: ReactNode
 }
 
@@ -88,6 +89,14 @@ export function SectionPageLayout(props: SectionPageLayoutProps) {
 
   if (hasSlots && content === props.children) content = null
 
+  let contentClass =
+    'min-h-0 flex-1 overflow-auto px-3 pt-1 pb-3 sm:px-4 sm:pt-1.5 sm:pb-4'
+  if (props.fixedContent) {
+    contentClass = props.mobileScrollableContent
+      ? 'min-h-0 flex-1 overflow-auto px-3 pt-1 pb-3 sm:px-4 sm:pt-1.5 sm:pb-4 lg:overflow-hidden'
+      : 'min-h-0 flex-1 overflow-hidden px-3 pt-1 pb-3 sm:px-4 sm:pt-1.5 sm:pb-4'
+  }
+
   return (
     <PageFooterProvider container={footerContainer}>
       <Main>
@@ -109,15 +118,7 @@ export function SectionPageLayout(props: SectionPageLayoutProps) {
           </div>
         </div>
 
-        <div
-          className={
-            props.fixedContent
-              ? 'min-h-0 flex-1 overflow-hidden px-3 pt-1 pb-3 sm:px-4 sm:pt-1.5 sm:pb-4'
-              : 'min-h-0 flex-1 overflow-auto px-3 pt-1 pb-3 sm:px-4 sm:pt-1.5 sm:pb-4'
-          }
-        >
-          {content}
-        </div>
+        <div className={contentClass}>{content}</div>
 
         <div
           className='bg-background shrink-0 border-t px-3 py-2.5 empty:hidden sm:px-4 sm:py-3'

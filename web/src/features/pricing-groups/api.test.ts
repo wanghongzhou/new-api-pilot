@@ -76,9 +76,7 @@ describe('pricing/group API contract', () => {
       throw new Error('group params missing')
     }
     expect(groupParams.has('billing_mode')).toBe(false)
-    expect(statisticsParams.toString()).toBe(
-      'p=2&page_size=20&site_ids=9007199254740993'
-    )
+    expect(statisticsParams.toString()).toBe('site_ids=9007199254740993')
   })
 
   test('uses forced site routes without site_ids', async () => {
@@ -112,5 +110,10 @@ describe('pricing/group API contract', () => {
     for (const request of requests) {
       expect((request.params as URLSearchParams).has('site_ids')).toBe(false)
     }
+    const statisticsParams = requests[1]?.params
+    if (!(statisticsParams instanceof URLSearchParams)) {
+      throw new Error('statistics params missing')
+    }
+    expect(statisticsParams.toString()).toBe('')
   })
 })

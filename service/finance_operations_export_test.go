@@ -27,6 +27,12 @@ func TestGenerateFinanceOperationsExportsSafeExactFields(t *testing.T) {
 	if err := db.GORM.Create(&model.SiteRedemption{SiteID: site.ID, RemoteID: 3, Name: "+batch", RemoteStatus: 1, Quota: 9007199254740993, CreatedTime: now, ExpiredTime: now - 1, RemoteState: "normal", ConfigVersion: 1, FirstSeenAt: now, LastSeenAt: &seen, CollectedAt: now, CreatedAt: now, UpdatedAt: now}).Error; err != nil {
 		t.Fatal(err)
 	}
+	if err := db.GORM.Create(&model.SiteTopupOrder{SiteID: site.ID, RemoteID: 2, RemoteUserID: 2, Amount: 1, Money: "1", RemoteStatus: "success", RemoteState: "normal", ConfigVersion: 1, FirstSeenAt: now, CollectedAt: now + 1, CreatedAt: now + 1, UpdatedAt: now + 1}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.GORM.Create(&model.SiteRedemption{SiteID: site.ID, RemoteID: 4, Name: "future", RemoteStatus: 1, Quota: 1, CreatedTime: now, RemoteState: "normal", ConfigVersion: 1, FirstSeenAt: now, CollectedAt: now + 1, CreatedAt: now + 1, UpdatedAt: now + 1}).Error; err != nil {
+		t.Fatal(err)
+	}
 	for _, kind := range []string{"topup", "redemption"} {
 		for _, format := range []string{dto.ExportFormatCSV, dto.ExportFormatXLSX} {
 			path := filepath.Join(t.TempDir(), kind+"."+format)

@@ -30,6 +30,8 @@ export const siteKeys = {
   lists: () => ['sites', 'list'] as const,
   list: (params: SiteListParams) =>
     ['sites', 'list', stableSiteParams(params)] as const,
+  options: (params: Omit<SiteListParams, 'p' | 'page_size'>) =>
+    ['sites', 'options', stableSiteParams(params)] as const,
   detail: (id: string) => ['sites', 'detail', id] as const,
   performance: (id: string, hours: number) =>
     ['sites', 'performance', id, hours] as const,

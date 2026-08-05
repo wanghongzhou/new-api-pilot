@@ -2,7 +2,13 @@ import type { ILineChartSpec } from '@visactor/react-vchart'
 import { lazy, Suspense, useMemo } from 'react'
 
 import { useTheme } from '@/context/theme-provider'
-import { fromUnixSeconds } from '@/lib/dayjs'
+
+import {
+  buildInventoryTrendChartValues,
+  shouldShowInventoryTrendPoints,
+  type InventoryTrendChartPoint,
+  type InventoryTrendSeries,
+} from './inventory-trend-chart-data'
 
 const LazyVChart = lazy(() =>
   import('@visactor/react-vchart').then((module) => ({
@@ -10,43 +16,25 @@ const LazyVChart = lazy(() =>
   }))
 )
 
-export interface InventoryTrendSeries {
-  key: string
-  label: string
-}
-
-export interface InventoryTrendChartPoint {
-  bucketStart: number
-  values: Record<string, string>
-}
-
 export function InventoryTrendChart({
   ariaLabel,
+  description,
   emptyText,
   points,
   series,
 }: {
   ariaLabel: string
+  description: string
   emptyText: string
   points: InventoryTrendChartPoint[]
   series: InventoryTrendSeries[]
 }) {
   const { resolvedTheme } = useTheme()
   const values = useMemo(
-    () =>
-      points.flatMap((point) =>
-        series.map((item) => {
-          const rawValue = point.values[item.key] ?? '0'
-          return {
-            label: fromUnixSeconds(point.bucketStart).format('MM-DD HH:mm'),
-            rawValue,
-            series: item.label,
-            value: Number(rawValue),
-          }
-        })
-      ),
+    () => buildInventoryTrendChartValues(points, series),
     [points, series]
   )
+  const showPoints = shouldShowInventoryTrendPoints(points.length)
   const spec = useMemo<ILineChartSpec>(
     () => ({
       axes: [
@@ -54,9 +42,10 @@ export function InventoryTrendChart({
         { orient: 'left', type: 'linear' },
       ],
       data: [{ id: 'inventory-trend', values }],
+      invalidType: 'break',
       legends: { orient: 'bottom', visible: true },
-      line: { style: { lineWidth: 2 } },
-      point: { style: { size: 6 }, visible: true },
+      line: { style: { curveType: 'stepAfter', lineWidth: 2 } },
+      point: { style: { size: 6 }, visible: showPoints },
       seriesField: 'series',
       theme: resolvedTheme === 'dark' ? 'dark' : 'light',
       tooltip: { activeType: 'dimension', visible: true },
@@ -64,7 +53,7 @@ export function InventoryTrendChart({
       xField: 'label',
       yField: 'value',
     }),
-    [resolvedTheme, values]
+    [resolvedTheme, showPoints, values]
   )
 
   if (points.length === 0) {
@@ -75,7 +64,7 @@ export function InventoryTrendChart({
     )
   }
   return (
-    <figure className='grid min-h-0 min-w-0 flex-1 gap-2'>
+    <figure className='grid min-h-80 min-w-0 gap-2 lg:min-h-0 lg:flex-1'>
       <div
         aria-label={ariaLabel}
         className='h-full min-h-80 w-full min-w-0 overflow-hidden'
@@ -89,6 +78,9 @@ export function InventoryTrendChart({
           <LazyVChart spec={spec} />
         </Suspense>
       </div>
+      <figcaption className='text-muted-foreground text-xs'>
+        {description}
+      </figcaption>
     </figure>
   )
 }

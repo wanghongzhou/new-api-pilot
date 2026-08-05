@@ -47,4 +47,18 @@ func TestPerformanceHistorySnapshotAverageOnlyAndConfigFence(t *testing.T) {
 	if count != 1 {
 		t.Fatalf("stale snapshot changed rows=%d", count)
 	}
+	start := (now / 3600) * 3600
+	old := SitePerformanceMetricBucket{SiteID: site.ID, ModelName: "old-model", RemoteGroup: "default", BucketTS: start + 3600, SeriesSchema: "ts,avg", MetricSource: PerformanceMetricSourceOfficialAverage, AvgTTFTMS: "1", AvgLatencyMS: "1", SuccessRate: "1", AvgTPS: "1", ConfigVersion: site.ConfigVersion - 1, CollectedAt: now - 1, CreatedAt: now - 1, UpdatedAt: now - 1}
+	future := SitePerformanceMetricBucket{SiteID: site.ID, ModelName: "future-model", RemoteGroup: "default", BucketTS: start + 7200, SeriesSchema: "ts,avg", MetricSource: PerformanceMetricSourceOfficialAverage, AvgTTFTMS: "1", AvgLatencyMS: "1", SuccessRate: "1", AvgTPS: "1", ConfigVersion: site.ConfigVersion, CollectedAt: now + 100, CreatedAt: now + 100, UpdatedAt: now + 100}
+	if err := db.GORM.Create(&old).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.GORM.Create(&future).Error; err != nil {
+		t.Fatal(err)
+	}
+	query := dto.PerformanceHistoryQuery{Page: 1, PageSize: 20, StartTimestamp: start - 3600, EndTimestamp: start + 10800, SiteIDs: []int64{site.ID}, SnapshotAt: now}
+	items, total, err := NewPerformanceHistoryRepository(db.GORM).List(context.Background(), query)
+	if err != nil || total != 1 || len(items) != 1 || items[0].ModelName != "gpt-4o" {
+		t.Fatalf("current snapshot rows=%#v total=%d err=%v", items, total, err)
+	}
 }

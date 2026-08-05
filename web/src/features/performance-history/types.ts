@@ -39,6 +39,13 @@ export interface PerformanceHistoryPage {
   page_size: number
   data_status: DataStatus
   as_of: Timestamp | null
+  completeness: PerformanceCompleteness
+}
+export interface PerformanceCompleteness {
+  data_status: DataStatus
+  successful_site_count: number
+  unavailable_site_count: number
+  expected_site_count: number
 }
 export interface PerformanceWeightedMetric {
   success_rate: DecimalString | null
@@ -47,12 +54,19 @@ export interface PerformanceWeightedMetric {
   avg_tps: DecimalString | null
   request_count: MetricString | null
 }
+export interface PerformanceDimensionBreakdown extends PerformanceWeightedMetric {
+  dimension: string
+}
 export interface PerformanceHistoryStatisticsResponse {
   summary: PerformanceWeightedMetric
   trend: PerformanceHistoryItem[]
+  model_breakdown: PerformanceDimensionBreakdown[]
+  group_breakdown: PerformanceDimensionBreakdown[]
   site_breakdown: PerformanceHistoryItem[]
   aggregation_status: PerformanceAggregationStatus
   data_status: DataStatus
+  as_of: Timestamp | null
+  completeness: PerformanceCompleteness
   unavailable_reason?: string
 }
 export interface PerformanceHistoryQueryParams {

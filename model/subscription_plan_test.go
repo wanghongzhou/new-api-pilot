@@ -60,3 +60,25 @@ func TestSyncSubscriptionPlansUsesBoundedBatchSQLAtLargeCardinality(t *testing.T
 		t.Fatalf("missing plans=%d err=%v", missing, err)
 	}
 }
+
+func TestSubscriptionPlanCollectionStateIsFencedByCurrentSiteConfig(t *testing.T) {
+	database := openLockedSiteRunDatabase(t)
+	now := int64(2_101_401_000)
+	site := createRunnableSite(t, database, fmt.Sprintf("plan-state-%d", time.Now().UnixNano()), now)
+	cleanupSubscriptionPlanTestRows(t, database, site.ID)
+	if _, err := NewSiteRepository(database.GORM).SyncSubscriptionPlans(context.Background(), site, now, dto.UpstreamSubscriptionPlanSnapshot{}); err != nil {
+		t.Fatal(err)
+	}
+	repository := NewSubscriptionPlanRepository(database.GORM)
+	rows, err := repository.ActiveSiteStates(context.Background(), dto.SubscriptionPlanQuery{Page: 1, PageSize: 20, SiteIDs: []int64{site.ID}})
+	if err != nil || len(rows) != 1 || rows[0].LastSuccessAt == nil {
+		t.Fatalf("current config plan state=%#v err=%v", rows, err)
+	}
+	if err := database.GORM.Model(&Site{}).Where("id=?", site.ID).Update("config_version", site.ConfigVersion+1).Error; err != nil {
+		t.Fatal(err)
+	}
+	rows, err = repository.ActiveSiteStates(context.Background(), dto.SubscriptionPlanQuery{Page: 1, PageSize: 20, SiteIDs: []int64{site.ID}})
+	if err != nil || len(rows) != 1 || rows[0].LastSuccessAt != nil || rows[0].LastFailureAt != nil {
+		t.Fatalf("stale config plan state leaked=%#v err=%v", rows, err)
+	}
+}

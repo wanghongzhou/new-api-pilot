@@ -31,6 +31,9 @@ type StatisticsScope =
   | 'account'
   | 'model'
   | 'channel'
+  | 'group'
+  | 'token'
+  | 'node'
 
 interface StatisticsRouteCase {
   apiPath: string
@@ -130,6 +133,27 @@ const routeCases: StatisticsRouteCase[] = [
     key: 'channels',
     path: '/statistics/channels',
     scope: 'channel',
+  },
+  {
+    apiPath: '/api/statistics/groups',
+    heading: '分组统计',
+    key: 'groups',
+    path: '/statistics/groups',
+    scope: 'group',
+  },
+  {
+    apiPath: '/api/statistics/tokens',
+    heading: 'Token 统计',
+    key: 'tokens',
+    path: '/statistics/tokens',
+    scope: 'token',
+  },
+  {
+    apiPath: '/api/statistics/nodes',
+    heading: '节点统计',
+    key: 'nodes',
+    path: '/statistics/nodes',
+    scope: 'node',
   },
   {
     apiPath: `/api/sites/${siteId}/stats`,
@@ -345,11 +369,20 @@ function breakdownItem(
     })
   } else if (scope === 'model') {
     base.model_name = dimensionName
-  } else {
+  } else if (scope === 'channel') {
     Object.assign(base, {
       remote_channel_id: '0',
       remote_missing: false,
     })
+  } else if (scope === 'group') {
+    base.use_group = dimensionName
+  } else if (scope === 'token') {
+    Object.assign(base, {
+      token_id: '9007199254740993',
+      token_name: dimensionName,
+    })
+  } else {
+    base.node_name = dimensionName
   }
   return base
 }
@@ -654,7 +687,10 @@ async function expectState(page: Page, state: A50State) {
   } else {
     const dimensionName = breakdownDimensionName(state)
     await expect(
-      page.getByText(dimensionName, { exact: true }).filter({ visible: true })
+      page
+        .getByText(dimensionName, { exact: true })
+        .filter({ visible: true })
+        .first()
     ).toBeVisible()
     await expect(page.getByText('范围内无流量', { exact: true })).toHaveCount(0)
   }
@@ -736,4 +772,56 @@ test.describe('A50 statistics pages preserve all five data states', () => {
       })
     })
   }
+
+  test('scope navigation follows keyboard activation', async ({ page }) => {
+    const globalCase = routeCases.find((item) => item.key === 'global')
+    const siteCase = routeCases.find((item) => item.key === 'sites')
+    if (!globalCase || !siteCase) {
+      throw new Error('required statistics routes are missing')
+    }
+    await seedAuth(page)
+    await mockStatisticsRoute(page, globalCase)
+    await mockStatisticsRoute(page, siteCase)
+    const navigationRange = rangeForState('partial')
+    const navigationParams = new URLSearchParams({
+      display: 'cny',
+      end: String(navigationRange.end),
+      granularity: 'hour',
+      metric: 'quota',
+      order: 'desc',
+      page: '4',
+      pageSize: '50',
+      sort: 'quota',
+      start: String(navigationRange.start),
+      view: 'table',
+    })
+    await page.goto(`${globalCase.path}?${navigationParams.toString()}`)
+    await expect(
+      page.getByRole('heading', { name: globalCase.heading })
+    ).toBeVisible()
+
+    const siteLink = page.getByRole('link', {
+      exact: true,
+      name: '站点',
+    })
+    await siteLink.press('Enter')
+
+    await expect(page).toHaveURL(/\/statistics\/sites\?/)
+    const navigated = new URL(page.url())
+    expect(navigated.searchParams.get('start')).toBe(
+      String(navigationRange.start)
+    )
+    expect(navigated.searchParams.get('end')).toBe(String(navigationRange.end))
+    expect(navigated.searchParams.get('granularity')).toBe('hour')
+    expect(navigated.searchParams.get('metric')).toBe('quota')
+    expect(navigated.searchParams.get('display')).toBe('cny')
+    expect(navigated.searchParams.get('view')).toBe('table')
+    expect(navigated.searchParams.get('page')).toBe('1')
+    expect(navigated.searchParams.get('pageSize')).toBe('50')
+    expect(navigated.searchParams.get('sort')).toBe('quota')
+    expect(navigated.searchParams.get('order')).toBe('desc')
+    await expect(
+      page.getByRole('heading', { name: siteCase.heading })
+    ).toBeVisible()
+  })
 })

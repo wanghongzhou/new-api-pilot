@@ -15,16 +15,20 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { DataStatusBadge } from '@/components/data/data-status'
+import { DebouncedInput } from '@/components/data/debounced-input'
 import { FacetedFilter } from '@/components/data/faceted-filter'
 import { MetricValue } from '@/components/data/metric-value'
+import { MultiFacetedFilter } from '@/components/data/multi-faceted-filter'
+import { QueryStateAlert } from '@/components/data/query-state-alert'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
+import { LoadingState } from '@/components/loading-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { listSites } from '@/features/sites/api'
+import { listAllSites } from '@/features/sites/api'
 import { siteKeys } from '@/features/sites/query-keys'
 import type { SiteListItem } from '@/features/sites/types'
 import { createStatisticsExport } from '@/features/statistics/api'
@@ -33,6 +37,7 @@ import type {
   StatisticsExportFormat,
   StatisticsExportJobItem,
 } from '@/features/statistics/types'
+import { useLastValidPage } from '@/hooks/use-last-valid-page'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import {
@@ -43,6 +48,7 @@ import {
 } from '@/lib/api-types'
 import { fromUnixSeconds } from '@/lib/dayjs'
 import { hasFilterChanges } from '@/lib/filter-state'
+import { cn } from '@/lib/utils'
 
 import {
   getModelCoverage,
@@ -101,6 +107,69 @@ function BinaryBadge({ value }: { value: ModelBinaryState }) {
   )
 }
 
+function ExpandableText({
+  collapseAt = 72,
+  monospace = false,
+  previewLines = 1,
+  testId,
+  value,
+}: {
+  collapseAt?: number
+  monospace?: boolean
+  previewLines?: 1 | 2
+  testId?: string
+  value: string
+}) {
+  const { t } = useTranslation()
+  if (!value) return <span>-</span>
+  if (value.length <= collapseAt) {
+    return (
+      <span
+        className={cn(
+          'block whitespace-normal [overflow-wrap:anywhere]',
+          monospace && 'font-mono'
+        )}
+      >
+        {value}
+      </span>
+    )
+  }
+
+  return (
+    <details
+      className='group max-w-full min-w-0 whitespace-normal'
+      data-testid={testId}
+    >
+      <summary className='cursor-pointer list-none rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2'>
+        <span
+          className={cn(
+            'block [overflow-wrap:anywhere]',
+            monospace && 'font-mono',
+            previewLines === 2 ? 'line-clamp-2' : 'line-clamp-1'
+          )}
+        >
+          {value}
+        </span>
+        <span className='text-muted-foreground mt-0.5 block text-xs group-open:hidden'>
+          {t('common.expand')}
+        </span>
+        <span className='text-muted-foreground mt-0.5 hidden text-xs group-open:block'>
+          {t('common.collapse')}
+        </span>
+      </summary>
+      <p
+        className={cn(
+          'bg-muted/40 mt-1 max-h-40 overflow-auto rounded p-2 text-xs whitespace-pre-wrap [overflow-wrap:anywhere]',
+          monospace && 'font-mono'
+        )}
+        tabIndex={0}
+      >
+        {value}
+      </p>
+    </details>
+  )
+}
+
 function Filters({
   global,
   onChange,
@@ -149,23 +218,21 @@ function Filters({
           size={15}
           strokeWidth={2}
         />
-        <Input
+        <DebouncedInput
           aria-label={t('modelCatalog.filters.keyword')}
           className='h-10 pl-8 sm:h-8'
-          onChange={(event) =>
-            onChange({ keyword: event.target.value, page: 1 })
-          }
+          onValueChange={(keyword) => onChange({ keyword, page: 1 })}
           placeholder={t('modelCatalog.filters.keywordPlaceholder')}
           value={search.keyword}
         />
       </label>
       {global && (
-        <FacetedFilter
+        <MultiFacetedFilter
           clearLabel={t('modelCatalog.filters.allSites')}
-          onChange={(value) =>
+          onChange={(values) =>
             onChange({
               page: 1,
-              siteIds: isIdString(value) ? [parseIdString(value)] : [],
+              siteIds: values.filter(isIdString).map(parseIdString),
             })
           }
           options={sites.map((site) => ({
@@ -173,7 +240,7 @@ function Filters({
             value: site.id,
           }))}
           title={t('modelCatalog.filters.site')}
-          value={search.siteIds.length === 1 ? search.siteIds[0] : ''}
+          values={search.siteIds}
         />
       )}
       {supportsCatalogFilters && (
@@ -380,10 +447,12 @@ function CoverageBreakdown({
 }
 
 export function ModelCatalogPage({
+  onPageReplace,
   onSearchChange,
   search,
   siteId,
 }: {
+  onPageReplace: (page: number) => void
   onSearchChange: (changes: Partial<ModelCatalogSearch>) => void
   search: ModelCatalogSearch
   siteId?: string
@@ -421,8 +490,6 @@ export function ModelCatalogPage({
   }, [hasCoverageIncompatibleState, onSearchChange, search])
   const siteParams = useMemo(
     () => ({
-      p: 1,
-      page_size: 100,
       sort_by: 'name',
       sort_order: 'asc' as const,
     }),
@@ -430,8 +497,8 @@ export function ModelCatalogPage({
   )
   const sitesQuery = useQuery({
     enabled: siteId == null,
-    queryFn: () => listSites(siteParams),
-    queryKey: siteKeys.list(siteParams),
+    queryFn: () => listAllSites(siteParams),
+    queryKey: siteKeys.options(siteParams),
     staleTime: 5 * 60_000,
   })
   const catalogQuery = useQuery({
@@ -486,6 +553,16 @@ export function ModelCatalogPage({
       onSearchChange({ exportId: job.id })
     },
   })
+  const activePageQuery = search.tab === 'missing' ? missingQuery : catalogQuery
+  const activePageData = activePageQuery.data
+  useLastValidPage({
+    isFetching: activePageQuery.isFetching,
+    isPlaceholderData: activePageQuery.isPlaceholderData,
+    onReplace: onPageReplace,
+    page: search.page,
+    pageSize: activePageData?.page_size ?? search.pageSize,
+    total: search.tab === 'coverage' ? undefined : activePageData?.total,
+  })
   const catalogColumns = useMemo<ColumnDef<ModelCatalogItem, unknown>[]>(
     () => [
       {
@@ -494,9 +571,14 @@ export function ModelCatalogPage({
             <p className='font-mono font-medium break-all'>
               {row.original.model_name}
             </p>
-            <p className='text-muted-foreground mt-1 line-clamp-2 text-xs'>
-              {row.original.description || '-'}
-            </p>
+            <div className='text-muted-foreground mt-1 text-xs'>
+              <ExpandableText
+                collapseAt={120}
+                previewLines={2}
+                testId={`model-description-${row.original.id}`}
+                value={row.original.description}
+              />
+            </div>
           </div>
         ),
         header: t('modelCatalog.model'),
@@ -537,7 +619,7 @@ export function ModelCatalogPage({
       },
       {
         cell: ({ row }) => (
-          <div className='grid min-w-40 gap-1 text-xs'>
+          <div className='grid w-56 min-w-48 gap-1 text-xs whitespace-normal'>
             <div className='flex flex-wrap gap-1'>
               <Badge variant='outline'>
                 {t('modelCatalog.vendorValue', {
@@ -548,12 +630,19 @@ export function ModelCatalogPage({
                 {ruleText(row.original.name_rule, t)}
               </Badge>
             </div>
-            <span className='text-muted-foreground line-clamp-1'>
-              {row.original.tags || '-'}
-            </span>
-            <code className='text-muted-foreground line-clamp-1 break-all'>
-              {row.original.icon || '-'}
-            </code>
+            <div className='text-muted-foreground'>
+              <ExpandableText
+                testId={`model-tags-${row.original.id}`}
+                value={row.original.tags}
+              />
+            </div>
+            <div className='text-muted-foreground'>
+              <ExpandableText
+                monospace
+                testId={`model-icon-${row.original.id}`}
+                value={row.original.icon}
+              />
+            </div>
           </div>
         ),
         header: t('modelCatalog.metadata'),
@@ -684,9 +773,10 @@ export function ModelCatalogPage({
           : t('modelCatalog.description')
       }
       fixedContent
+      mobileScrollableContent
       title={siteId ? t('modelCatalog.siteTitle') : t('modelCatalog.title')}
     >
-      <div className='flex h-full min-h-0 min-w-0 flex-col gap-4'>
+      <div className='flex min-w-0 flex-col gap-4 lg:h-full lg:min-h-0'>
         {siteId && (
           <DetailBackLink
             render={<Link params={{ siteId }} to='/sites/$siteId' />}
@@ -699,6 +789,17 @@ export function ModelCatalogPage({
           metric={coverageQuery.data}
           missingValue={coverageQuery.data?.exact_missing_models}
         />
+        {coverageQuery.isError && (
+          <QueryStateAlert
+            message={
+              coverageQuery.data
+                ? t('common.retainedDataRefreshFailed')
+                : t('common.dataLoadFailed')
+            }
+            onRetry={() => void coverageQuery.refetch()}
+            tone={coverageQuery.data ? 'warning' : 'destructive'}
+          />
+        )}
         <Tabs
           onValueChange={(tab) =>
             onSearchChange(
@@ -733,6 +834,20 @@ export function ModelCatalogPage({
             sites={sitesQuery.data?.items ?? []}
           />
         )}
+        {!siteId && sitesQuery.isError && (
+          <QueryStateAlert
+            message={t('common.siteOptionsRefreshFailed')}
+            onRetry={() => void sitesQuery.refetch()}
+          />
+        )}
+        {search.tab === 'catalog' &&
+          catalogQuery.isError &&
+          catalogQuery.data && (
+            <QueryStateAlert
+              message={t('common.retainedDataRefreshFailed')}
+              onRetry={() => void catalogQuery.refetch()}
+            />
+          )}
         {search.tab === 'catalog' && (
           <DataTable
             ariaLabel={t('modelCatalog.table')}
@@ -744,29 +859,43 @@ export function ModelCatalogPage({
             emptyTitle={t(
               dynamicI18nKey('modelCatalog', catalogEmptyState.titleKey)
             )}
-            error={!validSiteId || catalogQuery.isError}
+            error={!validSiteId || (catalogQuery.isError && !catalogQuery.data)}
             fetching={catalogQuery.isFetching}
             loading={catalogQuery.isPending}
+            mobileCardBreakpoint='wide'
             onPageChange={(page) => onSearchChange({ page })}
             onPageSizeChange={(pageSize) =>
               onSearchChange({ page: 1, pageSize })
             }
-            onRetry={() => void catalogQuery.refetch()}
+            onRetry={
+              validSiteId ? () => void catalogQuery.refetch() : undefined
+            }
             page={search.page}
             pageSize={search.pageSize}
             renderMobileCard={(item) => (
               <article className='bg-card text-card-foreground ring-foreground/10 grid gap-3 rounded-xl p-4 ring-1'>
                 <div className='flex items-start justify-between gap-2'>
                   <div className='min-w-0'>
-                    <p className='font-medium'>{item.model_name}</p>
+                    <p className='font-medium break-all'>{item.model_name}</p>
                     <span className='text-muted-foreground text-xs'>
                       {item.site_name} · {item.site_id}
                     </span>
                   </div>
-                  <BinaryBadge value={item.status} />
+                  <div className='flex shrink-0 flex-col items-end gap-1'>
+                    <BinaryBadge value={item.status} />
+                    <Badge
+                      variant={item.sync_official === 1 ? 'success' : 'neutral'}
+                    >
+                      {item.sync_official === 1
+                        ? t('modelCatalog.sync.official')
+                        : t('modelCatalog.sync.manual')}
+                    </Badge>
+                  </div>
                 </div>
-                <p className='text-sm'>{item.description || '-'}</p>
-                <code className='border-border bg-muted/50 rounded border p-2 text-xs break-all'>
+                <p className='text-sm [overflow-wrap:anywhere] whitespace-pre-wrap'>
+                  {item.description || '-'}
+                </p>
+                <code className='border-border bg-muted/50 rounded border p-2 text-xs [overflow-wrap:anywhere]'>
                   {item.icon || '-'}
                 </code>
                 <div className='grid grid-cols-2 gap-3 text-sm'>
@@ -794,19 +923,48 @@ export function ModelCatalogPage({
                     </dt>
                     <dd>{item.covered_groups}</dd>
                   </dl>
+                  <dl className='col-span-2 min-w-0'>
+                    <dt className='text-muted-foreground text-xs'>
+                      {t('modelCatalog.metadata')}
+                    </dt>
+                    <dd className='[overflow-wrap:anywhere] whitespace-pre-wrap'>
+                      {item.tags || '-'}
+                    </dd>
+                  </dl>
+                  <dl>
+                    <dt className='text-muted-foreground text-xs'>
+                      {t('common.createdAt')}
+                    </dt>
+                    <dd>{timestamp(item.created_time)}</dd>
+                  </dl>
+                  <dl>
+                    <dt className='text-muted-foreground text-xs'>
+                      {t('common.updatedAt')}
+                    </dt>
+                    <dd>{timestamp(item.updated_time)}</dd>
+                  </dl>
+                  <dl className='col-span-2'>
+                    <dt className='text-muted-foreground text-xs'>
+                      {t('statistics.dataStatus')}
+                    </dt>
+                    <dd className='mt-1'>
+                      <DataStatusBadge status={item.data_status} />
+                    </dd>
+                  </dl>
                 </div>
               </article>
             )}
+            rowHeaderColumnId='model'
             total={catalogQuery.data?.total ?? 0}
           />
         )}
         {search.tab === 'coverage' && (
-          <div className='min-h-0 flex-1 overflow-y-auto' tabIndex={0}>
-            {coverageQuery.isPending && (
-              <div
-                aria-hidden='true'
-                className='border-border bg-muted/40 h-64 animate-pulse rounded-xl border'
-              />
+          <div
+            className='min-h-0 overflow-visible lg:flex-1 lg:overflow-y-auto'
+            tabIndex={0}
+          >
+            {coverageQuery.isPending && !coverageQuery.data && (
+              <LoadingState className='min-h-64' />
             )}
             {coverageQuery.data && (
               <div className='grid gap-4 xl:grid-cols-3'>
@@ -824,14 +982,6 @@ export function ModelCatalogPage({
                 />
               </div>
             )}
-            {coverageQuery.isError && (
-              <Button
-                onClick={() => void coverageQuery.refetch()}
-                variant='outline'
-              >
-                {t('common.retry')}
-              </Button>
-            )}
           </div>
         )}
         {search.tab === 'missing' && (
@@ -845,36 +995,51 @@ export function ModelCatalogPage({
             emptyTitle={t(
               dynamicI18nKey('modelCatalog', missingEmptyState.titleKey)
             )}
-            error={!validSiteId || missingQuery.isError}
+            error={!validSiteId || (missingQuery.isError && !missingQuery.data)}
             fetching={missingQuery.isFetching}
             loading={missingQuery.isPending}
+            mobileCardBreakpoint='wide'
             onPageChange={(page) => onSearchChange({ page })}
             onPageSizeChange={(pageSize) =>
               onSearchChange({ page: 1, pageSize })
             }
-            onRetry={() => void missingQuery.refetch()}
+            onRetry={
+              validSiteId ? () => void missingQuery.refetch() : undefined
+            }
             page={search.page}
             pageSize={search.pageSize}
             renderMobileCard={(item) => (
               <article className='bg-card text-card-foreground ring-foreground/10 grid gap-2 rounded-xl p-4 ring-1'>
                 <div className='flex items-start justify-between gap-2'>
-                  <p className='font-medium'>{item.model_name}</p>
+                  <p className='font-medium break-all'>{item.model_name}</p>
                   <DataStatusBadge status={item.data_status} />
                 </div>
                 <p className='text-muted-foreground text-xs'>
                   {item.site_name} · {item.site_id}
                 </p>
-                <p className='text-sm'>
+                <p className='text-sm break-words'>
                   {item.channel_name || '-'} · {item.remote_channel_id}
                 </p>
                 <p className='text-sm'>
                   {t('modelCatalog.groupValue', { value: item.group || '-' })}
                 </p>
+                <p className='text-muted-foreground text-xs'>
+                  {t('modelCatalog.asOf', { time: timestamp(item.as_of) })}
+                </p>
               </article>
             )}
+            rowHeaderColumnId='model_name'
             total={missingQuery.data?.total ?? 0}
           />
         )}
+        {search.tab === 'missing' &&
+          missingQuery.isError &&
+          missingQuery.data && (
+            <QueryStateAlert
+              message={t('common.retainedDataRefreshFailed')}
+              onRetry={() => void missingQuery.refetch()}
+            />
+          )}
       </div>
       <ExportTaskSheet
         exportId={search.exportId}

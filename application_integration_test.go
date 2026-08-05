@@ -22,6 +22,7 @@ import (
 	"new-api-pilot/constant"
 	"new-api-pilot/dto"
 	"new-api-pilot/model"
+	"new-api-pilot/service"
 	testsupport "new-api-pilot/tests/support"
 	"new-api-pilot/worker"
 )
@@ -70,12 +71,14 @@ func TestBootstrapApplicationRegistersSettingsNotificationsAndCompositeRuntime(t
 		}
 	}
 	group, ok := app.runtime.(*runtimeGroup)
-	if !ok || len(group.components) != 6 {
+	if !ok || len(group.components) != 7 {
 		t.Fatalf("application runtime = %#v", app.runtime)
 	}
 	runtimeTypes := map[string]bool{}
 	for _, component := range group.components {
 		switch component.(type) {
+		case *service.RuntimeSettingsStore:
+			runtimeTypes["runtime_settings"] = true
 		case *worker.Runtime:
 			runtimeTypes["collection"] = true
 		case *worker.AlertRuntime:
@@ -91,7 +94,7 @@ func TestBootstrapApplicationRegistersSettingsNotificationsAndCompositeRuntime(t
 		}
 	}
 	for _, name := range []string{
-		"collection", "alert", "export", "resource_retention", "upstream_log_retention", "data_maintenance",
+		"runtime_settings", "collection", "alert", "export", "resource_retention", "upstream_log_retention", "data_maintenance",
 	} {
 		if !runtimeTypes[name] {
 			t.Errorf("application runtime is missing %s", name)
@@ -225,7 +228,7 @@ func TestBootstrapApplicationExportLifecycleOwnershipAndDownload(t *testing.T) {
 		t.Fatalf("startup recovery retained abandoned artifact: %v", err)
 	}
 
-	clock.Advance(time.Second)
+	clock.Advance(5 * time.Second)
 	completed := waitForApplicationExportStatus(t, database.GORM, jobID, dto.ExportStatusSuccess)
 	if completed.FilePath == nil || completed.FileName == nil || completed.ClaimToken != nil {
 		t.Fatalf("completed export state = %#v", completed)

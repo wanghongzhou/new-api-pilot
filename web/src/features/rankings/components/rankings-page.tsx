@@ -15,6 +15,7 @@ import { toast } from 'sonner'
 import { DataStatusBadge } from '@/components/data/data-status'
 import { FacetedFilter } from '@/components/data/faceted-filter'
 import { FilterPanel } from '@/components/data/filter-panel'
+import { QueryStateAlert } from '@/components/data/query-state-alert'
 import { ErrorState } from '@/components/error-state'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
@@ -460,6 +461,18 @@ export function RankingsPage({
             />
           )}
         </FilterPanel>
+        {!siteId && sitesQuery.isError && (
+          <QueryStateAlert
+            message={t('operationsAnalytics.siteOptionsError')}
+            onRetry={() => void sitesQuery.refetch()}
+          />
+        )}
+        {rankingQuery.isError && data && (
+          <QueryStateAlert
+            message={t('operationsAnalytics.staleListData')}
+            onRetry={() => void rankingQuery.refetch()}
+          />
+        )}
         {search.view === 'ranking' && (
           <DataTable
             ariaLabel={t('rankings.table')}

@@ -16,16 +16,18 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { DataStatusBadge } from '@/components/data/data-status'
+import { DebouncedInput } from '@/components/data/debounced-input'
 import { FacetedFilter } from '@/components/data/faceted-filter'
 import { MetricValue } from '@/components/data/metric-value'
+import { MultiFacetedFilter } from '@/components/data/multi-faceted-filter'
+import { QueryStateAlert } from '@/components/data/query-state-alert'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
-import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { listSites } from '@/features/sites/api'
+import { listAllSites } from '@/features/sites/api'
 import { siteKeys } from '@/features/sites/query-keys'
 import type { SiteListItem } from '@/features/sites/types'
 import { createStatisticsExport } from '@/features/statistics/api'
@@ -34,6 +36,7 @@ import type {
   StatisticsExportFormat,
   StatisticsExportJobItem,
 } from '@/features/statistics/types'
+import { useLastValidPage } from '@/hooks/use-last-valid-page'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import { isIdString, parseIdString } from '@/lib/api-types'
@@ -204,28 +207,26 @@ function Filters({
           size={15}
           strokeWidth={2}
         />
-        <Input
+        <DebouncedInput
           aria-label={t('subscriptionPlans.filters.keyword')}
           className='h-10 pl-8 sm:h-8'
-          onChange={(event) =>
-            onChange({ keyword: event.target.value, page: 1 })
-          }
+          onValueChange={(keyword) => onChange({ keyword, page: 1 })}
           placeholder={t('subscriptionPlans.filters.keywordPlaceholder')}
           value={search.keyword}
         />
       </label>
       {global && (
-        <FacetedFilter
+        <MultiFacetedFilter
           clearLabel={t('subscriptionPlans.filters.allSites')}
-          onChange={(value) =>
+          onChange={(values) =>
             onChange({
               page: 1,
-              siteIds: isIdString(value) ? [parseIdString(value)] : [],
+              siteIds: values.filter(isIdString).map(parseIdString),
             })
           }
           options={sites.map((site) => ({ label: site.name, value: site.id }))}
           title={t('subscriptionPlans.filters.site')}
-          value={search.siteIds.length === 1 ? search.siteIds[0] : ''}
+          values={search.siteIds}
         />
       )}
       <FacetedFilter
@@ -331,15 +332,15 @@ function SiteBreakdown({ items }: { items: SubscriptionPlanBreakdown[] }) {
               key={item.site_id}
             >
               <div className='flex items-start justify-between gap-2'>
-                <div>
-                  <p className='font-medium'>{item.site_name}</p>
-                  <code className='text-muted-foreground text-xs'>
+                <div className='min-w-0'>
+                  <p className='font-medium break-words'>{item.site_name}</p>
+                  <code className='text-muted-foreground text-xs break-all'>
                     {item.site_id}
                   </code>
                 </div>
                 <DataStatusBadge status={item.data_status} />
               </div>
-              <p className='text-muted-foreground text-xs'>
+              <p className='text-muted-foreground text-xs break-words'>
                 {t('subscriptionPlans.breakdown.values', {
                   disabled: item.disabled,
                   enabled: item.enabled,
@@ -359,10 +360,12 @@ function SiteBreakdown({ items }: { items: SubscriptionPlanBreakdown[] }) {
 }
 
 export function SubscriptionPlansPage({
+  onPageReplace,
   onSearchChange,
   search,
   siteId,
 }: {
+  onPageReplace: (page: number) => void
   onSearchChange: (changes: Partial<SubscriptionPlanSearch>) => void
   search: SubscriptionPlanSearch
   siteId?: string
@@ -389,8 +392,6 @@ export function SubscriptionPlansPage({
   )
   const siteParams = useMemo(
     () => ({
-      p: 1,
-      page_size: 100,
       sort_by: 'name',
       sort_order: 'asc' as const,
     }),
@@ -398,8 +399,8 @@ export function SubscriptionPlansPage({
   )
   const sitesQuery = useQuery({
     enabled: siteId == null,
-    queryFn: () => listSites(siteParams),
-    queryKey: siteKeys.list(siteParams),
+    queryFn: () => listAllSites(siteParams),
+    queryKey: siteKeys.options(siteParams),
     staleTime: 5 * 60_000,
   })
   const listQuery = useQuery({
@@ -449,15 +450,15 @@ export function SubscriptionPlansPage({
     () => [
       {
         cell: ({ row }) => (
-          <div className='min-w-44'>
-            <p className='font-medium'>{row.original.title}</p>
-            <p className='text-muted-foreground text-xs'>
+          <div className='max-w-72 min-w-44 whitespace-normal'>
+            <p className='font-medium break-words'>{row.original.title}</p>
+            <p className='text-muted-foreground text-xs break-words'>
               {row.original.subtitle || '-'}
             </p>
-            <p className='text-muted-foreground text-xs'>
+            <p className='text-muted-foreground text-xs break-words'>
               {row.original.site_name} · {row.original.site_id}
             </p>
-            <code className='text-muted-foreground text-xs'>
+            <code className='text-muted-foreground text-xs break-all'>
               {row.original.remote_id}
             </code>
           </div>
@@ -468,10 +469,10 @@ export function SubscriptionPlansPage({
       {
         cell: ({ row }) => (
           <div className='grid min-w-32 gap-1 text-xs'>
-            <strong>
+            <strong className='break-all'>
               {row.original.currency} {row.original.price_amount}
             </strong>
-            <span>
+            <span className='break-all'>
               {row.original.total_amount === '0'
                 ? t('subscriptionPlans.unlimited')
                 : t('subscriptionPlans.quotaValue', {
@@ -499,6 +500,11 @@ export function SubscriptionPlansPage({
             <EnabledBadge enabled={row.original.enabled} />
             <StateBadge state={row.original.remote_state} />
             <DataStatusBadge status={row.original.data_status} />
+            <span className='text-muted-foreground text-xs'>
+              {t('subscriptionPlans.missingCount', {
+                value: row.original.missing_count,
+              })}
+            </span>
           </div>
         ),
         header: t('common.status'),
@@ -507,8 +513,16 @@ export function SubscriptionPlansPage({
       {
         cell: ({ row }) => (
           <div className='grid min-w-40 gap-1 text-xs'>
-            <span>{timestamp(row.original.created_at)}</span>
-            <span>{timestamp(row.original.updated_at)}</span>
+            <span>
+              {t('subscriptionPlans.createdAt', {
+                time: timestamp(row.original.created_at),
+              })}
+            </span>
+            <span>
+              {t('subscriptionPlans.updatedAt', {
+                time: timestamp(row.original.updated_at),
+              })}
+            </span>
             <span>
               {t('subscriptionPlans.sortOrderValue', {
                 value: row.original.sort_order,
@@ -524,6 +538,14 @@ export function SubscriptionPlansPage({
   )
   const statistics = statisticsQuery.data
   const listTab = search.tab === 'plans'
+  useLastValidPage({
+    isFetching: listQuery.isFetching,
+    isPlaceholderData: listQuery.isPlaceholderData,
+    onReplace: onPageReplace,
+    page: search.page,
+    pageSize: listQuery.data?.page_size ?? search.pageSize,
+    total: listTab ? listQuery.data?.total : undefined,
+  })
   const purpose = listTab
     ? {
         description: t('subscriptionPlans.purpose.description'),
@@ -561,8 +583,9 @@ export function SubscriptionPlansPage({
         siteId ? t('subscriptionPlans.siteTitle') : t('subscriptionPlans.title')
       }
       fixedContent
+      mobileScrollableContent
     >
-      <div className='flex h-full min-h-0 min-w-0 flex-col gap-4'>
+      <div className='flex min-w-0 flex-col gap-4 lg:h-full lg:min-h-0'>
         {siteId && (
           <DetailBackLink
             render={<Link params={{ siteId }} to='/sites/$siteId' />}
@@ -572,6 +595,19 @@ export function SubscriptionPlansPage({
           </DetailBackLink>
         )}
         <StatisticsGrid values={statistics} />
+        {statisticsQuery.isError && statistics && (
+          <QueryStateAlert
+            message={t('common.retainedDataRefreshFailed')}
+            onRetry={() => void statisticsQuery.refetch()}
+          />
+        )}
+        {statisticsQuery.isError && !statistics && validSiteId && (
+          <QueryStateAlert
+            message={t('common.dataLoadFailed')}
+            onRetry={() => void statisticsQuery.refetch()}
+            tone='destructive'
+          />
+        )}
         <Tabs
           onValueChange={(tab) =>
             onSearchChange(
@@ -630,13 +666,17 @@ export function SubscriptionPlansPage({
             sites={sitesQuery.data?.items ?? []}
           />
         )}
-        {statisticsQuery.isError && (
-          <Button
-            onClick={() => void statisticsQuery.refetch()}
-            variant='outline'
-          >
-            {t('common.retry')}
-          </Button>
+        {!siteId && sitesQuery.isError && (
+          <QueryStateAlert
+            message={t('common.siteOptionsRefreshFailed')}
+            onRetry={() => void sitesQuery.refetch()}
+          />
+        )}
+        {listTab && listQuery.isError && listQuery.data && (
+          <QueryStateAlert
+            message={t('common.retainedDataRefreshFailed')}
+            onRetry={() => void listQuery.refetch()}
+          />
         )}
         {listTab && (
           <DataTable
@@ -645,34 +685,35 @@ export function SubscriptionPlansPage({
             data={listQuery.data?.items ?? []}
             emptyDescription={t('subscriptionPlans.emptyDescription')}
             emptyTitle={t('subscriptionPlans.empty')}
-            error={!validSiteId || listQuery.isError}
+            error={!validSiteId || (listQuery.isError && !listQuery.data)}
             fetching={listQuery.isFetching}
             loading={listQuery.isPending}
+            mobileCardBreakpoint='wide'
             onPageChange={(page) => onSearchChange({ page })}
             onPageSizeChange={(pageSize) =>
               onSearchChange({ page: 1, pageSize })
             }
-            onRetry={() => void listQuery.refetch()}
+            onRetry={validSiteId ? () => void listQuery.refetch() : undefined}
             page={search.page}
             pageSize={search.pageSize}
             renderMobileCard={(item) => (
               <article className='bg-card text-card-foreground ring-foreground/10 grid gap-3 rounded-xl p-4 ring-1'>
                 <div className='flex items-start justify-between gap-2'>
                   <div className='min-w-0'>
-                    <p className='font-medium'>{item.title}</p>
-                    <p className='text-muted-foreground text-xs'>
+                    <p className='font-medium break-words'>{item.title}</p>
+                    <p className='text-muted-foreground text-xs break-words'>
                       {item.subtitle || '-'}
                     </p>
-                    <p className='text-muted-foreground text-xs'>
+                    <p className='text-muted-foreground text-xs break-words'>
                       {item.site_name} · {item.site_id} · {item.remote_id}
                     </p>
                   </div>
                   <EnabledBadge enabled={item.enabled} />
                 </div>
-                <strong>
+                <strong className='break-all'>
                   {item.currency} {item.price_amount}
                 </strong>
-                <span>
+                <span className='break-all'>
                   {item.total_amount === '0'
                     ? t('subscriptionPlans.unlimited')
                     : t('subscriptionPlans.quotaValue', {
@@ -685,13 +726,44 @@ export function SubscriptionPlansPage({
                   <StateBadge state={item.remote_state} />
                   <DataStatusBadge status={item.data_status} />
                 </div>
+                <span className='text-muted-foreground text-xs'>
+                  {t('subscriptionPlans.missingCount', {
+                    value: item.missing_count,
+                  })}
+                </span>
+                <dl className='grid grid-cols-2 gap-2 text-xs'>
+                  <div>
+                    <dt className='text-muted-foreground'>
+                      {t('subscriptionPlans.created')}
+                    </dt>
+                    <dd>{timestamp(item.created_at)}</dd>
+                  </div>
+                  <div>
+                    <dt className='text-muted-foreground'>
+                      {t('subscriptionPlans.updated')}
+                    </dt>
+                    <dd>{timestamp(item.updated_at)}</dd>
+                  </div>
+                  <div className='col-span-2'>
+                    <dt className='sr-only'>{t('subscriptionPlans.sort')}</dt>
+                    <dd>
+                      {t('subscriptionPlans.sortOrderValue', {
+                        value: item.sort_order,
+                      })}
+                    </dd>
+                  </div>
+                </dl>
               </article>
             )}
+            rowHeaderColumnId='identity'
             total={listQuery.data?.total ?? 0}
           />
         )}
         {!listTab && (
-          <div className='min-h-0 flex-1 overflow-y-auto' tabIndex={0}>
+          <div
+            className='min-h-0 overflow-visible lg:flex-1 lg:overflow-y-auto'
+            tabIndex={0}
+          >
             {statistics && <SiteBreakdown items={statistics.site_breakdown} />}
           </div>
         )}

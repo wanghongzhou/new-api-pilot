@@ -7,6 +7,7 @@ import {
   buildSettingPatchItems,
   getMinuteRetentionDays,
   settingFieldDefinitions,
+  settingSectionForField,
   settingValueForDisplay,
   settingsSectionKeys,
   settingsSections,
@@ -86,6 +87,12 @@ function groupsFixture(retentionValue: unknown = 90): SettingGroup[] {
 }
 
 describe('settings frontend contract', () => {
+  test('maps editable fields and secret actions to their visible section', () => {
+    expect(settingSectionForField('probeIntervalMinutes')).toBe('collection')
+    expect(settingSectionForField('maxFileMegabytes')).toBe('export')
+    expect(settingSectionForField('dingTalkSecretAction')).toBe('notification')
+  })
+
   test('covers each persisted setting exactly once', () => {
     expect(platformSettingKeys).toHaveLength(39)
     expect(new Set(platformSettingKeys).size).toBe(39)

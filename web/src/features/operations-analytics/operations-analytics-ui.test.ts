@@ -47,7 +47,15 @@ describe('operations analytics workspace', () => {
     expect(pages[1]).not.toContain('<OperationsAnalyticsNavigation')
     expect(pages[2]).toContain('{siteId && (')
     expect(pages[3]).toContain('{siteId && (')
-    expect(pages[1]).toContain('nativeButton={false}')
+    expect(pages[1]).toContain(
+      "<nav\n      aria-label={t('statistics.scopeNavigation')}"
+    )
+    expect(pages[1]).toContain("aria-current={active ? 'page' : undefined}")
+    expect(pages[1]).toContain(
+      'search={buildScopeStatisticsSearch(search, value)}\n            to={to}'
+    )
+    expect(pages[1]).not.toContain('<Tabs value={scope}>')
+    expect(pages[1]).not.toContain('nativeButton={false}')
   })
 
   test('separates rankings and performance results into URL views', async () => {

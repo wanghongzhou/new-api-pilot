@@ -364,7 +364,7 @@ func (r *PricingCatalogRepository) SiteMetrics(ctx context.Context, q dto.Pricin
 			pricingArgs = append(pricingArgs, q.BillingMode)
 		}
 	}
-	db := r.db.WithContext(ctx).Table("site s").Joins(pricingJoin, pricingArgs...).Joins("LEFT JOIN site_group_catalog g ON g.site_id=s.id").Joins("LEFT JOIN pricing_group_collection_state ps ON ps.site_id=s.id AND ps.resource_kind='pricing'").Joins("LEFT JOIN pricing_group_collection_state gs ON gs.site_id=s.id AND gs.resource_kind='group'").Where("s.management_status='active'")
+	db := r.db.WithContext(ctx).Table("site s").Joins(pricingJoin, pricingArgs...).Joins("LEFT JOIN site_group_catalog g ON g.site_id=s.id").Joins("LEFT JOIN pricing_group_collection_state ps ON ps.site_id=s.id AND ps.resource_kind='pricing' AND ps.config_version=s.config_version").Joins("LEFT JOIN pricing_group_collection_state gs ON gs.site_id=s.id AND gs.resource_kind='group' AND gs.config_version=s.config_version").Where("s.management_status='active'")
 	if len(q.SiteIDs) > 0 {
 		db = db.Where("s.id IN ?", q.SiteIDs)
 	}

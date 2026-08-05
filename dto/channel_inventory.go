@@ -34,6 +34,16 @@ func (q ChannelInventoryQuery) Validate() map[string]string {
 	if !utf8.ValidString(q.Keyword) || utf8.RuneCountInString(q.Keyword) > 255 {
 		e["keyword"] = "is invalid"
 	}
+	for _, value := range q.Groups {
+		if !utf8.ValidString(value) || utf8.RuneCountInString(value) > 128 {
+			e["groups"] = "contains an invalid group"
+		}
+	}
+	for _, value := range q.Tags {
+		if !utf8.ValidString(value) || utf8.RuneCountInString(value) > 255 {
+			e["tags"] = "contains an invalid tag"
+		}
+	}
 	if !validEnumList(q.States, "normal", "missing") {
 		e["states"] = "contains an invalid state"
 	}
@@ -101,6 +111,19 @@ func (q ChannelInventoryStatisticsQuery) Validate() map[string]string {
 	e := map[string]string{}
 	if q.StartTimestamp <= 0 || q.EndTimestamp <= q.StartTimestamp || q.StartTimestamp%3600 != 0 || q.EndTimestamp%3600 != 0 || q.EndTimestamp-q.StartTimestamp > 366*24*3600 {
 		e["range"] = "must be aligned and at most one year"
+	}
+	if len(q.SiteIDs) > 100 || len(q.Types) > 100 || len(q.Statuses) > 20 || len(q.Groups) > 100 || len(q.Tags) > 100 {
+		e["filters"] = "too many values"
+	}
+	for _, value := range q.Groups {
+		if !utf8.ValidString(value) || utf8.RuneCountInString(value) > 128 {
+			e["groups"] = "contains an invalid group"
+		}
+	}
+	for _, value := range q.Tags {
+		if !utf8.ValidString(value) || utf8.RuneCountInString(value) > 255 {
+			e["tags"] = "contains an invalid tag"
+		}
 	}
 	return nilIfEmpty(e)
 }

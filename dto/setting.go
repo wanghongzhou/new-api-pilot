@@ -37,6 +37,8 @@ type SettingPatchItem struct {
 	Clear bool            `json:"clear"`
 }
 
+const SettingPatchMaximumItems = 100
+
 func (request *SettingPatchRequest) Normalize() {
 	for index := range request.Items {
 		request.Items[index].Key = strings.TrimSpace(request.Items[index].Key)
@@ -46,8 +48,8 @@ func (request *SettingPatchRequest) Normalize() {
 
 func (request SettingPatchRequest) Validate() map[string]string {
 	fieldErrors := map[string]string{}
-	if len(request.Items) < 1 || len(request.Items) > 37 {
-		fieldErrors["items"] = "must contain between 1 and 37 items"
+	if len(request.Items) < 1 || len(request.Items) > SettingPatchMaximumItems {
+		fieldErrors["items"] = "must contain between 1 and 100 items"
 	}
 	seen := make(map[string]struct{}, len(request.Items))
 	for index, item := range request.Items {

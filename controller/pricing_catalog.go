@@ -45,8 +45,13 @@ func (c *PricingCatalogController) run(g *gin.Context, sites []int64, kind strin
 		common.AbortInternalError(g)
 		return
 	}
-	allowed := map[string]bool{"p": true, "page_size": true}
+	if !requireEmptyBody(g) {
+		return
+	}
+	allowed := map[string]bool{}
 	if kind != "statistics" {
+		allowed["p"] = true
+		allowed["page_size"] = true
 		allowed["states"] = true
 		allowed["keyword"] = true
 		allowed["group"] = true
@@ -62,6 +67,10 @@ func (c *PricingCatalogController) run(g *gin.Context, sites []int64, kind strin
 			common.AbortError(g, http.StatusBadRequest, constant.CodeValidationError, "Invalid pricing catalog query", nil)
 			return
 		}
+	}
+	if fields := strictQueryFields(g, allowed, "p", "page_size", "keyword", "group", "billing_mode"); fields != nil {
+		common.AbortError(g, http.StatusBadRequest, constant.CodeValidationError, "Invalid pricing catalog query", fields)
+		return
 	}
 	p, _ := strconv.Atoi(g.DefaultQuery("p", "1"))
 	size, _ := strconv.Atoi(g.DefaultQuery("page_size", "20"))

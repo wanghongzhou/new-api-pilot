@@ -234,14 +234,36 @@ func TestPlatformUserAdminLifecycleOverHTTP(t *testing.T) {
 		t.Fatalf("change bootstrap password = %d %#v", changedAdmin.Code, envelope)
 	}
 	adminCookie := requireSessionCookie(t, changedAdmin)
+	admin, err = harness.repository.FindByID(ctx, admin.ID)
+	if err != nil {
+		t.Fatalf("refresh admin after password change: %v", err)
+	}
 
-	lastAdminDowngrade := performUserAPIRequest(harness.handler, http.MethodPut, "/api/user/"+adminID, `{"username":"admin","display_name":"Administrator","role":"viewer"}`, adminCookie, adminID)
+	lastAdminDowngradeBody, _ := json.Marshal(map[string]any{
+		"username": "admin", "display_name": "Administrator", "role": "viewer", "expected_updated_at": admin.UpdatedAt,
+	})
+	lastAdminDowngrade := performUserAPIRequest(harness.handler, http.MethodPut, "/api/user/"+adminID, string(lastAdminDowngradeBody), adminCookie, adminID)
 	if envelope := decodeUserAPIEnvelope(t, lastAdminDowngrade); lastAdminDowngrade.Code != http.StatusConflict || envelope.Code != constant.CodeLastAdmin {
 		t.Fatalf("last admin downgrade = %d %#v", lastAdminDowngrade.Code, envelope)
 	}
 	selfReset := performUserAPIRequest(harness.handler, http.MethodPost, "/api/user/"+adminID+"/reset-password", `{"new_password":"self-reset"}`, adminCookie, adminID)
 	if envelope := decodeUserAPIEnvelope(t, selfReset); selfReset.Code != http.StatusConflict || envelope.Code != constant.CodeConflict {
 		t.Fatalf("self password reset = %d %#v", selfReset.Code, envelope)
+	}
+	for name, response := range map[string]*httptest.ResponseRecorder{
+		"unknown list query":  performUserAPIRequest(harness.handler, http.MethodGet, "/api/user/?unknown=1", "", adminCookie, adminID),
+		"repeated list query": performUserAPIRequest(harness.handler, http.MethodGet, "/api/user/?p=1&p=2", "", adminCookie, adminID),
+		"list body":           performUserAPIRequest(harness.handler, http.MethodGet, "/api/user/", `{}`, adminCookie, adminID),
+		"create query":        performUserAPIRequest(harness.handler, http.MethodPost, "/api/user/?unknown=1", `{"username":"strict-user","display_name":"Strict","role":"viewer","password":"strict-pass"}`, adminCookie, adminID),
+		"update query":        performUserAPIRequest(harness.handler, http.MethodPut, "/api/user/"+adminID+"?unknown=1", string(lastAdminDowngradeBody), adminCookie, adminID),
+		"enable query":        performUserAPIRequest(harness.handler, http.MethodPost, "/api/user/"+adminID+"/enable?unknown=1", "", adminCookie, adminID),
+		"disable body":        performUserAPIRequest(harness.handler, http.MethodPost, "/api/user/"+adminID+"/disable", `{}`, adminCookie, adminID),
+		"reset query":         performUserAPIRequest(harness.handler, http.MethodPost, "/api/user/"+adminID+"/reset-password?unknown=1", `{"new_password":"strict-pass"}`, adminCookie, adminID),
+	} {
+		envelope := decodeUserAPIEnvelope(t, response)
+		if response.Code != http.StatusBadRequest || envelope.Code != constant.CodeValidationError {
+			t.Fatalf("%s = %d %#v body=%s", name, response.Code, envelope, response.Body.String())
+		}
 	}
 
 	created := performUserAPIRequest(harness.handler, http.MethodPost, "/api/user/", `{"username":"viewer-life","display_name":"Viewer Lifecycle","role":"viewer","password":"viewer-initial"}`, adminCookie, adminID)
@@ -250,11 +272,22 @@ func TestPlatformUserAdminLifecycleOverHTTP(t *testing.T) {
 	if created.Code != http.StatusOK || !createdEnvelope.Success || json.Unmarshal(createdEnvelope.Data, &createdUser) != nil || !createdUser.MustChangePassword || createdUser.Status != constant.UserStatusEnabled {
 		t.Fatalf("create lifecycle user = %d %#v user=%#v", created.Code, createdEnvelope, createdUser)
 	}
+	createdUserID, err := strconv.ParseInt(createdUser.ID, 10, 64)
+	if err != nil {
+		t.Fatalf("parse lifecycle user ID: %v", err)
+	}
 
 	firstLogin := performUserAPIRequest(harness.handler, http.MethodPost, "/api/user/login", `{"username":"viewer-life","password":"viewer-initial"}`, nil, "")
 	firstCookie := requireSessionCookie(t, firstLogin)
 	if envelope := decodeUserAPIEnvelope(t, firstLogin); firstLogin.Code != http.StatusOK || !envelope.Success {
 		t.Fatalf("first user login = %d %#v", firstLogin.Code, envelope)
+	}
+	afterLogin, err := harness.repository.FindByID(ctx, createdUserID)
+	if err != nil {
+		t.Fatalf("refresh lifecycle user after login: %v", err)
+	}
+	if afterLogin.LastLoginAt == nil || *afterLogin.LastLoginAt != createdUser.UpdatedAt || afterLogin.UpdatedAt <= createdUser.UpdatedAt {
+		t.Fatalf("login timestamps = created_updated_at=%d user=%#v", createdUser.UpdatedAt, afterLogin)
 	}
 	blocked := performUserAPIRequest(harness.handler, http.MethodGet, "/api/user/", "", firstCookie, createdUser.ID)
 	if envelope := decodeUserAPIEnvelope(t, blocked); blocked.Code != http.StatusForbidden || envelope.Code != constant.CodePasswordChangeRequired {
@@ -265,12 +298,26 @@ func TestPlatformUserAdminLifecycleOverHTTP(t *testing.T) {
 		t.Fatalf("first user password change = %d %#v", firstChange.Code, envelope)
 	}
 	activeUserCookie := requireSessionCookie(t, firstChange)
+	currentCreatedUser, err := harness.repository.FindByID(ctx, createdUserID)
+	if err != nil {
+		t.Fatalf("refresh lifecycle user before admin edit: %v", err)
+	}
+	if currentCreatedUser.UpdatedAt <= afterLogin.UpdatedAt {
+		t.Fatalf("password change did not advance updated_at: login=%d changed=%d", afterLogin.UpdatedAt, currentCreatedUser.UpdatedAt)
+	}
 
-	updated := performUserAPIRequest(harness.handler, http.MethodPut, "/api/user/"+createdUser.ID, `{"username":"viewer-renamed","display_name":"Viewer Renamed","role":"viewer"}`, adminCookie, adminID)
+	updateBody, _ := json.Marshal(map[string]any{
+		"username": "viewer-renamed", "display_name": "Viewer Renamed", "role": "viewer", "expected_updated_at": currentCreatedUser.UpdatedAt,
+	})
+	updated := performUserAPIRequest(harness.handler, http.MethodPut, "/api/user/"+createdUser.ID, string(updateBody), adminCookie, adminID)
 	updatedEnvelope := decodeUserAPIEnvelope(t, updated)
 	var updatedUser dto.PlatformUserItem
-	if updated.Code != http.StatusOK || !updatedEnvelope.Success || json.Unmarshal(updatedEnvelope.Data, &updatedUser) != nil || updatedUser.Username != "viewer-renamed" || updatedUser.DisplayName != "Viewer Renamed" {
+	if updated.Code != http.StatusOK || !updatedEnvelope.Success || json.Unmarshal(updatedEnvelope.Data, &updatedUser) != nil || updatedUser.Username != "viewer-renamed" || updatedUser.DisplayName != "Viewer Renamed" || updatedUser.UpdatedAt <= currentCreatedUser.UpdatedAt {
 		t.Fatalf("update lifecycle user = %d %#v user=%#v", updated.Code, updatedEnvelope, updatedUser)
+	}
+	staleUpdate := performUserAPIRequest(harness.handler, http.MethodPut, "/api/user/"+createdUser.ID, string(updateBody), adminCookie, adminID)
+	if envelope := decodeUserAPIEnvelope(t, staleUpdate); staleUpdate.Code != http.StatusConflict || envelope.Code != constant.CodeConflict {
+		t.Fatalf("stale platform user update = %d %#v", staleUpdate.Code, envelope)
 	}
 
 	reset := performUserAPIRequest(harness.handler, http.MethodPost, "/api/user/"+createdUser.ID+"/reset-password", `{"new_password":"viewer-reset"}`, adminCookie, adminID)

@@ -1,6 +1,7 @@
 package dto
 
 import (
+	"strconv"
 	"strings"
 	"unicode/utf8"
 )
@@ -13,6 +14,8 @@ type FinanceInventoryQuery struct {
 	States                       []string
 	StartTimestamp, EndTimestamp int64
 	Keyword                      string
+	SnapshotAt                   int64
+	StatusAt                     int64
 }
 
 func (q *FinanceInventoryQuery) Normalize() {
@@ -40,10 +43,26 @@ func (q FinanceInventoryQuery) Validate() map[string]string {
 	if q.StartTimestamp < 0 || q.EndTimestamp < 0 || q.EndTimestamp > 0 && q.EndTimestamp <= q.StartTimestamp {
 		e["range"] = "invalid range"
 	}
+	if q.SnapshotAt < 0 || q.StatusAt < 0 {
+		e["snapshot_at"] = "invalid snapshot"
+	}
 	if !utf8.ValidString(q.Keyword) || utf8.RuneCountInString(q.Keyword) > 255 {
 		e["keyword"] = "invalid keyword"
 	}
 	return nilIfEmpty(e)
+}
+
+func (q FinanceInventoryQuery) ValidateRedemptionStatuses() map[string]string {
+	for _, status := range q.Statuses {
+		if status == "expired" {
+			continue
+		}
+		value, err := strconv.ParseInt(status, 10, 32)
+		if err != nil || value < 0 || strconv.FormatInt(value, 10) != status {
+			return map[string]string{"statuses": "contains an invalid redemption status"}
+		}
+	}
+	return nil
 }
 func (q FinanceInventoryQuery) Offset() int {
 	o, _ := statisticsPaginationOffset(q.Page, q.PageSize)
@@ -90,12 +109,13 @@ type RedemptionInventoryItem struct {
 }
 
 type FinanceInventoryPage[T any] struct {
-	Items      []T    `json:"items"`
-	Total      int64  `json:"total"`
-	Page       int    `json:"page"`
-	PageSize   int    `json:"page_size"`
-	DataStatus string `json:"data_status"`
-	AsOf       *int64 `json:"as_of"`
+	Items        []T                 `json:"items"`
+	Total        int64               `json:"total"`
+	Page         int                 `json:"page"`
+	PageSize     int                 `json:"page_size"`
+	DataStatus   string              `json:"data_status"`
+	AsOf         *int64              `json:"as_of"`
+	Completeness FinanceCompleteness `json:"completeness"`
 }
 
 type FinanceMetric struct {
@@ -115,9 +135,19 @@ type FinanceBreakdown struct {
 	AsOf       *int64 `json:"as_of"`
 }
 type FinanceStatisticsResponse struct {
-	Summary           FinanceMetric      `json:"summary"`
-	StatusBreakdown   []FinanceBreakdown `json:"status_breakdown"`
-	ProviderBreakdown []FinanceBreakdown `json:"provider_breakdown,omitempty"`
-	SiteBreakdown     []FinanceBreakdown `json:"site_breakdown"`
-	DataStatus        string             `json:"data_status"`
+	Summary           FinanceMetric       `json:"summary"`
+	StatusBreakdown   []FinanceBreakdown  `json:"status_breakdown"`
+	ProviderBreakdown []FinanceBreakdown  `json:"provider_breakdown,omitempty"`
+	SiteBreakdown     []FinanceBreakdown  `json:"site_breakdown"`
+	DataStatus        string              `json:"data_status"`
+	AsOf              *int64              `json:"as_of"`
+	Completeness      FinanceCompleteness `json:"completeness"`
+}
+
+type FinanceCompleteness struct {
+	DataStatus        string `json:"data_status"`
+	CompleteSiteCount int    `json:"complete_site_count"`
+	ExpectedSiteCount int    `json:"expected_site_count"`
+	UnavailableCount  int    `json:"unavailable_site_count"`
+	PendingSiteCount  int    `json:"pending_site_count"`
 }

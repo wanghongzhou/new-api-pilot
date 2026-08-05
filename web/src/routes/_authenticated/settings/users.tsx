@@ -23,6 +23,12 @@ function PlatformUsersRoute() {
 
   return (
     <PlatformUsersPage
+      onPageReplace={(page) =>
+        void navigate({
+          replace: true,
+          search: (current) => ({ ...current, page }),
+        })
+      }
       onSearchChange={(changes) =>
         void navigate({
           replace: false,

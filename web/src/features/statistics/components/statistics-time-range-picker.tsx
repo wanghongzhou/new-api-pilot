@@ -14,6 +14,7 @@ import { SelectControl as Select } from '@/components/ui/select-control'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { BEIJING_TIMEZONE, dayjs, fromUnixSeconds } from '@/lib/dayjs'
 
+import { formatStatisticsRangeLabel } from '../presentation'
 import { defaultStatisticsRange } from '../search'
 import type { StatisticsGranularity, StatisticsSearch } from '../types'
 
@@ -89,7 +90,7 @@ export function StatisticsTimeRangePicker({
   const [rangeError, setRangeError] = useState(false)
   const label = useMemo(
     () =>
-      `${inputValue(search.start, search.granularity)} ~ ${inputValue(search.end, search.granularity)}`,
+      formatStatisticsRangeLabel(search.start, search.end, search.granularity),
     [search.end, search.granularity, search.start]
   )
 

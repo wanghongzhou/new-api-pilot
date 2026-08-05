@@ -249,7 +249,7 @@ test('A98 keeps subscription plan catalog exact, private, bounded and responsive
     '9007199254740997',
   ])
   expect(listRead?.searchParams.getAll('states')).toEqual(['missing'])
-  expect(statisticsRead?.search).toBe('?p=1&page_size=20')
+  expect(statisticsRead?.search).toBe('')
   await expect(
     page.getByText('USD 19.990000').filter({ visible: true }).first()
   ).toBeVisible()
@@ -261,6 +261,9 @@ test('A98 keeps subscription plan catalog exact, private, bounded and responsive
   ).toBeVisible()
   await expect(
     page.getByText('无限额度').filter({ visible: true }).first()
+  ).toBeVisible()
+  await expect(
+    page.getByText('连续缺失：1 次').filter({ visible: true }).first()
   ).toBeVisible()
   await expect(
     page
@@ -287,6 +290,17 @@ test('A98 keeps subscription plan catalog exact, private, bounded and responsive
   await expect(
     page.getByText(/不代表订单、收入或用户已经购买的订阅/)
   ).toBeVisible()
+  if (testInfo.project.name === 'chromium-mobile') {
+    await expect(
+      page.getByText('创建时间').filter({ visible: true }).first()
+    ).toBeVisible()
+    await expect(
+      page.getByText('更新时间').filter({ visible: true }).first()
+    ).toBeVisible()
+    await expect(
+      page.getByText('排序：10').filter({ visible: true }).first()
+    ).toBeVisible()
+  }
 
   await page.getByRole('button', { name: '导出 XLSX' }).click()
   await expect

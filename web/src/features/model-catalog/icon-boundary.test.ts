@@ -6,7 +6,7 @@ const pagePath = new URL('./components/model-catalog-page.tsx', import.meta.url)
 describe('model catalog icon boundary', () => {
   test('renders icon only as text and contains no external resource primitive', async () => {
     const source = await readFile(pagePath, 'utf8')
-    expect(source).toContain('{row.original.icon ||')
+    expect(source).toContain('value={row.original.icon}')
     expect(source).toContain('{item.icon ||')
     expect(source).not.toContain('<img')
     expect(source).not.toContain('<source')

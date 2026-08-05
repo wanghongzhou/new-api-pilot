@@ -1,5 +1,10 @@
 package dto
 
+import (
+	"strings"
+	"unicode/utf8"
+)
+
 type UpstreamPricingItem struct {
 	ModelName, VendorName, Description, Icon, Tags, OwnerBy, ModelRatio, ModelPrice, CompletionRatio string
 	BillingMode, BillingExpr, PricingSource                                                          string
@@ -55,6 +60,9 @@ type PricingCatalogQuery struct {
 func (q *PricingCatalogQuery) Normalize() {
 	q.SiteIDs = uniquePositiveIDs(q.SiteIDs)
 	q.States = normalizeEnumList(q.States)
+	q.Keyword = strings.TrimSpace(q.Keyword)
+	q.Group = strings.TrimSpace(q.Group)
+	q.BillingMode = strings.TrimSpace(q.BillingMode)
 }
 
 func (q PricingCatalogQuery) Validate() map[string]string {
@@ -70,8 +78,11 @@ func (q PricingCatalogQuery) Validate() map[string]string {
 			e["states"] = "invalid"
 		}
 	}
-	if len(q.Keyword) > 255 || len(q.Group) > 128 {
-		e["keyword"] = "invalid"
+	if !utf8.ValidString(q.Keyword) || len(q.Keyword) > 255 {
+		e["keyword"] = "must be valid UTF-8 and at most 255 bytes"
+	}
+	if !utf8.ValidString(q.Group) || len(q.Group) > 128 {
+		e["group"] = "must be valid UTF-8 and at most 128 bytes"
 	}
 	if q.BillingMode != "" && q.BillingMode != "token" && q.BillingMode != "fixed" && q.BillingMode != "tiered_expr" {
 		e["billing_mode"] = "invalid"

@@ -14,6 +14,12 @@ function GlobalChannelInventoryRoute() {
   const navigate = Route.useNavigate()
   return (
     <ChannelInventoryPage
+      onPageReplace={(page) =>
+        void navigate({
+          replace: true,
+          search: (current) => ({ ...current, page }),
+        })
+      }
       onSearchChange={(changes) =>
         void navigate({ search: (current) => ({ ...current, ...changes }) })
       }

@@ -42,7 +42,9 @@ func TestChannelInventorySnapshotStatisticsAndPrivacyAcceptance(t *testing.T) {
 		t.Fatalf("filtered channel trend=%#v err=%v", filtered, err)
 	}
 	missingFilter, err := svc.Statistics(context.Background(), dto.ChannelInventoryStatisticsQuery{StartTimestamp: hour, EndTimestamp: hour + 3600, SiteIDs: []int64{site.ID}, Groups: []string{"absent"}})
-	if err != nil || len(missingFilter.Trend) != 0 {
+	if err != nil || len(missingFilter.Trend) != 1 || missingFilter.Trend[0].DataStatus != "complete" ||
+		missingFilter.Trend[0].ChannelCount != "0" || missingFilter.Trend[0].AvailableCount != "0" ||
+		len(missingFilter.SiteBreakdown) != 1 || missingFilter.SiteBreakdown[0].ChannelCount != "0" {
 		t.Fatalf("absent filtered channel trend=%#v err=%v", missingFilter, err)
 	}
 	legacy := model.SiteChannelInventoryHourly{SiteID: site.ID, RemoteType: -1, RemoteStatus: -1, HourTS: hour - 3600, ChannelCount: 2, AvailableCount: 1, UnavailableCount: 1, BalanceTotal: "12.4456789012", ResponseTimeAvgMS: "500", ResponseTimeMaxMS: 900, AvailabilityRate: "0.5", DataStatus: "complete", ConfigVersion: site.ConfigVersion, CollectedAt: now - 3600}
@@ -50,7 +52,9 @@ func TestChannelInventorySnapshotStatisticsAndPrivacyAcceptance(t *testing.T) {
 		t.Fatal(err)
 	}
 	legacyFiltered, err := svc.Statistics(context.Background(), dto.ChannelInventoryStatisticsQuery{StartTimestamp: hour - 3600, EndTimestamp: hour + 3600, SiteIDs: []int64{site.ID}, Types: []int{1}})
-	if err != nil || legacyFiltered.DataStatus != "partial" || len(legacyFiltered.Trend) != 1 || legacyFiltered.Trend[0].BucketStart != hour {
+	if err != nil || legacyFiltered.DataStatus != "partial" || len(legacyFiltered.Trend) != 2 ||
+		legacyFiltered.Trend[0].BucketStart != hour-3600 || legacyFiltered.Trend[0].DataStatus != "missing" ||
+		legacyFiltered.Trend[1].BucketStart != hour || legacyFiltered.Trend[1].DataStatus != "complete" {
 		t.Fatalf("legacy filtered channel trend=%#v err=%v", legacyFiltered, err)
 	}
 	var columns []struct {

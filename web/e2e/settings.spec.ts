@@ -183,6 +183,8 @@ function settingsFixture(
     settingItem('collector.probe_interval_seconds', 60),
     settingItem('collector.realtime_interval_seconds', 60),
     settingItem('collector.resource_interval_seconds', 60),
+    settingItem('collector.operational_interval_seconds', 300),
+    settingItem('collector.catalog_interval_seconds', 600),
     settingItem('collector.usage_delay_minutes', 12),
     settingItem('collector.minute_retention_days', options.retentionDays ?? 37),
     settingItem('logs.retention_days', 90),
@@ -444,11 +446,11 @@ test('renders the complete settings surface for admin without overflow or axe vi
   ).toBeVisible()
   await categoryTabs.getByRole('tab', { name: '费率兜底' }).click()
   await expect(page.getByRole('heading', { name: '费率兜底' })).toBeVisible()
-  await expect(page.getByLabel('兜底额度单价基数（quota）')).toHaveAttribute(
+  await expect(page.getByLabel('兜底额度单价基数')).toHaveAttribute(
     'type',
     'text'
   )
-  await expect(page.getByLabel('兜底额度单价基数（quota）')).toHaveAttribute(
+  await expect(page.getByLabel('兜底额度单价基数')).toHaveAttribute(
     'inputmode',
     'decimal'
   )
@@ -494,6 +496,17 @@ test('keeps Viewer settings read-only while retaining both settings navigation e
     page.getByRole('heading', { level: 1, name: '系统设置' })
   ).toBeVisible()
   await expect(page.locator('#settings-form input')).toHaveCount(0)
+  const readonlyProbe = page.locator(
+    '[data-setting-key="collector.probe_interval_seconds"] output'
+  )
+  await expect(readonlyProbe).toHaveAttribute(
+    'aria-labelledby',
+    'setting-label-collector.probe_interval_seconds'
+  )
+  await expect(readonlyProbe).toHaveAttribute(
+    'aria-describedby',
+    'setting-description-collector.probe_interval_seconds'
+  )
   await expect(
     page.getByRole('button', { name: '保存', exact: true })
   ).toHaveCount(0)
@@ -549,6 +562,90 @@ test('stacks setting descriptions above controls at medium viewport widths', asy
   )
   expect(inputBox.width).toBeLessThanOrEqual(512)
   await assertNoHorizontalOverflow(page)
+})
+
+test('places setting descriptions beside controls on wide screens', async ({
+  page,
+}) => {
+  await page.setViewportSize({ height: 900, width: 1440 })
+  await seedAuth(page, admin)
+  await mockSelf(page, admin)
+  await mockSettings(page, admin)
+  await page.goto('/settings/system?section=export')
+
+  const row = page.locator('[data-setting-key="export.max_file_bytes"]')
+  const descriptionBox = await row.locator('p').boundingBox()
+  const inputBox = await row.locator('input').boundingBox()
+  expect(descriptionBox).not.toBeNull()
+  expect(inputBox).not.toBeNull()
+  if (!descriptionBox || !inputBox) throw new Error('Expected wide setting row')
+  expect(inputBox.x).toBeGreaterThan(descriptionBox.x + descriptionBox.width)
+})
+
+test('reveals the first invalid hidden section and confirms global reset', async ({
+  page,
+}) => {
+  await seedAuth(page, admin)
+  await mockSelf(page, admin)
+  await mockSettings(page, admin)
+  await page.goto('/settings/system')
+
+  const probeInterval = page.locator(
+    '[data-setting-key="collector.probe_interval_seconds"] input'
+  )
+  await probeInterval.fill('0')
+  await page.getByRole('tab').nth(2).click()
+  await expect(page).toHaveURL(/section=export/)
+  await expect(
+    page.getByLabel('此分类有未保存的修改', { exact: true })
+  ).toHaveCount(1)
+
+  await page.getByRole('button', { name: '保存', exact: true }).click()
+  await expect(page).toHaveURL(/\/settings\/system$/)
+  await expect(
+    page.getByText(
+      '部分设置未能保存。已定位到第一个需要处理的字段，请修正后重试。'
+    )
+  ).toBeVisible()
+  await expect(probeInterval).toBeFocused()
+
+  await page.getByRole('button', { name: '撤销未保存的修改' }).click()
+  const resetDialog = page.getByRole('alertdialog', {
+    name: '撤销全部未保存的修改？',
+  })
+  await expect(resetDialog).toBeVisible()
+  await resetDialog.getByRole('button', { name: '放弃更改' }).click()
+  await expect(probeInterval).toHaveValue('1')
+  await expect(page.getByLabel('此分类有未保存的修改')).toHaveCount(0)
+})
+
+test('blocks in-app navigation while settings have unsaved changes', async ({
+  page,
+}) => {
+  await seedAuth(page, admin)
+  await mockSelf(page, admin)
+  await mockSettings(page, admin)
+  await page.goto('/settings/system')
+  await page
+    .locator('[data-setting-key="collector.probe_interval_seconds"] input')
+    .fill('2')
+
+  const platformUsersLink = page
+    .getByRole('link', { name: '平台用户' })
+    .filter({ visible: true })
+  if ((await platformUsersLink.count()) === 0) {
+    await page.getByRole('button', { name: '打开导航' }).click()
+  }
+  await page
+    .getByRole('link', { name: '平台用户' })
+    .filter({ visible: true })
+    .click()
+  const discardDialog = page.getByRole('alertdialog', {
+    name: '放弃未保存的更改？',
+  })
+  await expect(discardDialog).toBeVisible()
+  await discardDialog.getByRole('button', { name: '取消' }).click()
+  await expect(page).toHaveURL(/\/settings\/system$/)
 })
 
 test('submits only changed settings and renders success, retry, and failed notification MessageRefs', async ({
@@ -663,6 +760,10 @@ test('keeps the edited batch after an atomic field error and reset restores the 
     { items: [{ key: 'collector.usage_delay_minutes', value: 7 }] },
   ])
   await page.getByRole('button', { name: '撤销未保存的修改' }).click()
+  await page
+    .getByRole('alertdialog', { name: '撤销全部未保存的修改？' })
+    .getByRole('button', { name: '放弃更改' })
+    .click()
   await expect(delay).toHaveValue('12')
 })
 

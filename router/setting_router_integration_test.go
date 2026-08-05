@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"new-api-pilot/config"
 	"new-api-pilot/constant"
 	"new-api-pilot/controller"
+	"new-api-pilot/dto"
 	"new-api-pilot/model"
 	"new-api-pilot/service"
 	testsupport "new-api-pilot/tests/support"
@@ -58,6 +60,35 @@ func TestSettingRoutesEnforceViewerReadAdminWriteWithoutSecretLeakage(t *testing
 		if strings.Contains(read.Body.String(), forbidden) {
 			t.Fatalf("viewer setting response leaked %q: %s", forbidden, read.Body.String())
 		}
+	}
+	var groups []dto.SettingGroup
+	if err := json.Unmarshal(readEnvelope.Data, &groups); err != nil {
+		t.Fatalf("decode setting groups: %v", err)
+	}
+	fullItems := make([]map[string]any, 0, 39)
+	for _, group := range groups {
+		for _, item := range group.Items {
+			if item.ReadOnly {
+				continue
+			}
+			patch := map[string]any{"key": item.Key}
+			if !item.Secret {
+				patch["value"] = item.Value
+			}
+			fullItems = append(fullItems, patch)
+		}
+	}
+	if len(fullItems) != 39 {
+		t.Fatalf("editable setting count = %d, want 39", len(fullItems))
+	}
+	fullBody, err := json.Marshal(map[string]any{"items": fullItems})
+	if err != nil {
+		t.Fatalf("marshal full setting patch: %v", err)
+	}
+	fullWrite := performSiteRequest(admin, http.MethodPut, "/api/settings", string(fullBody))
+	fullEnvelope := decodeSiteEnvelope(t, fullWrite)
+	if fullWrite.Code != http.StatusOK || !fullEnvelope.Success {
+		t.Fatalf("39-item admin setting write = %d %#v body=%s", fullWrite.Code, fullEnvelope, fullWrite.Body.String())
 	}
 
 	viewerWrite := performSiteRequest(viewer, http.MethodPut, "/api/settings",

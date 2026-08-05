@@ -616,6 +616,22 @@ const settingKeyToFormName = Object.fromEntries(
   editableDefinitions.map((definition) => [definition.key, definition.formName])
 ) as Partial<Record<PlatformSettingKey, FieldPath<SettingsFormValues>>>
 
+const settingFormNameToSection = Object.fromEntries(
+  editableDefinitions.map((definition) => [
+    definition.formName,
+    definition.section,
+  ])
+) as Partial<Record<FieldPath<SettingsFormValues>, SettingsSectionKey>>
+
+settingFormNameToSection.dingTalkWebhookAction = 'notification'
+settingFormNameToSection.dingTalkSecretAction = 'notification'
+
+export function settingSectionForField(
+  field: FieldPath<SettingsFormValues>
+): SettingsSectionKey | undefined {
+  return settingFormNameToSection[field]
+}
+
 function secretPatch(
   key: 'notification.dingtalk.secret' | 'notification.dingtalk.webhook',
   action: SettingsFormValues['dingTalkSecretAction' | 'dingTalkWebhookAction'],

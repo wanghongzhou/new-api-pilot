@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"gorm.io/gorm"
 	"new-api-pilot/dto"
@@ -57,40 +58,47 @@ func GeneratePerformanceHistoryExport(ctx context.Context, o PerformanceHistoryE
 	if err = w.WriteHeader(performanceHistoryExportColumns); err != nil {
 		return ExportGenerateResult{}, err
 	}
-	repo := model.NewPerformanceHistoryRepository(o.Database)
 	var count int64
-	for page := 1; ; page++ {
-		q := o.Query
-		q.Page, q.PageSize = page, 100
-		rows, total, e := repo.List(ctx, q)
-		if e != nil {
-			return ExportGenerateResult{}, e
-		}
-		for _, r := range rows {
-			v := func(p *int64) string {
-				if p == nil {
-					return ""
+	err = o.Database.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		repo := model.NewPerformanceHistoryRepository(tx)
+		for page := 1; ; page++ {
+			q := o.Query
+			q.Page, q.PageSize = page, 100
+			q.SnapshotAt = o.DataSnapshotAt
+			rows, total, e := repo.List(ctx, q)
+			if e != nil {
+				return e
+			}
+			for _, r := range rows {
+				v := func(p *int64) string {
+					if p == nil {
+						return ""
+					}
+					return strconv.FormatInt(*p, 10)
 				}
-				return strconv.FormatInt(*p, 10)
+				values := []string{strconv.FormatInt(r.SiteID, 10), r.SiteName, r.ModelName, r.RemoteGroup, strconv.FormatInt(r.BucketTS, 10), r.SeriesSchema, r.MetricSource, r.AvgTTFTMS, r.AvgLatencyMS, r.SuccessRate, r.AvgTPS, v(r.RequestCount), v(r.SuccessCount), v(r.TotalLatencyMS), v(r.TTFTSumMS), v(r.TTFTCount), v(r.OutputTokens), v(r.GenerationMS), strconv.FormatInt(r.CollectedAt, 10), strconv.FormatInt(o.DataSnapshotAt, 10), strconv.FormatInt(o.ExportedAt, 10)}
+				if e = w.WriteRow(values); e != nil {
+					return e
+				}
+				count++
 			}
-			values := []string{strconv.FormatInt(r.SiteID, 10), r.SiteName, r.ModelName, r.RemoteGroup, strconv.FormatInt(r.BucketTS, 10), r.SeriesSchema, r.MetricSource, r.AvgTTFTMS, r.AvgLatencyMS, r.SuccessRate, r.AvgTPS, v(r.RequestCount), v(r.SuccessCount), v(r.TotalLatencyMS), v(r.TTFTSumMS), v(r.TTFTCount), v(r.OutputTokens), v(r.GenerationMS), strconv.FormatInt(r.CollectedAt, 10), strconv.FormatInt(o.DataSnapshotAt, 10), strconv.FormatInt(o.ExportedAt, 10)}
-			if e = w.WriteRow(values); e != nil {
-				return ExportGenerateResult{}, e
+			if o.OnPage != nil {
+				if e = o.OnPage(ctx, page, count); e != nil {
+					return e
+				}
 			}
-			count++
-		}
-		if o.OnPage != nil {
-			if e = o.OnPage(ctx, page, count); e != nil {
-				return ExportGenerateResult{}, e
+			done, pageErr := performanceHistoryExportPageDone(count, total, len(rows))
+			if pageErr != nil {
+				return pageErr
+			}
+			if done {
+				break
 			}
 		}
-		done, pageErr := performanceHistoryExportPageDone(count, total, len(rows))
-		if pageErr != nil {
-			return ExportGenerateResult{}, pageErr
-		}
-		if done {
-			break
-		}
+		return nil
+	}, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+	if err != nil {
+		return ExportGenerateResult{}, err
 	}
 	if err = w.Close(); err != nil {
 		return ExportGenerateResult{}, err

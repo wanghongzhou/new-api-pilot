@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -43,8 +44,13 @@ func TestUserInventoryControllerParsesGlobalAndSiteQueriesStrictly(t *testing.T)
 
 	site := httptest.NewRecorder()
 	engine.ServeHTTP(site, httptest.NewRequest(http.MethodGet, "/sites/9/inventory?site_ids=3&p=1&page_size=20", nil))
-	if site.Code != http.StatusOK || len(application.listQuery.SiteIDs) != 1 || application.listQuery.SiteIDs[0] != 9 {
+	if site.Code != http.StatusBadRequest {
 		t.Fatalf("site inventory = %d %#v %s", site.Code, application.listQuery, site.Body.String())
+	}
+	site = httptest.NewRecorder()
+	engine.ServeHTTP(site, httptest.NewRequest(http.MethodGet, "/sites/9/inventory?p=1&page_size=20", nil))
+	if site.Code != http.StatusOK || len(application.listQuery.SiteIDs) != 1 || application.listQuery.SiteIDs[0] != 9 {
+		t.Fatalf("valid site inventory = %d %#v %s", site.Code, application.listQuery, site.Body.String())
 	}
 
 	stats := httptest.NewRecorder()
@@ -60,12 +66,21 @@ func TestUserInventoryControllerParsesGlobalAndSiteQueriesStrictly(t *testing.T)
 		"/inventory?remote_user_id=01&p=1&page_size=20",
 		"/inventory?states=unknown&p=1&page_size=20",
 		"/inventory?min_balance=01&p=1&page_size=20",
+		"/inventory?unknown=value&p=1&page_size=20",
+		"/inventory?p=1&p=2&page_size=20",
 		"/inventory/statistics?start_timestamp=3601&end_timestamp=7200",
+		"/inventory/statistics?start_timestamp=3600&start_timestamp=7200&end_timestamp=10800",
 	} {
 		recorder := httptest.NewRecorder()
 		engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, target, nil))
 		if recorder.Code != http.StatusBadRequest {
 			t.Fatalf("invalid inventory query %s = %d %s", target, recorder.Code, recorder.Body.String())
 		}
+	}
+	body := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/inventory?p=1&page_size=20", strings.NewReader(`{}`))
+	engine.ServeHTTP(body, request)
+	if body.Code != http.StatusBadRequest {
+		t.Fatalf("non-empty inventory body = %d %s", body.Code, body.Body.String())
 	}
 }

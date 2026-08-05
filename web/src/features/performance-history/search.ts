@@ -11,7 +11,7 @@ export interface PerformanceHistorySearch {
   start: number
   end: number
   exportId?: IdString
-  view: 'list' | 'sites' | 'trend'
+  view: 'groups' | 'list' | 'models' | 'sites' | 'trend'
 }
 
 type SearchInput = Omit<
@@ -78,7 +78,13 @@ export function buildPerformanceHistorySearch(
       .map(parseIdString)
       .sort((left, right) => left.localeCompare(right)),
     start: validRange ? requestedStart : defaults.start,
-    view: raw.view === 'trend' || raw.view === 'sites' ? raw.view : 'list',
+    view:
+      raw.view === 'trend' ||
+      raw.view === 'sites' ||
+      raw.view === 'models' ||
+      raw.view === 'groups'
+        ? raw.view
+        : 'list',
   }
 }
 

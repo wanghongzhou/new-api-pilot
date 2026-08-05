@@ -21,8 +21,8 @@ type PlatformUser struct {
 	MustChangePassword bool   `gorm:"column:must_change_password"`
 	SessionVersion     int    `gorm:"column:session_version"`
 	LastLoginAt        *int64 `gorm:"column:last_login_at"`
-	CreatedAt          int64  `gorm:"column:created_at"`
-	UpdatedAt          int64  `gorm:"column:updated_at"`
+	CreatedAt          int64  `gorm:"column:created_at;autoCreateTime:false"`
+	UpdatedAt          int64  `gorm:"column:updated_at;autoUpdateTime:false"`
 }
 
 func (PlatformUser) TableName() string {
@@ -85,10 +85,10 @@ func (repository *PlatformUserRepository) Save(ctx context.Context, user *Platfo
 	return repository.db.WithContext(ctx).Save(user).Error
 }
 
-func (repository *PlatformUserRepository) UpdateLastLogin(ctx context.Context, id, timestamp int64) error {
+func (repository *PlatformUserRepository) UpdateLastLogin(ctx context.Context, id, lastLoginAt, updatedAt int64) error {
 	return repository.db.WithContext(ctx).Model(&PlatformUser{}).Where("id = ?", id).Updates(map[string]any{
-		"last_login_at": timestamp,
-		"updated_at":    timestamp,
+		"last_login_at": lastLoginAt,
+		"updated_at":    updatedAt,
 	}).Error
 }
 

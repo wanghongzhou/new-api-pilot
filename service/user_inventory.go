@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"strconv"
 
@@ -12,14 +13,14 @@ import (
 )
 
 type UserInventoryService struct {
-	repository *model.SiteUserInventoryRepository
+	db *gorm.DB
 }
 
 func NewUserInventoryService(db *gorm.DB) (*UserInventoryService, error) {
 	if db == nil {
 		return nil, errors.New("user inventory database is required")
 	}
-	return &UserInventoryService{repository: model.NewSiteUserInventoryRepository(db)}, nil
+	return &UserInventoryService{db: db}, nil
 }
 
 func (service *UserInventoryService) List(ctx context.Context, query dto.UserInventoryQuery) (dto.UserInventoryPage, error) {
@@ -27,7 +28,19 @@ func (service *UserInventoryService) List(ctx context.Context, query dto.UserInv
 	if service == nil || query.Validate() != nil {
 		return dto.UserInventoryPage{}, ErrStatisticsInvalid
 	}
-	rows, total, err := service.repository.List(ctx, query)
+	var rows []model.SiteUserInventoryReadRow
+	var completeness []model.SiteUserInventoryCompletenessRow
+	var total int64
+	err := service.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		repository := model.NewSiteUserInventoryRepository(tx)
+		var err error
+		rows, total, err = repository.List(ctx, query)
+		if err != nil {
+			return err
+		}
+		completeness, err = repository.Completeness(ctx, query.SiteIDs)
+		return err
+	}, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if err != nil {
 		return dto.UserInventoryPage{}, err
 	}
@@ -45,10 +58,6 @@ func (service *UserInventoryService) List(ctx context.Context, query dto.UserInv
 			LastLoginAt: row.LastLoginAt, RemoteState: row.RemoteState, MissingCount: row.MissingCount, FirstSeenAt: row.FirstSeenAt,
 			LastSeenAt: row.LastSeenAt, AccountID: accountID})
 	}
-	completeness, err := service.repository.Completeness(ctx, query.SiteIDs)
-	if err != nil {
-		return dto.UserInventoryPage{}, err
-	}
 	status := inventoryOverallStatus(completeness)
 	return dto.UserInventoryPage{Items: items, Total: total, Page: query.Page, PageSize: query.PageSize, DataStatus: status}, nil
 }
@@ -58,35 +67,36 @@ func (service *UserInventoryService) Statistics(ctx context.Context, query dto.U
 	if service == nil || query.Validate() != nil {
 		return dto.UserInventoryStatisticsResponse{}, ErrStatisticsInvalid
 	}
-	summaryRows, err := service.repository.CurrentMetrics(ctx, query, "summary")
-	if err != nil {
-		return dto.UserInventoryStatisticsResponse{}, err
-	}
-	roleRows, err := service.repository.CurrentMetrics(ctx, query, "role")
-	if err != nil {
-		return dto.UserInventoryStatisticsResponse{}, err
-	}
-	statusRows, err := service.repository.CurrentMetrics(ctx, query, "status")
-	if err != nil {
-		return dto.UserInventoryStatisticsResponse{}, err
-	}
-	groupRows, err := service.repository.CurrentMetrics(ctx, query, "group")
-	if err != nil {
-		return dto.UserInventoryStatisticsResponse{}, err
-	}
-	siteRows, err := service.repository.CurrentMetrics(ctx, query, "site")
-	if err != nil {
-		return dto.UserInventoryStatisticsResponse{}, err
-	}
-	trendRows, err := service.repository.Trend(ctx, query)
-	if err != nil {
-		return dto.UserInventoryStatisticsResponse{}, err
-	}
-	completeness, err := service.repository.Completeness(ctx, query.SiteIDs)
-	if err != nil {
-		return dto.UserInventoryStatisticsResponse{}, err
-	}
-	coverage, err := service.repository.TrendCoverage(ctx, query)
+	var summaryRows, roleRows, statusRows, groupRows, siteRows, trendRows []model.SiteUserInventoryMetricRow
+	var completeness []model.SiteUserInventoryCompletenessRow
+	var coverage []model.SiteUserInventoryCoverageRow
+	err := service.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		repository := model.NewSiteUserInventoryRepository(tx)
+		var err error
+		if summaryRows, err = repository.CurrentMetrics(ctx, query, "summary"); err != nil {
+			return err
+		}
+		if roleRows, err = repository.CurrentMetrics(ctx, query, "role"); err != nil {
+			return err
+		}
+		if statusRows, err = repository.CurrentMetrics(ctx, query, "status"); err != nil {
+			return err
+		}
+		if groupRows, err = repository.CurrentMetrics(ctx, query, "group"); err != nil {
+			return err
+		}
+		if siteRows, err = repository.CurrentMetrics(ctx, query, "site"); err != nil {
+			return err
+		}
+		if trendRows, err = repository.Trend(ctx, query); err != nil {
+			return err
+		}
+		if completeness, err = repository.Completeness(ctx, query.SiteIDs); err != nil {
+			return err
+		}
+		coverage, err = repository.TrendCoverage(ctx, query)
+		return err
+	}, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if err != nil {
 		return dto.UserInventoryStatisticsResponse{}, err
 	}

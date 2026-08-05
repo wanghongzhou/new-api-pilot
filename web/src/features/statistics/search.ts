@@ -6,7 +6,11 @@ import {
   isBeijingBucketAligned,
 } from '@/lib/dayjs'
 
-import type { StatisticsGranularity, StatisticsSearch } from './types'
+import type {
+  StatisticsGranularity,
+  StatisticsScope,
+  StatisticsSearch,
+} from './types'
 
 type StatisticsSearchInput = Omit<
   Partial<StatisticsSearch>,
@@ -118,4 +122,23 @@ export function buildStatisticsSearch(
         ? raw.exportId
         : undefined,
   }
+}
+
+export function buildScopeStatisticsSearch(
+  search: StatisticsSearch,
+  scope: StatisticsScope
+): StatisticsSearch {
+  return buildStatisticsSearch({
+    ...search,
+    accountIds: scope === 'account' ? search.accountIds : [],
+    channelKeys: scope === 'channel' ? search.channelKeys : [],
+    customerIds:
+      scope === 'customer' || scope === 'account' ? search.customerIds : [],
+    exportId: undefined,
+    models: scope === 'model' ? search.models : [],
+    nodeNames: scope === 'node' ? search.nodeNames : [],
+    page: 1,
+    tokenKeys: scope === 'token' ? search.tokenKeys : [],
+    useGroups: scope === 'group' ? search.useGroups : [],
+  })
 }

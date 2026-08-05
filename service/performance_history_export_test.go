@@ -13,17 +13,25 @@ import (
 func TestGeneratePerformanceHistoryExportAverageAndCounters(t *testing.T) {
 	db := openUpstreamLogExportDatabase(t)
 	now := int64(2100900000)
+	start := (now / 3600) * 3600
 	site := model.Site{Name: "Performance Export", BaseURL: "https://performance-export-" + time.Now().Format("150405.000000000") + ".example", ConfigVersion: 1, ManagementStatus: constant.SiteManagementActive, OnlineStatus: constant.SiteOnlineOnline, AuthStatus: constant.SiteAuthAuthorized, StatisticsStatus: constant.SiteStatisticsReady, HealthStatus: constant.SiteHealthOK, DataExportEnabled: true, CreatedAt: now, UpdatedAt: now}
 	if err := db.GORM.Create(&site).Error; err != nil {
 		t.Fatal(err)
 	}
-	row := model.SitePerformanceMetricBucket{SiteID: site.ID, ModelName: "=gpt", RemoteGroup: "default", BucketTS: now - 60, SeriesSchema: "ts,avg", MetricSource: model.PerformanceMetricSourceOfficialAverage, AvgTTFTMS: "10.5", AvgLatencyMS: "20.25", SuccessRate: "0.9", AvgTPS: "30.125", ConfigVersion: 1, CollectedAt: now, CreatedAt: now, UpdatedAt: now}
+	row := model.SitePerformanceMetricBucket{SiteID: site.ID, ModelName: "=gpt", RemoteGroup: "default", BucketTS: start, SeriesSchema: "ts,avg", MetricSource: model.PerformanceMetricSourceOfficialAverage, AvgTTFTMS: "10.5", AvgLatencyMS: "20.25", SuccessRate: "0.9", AvgTPS: "30.125", ConfigVersion: 1, CollectedAt: now, CreatedAt: now, UpdatedAt: now}
 	if err := db.GORM.Create(&row).Error; err != nil {
+		t.Fatal(err)
+	}
+	future := row
+	future.ID = 0
+	future.ModelName = "future"
+	future.CollectedAt, future.CreatedAt, future.UpdatedAt = now+1, now+1, now+1
+	if err := db.GORM.Create(&future).Error; err != nil {
 		t.Fatal(err)
 	}
 	for _, format := range []string{dto.ExportFormatCSV, dto.ExportFormatXLSX} {
 		path := filepath.Join(t.TempDir(), "performance."+format)
-		result, err := GeneratePerformanceHistoryExport(context.Background(), PerformanceHistoryExportOptions{Database: db.GORM, Query: dto.PerformanceHistoryQuery{Page: 1, PageSize: 100, StartTimestamp: now - 3600, EndTimestamp: now + 1, SiteIDs: []int64{site.ID}}, Format: format, TemporaryPath: path, DataSnapshotAt: now, ExportedAt: now, MaxFileBytes: 1 << 20, MinFreeBytes: 1, DiskFree: func(string) (uint64, error) { return 1 << 30, nil }})
+		result, err := GeneratePerformanceHistoryExport(context.Background(), PerformanceHistoryExportOptions{Database: db.GORM, Query: dto.PerformanceHistoryQuery{Page: 1, PageSize: 100, StartTimestamp: start, EndTimestamp: start + 3600, SiteIDs: []int64{site.ID}}, Format: format, TemporaryPath: path, DataSnapshotAt: now, ExportedAt: now, MaxFileBytes: 1 << 20, MinFreeBytes: 1, DiskFree: func(string) (uint64, error) { return 1 << 30, nil }})
 		if err != nil || result.RowCount != 1 {
 			t.Fatalf("%s export=%+v err=%v", format, result, err)
 		}

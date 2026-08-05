@@ -16,6 +16,7 @@ import { DataStatusBadge } from '@/components/data/data-status'
 import { FacetedFilter } from '@/components/data/faceted-filter'
 import { FilterPanel } from '@/components/data/filter-panel'
 import { MetricValue } from '@/components/data/metric-value'
+import { QueryStateAlert } from '@/components/data/query-state-alert'
 import { ErrorState } from '@/components/error-state'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
@@ -795,6 +796,10 @@ export function FinancialOperationsPage({
   const redemptionData =
     search.tab === 'redemptions' ? redemptionListQuery.data : undefined
   const currentPage = topupData ?? redemptionData
+  const completeness =
+    search.view === 'list'
+      ? currentPage?.completeness
+      : statistics?.completeness
   const purpose = purposeText(search, t)
 
   return (
@@ -879,10 +884,30 @@ export function FinancialOperationsPage({
           badges={
             <>
               {statistics && (
-                <DataStatusBadge status={statistics.data_status} />
+                <span className='inline-flex items-center gap-1.5 text-xs'>
+                  <span className='text-muted-foreground'>
+                    {t('financialOperations.statisticsStatus')}
+                  </span>
+                  <DataStatusBadge status={statistics.data_status} />
+                </span>
               )}
               {search.view === 'list' && currentPage && (
-                <DataStatusBadge status={currentPage.data_status} />
+                <span className='inline-flex items-center gap-1.5 text-xs'>
+                  <span className='text-muted-foreground'>
+                    {t('financialOperations.listStatus')}
+                  </span>
+                  <DataStatusBadge status={currentPage.data_status} />
+                </span>
+              )}
+              {completeness && (
+                <Badge variant='outline'>
+                  {t('financialOperations.completeness', {
+                    complete: completeness.complete_site_count,
+                    expected: completeness.expected_site_count,
+                    pending: completeness.pending_site_count,
+                    unavailable: completeness.unavailable_site_count,
+                  })}
+                </Badge>
               )}
             </>
           }
@@ -901,6 +926,24 @@ export function FinancialOperationsPage({
           search={search}
           sites={sitesQuery.data?.items ?? []}
         />
+        {!siteId && sitesQuery.isError && (
+          <QueryStateAlert
+            message={t('operationsAnalytics.siteOptionsError')}
+            onRetry={() => void sitesQuery.refetch()}
+          />
+        )}
+        {search.view === 'list' && activeListQuery.isError && currentPage && (
+          <QueryStateAlert
+            message={t('operationsAnalytics.staleListData')}
+            onRetry={() => void activeListQuery.refetch()}
+          />
+        )}
+        {statisticsQuery.isError && statistics && (
+          <QueryStateAlert
+            message={t('operationsAnalytics.staleStatisticsData')}
+            onRetry={() => void statisticsQuery.refetch()}
+          />
+        )}
         {search.view === 'list' &&
           (search.tab === 'topups' ? (
             <TopupTable

@@ -153,6 +153,7 @@ func (service *SettingService) Update(
 	}
 	var groups []dto.SettingGroup
 	var nextRuntime RuntimeSettingsSnapshot
+	var nextRuntimeVersion int64
 	var updateRuntime bool
 	err := service.settings.Transaction(ctx, func(repository *model.SettingRepository) error {
 		rows, err := repository.ListForUpdate(ctx, settingKeys())
@@ -209,13 +210,16 @@ func (service *SettingService) Update(
 			indexed[definition.Key] = row
 		}
 		groups = service.settingGroups(indexed)
+		nextRuntimeVersion = runtimeSettingsVersion(indexed)
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
 	if updateRuntime {
-		service.runtime.Store(nextRuntime)
+		if err := service.runtime.StoreVersioned(nextRuntime, nextRuntimeVersion); err != nil {
+			return nil, fmt.Errorf("publish runtime settings: %w", err)
+		}
 	}
 	return groups, nil
 }

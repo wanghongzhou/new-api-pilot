@@ -101,6 +101,10 @@ func TestA01A02A03AuthenticationLifecycleAcceptance(t *testing.T) {
 	if err != nil || loggedIn.ID != admin.ID || !loggedIn.MustChangePassword {
 		t.Fatalf("bootstrap login = %#v, %v", loggedIn, err)
 	}
+	admin, err = repository.FindByID(context.Background(), admin.ID)
+	if err != nil {
+		t.Fatalf("reload admin after login mutation: %v", err)
+	}
 
 	sessions, err := common.NewSessionStore([]byte("0123456789abcdef0123456789abcdef"), false, clock)
 	if err != nil {
@@ -128,7 +132,7 @@ func TestA01A02A03AuthenticationLifecycleAcceptance(t *testing.T) {
 		t.Fatalf("create second admin: %v", err)
 	}
 	if _, err := users.Update(context.Background(), admin.ID, dto.UpdatePlatformUserRequest{
-		Username: admin.Username, DisplayName: admin.DisplayName, Role: constant.RoleViewer,
+		Username: admin.Username, DisplayName: admin.DisplayName, Role: constant.RoleViewer, ExpectedUpdatedAt: admin.UpdatedAt,
 	}); err != nil {
 		t.Fatalf("downgrade original admin after creating replacement: %v", err)
 	}

@@ -33,7 +33,7 @@ func TestPerformanceHistoryStatisticsRejectsOversizedResult(t *testing.T) {
 	e := gin.New()
 	e.GET("/stats", c.GlobalStatistics)
 	r := httptest.NewRecorder()
-	e.ServeHTTP(r, httptest.NewRequest(http.MethodGet, "/stats?start_timestamp=100&end_timestamp=200", nil))
+	e.ServeHTTP(r, httptest.NewRequest(http.MethodGet, "/stats?start_timestamp=3600&end_timestamp=7200", nil))
 	if r.Code != http.StatusRequestEntityTooLarge || !strings.Contains(r.Body.String(), constant.CodePayloadTooLarge) {
 		t.Fatalf("oversized statistics=%d %s", r.Code, r.Body.String())
 	}
@@ -46,11 +46,11 @@ func TestPerformanceHistoryControllerQueries(t *testing.T) {
 	e.GET("/history", c.Global)
 	e.GET("/stats", c.GlobalStatistics)
 	r := httptest.NewRecorder()
-	e.ServeHTTP(r, httptest.NewRequest(http.MethodGet, "/history?start_timestamp=100&end_timestamp=200&site_ids=3&model_names=gpt&groups=vip&p=2&page_size=10", nil))
+	e.ServeHTTP(r, httptest.NewRequest(http.MethodGet, "/history?start_timestamp=3600&end_timestamp=7200&site_ids=3&model_names=gpt&groups=vip&p=2&page_size=10", nil))
 	if r.Code != 200 || a.q.Page != 2 || len(a.q.SiteIDs) != 1 || a.q.ModelNames[0] != "gpt" {
 		t.Fatalf("history query=%#v code=%d body=%s", a.q, r.Code, r.Body.String())
 	}
-	for _, target := range []string{"/history?start_timestamp=200&end_timestamp=100&p=1&page_size=20", "/history?start_timestamp=100&end_timestamp=200&site_ids=bad&p=1&page_size=20"} {
+	for _, target := range []string{"/history?start_timestamp=7200&end_timestamp=3600&p=1&page_size=20", "/history?start_timestamp=3600&end_timestamp=7200&site_ids=bad&p=1&page_size=20", "/history?start_timestamp=3601&end_timestamp=7200&p=1&page_size=20"} {
 		r = httptest.NewRecorder()
 		e.ServeHTTP(r, httptest.NewRequest(http.MethodGet, target, nil))
 		if r.Code != 400 {

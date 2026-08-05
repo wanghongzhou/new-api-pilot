@@ -20,17 +20,17 @@ import { LoadingState } from '@/components/loading-state'
 import { Badge } from '@/components/ui/badge'
 import { DataTable } from '@/components/ui/data-table'
 import { Spinner } from '@/components/ui/spinner'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { OperationsViewPurpose } from '@/features/operations-analytics/components/operations-analytics-workspace'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import { formatBeijingTimestamp } from '@/lib/dayjs'
 import { formatDisplayValue } from '@/lib/display-value'
+import { cn } from '@/lib/utils'
 
 import { createStatisticsExport, getStatistics } from '../api'
 import { buildStatisticsExportRequest } from '../export-request'
 import { statisticsKeys } from '../query-keys'
-import { buildStatisticsSearch } from '../search'
+import { buildScopeStatisticsSearch } from '../search'
 import type {
   AccountStatisticsBreakdown,
   ChannelStatisticsBreakdown,
@@ -53,7 +53,7 @@ import {
   ActiveUsersValue,
   AmountValue,
   MetricTrendChart,
-  SiteBreakdownList,
+  SiteBreakdownDisclosure,
   StatisticsSummary,
   StatisticsToolbar,
   useStatisticsEmptyCopy,
@@ -94,27 +94,38 @@ function queryParams(search: StatisticsSearch): StatisticsQueryParams {
   }
 }
 
-function ScopeNavigation({ scope }: { scope: StatisticsScope }) {
+function ScopeNavigation({
+  scope,
+  search,
+}: {
+  scope: StatisticsScope
+  search: StatisticsSearch
+}) {
   const { t } = useTranslation()
   return (
-    <Tabs value={scope}>
-      <TabsList
-        aria-label={t('statistics.scopeNavigation')}
-        className='max-w-full flex-wrap justify-start group-data-horizontal/tabs:h-auto'
-      >
-        {scopeLinks.map(([value, to]) => (
-          <TabsTrigger
-            className='statistics-scope-link'
+    <nav
+      aria-label={t('statistics.scopeNavigation')}
+      className='bg-muted text-muted-foreground flex w-fit max-w-full flex-wrap items-center justify-start gap-0.5 rounded-lg p-[3px]'
+    >
+      {scopeLinks.map(([value, to]) => {
+        const active = value === scope
+        return (
+          <Link
+            aria-current={active ? 'page' : undefined}
+            className={cn(
+              'text-foreground/60 hover:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 inline-flex min-h-10 items-center justify-center rounded-md border border-transparent px-2 py-1 text-sm font-medium whitespace-nowrap transition-all focus-visible:ring-[3px] focus-visible:outline-1 sm:min-h-7',
+              active &&
+                'bg-background text-foreground shadow-sm dark:border-input dark:bg-input/30'
+            )}
             key={value}
-            nativeButton={false}
-            render={<Link search={buildStatisticsSearch({})} to={to} />}
-            value={value}
+            search={buildScopeStatisticsSearch(search, value)}
+            to={to}
           >
             {t(dynamicI18nKey('statistics', `statistics.scope.${value}`))}
-          </TabsTrigger>
-        ))}
-      </TabsList>
-    </Tabs>
+          </Link>
+        )
+      })}
+    </nav>
   )
 }
 
@@ -347,7 +358,7 @@ function BreakdownMobileCard({
           </dd>
         </dl>
       </div>
-      <SiteBreakdownList sites={item.site_breakdown} />
+      <SiteBreakdownDisclosure sites={item.site_breakdown} />
       <footer className='border-border grid gap-1 border-t pt-3'>
         <span className='text-sm'>
           {t('statistics.rowCompleteness', {
@@ -692,7 +703,7 @@ export function StatisticsPage({
       title={t(dynamicI18nKey('statistics', `statistics.page.${scope}.title`))}
     >
       <div className='flex h-full min-h-0 min-w-0 flex-col gap-4'>
-        <ScopeNavigation scope={scope} />
+        <ScopeNavigation scope={scope} search={search} />
         <OperationsViewPurpose
           description={t('operationsAnalytics.statistics.purpose.description')}
           icon={Chart01Icon}

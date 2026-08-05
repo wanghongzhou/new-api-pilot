@@ -209,16 +209,7 @@ func (r *PerformanceHistoryRepository) CollectionCoverage(ctx context.Context, s
 }
 
 func (r *PerformanceHistoryRepository) List(ctx context.Context, q dto.PerformanceHistoryQuery) ([]PerformanceHistoryReadRow, int64, error) {
-	db := r.db.WithContext(ctx).Table("site_performance_metric_bucket AS p").Joins("JOIN site AS s ON s.id=p.site_id").Where("p.bucket_ts>=? AND p.bucket_ts<?", q.StartTimestamp, q.EndTimestamp)
-	if len(q.SiteIDs) > 0 {
-		db = db.Where("p.site_id IN ?", q.SiteIDs)
-	}
-	if len(q.ModelNames) > 0 {
-		db = db.Where("p.model_name IN ?", q.ModelNames)
-	}
-	if len(q.Groups) > 0 {
-		db = db.Where("p.remote_group IN ?", q.Groups)
-	}
+	db := performanceHistoryQuery(r.db.WithContext(ctx), q)
 	var total int64
 	if err := db.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -230,7 +221,20 @@ func (r *PerformanceHistoryRepository) List(ctx context.Context, q dto.Performan
 func (r *PerformanceHistoryRepository) All(ctx context.Context, q dto.PerformanceHistoryQuery) ([]PerformanceHistoryReadRow, error) {
 	q.Page = 1
 	q.PageSize = 100
-	db := r.db.WithContext(ctx).Table("site_performance_metric_bucket AS p").Joins("JOIN site AS s ON s.id=p.site_id").Where("p.bucket_ts>=? AND p.bucket_ts<?", q.StartTimestamp, q.EndTimestamp)
+	db := performanceHistoryQuery(r.db.WithContext(ctx), q)
+	var rows []PerformanceHistoryReadRow
+	err := db.Select("p.*,s.name AS site_name").Order("p.bucket_ts,p.site_id,p.model_name,p.remote_group").Limit(performanceHistoryStatisticsRowLimit + 1).Scan(&rows).Error
+	if err == nil && len(rows) > performanceHistoryStatisticsRowLimit {
+		return nil, ErrPerformanceHistoryResultTooLarge
+	}
+	return rows, err
+}
+
+func performanceHistoryQuery(db *gorm.DB, q dto.PerformanceHistoryQuery) *gorm.DB {
+	db = db.Table("site_performance_metric_bucket AS p").
+		Joins("JOIN site AS s ON s.id=p.site_id AND p.config_version=s.config_version").
+		Where("s.management_status=? AND s.auth_status=?", constant.SiteManagementActive, constant.SiteAuthAuthorized).
+		Where("p.bucket_ts>=? AND p.bucket_ts<?", q.StartTimestamp, q.EndTimestamp)
 	if len(q.SiteIDs) > 0 {
 		db = db.Where("p.site_id IN ?", q.SiteIDs)
 	}
@@ -240,12 +244,10 @@ func (r *PerformanceHistoryRepository) All(ctx context.Context, q dto.Performanc
 	if len(q.Groups) > 0 {
 		db = db.Where("p.remote_group IN ?", q.Groups)
 	}
-	var rows []PerformanceHistoryReadRow
-	err := db.Select("p.*,s.name AS site_name").Order("p.bucket_ts,p.site_id,p.model_name,p.remote_group").Limit(performanceHistoryStatisticsRowLimit + 1).Scan(&rows).Error
-	if err == nil && len(rows) > performanceHistoryStatisticsRowLimit {
-		return nil, ErrPerformanceHistoryResultTooLarge
+	if q.SnapshotAt > 0 {
+		db = db.Where("p.collected_at<=?", q.SnapshotAt)
 	}
-	return rows, err
+	return db
 }
 func WeightedPerformance(rows []PerformanceHistoryReadRow) (success, latency, ttft, tps, requests string, ok bool) {
 	if len(rows) == 0 {

@@ -20,6 +20,16 @@ function SiteModelCatalogRoute() {
   const navigate = Route.useNavigate()
   return (
     <ModelCatalogPage
+      onPageReplace={(page) =>
+        void navigate({
+          replace: true,
+          search: (current) =>
+            serializeModelCatalogSearch({
+              ...buildModelCatalogSearch(current),
+              page,
+            }),
+        })
+      }
       onSearchChange={(changes) =>
         void navigate({
           search: (current) =>

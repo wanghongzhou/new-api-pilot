@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"new-api-pilot/constant"
 	"new-api-pilot/dto"
 )
 
@@ -199,11 +200,20 @@ type FinanceMetricRow struct {
 	Quota                      int64
 	AsOf                       *int64
 }
+type FinanceCollectionCoverageRow struct {
+	SiteID        int64  `gorm:"column:site_id"`
+	SiteName      string `gorm:"column:site_name"`
+	LastSuccessAt *int64 `gorm:"column:last_success_at"`
+	LastFailureAt *int64 `gorm:"column:last_failure_at"`
+	AsOf          *int64 `gorm:"column:as_of"`
+}
 type FinanceRepository struct{ db *gorm.DB }
 
 func NewFinanceRepository(db *gorm.DB) *FinanceRepository { return &FinanceRepository{db: db} }
 
 func applyFinanceListFilters(db *gorm.DB, q dto.FinanceInventoryQuery, alias, timeColumn string) *gorm.DB {
+	db = db.Where(alias+".config_version=s.config_version").
+		Where("s.management_status=? AND s.auth_status=?", constant.SiteManagementActive, constant.SiteAuthAuthorized)
 	if len(q.SiteIDs) > 0 {
 		db = db.Where(alias+".site_id IN ?", q.SiteIDs)
 	}
@@ -212,9 +222,6 @@ func applyFinanceListFilters(db *gorm.DB, q dto.FinanceInventoryQuery, alias, ti
 	}
 	if q.RemoteUserID != nil {
 		db = db.Where(alias+".remote_user_id=?", *q.RemoteUserID)
-	}
-	if len(q.Statuses) > 0 {
-		db = db.Where(alias+".remote_status IN ?", q.Statuses)
 	}
 	if len(q.States) > 0 {
 		db = db.Where(alias+".remote_state IN ?", q.States)
@@ -225,10 +232,16 @@ func applyFinanceListFilters(db *gorm.DB, q dto.FinanceInventoryQuery, alias, ti
 	if q.EndTimestamp > 0 {
 		db = db.Where(alias+"."+timeColumn+"<?", q.EndTimestamp)
 	}
+	if q.SnapshotAt > 0 {
+		db = db.Where(alias+".collected_at<=?", q.SnapshotAt)
+	}
 	return db
 }
 func (r *FinanceRepository) ListTopups(ctx context.Context, q dto.FinanceInventoryQuery) ([]TopupReadRow, int64, error) {
 	db := applyFinanceListFilters(r.db.WithContext(ctx).Table("site_topup_order t").Joins("JOIN site s ON s.id=t.site_id"), q, "t", "create_time")
+	if len(q.Statuses) > 0 {
+		db = db.Where("t.remote_status IN ?", q.Statuses)
+	}
 	if len(q.Providers) > 0 {
 		db = db.Where("t.payment_provider IN ?", q.Providers)
 	}
@@ -245,6 +258,7 @@ func (r *FinanceRepository) ListTopups(ctx context.Context, q dto.FinanceInvento
 }
 func (r *FinanceRepository) ListRedemptions(ctx context.Context, q dto.FinanceInventoryQuery) ([]RedemptionReadRow, int64, error) {
 	db := applyFinanceListFilters(r.db.WithContext(ctx).Table("site_redemption r").Joins("JOIN site s ON s.id=r.site_id"), q, "r", "created_time")
+	db = applyRedemptionStatusFilter(db, q, "r")
 	if q.Keyword != "" {
 		db = db.Where("r.name LIKE ? ESCAPE '\\\\'", "%"+escapeLike(q.Keyword)+"%")
 	}
@@ -263,6 +277,9 @@ func (r *FinanceRepository) TopupMetrics(ctx context.Context, q dto.FinanceInven
 		return nil, errors.New("invalid topup dimension")
 	}
 	db := applyFinanceListFilters(r.db.WithContext(ctx).Table("site_topup_order t").Joins("JOIN site s ON s.id=t.site_id"), q, "t", "create_time")
+	if len(q.Statuses) > 0 {
+		db = db.Where("t.remote_status IN ?", q.Statuses)
+	}
 	if len(q.Providers) > 0 {
 		db = db.Where("t.payment_provider IN ?", q.Providers)
 	}
@@ -299,6 +316,7 @@ func (r *FinanceRepository) RedemptionMetrics(ctx context.Context, q dto.Finance
 		return nil, errors.New("invalid redemption dimension")
 	}
 	db := applyFinanceListFilters(r.db.WithContext(ctx).Table("site_redemption r").Joins("JOIN site s ON s.id=r.site_id"), q, "r", "created_time")
+	db = applyRedemptionStatusFilter(db, q, "r")
 	siteID, siteName := "0", "''"
 	group := expr
 	if dim == "site" {
@@ -313,5 +331,40 @@ func (r *FinanceRepository) RedemptionMetrics(ctx context.Context, q dto.Finance
 	}
 	var rows []FinanceMetricRow
 	err := db.Order("site_id,dimension_id").Scan(&rows).Error
+	return rows, err
+}
+
+func applyRedemptionStatusFilter(db *gorm.DB, q dto.FinanceInventoryQuery, alias string) *gorm.DB {
+	if len(q.Statuses) == 0 {
+		return db
+	}
+	now := q.StatusAt
+	clauses := make([]string, 0, len(q.Statuses))
+	args := make([]any, 0, len(q.Statuses)+1)
+	for _, status := range q.Statuses {
+		if status == "expired" {
+			clauses = append(clauses, "("+alias+".remote_status=1 AND "+alias+".expired_time<>0 AND "+alias+".expired_time<?)")
+			args = append(args, now)
+			continue
+		}
+		clauses = append(clauses, alias+".remote_status=?")
+		args = append(args, status)
+	}
+	return db.Where("("+strings.Join(clauses, " OR ")+")", args...)
+}
+
+func (r *FinanceRepository) CollectionCoverage(ctx context.Context, siteIDs []int64, kind string) ([]FinanceCollectionCoverageRow, error) {
+	stateTable := map[string]string{"topup": "site_topup_collection_state", "redemption": "site_redemption_collection_state"}[kind]
+	if r == nil || r.db == nil || stateTable == "" {
+		return nil, ErrStatisticsReadContract
+	}
+	query := r.db.WithContext(ctx).Table("site s").
+		Joins("LEFT JOIN "+stateTable+" c ON c.site_id=s.id AND c.config_version=s.config_version").
+		Where("s.management_status=? AND s.auth_status=?", constant.SiteManagementActive, constant.SiteAuthAuthorized)
+	if len(siteIDs) > 0 {
+		query = query.Where("s.id IN ?", siteIDs)
+	}
+	var rows []FinanceCollectionCoverageRow
+	err := query.Select("s.id site_id,s.name site_name,c.last_success_at,c.last_failure_at,c.last_success_at as_of").Order("s.id").Scan(&rows).Error
 	return rows, err
 }

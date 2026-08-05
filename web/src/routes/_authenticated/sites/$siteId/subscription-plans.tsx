@@ -20,6 +20,16 @@ function SiteSubscriptionPlans() {
   const navigate = Route.useNavigate()
   return (
     <SubscriptionPlansPage
+      onPageReplace={(page) =>
+        void navigate({
+          replace: true,
+          search: (current) =>
+            serializeSubscriptionPlanSearch({
+              ...buildSubscriptionPlanSearch(current),
+              page,
+            }),
+        })
+      }
       onSearchChange={(changes) =>
         void navigate({
           search: (current) =>

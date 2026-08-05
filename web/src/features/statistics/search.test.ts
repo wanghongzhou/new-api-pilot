@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import { BEIJING_TIMEZONE, dayjs } from '@/lib/dayjs'
 
-import { buildStatisticsSearch } from './search'
+import { buildScopeStatisticsSearch, buildStatisticsSearch } from './search'
 
 const now = dayjs.tz('2026-07-13 12:34:56', BEIJING_TIMEZONE)
 
@@ -106,5 +106,60 @@ describe('statistics URL range normalization', () => {
     expect(search.useGroups).toEqual(['', 'vip'])
     expect(search.tokenKeys).toEqual(['9007199254740993:0'])
     expect(search.nodeNames).toEqual(['', 'Node-A'])
+  })
+})
+
+describe('statistics scope navigation', () => {
+  test('preserves shared state and only the target scope filters', () => {
+    const current = buildStatisticsSearch({
+      accountIds: ['13'],
+      channelKeys: ['11:12'],
+      customerIds: ['10'],
+      display: 'cny',
+      end: 1_784_275_200,
+      granularity: 'hour',
+      metric: 'quota',
+      models: ['gpt-5'],
+      nodeNames: ['node-a'],
+      order: 'desc',
+      page: 8,
+      pageSize: 50,
+      siteIds: ['9'],
+      sort: 'quota',
+      start: 1_784_188_800,
+      tokenKeys: ['11:14'],
+      useGroups: ['vip'],
+      view: 'table',
+    })
+
+    const account = buildScopeStatisticsSearch(current, 'account')
+    expect(account).toMatchObject({
+      accountIds: ['13'],
+      customerIds: ['10'],
+      display: 'cny',
+      end: current.end,
+      granularity: 'hour',
+      metric: 'quota',
+      order: 'desc',
+      page: 1,
+      pageSize: 50,
+      siteIds: current.siteIds,
+      sort: 'quota',
+      start: current.start,
+      view: 'table',
+    })
+    expect(account.models).toEqual([])
+    expect(account.channelKeys).toEqual([])
+    expect(account.useGroups).toEqual([])
+    expect(account.tokenKeys).toEqual([])
+    expect(account.nodeNames).toEqual([])
+
+    const model = buildScopeStatisticsSearch(current, 'model')
+    expect(model.models).toEqual(['gpt-5'])
+    expect(model.customerIds).toEqual([])
+    expect(model.accountIds).toEqual([])
+    expect(model.siteIds).toEqual(current.siteIds)
+    expect(model.start).toBe(current.start)
+    expect(model.end).toBe(current.end)
   })
 })

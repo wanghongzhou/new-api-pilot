@@ -297,6 +297,9 @@ func (r *ModelCatalogRepository) Statuses(ctx context.Context, siteIDs []int64) 
 	var asOf *int64
 	for _, site := range sites {
 		x, ok := by[site.ID]
+		if ok && x.ConfigVersion != site.ConfigVersion {
+			ok = false
+		}
 		st := ModelCatalogStatus{DataStatus: "pending"}
 		if ok && x.LastSuccessAt != nil && (x.LastFailureAt == nil || *x.LastSuccessAt >= *x.LastFailureAt) {
 			st.DataStatus = "complete"
@@ -333,7 +336,7 @@ func (r *ModelCatalogRepository) MissingRows(ctx context.Context, q dto.ModelCat
 	if q.VendorID != nil || len(q.Statuses) > 0 || len(q.SyncOfficial) > 0 {
 		return []MissingModelReadRow{}, 0, nil
 	}
-	db := r.db.WithContext(ctx).Table("site_channel_model_mapping x").Joins("JOIN site s ON s.id=x.site_id").Joins("LEFT JOIN site_channel_inventory c ON c.site_id=x.site_id AND c.remote_channel_id=x.remote_channel_id").Joins("LEFT JOIN site_model_meta m ON m.site_id=x.site_id AND m.model_name=x.model_name AND m.name_rule=0").Joins("LEFT JOIN site_model_meta_collection_state st ON st.site_id=x.site_id").Where("m.id IS NULL")
+	db := r.db.WithContext(ctx).Table("site_channel_model_mapping x").Joins("JOIN site s ON s.id=x.site_id AND s.management_status='active'").Joins("LEFT JOIN site_channel_inventory c ON c.site_id=x.site_id AND c.remote_channel_id=x.remote_channel_id").Joins("LEFT JOIN site_model_meta m ON m.site_id=x.site_id AND m.model_name=x.model_name AND m.name_rule=0").Joins("LEFT JOIN site_model_meta_collection_state st ON st.site_id=x.site_id AND st.config_version=s.config_version").Where("m.id IS NULL")
 	if len(q.SiteIDs) > 0 {
 		db = db.Where("x.site_id IN ?", q.SiteIDs)
 	}

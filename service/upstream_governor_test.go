@@ -67,6 +67,61 @@ func TestUpstreamGovernorCanceledWaiterDoesNotLeakCapacity(t *testing.T) {
 	}
 }
 
+func TestUpstreamGovernorReconfigurePreservesOriginStateCooldownAndInflight(t *testing.T) {
+	clock := testsupport.NewFakeClock(time.Unix(1_752_400_800, 0))
+	created, err := NewUpstreamGovernor(UpstreamGovernorOptions{Requests: 10, Window: time.Second, MaxInFlight: 2, Clock: clock})
+	if err != nil {
+		t.Fatalf("create governor: %v", err)
+	}
+	governor := created.(*upstreamGovernor)
+	firstRelease, err := governor.Acquire(context.Background(), "http://upstream.local", UpstreamRequestRoutine)
+	if err != nil {
+		t.Fatalf("acquire first: %v", err)
+	}
+	state := governor.origins["http://upstream.local"]
+	governor.ObserveRateLimit("http://upstream.local", time.Second, true)
+	if err := governor.Reconfigure(UpstreamGovernorOptions{Requests: 20, Window: time.Second, MaxInFlight: 1}); err != nil {
+		t.Fatalf("reconfigure governor: %v", err)
+	}
+	if governor.origins["http://upstream.local"] != state || len(governor.origins) != 1 {
+		t.Fatal("reconfigure replaced origin state or created another origin runtime")
+	}
+
+	second := make(chan error, 1)
+	go acquireForGovernorTest(governor, context.Background(), UpstreamRequestRoutine, second)
+	firstRelease()
+	clock.Advance(999 * time.Millisecond)
+	assertGovernorBlocked(t, second)
+	clock.Advance(time.Millisecond)
+	if err := waitGovernorResult(t, second); err != nil {
+		t.Fatalf("acquire after preserved cooldown: %v", err)
+	}
+}
+
+func TestUpstreamGovernorStricterIntervalAppliesFromLastGrant(t *testing.T) {
+	clock := testsupport.NewFakeClock(time.Unix(1_752_400_800, 0))
+	governor, err := NewUpstreamGovernor(UpstreamGovernorOptions{Requests: 10, Window: time.Second, MaxInFlight: 2, Clock: clock})
+	if err != nil {
+		t.Fatalf("create governor: %v", err)
+	}
+	release, err := governor.Acquire(context.Background(), "http://upstream.local", UpstreamRequestRoutine)
+	if err != nil {
+		t.Fatalf("acquire first: %v", err)
+	}
+	release()
+	if err := governor.Reconfigure(UpstreamGovernorOptions{Requests: 2, Window: time.Second, MaxInFlight: 2}); err != nil {
+		t.Fatalf("reconfigure governor: %v", err)
+	}
+	second := make(chan error, 1)
+	go acquireForGovernorTest(governor, context.Background(), UpstreamRequestRoutine, second)
+	clock.Advance(499 * time.Millisecond)
+	assertGovernorBlocked(t, second)
+	clock.Advance(time.Millisecond)
+	if err := waitGovernorResult(t, second); err != nil {
+		t.Fatalf("acquire at stricter interval: %v", err)
+	}
+}
+
 func acquireForGovernorTest(governor UpstreamGovernor, ctx context.Context, class UpstreamRequestClass, result chan<- error) {
 	release, err := governor.Acquire(ctx, "http://upstream.local", class)
 	if err == nil {

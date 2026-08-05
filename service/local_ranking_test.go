@@ -1,8 +1,14 @@
 package service
 
 import (
+	"context"
+	"fmt"
+	"strings"
+
+	"new-api-pilot/constant"
 	"new-api-pilot/dto"
 	"new-api-pilot/model"
+	testsupport "new-api-pilot/tests/support"
 	"testing"
 	"time"
 )
@@ -16,6 +22,36 @@ func TestRankingWindowBeijingBoundaries(t *testing.T) {
 		if err != nil || start != startWant.Unix() || end != now.Unix() || prior != start-(end-start) {
 			t.Fatalf("period=%s start=%d end=%d prior=%d err=%v", period, start, end, prior, err)
 		}
+	}
+}
+
+func TestVendorRankingTreatsConflictingExactMetadataAsUnknown(t *testing.T) {
+	database := openUpstreamLogExportDatabase(t)
+	location := time.FixedZone("Asia/Shanghai", 8*3600)
+	now := time.Date(2026, 7, 15, 12, 0, 0, 0, location)
+	timestamp := now.Unix()
+	site := model.Site{Name: "Ranking Conflict", BaseURL: fmt.Sprintf("https://ranking-conflict-%d.example", time.Now().UnixNano()), ConfigVersion: 1, ManagementStatus: constant.SiteManagementActive, OnlineStatus: constant.SiteOnlineOnline, AuthStatus: constant.SiteAuthAuthorized, StatisticsStatus: constant.SiteStatisticsReady, HealthStatus: constant.SiteHealthOK, CreatedAt: timestamp, UpdatedAt: timestamp}
+	if err := database.GORM.Create(&site).Error; err != nil {
+		t.Fatal(err)
+	}
+	metas := []model.SiteModelMeta{
+		{SiteID: site.ID, RemoteID: 1, ModelName: "gpt", VendorID: 7, RemoteStatus: 1, SyncOfficial: 1, NameRule: 0, SourceHash: strings.Repeat("a", 64), ConfigVersion: 1, CollectedAt: timestamp, CreatedAt: timestamp, UpdatedAt: timestamp},
+		{SiteID: site.ID, RemoteID: 2, ModelName: "gpt", VendorID: 8, RemoteStatus: 1, SyncOfficial: 1, NameRule: 0, SourceHash: strings.Repeat("b", 64), ConfigVersion: 1, CollectedAt: timestamp, CreatedAt: timestamp, UpdatedAt: timestamp},
+	}
+	if err := database.GORM.Create(&metas).Error; err != nil {
+		t.Fatal(err)
+	}
+	fact := model.UsageFactHourly{SiteID: site.ID, RemoteUserID: 1, UsernameSnapshot: "user", ModelName: "gpt", UseGroup: "default", NodeName: "node", HourTS: timestamp - 3600, RequestCount: 1, Quota: 1, TokenUsed: 100, CollectedAt: timestamp}
+	if err := database.GORM.Create(&fact).Error; err != nil {
+		t.Fatal(err)
+	}
+	svc, err := NewLocalRankingService(database.GORM, testsupport.NewFakeClock(now))
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := svc.Query(context.Background(), dto.LocalRankingQuery{Period: "today", SiteIDs: []int64{site.ID}}, "vendor")
+	if err != nil || len(response.Items) != 1 || response.Items[0].DimensionID != "0" || response.Items[0].DimensionName != "unknown" {
+		t.Fatalf("ranking=%#v err=%v", response, err)
 	}
 }
 func TestRankingCompletenessStatuses(t *testing.T) {

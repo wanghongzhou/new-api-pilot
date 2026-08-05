@@ -41,6 +41,9 @@ if (!f10Pricing || !f10ZeroUsageGroup) {
   throw new Error('F10 pricing/group fixture is incomplete')
 }
 
+const longGroupName = `long-${'pricing-group-'.repeat(30)}`
+const longIconText = `https://icons.invalid/${'audit-segment/'.repeat(30)}icon.svg`
+
 function envelope<T>(data: T, requestId = 'req_pricing_groups_e2e') {
   return { code: '', data, message: '', request_id: requestId, success: true }
 }
@@ -88,8 +91,17 @@ const pricingItem = {
   create_cache_ratio: null,
   data_status: 'partial',
   description: '安全定价说明',
-  enable_groups: ['default', 'vip-zero-usage'],
-  icon: 'https://icons.invalid/not-loaded.svg',
+  enable_groups: [
+    longGroupName,
+    'default',
+    'vip-zero-usage',
+    'group-4',
+    'group-5',
+    'group-6',
+    'group-7',
+    'group-8',
+  ],
+  icon: longIconText,
   id: '9007199254740801',
   image_ratio: null,
   missing_count: 0,
@@ -103,7 +115,15 @@ const pricingItem = {
   remote_state: 'normal',
   site_id: '9007199254740997',
   site_name: '华东定价站点',
-  supported_endpoint_types: ['chat_completions', 'responses'],
+  supported_endpoint_types: [
+    'chat_completions',
+    'responses',
+    'embeddings',
+    'images',
+    'audio',
+    'rerank',
+    'realtime',
+  ],
   tags: 'chat',
   vendor_id: '9007199254740995',
   vendor_name: f10Pricing.vendor,
@@ -171,7 +191,16 @@ test('A99 keeps pricing and configured groups exact, passive, private and respon
     items: [item],
     page: 1,
     page_size: 20,
-    site_breakdown: [],
+    site_breakdown: [
+      {
+        as_of: 1_784_348_700,
+        data_status: status,
+        missing: status === 'complete' ? '0' : '1',
+        site_id: '9007199254740997',
+        site_name: '华东定价站点',
+        total: '1',
+      },
+    ],
     total: 1,
   })
   const fulfill = async (route: Route, data: unknown) => {
@@ -255,6 +284,55 @@ test('A99 keeps pricing and configured groups exact, passive, private and respon
   await expect(
     page.getByText('tokens <= 100 ? 1 : 2').filter({ visible: true }).first()
   ).toBeVisible()
+  await expect(
+    page.getByText('供应商 ID').filter({ visible: true }).first()
+  ).toBeVisible()
+  await expect(
+    page.getByText('9007199254740995').filter({ visible: true }).first()
+  ).toBeVisible()
+  await expect(
+    page.getByText('额度类型').filter({ visible: true }).first()
+  ).toBeVisible()
+  await expect(
+    page.getByText('归属方').filter({ visible: true }).first()
+  ).toBeVisible()
+  await expect(
+    page.getByText('定价版本').filter({ visible: true }).first()
+  ).toBeVisible()
+  await expect(
+    page.getByText('图标文本').filter({ visible: true }).first()
+  ).toBeVisible()
+  const pricingSurface =
+    testInfo.project.name === 'chromium-mobile' ? 'article' : 'table'
+  const groupScope = page.locator(
+    `${pricingSurface} [role="group"][aria-label="可用分组"]`
+  )
+  const endpointScope = page.locator(
+    `${pricingSurface} [role="group"][aria-label="支持端点类型"]`
+  )
+  await groupScope.scrollIntoViewIfNeeded()
+  await expect(groupScope).toBeVisible()
+  await expect(endpointScope).toBeVisible()
+  await expect(groupScope.getByText('group-8', { exact: true })).toBeHidden()
+  await groupScope.getByRole('button', { name: '展开 (+2)' }).click()
+  await expect(groupScope.getByText('group-8', { exact: true })).toBeVisible()
+  await expect(
+    page.getByText('列表采集截至：2026-07-18 12:25:00', { exact: true })
+  ).toBeVisible()
+  await page.getByText('查看逐站完整性', { exact: true }).click()
+  await expect(
+    page.getByText('目录 1 项，历史缺失 1 项', { exact: true })
+  ).toBeVisible()
+  await expect(
+    page.getByText('模型：现存 9007199254740994，缺失 1', { exact: true })
+  ).toBeVisible()
+  const longBadgeFits = await groupScope.evaluate((element) => {
+    const badge = [...element.querySelectorAll('[data-slot="badge"]')].find(
+      (candidate) => candidate.textContent?.startsWith('long-pricing-group-')
+    )
+    return badge != null && badge.scrollWidth <= badge.clientWidth + 1
+  })
+  expect(longBadgeFits).toBe(true)
   expect(
     reads
       .slice(0, 2)
@@ -271,7 +349,7 @@ test('A99 keeps pricing and configured groups exact, passive, private and respon
     '9007199254740997',
   ])
   expect(pricingRead?.searchParams.get('group')).toBe('vip')
-  expect(pricingStatisticsRead?.search).toBe('?p=1&page_size=20')
+  expect(pricingStatisticsRead?.search).toBe('')
   await page.getByRole('tab', { name: '分组配置' }).click()
   await expect(page.getByRole('tab', { name: '分组配置' })).toHaveAttribute(
     'aria-selected',

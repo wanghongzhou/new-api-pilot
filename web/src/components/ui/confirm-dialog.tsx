@@ -14,6 +14,7 @@ import { Button } from './button'
 import { Spinner } from './spinner'
 
 interface ConfirmDialogProps {
+  confirmDisabled?: boolean
   confirmLabel: string
   description: ReactNode
   onConfirm: () => void
@@ -25,6 +26,7 @@ interface ConfirmDialogProps {
 }
 
 export function ConfirmDialog({
+  confirmDisabled = false,
   confirmLabel,
   description,
   onConfirm,
@@ -49,7 +51,7 @@ export function ConfirmDialog({
             {t('common.cancel')}
           </AlertDialogCancel>
           <Button
-            disabled={pending}
+            disabled={pending || confirmDisabled}
             onClick={onConfirm}
             variant={variant === 'primary' ? 'default' : 'destructive'}
           >

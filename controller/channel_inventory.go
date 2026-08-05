@@ -40,6 +40,17 @@ func (c *ChannelInventoryController) list(g *gin.Context, forced []int64) {
 		common.AbortInternalError(g)
 		return
 	}
+	if !requireEmptyBody(g) {
+		return
+	}
+	allowed := map[string]bool{"p": true, "page_size": true, "keyword": true, "types": true, "statuses": true, "groups": true, "tags": true, "states": true, "min_balance": true, "max_balance": true, "min_response_time_ms": true, "max_response_time_ms": true}
+	if len(forced) == 0 {
+		allowed["site_ids"] = true
+	}
+	if fields := strictQueryFields(g, allowed, "p", "page_size", "keyword", "min_balance", "max_balance", "min_response_time_ms", "max_response_time_ms"); fields != nil {
+		common.AbortError(g, http.StatusBadRequest, constant.CodeValidationError, "Invalid channel inventory query", fields)
+		return
+	}
 	q, e := parseChannelInventoryQuery(g)
 	if len(forced) > 0 {
 		q.SiteIDs = forced
@@ -59,6 +70,17 @@ func (c *ChannelInventoryController) list(g *gin.Context, forced []int64) {
 func (c *ChannelInventoryController) statistics(g *gin.Context, forced []int64) {
 	if c == nil || c.inventory == nil {
 		common.AbortInternalError(g)
+		return
+	}
+	if !requireEmptyBody(g) {
+		return
+	}
+	allowed := map[string]bool{"start_timestamp": true, "end_timestamp": true, "types": true, "statuses": true, "groups": true, "tags": true}
+	if len(forced) == 0 {
+		allowed["site_ids"] = true
+	}
+	if fields := strictQueryFields(g, allowed, "start_timestamp", "end_timestamp"); fields != nil {
+		common.AbortError(g, http.StatusBadRequest, constant.CodeValidationError, "Invalid channel inventory statistics query", fields)
 		return
 	}
 	q, e := parseChannelInventoryStatisticsQuery(g)
@@ -116,12 +138,23 @@ func parseChannelInventoryStatisticsQuery(g *gin.Context) (dto.ChannelInventoryS
 	q := dto.ChannelInventoryStatisticsQuery{Groups: inventoryQueryValues(g, "groups"), Tags: inventoryQueryValues(g, "tags")}
 	q.StartTimestamp, _ = strconv.ParseInt(g.Query("start_timestamp"), 10, 64)
 	q.EndTimestamp, _ = strconv.ParseInt(g.Query("end_timestamp"), 10, 64)
-	q.SiteIDs, _ = parseLogIDList(g.QueryArray("site_ids"))
-	q.Types, _ = parseInventoryInts(inventoryQueryValues(g, "types"))
-	q.Statuses, _ = parseInventoryInts(inventoryQueryValues(g, "statuses"))
+	var bad bool
+	q.SiteIDs, bad = parseLogIDList(g.QueryArray("site_ids"))
+	if bad || containsNonPositiveInventoryID(q.SiteIDs) {
+		return q, map[string]string{"site_ids": "invalid"}
+	}
+	q.Types, bad = parseInventoryInts(inventoryQueryValues(g, "types"))
+	if bad {
+		return q, map[string]string{"types": "invalid"}
+	}
+	q.Statuses, bad = parseInventoryInts(inventoryQueryValues(g, "statuses"))
+	if bad {
+		return q, map[string]string{"statuses": "invalid"}
+	}
 	q.Normalize()
 	return q, q.Validate()
 }
+
 func optionalString(v string) *string {
 	v = strings.TrimSpace(v)
 	if v == "" {

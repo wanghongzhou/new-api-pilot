@@ -36,6 +36,7 @@ import {
   type TrendChartDatum,
 } from '../chart-data'
 import { buildEntityExportRequest } from '../export-request'
+import { formatStatisticsDecimal } from '../presentation'
 import { statisticsKeys } from '../query-keys'
 import type {
   AccountStatisticsBreakdown,
@@ -656,13 +657,19 @@ export function SiteBreakdownList({ sites }: { sites: SiteQuotaBreakdown[] }) {
                 <dt className='text-muted-foreground'>
                   {t('statistics.siteBreakdown.quotaPerUnit')}
                 </dt>
-                <dd>{site.quota_per_unit ?? t('data.unavailableValue')}</dd>
+                <dd>
+                  {formatStatisticsDecimal(site.quota_per_unit) ??
+                    t('data.unavailableValue')}
+                </dd>
               </dl>
               <dl>
                 <dt className='text-muted-foreground'>
                   {t('statistics.siteBreakdown.exchangeRate')}
                 </dt>
-                <dd>{site.usd_exchange_rate ?? t('data.unavailableValue')}</dd>
+                <dd>
+                  {formatStatisticsDecimal(site.usd_exchange_rate) ??
+                    t('data.unavailableValue')}
+                </dd>
               </dl>
               <dl>
                 <dt className='text-muted-foreground'>
@@ -687,6 +694,25 @@ export function SiteBreakdownList({ sites }: { sites: SiteQuotaBreakdown[] }) {
         )
       })}
     </ul>
+  )
+}
+
+export function SiteBreakdownDisclosure({
+  sites,
+}: {
+  sites: SiteQuotaBreakdown[]
+}) {
+  const { t } = useTranslation()
+  if (sites.length === 0) return <SiteBreakdownList sites={sites} />
+  return (
+    <details className='border-border rounded-lg border px-3 py-2'>
+      <summary className='focus-visible:ring-ring/50 cursor-pointer rounded-sm text-sm font-medium focus-visible:ring-[3px] focus-visible:outline-none'>
+        {t('statistics.siteBreakdown.expand', { count: sites.length })}
+      </summary>
+      <div className='mt-3'>
+        <SiteBreakdownList sites={sites} />
+      </div>
+    </details>
   )
 }
 

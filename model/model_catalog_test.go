@@ -46,6 +46,13 @@ func TestModelCatalogStatusesAggregatePendingUnavailableAndMixed(t *testing.T) {
 	if err != nil || status != "partial" {
 		t.Fatalf("mixed status=%q err=%v", status, err)
 	}
+	if err := database.GORM.Model(&Site{}).Where("id=?", unavailable.ID).Update("config_version", unavailable.ConfigVersion+1).Error; err != nil {
+		t.Fatalf("bump unavailable site config: %v", err)
+	}
+	_, status, _, err = repository.Statuses(context.Background(), []int64{unavailable.ID})
+	if err != nil || status != "pending" {
+		t.Fatalf("stale config state status=%q err=%v", status, err)
+	}
 }
 
 func TestSyncModelCatalogUsesBoundedQueriesAndCountsDeletes(t *testing.T) {

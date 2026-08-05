@@ -285,6 +285,10 @@ test('keeps upstream inventory distinct, bigint-safe, filterable, exportable and
   })
   expect(exportBody?.filters).not.toHaveProperty('p')
   expect(exportBody?.filters).not.toHaveProperty('page_size')
+  await page
+    .getByRole('dialog', { name: '导出任务' })
+    .getByRole('button', { name: '关闭' })
+    .click()
   await page.getByRole('tab', { name: '趋势分析' }).click()
   await expect(
     page.getByRole('img', { name: '用户库存小时趋势曲线图' })
@@ -293,6 +297,10 @@ test('keeps upstream inventory distinct, bigint-safe, filterable, exportable and
   await expect(
     page.getByRole('table', { name: '用户库存小时趋势数据列表' })
   ).toBeVisible()
+  await page.addStyleTag({
+    content:
+      "button[aria-label='Open TanStack Router Devtools'] { display: none !important; }",
+  })
   await page.getByRole('button', { name: '下一页' }).click()
   await expect(page).toHaveURL(/trendPage=2/)
   const bodyText = await page.locator('body').innerText()

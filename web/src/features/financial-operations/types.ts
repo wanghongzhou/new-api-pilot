@@ -65,6 +65,15 @@ export interface FinanceInventoryPage<TItem> {
   page_size: number
   data_status: DataStatus
   as_of: Timestamp | null
+  completeness: FinanceCompleteness
+}
+
+export interface FinanceCompleteness {
+  data_status: DataStatus
+  complete_site_count: number
+  expected_site_count: number
+  unavailable_site_count: number
+  pending_site_count: number
 }
 
 export interface FinanceMetric {
@@ -90,4 +99,6 @@ export interface FinanceStatisticsResponse {
   provider_breakdown?: FinanceBreakdown[]
   site_breakdown: FinanceBreakdown[]
   data_status: DataStatus
+  as_of: Timestamp | null
+  completeness: FinanceCompleteness
 }

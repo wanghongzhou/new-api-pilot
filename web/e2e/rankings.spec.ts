@@ -236,7 +236,7 @@ test('A97 keeps local rankings exact, bounded, exportable and responsive', async
     page.getByText('9007199254740994').filter({ visible: true }).first()
   ).toBeVisible()
   await expect(
-    page.getByText('33.33333333%').filter({ visible: true }).first()
+    page.getByText('33.33%').filter({ visible: true }).first()
   ).toBeVisible()
   await expect(page.getByText('0.3333333333')).toHaveCount(0)
   await expect(

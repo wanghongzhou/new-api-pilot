@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { z } from 'zod'
 
 import { FacetedFilter } from '@/components/data/faceted-filter'
+import { QueryStateAlert } from '@/components/data/query-state-alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -235,6 +236,19 @@ export function StatisticsFilters({
     queryKey: statisticsKeys.options('nodes', optionParams),
     staleTime: 5 * 60_000,
   })
+  const failedOptionQueries = [
+    siteQuery,
+    customerQuery,
+    accountQuery,
+    modelQuery,
+    channelQuery,
+    groupQuery,
+    tokenQuery,
+    nodeQuery,
+  ].filter((query) => query.isError)
+  const retryFailedOptions = () => {
+    void Promise.all(failedOptionQueries.map((query) => query.refetch()))
+  }
 
   const customerIds = form.watch('customerIds')
   const accountIds = form.watch('accountIds')
@@ -399,26 +413,34 @@ export function StatisticsFilters({
 
   if (scope === 'global') {
     return (
-      <div className='flex min-w-0 flex-wrap items-center gap-2'>
-        <FacetedFilter
-          clearLabel={t('common.all')}
-          onChange={(value) =>
-            onApply({
-              page: 1,
-              siteIds: isIdString(value) ? [parseIdString(value)] : [],
-            })
-          }
-          options={siteOptions}
-          title={t('statistics.filter.sites')}
-          value={siteIds.length === 1 ? siteIds[0] : ''}
-        />
-        {siteIds.length > 1 && (
-          <>
-            <Badge variant='secondary'>{siteIds.length}</Badge>
-            <Button onClick={reset} size='sm' type='button' variant='ghost'>
-              {t('common.reset')}
-            </Button>
-          </>
+      <div className='grid min-w-0 gap-2'>
+        <div className='flex min-w-0 flex-wrap items-center gap-2'>
+          <FacetedFilter
+            clearLabel={t('common.all')}
+            onChange={(value) =>
+              onApply({
+                page: 1,
+                siteIds: isIdString(value) ? [parseIdString(value)] : [],
+              })
+            }
+            options={siteOptions}
+            title={t('statistics.filter.sites')}
+            value={siteIds.length === 1 ? siteIds[0] : ''}
+          />
+          {siteIds.length > 1 && (
+            <>
+              <Badge variant='secondary'>{siteIds.length}</Badge>
+              <Button onClick={reset} size='sm' type='button' variant='ghost'>
+                {t('common.reset')}
+              </Button>
+            </>
+          )}
+        </div>
+        {failedOptionQueries.length > 0 && (
+          <QueryStateAlert
+            message={t('operationsAnalytics.filterOptionsError')}
+            onRetry={retryFailedOptions}
+          />
         )}
       </div>
     )
@@ -444,6 +466,12 @@ export function StatisticsFilters({
             void submit()
           }}
         >
+          {failedOptionQueries.length > 0 && (
+            <QueryStateAlert
+              message={t('operationsAnalytics.filterOptionsError')}
+              onRetry={retryFailedOptions}
+            />
+          )}
           <div className='grid max-h-[min(62dvh,620px)] min-w-0 gap-5 overflow-y-auto pr-1 sm:grid-cols-2'>
             <FilterGroup
               emptyLabel={t('statistics.filter.noOptions')}

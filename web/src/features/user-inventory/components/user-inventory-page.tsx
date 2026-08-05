@@ -15,19 +15,23 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { DataStatusBadge } from '@/components/data/data-status'
+import { DebouncedInput } from '@/components/data/debounced-input'
 import { FacetedFilter } from '@/components/data/faceted-filter'
 import { FilterPanel } from '@/components/data/filter-panel'
 import { InventoryTrendChart } from '@/components/data/inventory-trend-chart'
 import { MetricValue } from '@/components/data/metric-value'
+import { MultiFacetedFilter } from '@/components/data/multi-faceted-filter'
+import { QueryStateAlert } from '@/components/data/query-state-alert'
 import { ErrorState } from '@/components/error-state'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
+import { LoadingState } from '@/components/loading-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { listSites } from '@/features/sites/api'
+import { listAllSites } from '@/features/sites/api'
 import { siteKeys } from '@/features/sites/query-keys'
 import type { SiteListItem } from '@/features/sites/types'
 import { createStatisticsExport } from '@/features/statistics/api'
@@ -36,6 +40,8 @@ import type {
   StatisticsExportFormat,
   StatisticsExportJobItem,
 } from '@/features/statistics/types'
+import { useLastValidPage } from '@/hooks/use-last-valid-page'
+import { useRetainedQueryData } from '@/hooks/use-retained-query-data'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import {
@@ -445,23 +451,21 @@ function InventoryFilters({
         {search.tab === 'list' && (
           <label className='grid gap-1 text-sm'>
             <span>{t('userInventory.filters.keyword')}</span>
-            <Input
+            <DebouncedInput
               className='min-w-48 sm:w-72'
-              onChange={(event) =>
-                onChange({ keyword: event.target.value, page: 1 })
-              }
+              onValueChange={(keyword) => onChange({ keyword, page: 1 })}
               placeholder={t('userInventory.filters.keywordPlaceholder')}
               value={search.keyword}
             />
           </label>
         )}
         {global && (
-          <FacetedFilter
+          <MultiFacetedFilter
             clearLabel={t('common.all')}
-            onChange={(value) =>
+            onChange={(values) =>
               onChange({
                 page: 1,
-                siteIds: isIdString(value) ? [parseIdString(value)] : [],
+                siteIds: values.filter(isIdString).map(parseIdString),
               })
             }
             options={sites.map((site) => ({
@@ -469,7 +473,7 @@ function InventoryFilters({
               value: site.id,
             }))}
             title={t('userInventory.filters.siteIds')}
-            value={search.siteIds.length === 1 ? search.siteIds[0] : ''}
+            values={search.siteIds}
           />
         )}
         {search.tab === 'list' && (
@@ -612,9 +616,11 @@ function TrendView({
       {search.trendView === 'chart' ? (
         <InventoryTrendChart
           ariaLabel={t('userInventory.trend.chart')}
+          description={t('userInventory.trend.chartDescription')}
           emptyText={t('userInventory.trend.empty')}
           points={points.map((point) => ({
             bucketStart: point.bucket_start,
+            dataStatus: point.data_status,
             values: {
               active_user_count: point.active_user_count,
               new_user_count: point.new_user_count,
@@ -701,42 +707,48 @@ function SiteBreakdown({ items }: { items: UserInventorySiteBreakdown[] }) {
       <h2 className='text-lg font-semibold' id='inventory-sites-title'>
         {t('userInventory.siteBreakdown')}
       </h2>
-      <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-3'>
-        {items.map((item) => (
-          <article
-            className='border-border grid gap-2 rounded-lg border p-4'
-            key={item.site_id}
-          >
-            <div className='flex items-start justify-between gap-2'>
-              <div>
-                <p className='font-medium'>{item.site_name}</p>
-                <code className='text-muted-foreground text-xs'>
-                  {item.site_id}
-                </code>
+      {items.length === 0 ? (
+        <p className='text-muted-foreground text-sm'>{t('common.none')}</p>
+      ) : (
+        <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-3'>
+          {items.map((item) => (
+            <article
+              className='border-border grid gap-2 rounded-lg border p-4'
+              key={item.site_id}
+            >
+              <div className='flex items-start justify-between gap-2'>
+                <div className='min-w-0'>
+                  <p className='font-medium break-words'>{item.site_name}</p>
+                  <code className='text-muted-foreground text-xs break-all'>
+                    {item.site_id}
+                  </code>
+                </div>
+                <DataStatusBadge status={item.data_status} />
               </div>
-              <DataStatusBadge status={item.data_status} />
-            </div>
-            <p className='text-muted-foreground text-xs'>
-              {t('userInventory.asOf', { time: timestamp(item.as_of) })}
-            </p>
-            <p className='text-sm'>
-              {t('userInventory.siteMetric', {
-                balance: item.balance,
-                users: item.user_count,
-              })}
-            </p>
-          </article>
-        ))}
-      </div>
+              <p className='text-muted-foreground text-xs'>
+                {t('userInventory.asOf', { time: timestamp(item.as_of) })}
+              </p>
+              <p className='text-sm break-words'>
+                {t('userInventory.siteMetric', {
+                  balance: item.balance,
+                  users: item.user_count,
+                })}
+              </p>
+            </article>
+          ))}
+        </div>
+      )}
     </section>
   )
 }
 
 export function UserInventoryPage({
+  onPageReplace,
   onSearchChange,
   search,
   siteId,
 }: {
+  onPageReplace: (page: number) => void
   onSearchChange: (changes: Partial<UserInventorySearch>) => void
   search: UserInventorySearch
   siteId?: string
@@ -749,11 +761,11 @@ export function UserInventoryPage({
     () => statisticsParams(search),
     [search]
   )
-  const siteParams = useMemo(() => ({ page_size: 100 }), [])
+  const siteParams = useMemo(() => ({}), [])
   const sitesQuery = useQuery({
     enabled: !siteId,
-    queryFn: () => listSites(siteParams),
-    queryKey: siteKeys.list(siteParams),
+    queryFn: () => listAllSites(siteParams),
+    queryKey: siteKeys.options(siteParams),
   })
   const listQuery = useQuery({
     enabled: validSiteId && search.tab === 'list',
@@ -798,19 +810,32 @@ export function UserInventoryPage({
       onSearchChange({ exportId: job.id })
     },
   })
-  const list = listQuery.data
-  const statistics = statisticsQuery.data
+  const list = useRetainedQueryData(listQuery.data, listQuery.isError)
+  const statistics = useRetainedQueryData(
+    statisticsQuery.data,
+    statisticsQuery.isError
+  )
+  useLastValidPage({
+    isFetching: listQuery.isFetching,
+    isPlaceholderData: listQuery.isPlaceholderData,
+    onReplace: onPageReplace,
+    page: search.page,
+    pageSize: list?.page_size ?? search.pageSize,
+    total: list?.total,
+  })
   const purpose = purposeText(search.tab, t)
   const columns = useMemo<ColumnDef<UserInventoryItem, unknown>[]>(
     () => [
       {
         cell: ({ row }) => (
-          <div className='min-w-40'>
-            <span className='font-medium'>{row.original.username}</span>
-            <span className='text-muted-foreground block text-xs'>
+          <div className='max-w-72 min-w-40'>
+            <span className='block font-medium break-words'>
+              {row.original.username}
+            </span>
+            <span className='text-muted-foreground block text-xs break-words'>
               {formatDisplayValue(row.original.display_name)}
             </span>
-            <code className='text-muted-foreground block text-xs'>
+            <code className='text-muted-foreground block text-xs break-all'>
               {row.original.remote_user_id}
             </code>
           </div>
@@ -820,9 +845,9 @@ export function UserInventoryPage({
       },
       {
         cell: ({ row }) => (
-          <div className='min-w-36'>
-            <span>{row.original.site_name}</span>
-            <code className='text-muted-foreground block text-xs'>
+          <div className='max-w-64 min-w-36'>
+            <span className='block break-words'>{row.original.site_name}</span>
+            <code className='text-muted-foreground block text-xs break-all'>
               {row.original.site_id}
             </code>
           </div>
@@ -835,7 +860,7 @@ export function UserInventoryPage({
           <div className='grid min-w-28 gap-1 text-xs'>
             <span>{roleText(row.original.role, t)}</span>
             <span>{statusText(row.original.status, t)}</span>
-            <code>{row.original.group || '-'}</code>
+            <code className='break-all'>{row.original.group || '-'}</code>
           </div>
         ),
         header: t('userInventory.roleStatusGroup'),
@@ -850,7 +875,7 @@ export function UserInventoryPage({
       },
       {
         cell: ({ row }) => (
-          <div className='grid min-w-36 gap-1 text-xs'>
+          <div className='grid min-w-36 gap-1 text-xs break-all'>
             <span>
               {t('userInventory.metric.quotaValue', {
                 value: row.original.quota,
@@ -878,11 +903,30 @@ export function UserInventoryPage({
       },
       {
         cell: ({ row }) => (
-          <div className='min-w-40 text-xs'>
-            <span>{timestamp(row.original.last_login_at)}</span>
-            <span className='text-muted-foreground block'>
+          <div className='grid min-w-52 gap-0.5 text-xs'>
+            <span>
+              {t('userInventory.remoteCreatedAt', {
+                time: timestamp(row.original.remote_created_at),
+              })}
+            </span>
+            <span>
+              {t('userInventory.firstSeenAt', {
+                time: timestamp(row.original.first_seen_at),
+              })}
+            </span>
+            <span>
+              {t('userInventory.lastLoginAt', {
+                time: timestamp(row.original.last_login_at),
+              })}
+            </span>
+            <span className='text-muted-foreground'>
               {t('userInventory.lastSeen', {
                 time: timestamp(row.original.last_seen_at),
+              })}
+            </span>
+            <span className='text-muted-foreground'>
+              {t('userInventory.missingCount', {
+                value: row.original.missing_count,
               })}
             </span>
           </div>
@@ -934,9 +978,10 @@ export function UserInventoryPage({
           : t('userInventory.description')
       }
       fixedContent
+      mobileScrollableContent
       title={siteId ? t('userInventory.siteTitle') : t('userInventory.title')}
     >
-      <div className='flex h-full min-h-0 min-w-0 flex-col gap-4'>
+      <div className='flex min-w-0 flex-col gap-4 lg:h-full lg:min-h-0'>
         {siteId && (
           <DetailBackLink
             render={<Link params={{ siteId }} to='/sites/$siteId' />}
@@ -981,10 +1026,20 @@ export function UserInventoryPage({
             <div className='flex flex-wrap items-center gap-2'>
               <p className='font-medium'>{purpose.title}</p>
               {statistics && (
-                <DataStatusBadge status={statistics.data_status} />
+                <span className='flex items-center gap-1.5 text-xs'>
+                  <span className='text-muted-foreground'>
+                    {t('userInventory.statisticsStatus')}
+                  </span>
+                  <DataStatusBadge status={statistics.data_status} />
+                </span>
               )}
               {search.tab === 'list' && list && (
-                <DataStatusBadge status={list.data_status} />
+                <span className='flex items-center gap-1.5 text-xs'>
+                  <span className='text-muted-foreground'>
+                    {t('userInventory.listStatus')}
+                  </span>
+                  <DataStatusBadge status={list.data_status} />
+                </span>
               )}
             </div>
             <p className='text-muted-foreground mt-1 text-sm'>
@@ -1006,6 +1061,18 @@ export function UserInventoryPage({
           search={search}
           sites={sitesQuery.data?.items ?? []}
         />
+        {!siteId && sitesQuery.isError && (
+          <QueryStateAlert
+            message={t('common.siteOptionsRefreshFailed')}
+            onRetry={() => void sitesQuery.refetch()}
+          />
+        )}
+        {search.tab === 'list' && listQuery.isError && list && (
+          <QueryStateAlert
+            message={t('common.retainedDataRefreshFailed')}
+            onRetry={() => void listQuery.refetch()}
+          />
+        )}
         {search.tab === 'list' && (
           <DataTable
             ariaLabel={t('userInventory.table')}
@@ -1013,9 +1080,10 @@ export function UserInventoryPage({
             data={list?.items ?? []}
             emptyDescription={t('userInventory.emptyDescription')}
             emptyTitle={t('userInventory.empty')}
-            error={!validSiteId || listQuery.isError}
+            error={!validSiteId || (listQuery.isError && !list)}
             fetching={listQuery.isFetching}
             loading={listQuery.isPending}
+            mobileCardBreakpoint='wide'
             onPageChange={(page) => onSearchChange({ page })}
             onPageSizeChange={(pageSize) =>
               onSearchChange({ page: 1, pageSize })
@@ -1026,15 +1094,18 @@ export function UserInventoryPage({
             renderMobileCard={(item) => (
               <article className='bg-card text-card-foreground ring-foreground/10 grid gap-3 rounded-xl p-4 ring-1'>
                 <div className='flex items-start justify-between gap-2'>
-                  <div>
-                    <p className='font-medium'>{item.username}</p>
-                    <code className='text-muted-foreground text-xs'>
+                  <div className='min-w-0'>
+                    <p className='font-medium break-words'>{item.username}</p>
+                    <p className='text-muted-foreground text-xs break-words'>
+                      {formatDisplayValue(item.display_name)}
+                    </p>
+                    <code className='text-muted-foreground text-xs break-all'>
                       {item.remote_user_id}
                     </code>
                   </div>
                   <InventoryStateBadge state={item.remote_state} />
                 </div>
-                <p className='text-muted-foreground text-xs'>
+                <p className='text-muted-foreground text-xs break-words'>
                   {item.site_name} · {item.site_id}
                 </p>
                 <dl className='grid grid-cols-2 gap-3 text-sm'>
@@ -1046,21 +1117,71 @@ export function UserInventoryPage({
                   </div>
                   <div>
                     <dt className='text-muted-foreground text-xs'>
+                      {t('common.status')}
+                    </dt>
+                    <dd>{statusText(item.status, t)}</dd>
+                  </div>
+                  <div>
+                    <dt className='text-muted-foreground text-xs'>
                       {t('userInventory.group')}
                     </dt>
-                    <dd>{item.group || '-'}</dd>
+                    <dd className='break-words'>{item.group || '-'}</dd>
                   </div>
                   <div>
                     <dt className='text-muted-foreground text-xs'>
                       {t('userInventory.metric.balance')}
                     </dt>
-                    <dd>{item.balance}</dd>
+                    <dd className='break-all'>{item.balance}</dd>
                   </div>
                   <div>
                     <dt className='text-muted-foreground text-xs'>
                       {t('userInventory.metric.requestCount')}
                     </dt>
-                    <dd>{item.request_count}</dd>
+                    <dd className='break-all'>{item.request_count}</dd>
+                  </div>
+                  <div>
+                    <dt className='text-muted-foreground text-xs'>
+                      {t('userInventory.metric.quota')}
+                    </dt>
+                    <dd className='break-all'>{item.quota}</dd>
+                  </div>
+                  <div>
+                    <dt className='text-muted-foreground text-xs'>
+                      {t('userInventory.metric.usedQuota')}
+                    </dt>
+                    <dd className='break-all'>{item.used_quota}</dd>
+                  </div>
+                  <div className='col-span-2'>
+                    <dt className='text-muted-foreground text-xs'>
+                      {t('userInventory.activity')}
+                    </dt>
+                    <dd className='mt-1 grid gap-x-3 gap-y-1 text-xs sm:grid-cols-2'>
+                      <span>
+                        {t('userInventory.remoteCreatedAt', {
+                          time: timestamp(item.remote_created_at),
+                        })}
+                      </span>
+                      <span>
+                        {t('userInventory.firstSeenAt', {
+                          time: timestamp(item.first_seen_at),
+                        })}
+                      </span>
+                      <span>
+                        {t('userInventory.lastLoginAt', {
+                          time: timestamp(item.last_login_at),
+                        })}
+                      </span>
+                      <span>
+                        {t('userInventory.lastSeen', {
+                          time: timestamp(item.last_seen_at),
+                        })}
+                      </span>
+                      <span>
+                        {t('userInventory.missingCount', {
+                          value: item.missing_count,
+                        })}
+                      </span>
+                    </dd>
                   </div>
                 </dl>
                 {item.account_id ? (
@@ -1078,18 +1199,33 @@ export function UserInventoryPage({
                 )}
               </article>
             )}
+            rowHeaderColumnId='user'
             total={list?.total ?? 0}
+          />
+        )}
+        {search.tab !== 'list' && statisticsQuery.isPending && !statistics && (
+          <LoadingState className='min-h-40' />
+        )}
+        {statisticsQuery.isError && statistics && (
+          <QueryStateAlert
+            message={t('common.retainedDataRefreshFailed')}
+            onRetry={() => void statisticsQuery.refetch()}
           />
         )}
         {statisticsQuery.isError && !statistics && (
           <ErrorState
             className='min-h-40'
-            onRetry={() => void statisticsQuery.refetch()}
+            onRetry={
+              validSiteId ? () => void statisticsQuery.refetch() : undefined
+            }
             title={t('userInventory.statisticsError')}
           />
         )}
         {statistics && search.tab !== 'list' && (
-          <div className='min-h-0 flex-1 overflow-y-auto pr-1' tabIndex={0}>
+          <div
+            className='min-h-0 overflow-visible pr-1 lg:flex-1 lg:overflow-y-auto'
+            tabIndex={0}
+          >
             {search.tab === 'trend' && (
               <TrendView
                 onSearchChange={onSearchChange}

@@ -9,6 +9,7 @@ import {
   authorizeSite,
   getSitePerformance,
   getSiteStatistics,
+  listAllSites,
   listSites,
   recheckSiteCapabilities,
 } from './api'
@@ -20,6 +21,51 @@ afterEach(() => {
 })
 
 describe('site API', () => {
+  test('loads every site page for complete filter options', async () => {
+    const pages: number[] = []
+    api.defaults.adapter = async (config) => {
+      const page = Number((config.params as URLSearchParams).get('p'))
+      pages.push(page)
+      return {
+        config,
+        data: {
+          code: '',
+          data: {
+            items: [
+              {
+                auth_status: 'authorized',
+                base_url: `https://site-${page}.example.com`,
+                created_at: 1,
+                health_status: 'ok',
+                id: String(page),
+                management_status: 'active',
+                name: `Site ${page}`,
+                online_status: 'online',
+                priority: 0,
+                statistics_status: 'ready',
+                updated_at: 1,
+              },
+            ],
+            page,
+            page_size: 100,
+            total: 201,
+          },
+          message: '',
+          request_id: `req_sites_${page}`,
+          success: true,
+        },
+        headers: {},
+        status: 200,
+        statusText: 'OK',
+      }
+    }
+
+    const result = await listAllSites({ sort_by: 'name', sort_order: 'asc' })
+
+    expect(pages).toEqual([1, 2, 3])
+    expect(result.items.map((item) => String(item.id))).toEqual(['1', '2', '3'])
+  })
+
   test('omits request params when the site list has no filters', async () => {
     api.defaults.adapter = async (config) => {
       expect(config.method).toBe('get')

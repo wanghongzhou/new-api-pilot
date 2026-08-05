@@ -17,6 +17,16 @@ function GlobalPricingGroups() {
   const navigate = Route.useNavigate()
   return (
     <PricingGroupsPage
+      onPageReplace={(page) =>
+        void navigate({
+          replace: true,
+          search: (current) =>
+            serializePricingGroupSearch({
+              ...buildPricingGroupSearch(current),
+              page,
+            }),
+        })
+      }
       onSearchChange={(changes) =>
         void navigate({
           search: (current) =>

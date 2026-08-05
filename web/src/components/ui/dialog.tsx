@@ -136,10 +136,12 @@ function DialogFooter({
   )
 }
 
-function DialogCancelButton() {
+function DialogCancelButton(props: React.ComponentProps<typeof Button>) {
   const { t } = useTranslation()
   return (
-    <DialogPrimitive.Close render={<Button autoFocus variant='outline' />}>
+    <DialogPrimitive.Close
+      render={<Button autoFocus variant='outline' {...props} />}
+    >
       {t('Cancel')}
     </DialogPrimitive.Close>
   )

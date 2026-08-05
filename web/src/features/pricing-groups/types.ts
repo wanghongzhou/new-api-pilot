@@ -1,8 +1,9 @@
 import type {
   DataStatus,
-  DecimalString,
   IdString,
   MetricString,
+  NonNegativeIdString,
+  PricingDecimalString,
   Timestamp,
 } from '@/lib/api-types'
 
@@ -13,7 +14,7 @@ export type PricingBillingMode = 'token' | 'fixed' | 'tiered_expr'
 export interface PricingCatalogItem {
   id: IdString
   site_id: IdString
-  vendor_id: IdString
+  vendor_id: NonNegativeIdString
   quota_type: MetricString
   site_name: string
   model_name: string
@@ -22,15 +23,15 @@ export interface PricingCatalogItem {
   icon: string
   tags: string
   owner_by: string
-  model_ratio: DecimalString
-  model_price: DecimalString
-  completion_ratio: DecimalString
-  cache_ratio: DecimalString | null
-  create_cache_ratio: DecimalString | null
-  image_ratio: DecimalString | null
-  audio_ratio: DecimalString | null
-  audio_completion_ratio: DecimalString | null
-  billing_mode: string
+  model_ratio: PricingDecimalString
+  model_price: PricingDecimalString
+  completion_ratio: PricingDecimalString
+  cache_ratio: PricingDecimalString | null
+  create_cache_ratio: PricingDecimalString | null
+  image_ratio: PricingDecimalString | null
+  audio_ratio: PricingDecimalString | null
+  audio_completion_ratio: PricingDecimalString | null
+  billing_mode: PricingBillingMode
   billing_expr: string
   pricing_source: 'token_default' | 'token_explicit' | 'fixed' | 'tiered_expr'
   ability_available: boolean
@@ -48,14 +49,14 @@ export interface PricingGroupItem {
   site_id: IdString
   site_name: string
   name: string
-  ratio: DecimalString | null
-  topup_ratio: DecimalString | null
+  ratio: PricingDecimalString | null
+  topup_ratio: PricingDecimalString | null
   description: string
   user_selectable: boolean
   default_use_auto_group: boolean
   auto_priority: number | null
-  outgoing_overrides: Record<string, DecimalString>
-  incoming_overrides: Record<string, DecimalString>
+  outgoing_overrides: Record<string, PricingDecimalString>
+  incoming_overrides: Record<string, PricingDecimalString>
   visible_to_groups: Record<string, string>
   hidden_from_groups: string[]
   remote_state: PricingCatalogState
@@ -77,6 +78,11 @@ export interface CatalogPage<T> {
 }
 
 export interface PricingGroupPage extends CatalogPage<PricingGroupItem> {
+  as_of: Timestamp | null
+  site_breakdown: PricingCatalogSiteBreakdown[]
+}
+
+export interface PricingCatalogPage extends CatalogPage<PricingCatalogItem> {
   as_of: Timestamp | null
   site_breakdown: PricingCatalogSiteBreakdown[]
 }

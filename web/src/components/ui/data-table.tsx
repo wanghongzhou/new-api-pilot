@@ -45,6 +45,7 @@ interface DataTableProps<TData> {
   fetching?: boolean
   fillAvailableHeight?: boolean
   loading?: boolean
+  mobileCardBreakpoint?: 'compact' | 'wide'
   onPageChange?: (page: number) => void
   onPageSizeChange?: (pageSize: number) => void
   onRetry?: () => void
@@ -54,6 +55,7 @@ interface DataTableProps<TData> {
   paginationInFooter?: boolean
   preserveHeaderWhenEmpty?: boolean
   renderMobileCard?: (item: TData) => ReactNode
+  rowHeaderColumnId?: string
   sorting?: SortingState
   total?: number
 }
@@ -69,6 +71,7 @@ export function DataTable<TData>({
   fetching = false,
   fillAvailableHeight = true,
   loading = false,
+  mobileCardBreakpoint = 'compact',
   onPageChange,
   onPageSizeChange,
   onRetry,
@@ -78,6 +81,7 @@ export function DataTable<TData>({
   paginationInFooter = true,
   preserveHeaderWhenEmpty = true,
   renderMobileCard,
+  rowHeaderColumnId,
   sorting = [],
   total = data.length,
 }: DataTableProps<TData>) {
@@ -121,7 +125,10 @@ export function DataTable<TData>({
   if (error && data.length === 0 && !preserveHeaderWhenEmpty) {
     return (
       <div className='grid min-w-0 gap-3'>
-        <Empty className='border-border bg-background min-h-64 border'>
+        <Empty
+          className='border-border bg-background min-h-64 border'
+          role='alert'
+        >
           <EmptyHeader>
             <EmptyMedia variant='icon'>
               <HugeiconsIcon
@@ -181,7 +188,7 @@ export function DataTable<TData>({
       )
     } else if (error) {
       content = (
-        <Empty className='min-h-56 rounded-none border-0'>
+        <Empty className='min-h-56 rounded-none border-0' role='alert'>
           <EmptyHeader>
             <EmptyMedia variant='icon'>
               <HugeiconsIcon
@@ -249,7 +256,10 @@ export function DataTable<TData>({
           'border-border bg-background overflow-hidden rounded-md border transition-opacity duration-150',
           fillAvailableHeight && 'min-h-0 flex-1',
           fetching && !loading && 'pointer-events-none opacity-60',
-          renderMobileCard && 'hidden min-[641px]:block'
+          renderMobileCard &&
+            (mobileCardBreakpoint === 'wide'
+              ? 'hidden lg:block'
+              : 'hidden min-[641px]:block')
         )}
       >
         <div
@@ -310,14 +320,25 @@ export function DataTable<TData>({
                     className='border-t align-top transition-colors hover:bg-[var(--table-header-hover)]'
                     key={row.id}
                   >
-                    {row.getVisibleCells().map((cell) => (
-                      <TableCell className='px-3 py-2.5' key={cell.id}>
-                        {flexRender(
-                          cell.column.columnDef.cell,
-                          cell.getContext()
-                        )}
-                      </TableCell>
-                    ))}
+                    {row.getVisibleCells().map((cell) => {
+                      const content = flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext()
+                      )
+                      return cell.column.id === rowHeaderColumnId ? (
+                        <th
+                          className='px-3 py-2.5 text-left align-top font-normal whitespace-normal'
+                          key={cell.id}
+                          scope='row'
+                        >
+                          {content}
+                        </th>
+                      ) : (
+                        <TableCell className='px-3 py-2.5' key={cell.id}>
+                          {content}
+                        </TableCell>
+                      )
+                    })}
                   </TableRow>
                 ))}
             </TableBody>
@@ -329,7 +350,10 @@ export function DataTable<TData>({
           aria-label={ariaLabel}
           aria-busy={loading || fetching}
           className={cn(
-            'grid min-h-0 flex-1 gap-3 overflow-y-auto pb-16 transition-opacity duration-150 min-[641px]:hidden',
+            'grid min-h-0 flex-1 gap-3 pb-16 transition-opacity duration-150',
+            mobileCardBreakpoint === 'wide'
+              ? 'overflow-visible lg:hidden lg:overflow-y-auto'
+              : 'overflow-y-auto min-[641px]:hidden',
             fetching && !loading && 'pointer-events-none opacity-60'
           )}
           role='region'

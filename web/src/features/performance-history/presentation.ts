@@ -27,6 +27,14 @@ export function successRateToPercent(value: string | null): string | null {
   return value == null ? null : `${new Decimal(value).times(100).toFixed()}%`
 }
 
+export function formatPerformanceTps(
+  value: string | null
+): DecimalString | null {
+  return value == null
+    ? null
+    : parseDecimalString(new Decimal(value).toDecimalPlaces(2).toString())
+}
+
 export function trustedWeightedSummary(
   statistics: PerformanceHistoryStatisticsResponse
 ): PerformanceWeightedMetric {

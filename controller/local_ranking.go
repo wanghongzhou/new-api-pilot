@@ -2,11 +2,13 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"github.com/gin-gonic/gin"
 	"net/http"
 	"new-api-pilot/common"
 	"new-api-pilot/constant"
 	"new-api-pilot/dto"
+	"new-api-pilot/service"
 )
 
 type localRankingApplication interface {
@@ -45,7 +47,11 @@ func (c *LocalRankingController) run(g *gin.Context, sites []int64, kind string)
 	}
 	out, err := c.service.Query(g.Request.Context(), q, kind)
 	if err != nil {
-		common.AbortError(g, http.StatusBadRequest, constant.CodeValidationError, "Invalid ranking query", nil)
+		if errors.Is(err, service.ErrStatisticsInvalid) {
+			common.AbortError(g, http.StatusBadRequest, constant.CodeValidationError, "Invalid ranking query", nil)
+		} else {
+			common.AbortInternalError(g)
+		}
 		return
 	}
 	common.WriteSuccess(g, http.StatusOK, out)

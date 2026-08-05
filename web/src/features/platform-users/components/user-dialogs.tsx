@@ -37,7 +37,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { UnsavedChangesConfirmDialog } from '@/components/unsaved-changes-guard'
 import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
-import { getApiErrorTranslationKey } from '@/lib/api'
+import { getApiErrorTranslationKey, normalizeApiError } from '@/lib/api'
 import { applyApiFieldErrors } from '@/lib/form-errors'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -59,6 +59,7 @@ import {
 import type { PlatformUserItem } from '../types'
 
 interface ControlledDialogProps {
+  disabledReason?: string
   onOpenChange: (open: boolean) => void
   onSaved: () => void
   open: boolean
@@ -71,7 +72,20 @@ function translatedError(
   return message ? t(dynamicI18nKey('platformUser', message)) : undefined
 }
 
+function DisabledWriteNotice({ reason }: { reason?: string }) {
+  if (!reason) return null
+  return (
+    <p
+      className='border-warning/40 bg-warning/10 text-warning-foreground rounded-md border px-3 py-2 text-sm'
+      role='alert'
+    >
+      {reason}
+    </p>
+  )
+}
+
 export function CreateUserDialog({
+  disabledReason,
   onOpenChange,
   onSaved,
   open,
@@ -113,6 +127,7 @@ export function CreateUserDialog({
   }, [open, reset])
 
   const submit = handleSubmit(async (values) => {
+    if (disabledReason) return
     setSubmitting(true)
     try {
       await createPlatformUser({
@@ -147,9 +162,10 @@ export function CreateUserDialog({
         direction='right'
         onOpenChange={(nextOpen) => {
           if (nextOpen) onOpenChange(true)
+          else if (submitting) return
           else createCloseGuard.requestClose()
         }}
-        open={open}
+        open={open && !createCloseGuard.confirmOpen}
       >
         <DrawerContent className={sideDrawerContentClassName('sm:max-w-xl')}>
           <DrawerHeader className={sideDrawerHeaderClassName()}>
@@ -163,6 +179,7 @@ export function CreateUserDialog({
             id='create-user-form'
             onSubmit={submit}
           >
+            <DisabledWriteNotice reason={disabledReason} />
             <FormField
               error={translatedError(errors.username?.message, t)}
               htmlFor='create-username'
@@ -245,13 +262,18 @@ export function CreateUserDialog({
           </form>
           <DrawerFooter className={sideDrawerFooterClassName()}>
             <Button
+              disabled={submitting}
               onClick={createCloseGuard.requestClose}
               type='button'
               variant='outline'
             >
               {t('common.cancel')}
             </Button>
-            <Button disabled={submitting} form='create-user-form' type='submit'>
+            <Button
+              disabled={submitting || Boolean(disabledReason)}
+              form='create-user-form'
+              type='submit'
+            >
               {submitting && <Spinner />}
               {t('Create user')}
             </Button>
@@ -268,6 +290,7 @@ export function CreateUserDialog({
 }
 
 export function EditUserDialog({
+  disabledReason,
   isLastEnabledAdmin,
   onOpenChange,
   onSaved,
@@ -306,11 +329,12 @@ export function EditUserDialog({
   }, [open, reset, user])
 
   const submit = handleSubmit(async (values) => {
-    if (!user) return
+    if (!user || disabledReason) return
     setSubmitting(true)
     try {
       const updated = await updatePlatformUser(user.id, {
         display_name: values.displayName,
+        expected_updated_at: user.updated_at,
         role: values.role,
         username: values.username,
       })
@@ -332,12 +356,17 @@ export function EditUserDialog({
         display_name: 'displayName',
       })
       if (!mapped) {
+        const apiError = normalizeApiError(error)
+        const isConcurrentEdit =
+          apiError.status === 409 && apiError.code === 'CONFLICT'
+        const message = isConcurrentEdit
+          ? t('Platform user changed; refresh and retry')
+          : t(dynamicI18nKey('platformUser', getApiErrorTranslationKey(error)))
         setError('root', {
-          message: t(
-            dynamicI18nKey('platformUser', getApiErrorTranslationKey(error))
-          ),
+          message,
           type: 'server',
         })
+        if (isConcurrentEdit) toast.error(message)
       }
     } finally {
       setSubmitting(false)
@@ -350,9 +379,10 @@ export function EditUserDialog({
         direction='right'
         onOpenChange={(nextOpen) => {
           if (nextOpen) onOpenChange(true)
+          else if (submitting) return
           else editCloseGuard.requestClose()
         }}
-        open={open}
+        open={open && !editCloseGuard.confirmOpen}
       >
         <DrawerContent className={sideDrawerContentClassName('sm:max-w-xl')}>
           <DrawerHeader className={sideDrawerHeaderClassName()}>
@@ -366,6 +396,7 @@ export function EditUserDialog({
             id='edit-user-form'
             onSubmit={submit}
           >
+            <DisabledWriteNotice reason={disabledReason} />
             <FormField
               error={translatedError(errors.username?.message, t)}
               htmlFor='edit-username'
@@ -432,13 +463,18 @@ export function EditUserDialog({
           </form>
           <DrawerFooter className={sideDrawerFooterClassName()}>
             <Button
+              disabled={submitting}
               onClick={editCloseGuard.requestClose}
               type='button'
               variant='outline'
             >
               {t('common.cancel')}
             </Button>
-            <Button disabled={submitting} form='edit-user-form' type='submit'>
+            <Button
+              disabled={submitting || Boolean(disabledReason)}
+              form='edit-user-form'
+              type='submit'
+            >
               {submitting && <Spinner />}
               {t('Save changes')}
             </Button>
@@ -455,6 +491,7 @@ export function EditUserDialog({
 }
 
 export function ResetPasswordDialog({
+  disabledReason,
   onOpenChange,
   onSaved,
   open,
@@ -463,7 +500,7 @@ export function ResetPasswordDialog({
   const { t } = useTranslation()
   const [submitting, setSubmitting] = useState(false)
   const {
-    formState: { errors },
+    formState: { errors, isDirty },
     handleSubmit,
     register,
     reset,
@@ -472,13 +509,17 @@ export function ResetPasswordDialog({
     defaultValues: { confirmPassword: '', password: '' },
     resolver: zodResolver(resetPlatformUserPasswordSchema),
   })
+  const resetCloseGuard = useUnsavedChangesGuard({
+    hasUnsavedChanges: isDirty,
+    onClose: () => onOpenChange(false),
+  })
 
   useEffect(() => {
     if (open) reset({ confirmPassword: '', password: '' })
   }, [open, reset])
 
   const submit = handleSubmit(async (values) => {
-    if (!user) return
+    if (!user || disabledReason) return
     setSubmitting(true)
     try {
       await resetPlatformUserPassword(user.id, {
@@ -505,70 +546,90 @@ export function ResetPasswordDialog({
   })
 
   return (
-    <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{t('Reset password')}</DialogTitle>
-          <DialogDescription>
-            {t('{{username}} must change this password at the next sign-in', {
-              username: user?.username ?? '',
-            })}
-          </DialogDescription>
-        </DialogHeader>
-        <form className='grid gap-4' id='reset-password-form' onSubmit={submit}>
-          <FormField
-            description={t(
-              'Use 8 or more Unicode characters, up to 72 UTF-8 bytes'
+    <>
+      <Dialog
+        onOpenChange={(nextOpen) => {
+          if (nextOpen) onOpenChange(true)
+          else if (submitting) return
+          else resetCloseGuard.requestClose()
+        }}
+        open={open && !resetCloseGuard.confirmOpen}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('Reset password')}</DialogTitle>
+            <DialogDescription>
+              {t('{{username}} must change this password at the next sign-in', {
+                username: user?.username ?? '',
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <DisabledWriteNotice reason={disabledReason} />
+          <form
+            className='grid gap-4'
+            id='reset-password-form'
+            onSubmit={submit}
+          >
+            <FormField
+              description={t(
+                'Use 8 or more Unicode characters, up to 72 UTF-8 bytes'
+              )}
+              error={translatedError(errors.password?.message, t)}
+              htmlFor='reset-password'
+              label={t('Temporary password')}
+              required
+            >
+              <PasswordInput
+                aria-invalid={Boolean(errors.password)}
+                autoComplete='new-password'
+                id='reset-password'
+                {...register('password')}
+              />
+            </FormField>
+            <FormField
+              error={translatedError(errors.confirmPassword?.message, t)}
+              htmlFor='reset-confirm-password'
+              label={t('Confirm password')}
+              required
+            >
+              <PasswordInput
+                aria-invalid={Boolean(errors.confirmPassword)}
+                autoComplete='new-password'
+                id='reset-confirm-password'
+                {...register('confirmPassword')}
+              />
+            </FormField>
+            {errors.root?.message && (
+              <p className='text-destructive text-sm' role='alert'>
+                {errors.root.message}
+              </p>
             )}
-            error={translatedError(errors.password?.message, t)}
-            htmlFor='reset-password'
-            label={t('Temporary password')}
-            required
-          >
-            <PasswordInput
-              aria-invalid={Boolean(errors.password)}
-              autoComplete='new-password'
-              id='reset-password'
-              {...register('password')}
-            />
-          </FormField>
-          <FormField
-            error={translatedError(errors.confirmPassword?.message, t)}
-            htmlFor='reset-confirm-password'
-            label={t('Confirm password')}
-            required
-          >
-            <PasswordInput
-              aria-invalid={Boolean(errors.confirmPassword)}
-              autoComplete='new-password'
-              id='reset-confirm-password'
-              {...register('confirmPassword')}
-            />
-          </FormField>
-          {errors.root?.message && (
-            <p className='text-destructive text-sm' role='alert'>
-              {errors.root.message}
-            </p>
-          )}
-        </form>
-        <DialogFooter>
-          <DialogCancelButton />
-          <Button
-            disabled={submitting}
-            form='reset-password-form'
-            type='submit'
-          >
-            {submitting && <Spinner />}
-            {t('Reset password')}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          </form>
+          <DialogFooter>
+            <DialogCancelButton disabled={submitting} />
+            <Button
+              disabled={submitting || Boolean(disabledReason)}
+              form='reset-password-form'
+              type='submit'
+            >
+              {submitting && <Spinner />}
+              {t('Reset password')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <UnsavedChangesConfirmDialog
+        onConfirm={resetCloseGuard.discardAndClose}
+        onOpenChange={resetCloseGuard.setConfirmOpen}
+        open={resetCloseGuard.confirmOpen}
+      />
+    </>
   )
 }
 
 export function ToggleUserDialog({
   action,
+  disabledReason,
   onOpenChange,
   onSaved,
   open,
@@ -581,7 +642,7 @@ export function ToggleUserDialog({
   const [submitting, setSubmitting] = useState(false)
 
   const submit = async () => {
-    if (!user) return
+    if (!user || disabledReason) return
     setSubmitting(true)
     try {
       if (action === 'enable') await enablePlatformUser(user.id)
@@ -611,11 +672,18 @@ export function ToggleUserDialog({
   if (disabling) {
     return (
       <ConfirmDialog
+        confirmDisabled={Boolean(disabledReason)}
         confirmLabel={t('Disable user')}
-        description={t(
-          '{{username}} will immediately lose access to the platform',
-          { username: user?.username ?? '' }
-        )}
+        description={
+          <div className='grid gap-3'>
+            <span>
+              {t('{{username}} will immediately lose access to the platform', {
+                username: user?.username ?? '',
+              })}
+            </span>
+            <DisabledWriteNotice reason={disabledReason} />
+          </div>
+        }
         onConfirm={() => void submit()}
         onOpenChange={onOpenChange}
         open={open}
@@ -635,10 +703,11 @@ export function ToggleUserDialog({
             })}
           </DialogDescription>
         </DialogHeader>
+        <DisabledWriteNotice reason={disabledReason} />
         <DialogFooter>
           <DialogCancelButton />
           <Button
-            disabled={submitting}
+            disabled={submitting || Boolean(disabledReason)}
             onClick={() => void submit()}
             variant='default'
           >

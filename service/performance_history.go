@@ -2,15 +2,17 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"gorm.io/gorm"
 	"new-api-pilot/dto"
 	"new-api-pilot/model"
+	"sort"
 	"strconv"
 )
 
 type PerformanceHistoryService struct {
-	repository *model.PerformanceHistoryRepository
+	database *gorm.DB
 }
 
 var ErrPerformanceHistoryTooLarge = errors.New("performance history result set is too large")
@@ -19,23 +21,38 @@ func NewPerformanceHistoryService(db *gorm.DB) (*PerformanceHistoryService, erro
 	if db == nil {
 		return nil, errors.New("performance history database is required")
 	}
-	return &PerformanceHistoryService{repository: model.NewPerformanceHistoryRepository(db)}, nil
+	return &PerformanceHistoryService{database: db}, nil
+}
+
+func (s *PerformanceHistoryService) readSnapshot(ctx context.Context, read func(*model.PerformanceHistoryRepository) error) error {
+	if s == nil || s.database == nil || read == nil {
+		return errors.New("performance history snapshot dependencies are required")
+	}
+	return s.database.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return read(model.NewPerformanceHistoryRepository(tx))
+	}, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 }
 func (s *PerformanceHistoryService) List(ctx context.Context, q dto.PerformanceHistoryQuery) (dto.PerformanceHistoryPage, error) {
 	q.Normalize()
 	if s == nil || q.Validate() != nil {
 		return dto.PerformanceHistoryPage{}, ErrStatisticsInvalid
 	}
-	rows, total, err := s.repository.List(ctx, q)
-	if err != nil {
-		return dto.PerformanceHistoryPage{}, err
-	}
-	coverage, err := s.repository.CollectionCoverage(ctx, q.SiteIDs)
-	if err != nil {
+	var rows []model.PerformanceHistoryReadRow
+	var coverage model.PerformanceCollectionCoverage
+	var total int64
+	if err := s.readSnapshot(ctx, func(repository *model.PerformanceHistoryRepository) error {
+		var err error
+		if rows, total, err = repository.List(ctx, q); err != nil {
+			return err
+		}
+		coverage, err = repository.CollectionCoverage(ctx, q.SiteIDs)
+		return err
+	}); err != nil {
 		return dto.PerformanceHistoryPage{}, err
 	}
 	items := performanceHistoryItems(rows)
-	return dto.PerformanceHistoryPage{Items: items, Total: total, Page: q.Page, PageSize: q.PageSize, DataStatus: performanceCollectionStatus(coverage), AsOf: coverage.AsOf}, nil
+	complete := performanceCompleteness(coverage)
+	return dto.PerformanceHistoryPage{Items: items, Total: total, Page: q.Page, PageSize: q.PageSize, DataStatus: complete.DataStatus, AsOf: coverage.AsOf, Completeness: complete}, nil
 }
 func (s *PerformanceHistoryService) Statistics(ctx context.Context, q dto.PerformanceHistoryQuery) (dto.PerformanceHistoryStatisticsResponse, error) {
 	q.Normalize()
@@ -43,29 +60,83 @@ func (s *PerformanceHistoryService) Statistics(ctx context.Context, q dto.Perfor
 	if s == nil || q.Validate() != nil {
 		return dto.PerformanceHistoryStatisticsResponse{}, ErrStatisticsInvalid
 	}
-	rows, err := s.repository.All(ctx, q)
-	if err != nil {
+	var rows []model.PerformanceHistoryReadRow
+	var coverage model.PerformanceCollectionCoverage
+	if err := s.readSnapshot(ctx, func(repository *model.PerformanceHistoryRepository) error {
+		var readErr error
+		if rows, readErr = repository.All(ctx, q); readErr != nil {
+			return readErr
+		}
+		coverage, readErr = repository.CollectionCoverage(ctx, q.SiteIDs)
+		return readErr
+	}); err != nil {
 		if errors.Is(err, model.ErrPerformanceHistoryResultTooLarge) {
 			return dto.PerformanceHistoryStatisticsResponse{}, ErrPerformanceHistoryTooLarge
 		}
 		return dto.PerformanceHistoryStatisticsResponse{}, err
 	}
-	coverage, err := s.repository.CollectionCoverage(ctx, q.SiteIDs)
-	if err != nil {
-		return dto.PerformanceHistoryStatisticsResponse{}, err
-	}
 	items := performanceHistoryItems(rows)
-	out := dto.PerformanceHistoryStatisticsResponse{Trend: items, SiteBreakdown: items, AggregationStatus: "unavailable", DataStatus: performanceCollectionStatus(coverage), UnavailableReason: "upstream_standard_api_missing_counters"}
+	complete := performanceCompleteness(coverage)
+	out := dto.PerformanceHistoryStatisticsResponse{
+		Trend:             items,
+		ModelBreakdown:    []dto.PerformanceDimensionBreakdown{},
+		GroupBreakdown:    []dto.PerformanceDimensionBreakdown{},
+		SiteBreakdown:     items,
+		AggregationStatus: "unavailable",
+		DataStatus:        complete.DataStatus,
+		AsOf:              coverage.AsOf,
+		Completeness:      complete,
+		UnavailableReason: "upstream_standard_api_missing_counters",
+	}
 	if len(rows) == 0 {
 		return out, nil
 	}
 	success, latency, ttft, tps, requests, ok := model.WeightedPerformance(rows)
 	if ok {
 		out.Summary = dto.PerformanceWeightedMetric{SuccessRate: &success, AvgLatencyMS: &latency, AvgTTFTMS: &ttft, AvgTPS: &tps, RequestCount: &requests}
+		out.ModelBreakdown = weightedPerformanceDimensionBreakdown(rows, func(row model.PerformanceHistoryReadRow) string { return row.ModelName })
+		out.GroupBreakdown = weightedPerformanceDimensionBreakdown(rows, func(row model.PerformanceHistoryReadRow) string { return row.RemoteGroup })
 		out.AggregationStatus = "complete"
 		out.UnavailableReason = ""
 	}
 	return out, nil
+}
+
+func performanceCompleteness(coverage model.PerformanceCollectionCoverage) dto.PerformanceCompleteness {
+	return dto.PerformanceCompleteness{DataStatus: performanceCollectionStatus(coverage), SuccessfulSiteCount: coverage.SuccessfulSites, UnavailableSiteCount: coverage.UnavailableSites, ExpectedSiteCount: coverage.SiteCount}
+}
+
+func weightedPerformanceDimensionBreakdown(rows []model.PerformanceHistoryReadRow, key func(model.PerformanceHistoryReadRow) string) []dto.PerformanceDimensionBreakdown {
+	grouped := make(map[string][]model.PerformanceHistoryReadRow)
+	for _, row := range rows {
+		value := key(row)
+		grouped[value] = append(grouped[value], row)
+	}
+	keys := make([]string, 0, len(grouped))
+	for value := range grouped {
+		keys = append(keys, value)
+	}
+	sort.Strings(keys)
+	out := make([]dto.PerformanceDimensionBreakdown, 0, len(keys))
+	for _, value := range keys {
+		group := grouped[value]
+		success, latency, ttft, tps, requests, ok := model.WeightedPerformance(group)
+		if !ok {
+			continue
+		}
+		requestCount := requests
+		out = append(out, dto.PerformanceDimensionBreakdown{
+			Dimension: value,
+			PerformanceWeightedMetric: dto.PerformanceWeightedMetric{
+				SuccessRate:  &success,
+				AvgLatencyMS: &latency,
+				AvgTTFTMS:    &ttft,
+				AvgTPS:       &tps,
+				RequestCount: &requestCount,
+			},
+		})
+	}
+	return out
 }
 
 func performanceCollectionStatus(coverage model.PerformanceCollectionCoverage) string {

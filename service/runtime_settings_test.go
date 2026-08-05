@@ -1,11 +1,23 @@
 package service
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
 	testsupport "new-api-pilot/tests/support"
 )
+
+type rejectingReconfigureGovernor struct{ err error }
+
+func (governor rejectingReconfigureGovernor) Acquire(context.Context, string, UpstreamRequestClass) (func(), error) {
+	return func() {}, nil
+}
+func (governor rejectingReconfigureGovernor) ObserveRateLimit(string, time.Duration, bool) {}
+func (governor rejectingReconfigureGovernor) Reconfigure(UpstreamGovernorOptions) error {
+	return governor.err
+}
 
 func TestRuntimeSettingsBuildsCanonicalHotReloadSnapshot(t *testing.T) {
 	clock := testsupport.NewFakeClock(time.Unix(1_752_400_800, 0))
@@ -18,7 +30,9 @@ func TestRuntimeSettingsBuildsCanonicalHotReloadSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build() error = %v", err)
 	}
-	store.Store(snapshot)
+	if err := store.Store(snapshot); err != nil {
+		t.Fatalf("Store() error = %v", err)
+	}
 
 	loaded := store.Snapshot()
 	if loaded.FastTaskRetention != 24*time.Hour || loaded.FastTaskCount != 100 {
@@ -59,6 +73,25 @@ func TestRuntimeSettingCanonicalizersNormalizeOperatorInput(t *testing.T) {
 	cidrs, err := canonicalUpstreamCIDRs("192.168.1.7/24\n10.0.0.1")
 	if err != nil || cidrs != "10.0.0.1/32,192.168.1.0/24" {
 		t.Fatalf("canonical CIDRs = %q, %v", cidrs, err)
+	}
+}
+
+func TestRuntimeSettingsStoreDoesNotPublishSnapshotWhenGovernorReconfigureFails(t *testing.T) {
+	reconfigureError := errors.New("reconfigure failed")
+	store := &RuntimeSettingsStore{}
+	store.value.Store(&RuntimeSettingsSnapshot{
+		AllowedHosts: []string{"old.example.com"}, Governor: rejectingReconfigureGovernor{err: reconfigureError},
+	})
+	store.version.Store(1)
+	err := store.StoreVersioned(RuntimeSettingsSnapshot{
+		AllowedHosts: []string{"new.example.com"}, Governor: rejectingReconfigureGovernor{err: reconfigureError},
+		governorOptions: UpstreamGovernorOptions{Requests: 1, Window: time.Second, MaxInFlight: 1},
+	}, 2)
+	if !errors.Is(err, reconfigureError) {
+		t.Fatalf("StoreVersioned() error = %v", err)
+	}
+	if got := store.Snapshot().AllowedHosts; len(got) != 1 || got[0] != "old.example.com" || store.version.Load() != 1 {
+		t.Fatalf("failed reconfigure published snapshot/version: %v/%d", got, store.version.Load())
 	}
 }
 

@@ -61,17 +61,24 @@ describe('model catalog API contract', () => {
       '/api/model-catalog/coverage',
       '/api/model-catalog/missing',
     ])
-    for (const request of requests.slice(0, 2)) {
-      const params = request.params as URLSearchParams
-      expect(params.getAll('site_ids')).toEqual(['9007199254740993'])
-      expect(params.getAll('statuses')).toEqual(['0', '1'])
-      expect(params.getAll('sync_official')).toEqual(['1'])
-      expect(params.get('vendor_id')).toBe('0')
-      expect(params.get('keyword')).toBe('safe-model')
-    }
+    const catalogParams = requests[0]?.params as URLSearchParams
+    expect(catalogParams.getAll('site_ids')).toEqual(['9007199254740993'])
+    expect(catalogParams.getAll('statuses')).toEqual(['0', '1'])
+    expect(catalogParams.getAll('sync_official')).toEqual(['1'])
+    expect(catalogParams.get('vendor_id')).toBe('0')
+    expect(catalogParams.get('keyword')).toBe('safe-model')
+    expect(catalogParams.get('p')).toBe('2')
+    expect(catalogParams.get('page_size')).toBe('20')
+
+    const coverageParams = requests[1]?.params as URLSearchParams
+    expect([...coverageParams.entries()]).toEqual([
+      ['site_ids', '9007199254740993'],
+    ])
     const missingParams = requests[2]?.params as URLSearchParams
     expect(missingParams.getAll('site_ids')).toEqual(['9007199254740993'])
     expect(missingParams.get('keyword')).toBe('safe-model')
+    expect(missingParams.get('p')).toBe('2')
+    expect(missingParams.get('page_size')).toBe('20')
     expect(missingParams.has('statuses')).toBe(false)
     expect(missingParams.has('sync_official')).toBe(false)
     expect(missingParams.has('vendor_id')).toBe(false)
@@ -100,5 +107,7 @@ describe('model catalog API contract', () => {
     for (const request of requests) {
       expect((request.params as URLSearchParams).has('site_ids')).toBe(false)
     }
+    const siteCoverageParams = requests[1]?.params as URLSearchParams
+    expect([...siteCoverageParams.entries()]).toEqual([])
   })
 })

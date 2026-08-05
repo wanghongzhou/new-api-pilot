@@ -29,15 +29,47 @@ func TestPricingCatalogQueryRejectsOversizedFilters(t *testing.T) {
 }
 
 func TestSubscriptionPlanQueryRejectsOversizedFilters(t *testing.T) {
-	queries := []SubscriptionPlanQuery{
-		{Page: 1, PageSize: 20, SiteIDs: catalogTestSiteIDs(101)},
-		{Page: 1, PageSize: 20, States: []string{"normal", "missing", "unexpected"}},
-		{Page: 1, PageSize: 20, Keyword: strings.Repeat("界", 43)},
+	tests := []struct {
+		field string
+		query SubscriptionPlanQuery
+	}{
+		{field: "filters", query: SubscriptionPlanQuery{Page: 1, PageSize: 20, SiteIDs: catalogTestSiteIDs(101)}},
+		{field: "filters", query: SubscriptionPlanQuery{Page: 1, PageSize: 20, States: []string{"normal", "missing", "unexpected"}}},
+		{field: "keyword", query: SubscriptionPlanQuery{Page: 1, PageSize: 20, Keyword: strings.Repeat("界", 43)}},
+		{field: "keyword", query: SubscriptionPlanQuery{Page: 1, PageSize: 20, Keyword: string([]byte{0xff})}},
 	}
-	for index, query := range queries {
-		query.Normalize()
-		if fields := query.Validate(); fields == nil || fields["filters"] == "" {
+	for index, test := range tests {
+		test.query.Normalize()
+		if fields := test.query.Validate(); fields == nil || fields[test.field] == "" {
 			t.Fatalf("case %s validation=%v", strconv.Itoa(index), fields)
+		}
+	}
+}
+
+func TestCatalogQueriesRejectInvalidUTF8AndByteOverflow(t *testing.T) {
+	modelQueries := []ModelCatalogQuery{
+		{Page: 1, PageSize: 20, Keyword: strings.Repeat("界", 43)},
+		{Page: 1, PageSize: 20, Keyword: string([]byte{0xff})},
+	}
+	for _, query := range modelQueries {
+		query.Normalize()
+		if fields := query.Validate(); fields == nil || fields["keyword"] == "" {
+			t.Fatalf("model query validation=%v", fields)
+		}
+	}
+
+	pricingQueries := []struct {
+		field string
+		query PricingCatalogQuery
+	}{
+		{field: "keyword", query: PricingCatalogQuery{Page: 1, PageSize: 20, Keyword: strings.Repeat("界", 86)}},
+		{field: "keyword", query: PricingCatalogQuery{Page: 1, PageSize: 20, Keyword: string([]byte{0xff})}},
+		{field: "group", query: PricingCatalogQuery{Page: 1, PageSize: 20, Group: strings.Repeat("界", 43)}},
+	}
+	for _, test := range pricingQueries {
+		test.query.Normalize()
+		if fields := test.query.Validate(); fields == nil || fields[test.field] == "" {
+			t.Fatalf("pricing query field=%s validation=%v", test.field, fields)
 		}
 	}
 }

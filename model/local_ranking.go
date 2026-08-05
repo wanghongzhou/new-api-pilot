@@ -53,7 +53,7 @@ func (r *LocalRankingRepository) Rows(ctx context.Context, q dto.LocalRankingQue
 	}
 	db := applyRankingSites(r.db.WithContext(ctx).Table("usage_fact_hourly f").Joins("JOIN site s ON s.id=f.site_id"), q.SiteIDs)
 	if kind == "vendor" {
-		db = db.Joins("LEFT JOIN (SELECT site_id,model_name,MIN(vendor_id) vendor_id FROM site_model_meta WHERE name_rule=0 GROUP BY site_id,model_name) vm ON vm.site_id=f.site_id AND vm.model_name=f.model_name")
+		db = db.Joins("LEFT JOIN (SELECT m.site_id,m.model_name,CASE WHEN COUNT(DISTINCT m.vendor_id)=1 THEN MIN(m.vendor_id) ELSE 0 END vendor_id FROM site_model_meta m JOIN site ms ON ms.id=m.site_id AND m.config_version=ms.config_version WHERE m.name_rule=0 GROUP BY m.site_id,m.model_name) vm ON vm.site_id=f.site_id AND vm.model_name=f.model_name")
 	}
 	sql := id + " dimension_id," + name + " dimension_name," + siteID + " site_id," + siteName + " site_name,SUM(CASE WHEN f.hour_ts>=? AND f.hour_ts<? THEN f.token_used ELSE 0 END) token_used,SUM(CASE WHEN f.hour_ts>=? AND f.hour_ts<? THEN f.request_count ELSE 0 END) request_count,SUM(CASE WHEN f.hour_ts>=? AND f.hour_ts<? THEN f.quota ELSE 0 END) quota,SUM(CASE WHEN f.hour_ts>=? AND f.hour_ts<? THEN f.token_used ELSE 0 END) previous_token_used,MAX(CASE WHEN f.hour_ts>=? AND f.hour_ts<? THEN f.collected_at END) as_of"
 	var rows []LocalRankingRow
@@ -67,7 +67,7 @@ func (r *LocalRankingRepository) History(ctx context.Context, q dto.LocalRanking
 	}
 	db := applyRankingSites(r.db.WithContext(ctx).Table("usage_fact_hourly f"), q.SiteIDs)
 	if kind == "vendor" {
-		db = db.Joins("LEFT JOIN (SELECT site_id,model_name,MIN(vendor_id) vendor_id FROM site_model_meta WHERE name_rule=0 GROUP BY site_id,model_name) vm ON vm.site_id=f.site_id AND vm.model_name=f.model_name")
+		db = db.Joins("LEFT JOIN (SELECT m.site_id,m.model_name,CASE WHEN COUNT(DISTINCT m.vendor_id)=1 THEN MIN(m.vendor_id) ELSE 0 END vendor_id FROM site_model_meta m JOIN site ms ON ms.id=m.site_id AND m.config_version=ms.config_version WHERE m.name_rule=0 GROUP BY m.site_id,m.model_name) vm ON vm.site_id=f.site_id AND vm.model_name=f.model_name")
 	}
 	var rows []LocalRankingHistoryRow
 	err = db.Where("f.hour_ts>=? AND f.hour_ts<?", start, end).Select(id + " dimension_id,FLOOR((f.hour_ts+28800)/86400)*86400-28800 bucket_start,SUM(f.token_used) token_used").Group("dimension_id,bucket_start").Order("bucket_start,dimension_id").Scan(&rows).Error

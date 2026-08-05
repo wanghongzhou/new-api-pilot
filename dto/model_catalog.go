@@ -1,5 +1,10 @@
 package dto
 
+import (
+	"strings"
+	"unicode/utf8"
+)
+
 type UpstreamModelMeta struct {
 	ID, VendorID, CreatedTime, UpdatedTime int64
 	ModelName, Description, Icon, Tags     string
@@ -24,14 +29,20 @@ type ModelCatalogQuery struct {
 	Keyword        string
 }
 
-func (q *ModelCatalogQuery) Normalize() { q.SiteIDs = uniquePositiveIDs(q.SiteIDs) }
+func (q *ModelCatalogQuery) Normalize() {
+	q.SiteIDs = uniquePositiveIDs(q.SiteIDs)
+	q.Keyword = strings.TrimSpace(q.Keyword)
+}
 func (q ModelCatalogQuery) Validate() map[string]string {
 	e := map[string]string{}
 	if q.Page < 1 || q.PageSize < 1 || q.PageSize > 100 || !statisticsPaginationValid(q.Page, q.PageSize) {
 		e["p"] = "invalid pagination"
 	}
-	if len(q.SiteIDs) > 100 || len(q.Statuses) > 2 || len(q.SyncOfficial) > 2 || len(q.Keyword) > 128 {
+	if len(q.SiteIDs) > 100 || len(q.Statuses) > 2 || len(q.SyncOfficial) > 2 {
 		e["filters"] = "invalid filters"
+	}
+	if !utf8.ValidString(q.Keyword) || len(q.Keyword) > 128 {
+		e["keyword"] = "must be valid UTF-8 and at most 128 bytes"
 	}
 	if q.VendorID != nil && *q.VendorID < 0 {
 		e["vendor_id"] = "invalid"

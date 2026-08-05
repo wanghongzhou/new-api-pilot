@@ -19,8 +19,14 @@ export function PlatformUserFilters({
   const { t } = useTranslation()
   const [draft, setDraft] = useState(value)
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const searchGenerationRef = useRef(0)
 
-  useEffect(() => setDraft(value), [value])
+  useEffect(() => {
+    searchGenerationRef.current += 1
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    searchTimerRef.current = null
+    setDraft(value)
+  }, [value])
   useEffect(
     () => () => {
       if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
@@ -32,7 +38,9 @@ export function PlatformUserFilters({
     draft.filter.trim() !== '' || draft.role != null || draft.status != null
 
   const applyImmediately = (next: FilterState) => {
+    searchGenerationRef.current += 1
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    searchTimerRef.current = null
     setDraft(next)
     onApply({ ...next, filter: next.filter.trim() })
   }
@@ -41,10 +49,12 @@ export function PlatformUserFilters({
     const next = { ...draft, filter }
     setDraft(next)
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
-    searchTimerRef.current = setTimeout(
-      () => onApply({ ...next, filter: filter.trim() }),
-      400
-    )
+    const generation = ++searchGenerationRef.current
+    searchTimerRef.current = setTimeout(() => {
+      if (generation !== searchGenerationRef.current) return
+      searchTimerRef.current = null
+      onApply({ ...next, filter: filter.trim() })
+    }, 400)
   }
 
   return (

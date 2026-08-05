@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import { parseDecimalString, parseMetricString } from '@/lib/api-types'
 
 import {
+  formatPerformanceTps,
   millisecondsToSeconds,
   successRateToPercent,
   trustedWeightedSummary,
@@ -14,7 +15,16 @@ function statistics(
 ): PerformanceHistoryStatisticsResponse {
   return {
     aggregation_status,
+    as_of: null,
+    completeness: {
+      data_status: 'complete',
+      expected_site_count: 1,
+      successful_site_count: 1,
+      unavailable_site_count: 0,
+    },
     data_status: 'complete',
+    group_breakdown: [],
+    model_breakdown: [],
     site_breakdown: [],
     summary: {
       avg_latency_ms: parseDecimalString('123.4560000000'),
@@ -70,5 +80,17 @@ describe('performance history display units', () => {
 
   test('preserves unavailable success rates', () => {
     expect(successRateToPercent(null)).toBeNull()
+  })
+
+  test.each([
+    ['49.3323163870', '49.33'],
+    ['9.5000000000', '9.5'],
+    ['0.004', '0'],
+  ])('formats TPS %s as %s', (value, expected) => {
+    expect(formatPerformanceTps(value)).toBe(parseDecimalString(expected))
+  })
+
+  test('preserves unavailable TPS', () => {
+    expect(formatPerformanceTps(null)).toBeNull()
   })
 })

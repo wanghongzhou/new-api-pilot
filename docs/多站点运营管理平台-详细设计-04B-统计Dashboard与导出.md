@@ -255,17 +255,17 @@ Dashboard 是登录后的默认首页，只展示最重要的汇总信息，不�
 日志导出复用 `export_job`，导出行必须保留 site_id、created_at、type、用户、模型、token、channel、group、request_id 和 upstream_request_id；content 只能输出脱敏摘要。导出不改变统计汇总，也不暴露上游展示 ID、站点 Token 或密码。
 # P0-C 用户库存统计与导出
 
-新增 `GET /api/user-inventory`、`GET /api/user-inventory/statistics`、`GET /api/sites/:id/user-inventory`、`GET /api/sites/:id/user-inventory/statistics`。列表返回当前用户；统计返回 summary、trend、role/status/group breakdown、site_breakdown 和 completeness。trend 是所选左闭右开时间范围内按小时连续排序的完整序列；前端曲线视图读取完整序列，表格视图对同一响应做确定性分页，不以分页拆断或重算趋势。quota、used_quota、balance、request_count、用户计数全部为 JSON string。
+新增 `GET /api/user-inventory`、`GET /api/user-inventory/statistics`、`GET /api/sites/:id/user-inventory`、`GET /api/sites/:id/user-inventory/statistics`。列表返回当前用户；统计返回 summary、trend、role/status/group breakdown、site_breakdown 和 completeness。列表的 `total/items/completeness` 与统计的全部汇总、趋势、breakdown、完整性必须分别在同一 repeatable-read 快照读取；完整性只采用 active 站点当前 config_version 的库存与最近 `user_sync`，旧配置版本的成功 run 不得把新配置误报为 complete。trend 是所选左闭右开时间范围内按小时连续排序的完整序列；前端曲线视图读取完整序列，表格视图对同一响应做确定性分页，不以分页拆断或重算趋势。quota、used_quota、balance、request_count、用户计数全部为 JSON string。
 
 导出 scope `user_inventory` 复用 export_job，CSV/XLSX 只包含允许落库的库存字段和 site 身份；严禁 email、OAuth、token、密码和 setting。导出 snapshot 与查询使用同一筛选和 repeatable-read 边界。
 # P0-D 渠道运营统计与导出
 
-渠道统计提供当前汇总、小时趋势、type/status/group/tag breakdown 和 site_breakdown。当前汇总展示渠道总数、可用数、不可用数、missing 数、余额合计、used_quota 合计、平均/最大响应时间和可用率；趋势只读取 `complete` 小时事实，并必须对 site/type/status/group/tag 使用与当前汇总相同的筛选语义。trend 是所选左闭右开时间范围内按小时连续排序的完整序列；前端曲线视图读取完整序列，表格视图对同一响应做确定性分页，不以分页拆断或重算趋势。无成功快照、采集失败、部分站点缺失或旧历史缺少可筛选维度时，必须用 `data_status`、`as_of` 和站点完整性表达，不能把 unavailable/partial/pending 显示为零渠道。
+渠道统计提供当前汇总、小时趋势、type/status/group/tag breakdown 和 site_breakdown。当前汇总展示渠道总数、可用数、不可用数、missing 数、余额合计、used_quota 合计、平均/最大响应时间和可用率；趋势只读取 `complete` 小时事实，并必须对 site/type/status/group/tag 使用与当前汇总相同的筛选语义。列表的 `total/items`、采集完整性与 `as_of`，以及统计的当前汇总、breakdown、趋势和完整性必须在同一 repeatable-read 快照读取。`data_status` 由请求范围内 active 站点当前 config_version 的最近 `channel_sync` 与完整小时快照判定，不能由筛选后的 `total` 或数组长度推断；完整空快照或完整快照下筛选无匹配仍为 `complete`，最近失败为 `unavailable`，部分站点或运行中且已有旧安全快照为 `partial`。trend 是所选左闭右开时间范围内按小时连续排序的完整序列；前端曲线视图读取完整序列，表格视图对同一响应做确定性分页，不以分页拆断或重算趋势。无成功快照、采集失败、部分站点缺失或旧历史缺少可筛选维度时，必须用 `data_status`、`as_of` 和站点完整性表达，不能把 unavailable/partial/pending 显示为零渠道。
 
 `statistics_type=channel_inventory` 复用 export_job 生成 CSV/XLSX，冻结站点、关键字、type、status、group、tag、remote_state 和余额/响应范围筛选。导出只包含安全运营字段，bigint 保持字符串、balance 保持规范十进制文本，并沿用公式注入防护。任何导出列都不得包含 `key`、多 Key 状态或上游私密配置。
 # P0-E 性能历史统计与导出
 
-提供全局与站点性能历史 API，支持整点左闭右开范围、model、group、site 筛选，返回 trend、model/group breakdown、site_breakdown、完整性和 `aggregation_status`。站点范围可精确展示 official_average；跨站只有所有参与行均为 counter_ready 时才返回加权 summary/trend：success=`Σsuccess/Σrequest`，latency=`Σlatency/Σrequest`，TTFT=`Σttft_sum/Σttft_count`，TPS=`Σoutput_tokens*1000/Σgeneration_ms`。缺少任一分母时不得平均各站平均值，总值置空并标记 unavailable，site_breakdown 保留原值。
+提供全局与站点性能历史 API，支持整点左闭右开范围、model、group、site 筛选，返回 trend、model/group breakdown、site_breakdown、完整性和 `aggregation_status`。`trend` 与 `site_breakdown` 始终保留逐站、逐模型、逐分组的原始时间桶身份；跨站只有所有参与行均为 counter_ready 时才返回加权 summary 以及 model/group breakdown：success=`Σsuccess/Σrequest`，latency=`Σlatency/Σrequest`，TTFT=`Σttft_sum/Σttft_count`，TPS=`Σoutput_tokens*1000/Σgeneration_ms`。model/group breakdown 使用独立的 `dimension + weighted metrics` DTO，不得伪造原始记录 ID、site_id 或 collected_at。缺少任一分母时不得平均各站平均值，总值置空并标记 unavailable，trend 与 site_breakdown 仍保留原值。
 
 `statistics_type=performance_history` 使用 export_job 导出单站/逐站 model+group bucket 原值和 source/completeness；只有 counter_ready 才附带 counters。CSV/XLSX 继续防公式注入，bigint 为字符串、decimal 为规范文本。
 

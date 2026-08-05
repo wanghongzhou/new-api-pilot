@@ -37,6 +37,7 @@ export interface UpdatePlatformUserRequest {
   username: string
   display_name: string
   role: PlatformRole
+  expected_updated_at: Timestamp
 }
 
 export interface ResetPasswordRequest {

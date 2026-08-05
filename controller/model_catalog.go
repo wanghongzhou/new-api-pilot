@@ -46,13 +46,20 @@ func (c *ModelCatalogController) run(g *gin.Context, sites []int64, kind string)
 		common.AbortInternalError(g)
 		return
 	}
-	allowed := map[string]bool{"p": true, "page_size": true}
+	if !requireEmptyBody(g) {
+		return
+	}
+	allowed := map[string]bool{}
 	if kind == "list" {
+		allowed["p"] = true
+		allowed["page_size"] = true
 		allowed["keyword"] = true
 		allowed["vendor_id"] = true
 		allowed["statuses"] = true
 		allowed["sync_official"] = true
 	} else if kind == "missing" {
+		allowed["p"] = true
+		allowed["page_size"] = true
 		allowed["keyword"] = true
 	}
 	if sites == nil && kind != "coverage" {
@@ -63,6 +70,10 @@ func (c *ModelCatalogController) run(g *gin.Context, sites []int64, kind string)
 			common.AbortError(g, http.StatusBadRequest, constant.CodeValidationError, "Invalid model catalog query", map[string]string{key: "unsupported"})
 			return
 		}
+	}
+	if fields := strictQueryFields(g, allowed, "p", "page_size", "keyword", "vendor_id"); fields != nil {
+		common.AbortError(g, http.StatusBadRequest, constant.CodeValidationError, "Invalid model catalog query", fields)
+		return
 	}
 	p, _ := strconv.Atoi(g.DefaultQuery("p", "1"))
 	size, _ := strconv.Atoi(g.DefaultQuery("page_size", "20"))

@@ -2,22 +2,26 @@ import { requestApiData } from '@/lib/api'
 import type { IdString } from '@/lib/api-types'
 
 import type {
-  CatalogPage,
-  PricingCatalogItem,
+  PricingCatalogPage,
   PricingCatalogQueryParams,
   PricingCatalogStatistics,
   PricingGroupPage,
 } from './types'
 
-function params(values: PricingCatalogQueryParams, forcedSite = false) {
+function params(
+  values: PricingCatalogQueryParams,
+  forcedSite = false,
+  statistics = false
+) {
   const result = new URLSearchParams()
-  result.set('p', String(values.p))
-  result.set('page_size', String(values.page_size))
   if (!forcedSite) {
     for (const siteId of values.site_ids ?? []) {
       result.append('site_ids', siteId)
     }
   }
+  if (statistics) return result
+  result.set('p', String(values.p))
+  result.set('page_size', String(values.page_size))
   for (const state of values.states ?? []) result.append('states', state)
   if (values.keyword) result.set('keyword', values.keyword)
   if (values.group) result.set('group', values.group)
@@ -37,23 +41,19 @@ function requestCatalog<T>(
       resource === 'pricing-catalog'
         ? values
         : { ...values, billing_mode: undefined },
-      siteId != null
+      siteId != null,
+      statistics
     ),
     url: `${siteId ? `/api/sites/${siteId}` : '/api'}/${resource}${statistics ? '/statistics' : ''}`,
   })
 }
 
 export const listPricingCatalog = (values: PricingCatalogQueryParams) =>
-  requestCatalog<CatalogPage<PricingCatalogItem>>('pricing-catalog', values)
+  requestCatalog<PricingCatalogPage>('pricing-catalog', values)
 export const listSitePricingCatalog = (
   siteId: IdString,
   values: PricingCatalogQueryParams
-) =>
-  requestCatalog<CatalogPage<PricingCatalogItem>>(
-    'pricing-catalog',
-    values,
-    siteId
-  )
+) => requestCatalog<PricingCatalogPage>('pricing-catalog', values, siteId)
 export const listPricingGroups = (values: PricingCatalogQueryParams) =>
   requestCatalog<PricingGroupPage>('group-catalog', values)
 export const listSitePricingGroups = (
@@ -65,7 +65,7 @@ export const getPricingCatalogStatistics = (
 ) =>
   requestCatalog<PricingCatalogStatistics>(
     'pricing-catalog',
-    { p: values.p, page_size: values.page_size, site_ids: values.site_ids },
+    values,
     undefined,
     true
   )
@@ -75,7 +75,7 @@ export const getSitePricingCatalogStatistics = (
 ) =>
   requestCatalog<PricingCatalogStatistics>(
     'pricing-catalog',
-    { p: values.p, page_size: values.page_size },
+    values,
     siteId,
     true
   )

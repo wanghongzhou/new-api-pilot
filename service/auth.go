@@ -53,11 +53,12 @@ func (service *AuthService) Login(ctx context.Context, clientIP string, request 
 		return model.PlatformUser{}, ErrUserDisabled
 	}
 	now := service.clock.Now().Unix()
-	if err := service.users.UpdateLastLogin(ctx, user.ID, now); err != nil {
+	updatedAt := nextPlatformUserUpdatedAt(now, user.UpdatedAt)
+	if err := service.users.UpdateLastLogin(ctx, user.ID, now, updatedAt); err != nil {
 		return model.PlatformUser{}, fmt.Errorf("record login: %w", err)
 	}
 	user.LastLoginAt = &now
-	user.UpdatedAt = now
+	user.UpdatedAt = updatedAt
 	service.limiter.Reset(key)
 	return user, nil
 }
@@ -100,7 +101,7 @@ func (service *AuthService) ChangePassword(ctx context.Context, userID int64, re
 		user.PasswordHash = newHash
 		user.MustChangePassword = false
 		user.SessionVersion++
-		user.UpdatedAt = service.clock.Now().Unix()
+		user.UpdatedAt = nextPlatformUserUpdatedAt(service.clock.Now().Unix(), user.UpdatedAt)
 		if err := repository.Save(ctx, &user); err != nil {
 			return err
 		}

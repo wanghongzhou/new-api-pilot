@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"new-api-pilot/constant"
 	"new-api-pilot/dto"
 )
 
@@ -228,13 +229,113 @@ type SiteChannelInventoryMetricRow struct {
 	AvailabilityRate  string `gorm:"column:availability_rate"`
 	AsOf              *int64 `gorm:"column:as_of"`
 }
+type SiteChannelInventoryCompletenessRow struct {
+	SiteID          int64
+	SiteName        string
+	InventoryCount  int64
+	AsOf            *int64
+	LatestRunStatus string
+}
+type SiteChannelInventoryCoverageRow struct {
+	BucketStart       int64 `gorm:"column:bucket_start"`
+	CompleteSiteCount int64 `gorm:"column:complete_site_count"`
+}
 type SiteChannelInventoryRepository struct{ db *gorm.DB }
 
 func NewSiteChannelInventoryRepository(db *gorm.DB) *SiteChannelInventoryRepository {
 	return &SiteChannelInventoryRepository{db: db}
 }
+func (r *SiteChannelInventoryRepository) Completeness(ctx context.Context, siteIDs []int64) ([]SiteChannelInventoryCompletenessRow, error) {
+	if r == nil || r.db == nil {
+		return nil, ErrCollectionRunContract
+	}
+	type siteRow struct {
+		ID            int64  `gorm:"column:id"`
+		Name          string `gorm:"column:name"`
+		ConfigVersion int    `gorm:"column:config_version"`
+	}
+	var sites []siteRow
+	db := r.db.WithContext(ctx).Table("site").Select("id,name,config_version").Where("management_status=?", constant.SiteManagementActive)
+	if len(siteIDs) > 0 {
+		db = db.Where("id IN ?", siteIDs)
+	}
+	if err := db.Order("id").Scan(&sites).Error; err != nil || len(sites) == 0 {
+		return nil, err
+	}
+	ids := make([]int64, 0, len(sites))
+	versions := make(map[int64]int, len(sites))
+	for _, site := range sites {
+		ids = append(ids, site.ID)
+		versions[site.ID] = site.ConfigVersion
+	}
+	type inventoryRow struct {
+		SiteID        int64  `gorm:"column:site_id"`
+		ConfigVersion int    `gorm:"column:config_version"`
+		Count         int64  `gorm:"column:inventory_count"`
+		AsOf          *int64 `gorm:"column:as_of"`
+	}
+	var inventories []inventoryRow
+	if err := r.db.WithContext(ctx).Table("site_channel_inventory").
+		Select("site_id,config_version,COUNT(*) inventory_count,MAX(updated_at) as_of").
+		Where("site_id IN ?", ids).Group("site_id,config_version").Scan(&inventories).Error; err != nil {
+		return nil, err
+	}
+	type snapshotRow struct {
+		SiteID        int64  `gorm:"column:site_id"`
+		ConfigVersion int    `gorm:"column:config_version"`
+		AsOf          *int64 `gorm:"column:as_of"`
+	}
+	var snapshots []snapshotRow
+	if err := r.db.WithContext(ctx).Table("site_channel_inventory_hourly").
+		Select("site_id,config_version,MAX(collected_at) as_of").Where("site_id IN ? AND data_status='complete'", ids).
+		Group("site_id,config_version").Scan(&snapshots).Error; err != nil {
+		return nil, err
+	}
+	type runRow struct {
+		SiteID int64  `gorm:"column:site_id"`
+		Status string `gorm:"column:status"`
+	}
+	var runs []runRow
+	if err := r.db.WithContext(ctx).Raw(`SELECT cr.site_id,cr.status
+FROM collection_run cr
+JOIN site s ON s.id=cr.site_id AND s.config_version=cr.site_config_version
+JOIN (
+  SELECT r.site_id,MAX(r.id) id
+  FROM collection_run r
+  JOIN site current_site ON current_site.id=r.site_id AND current_site.config_version=r.site_config_version
+  WHERE r.task_type=? AND r.site_id IN ?
+  GROUP BY r.site_id
+) latest ON latest.id=cr.id`, constant.TaskTypeChannelSync, ids).Scan(&runs).Error; err != nil {
+		return nil, err
+	}
+	inventoryBySite := make(map[int64]inventoryRow, len(inventories))
+	for _, row := range inventories {
+		if versions[row.SiteID] == row.ConfigVersion {
+			inventoryBySite[row.SiteID] = row
+		}
+	}
+	for _, row := range snapshots {
+		if versions[row.SiteID] == row.ConfigVersion {
+			inventory := inventoryBySite[row.SiteID]
+			if inventory.AsOf == nil || row.AsOf != nil && *row.AsOf > *inventory.AsOf {
+				inventory.AsOf = row.AsOf
+			}
+			inventoryBySite[row.SiteID] = inventory
+		}
+	}
+	runBySite := make(map[int64]string, len(runs))
+	for _, row := range runs {
+		runBySite[row.SiteID] = row.Status
+	}
+	result := make([]SiteChannelInventoryCompletenessRow, 0, len(sites))
+	for _, site := range sites {
+		inventory := inventoryBySite[site.ID]
+		result = append(result, SiteChannelInventoryCompletenessRow{SiteID: site.ID, SiteName: site.Name, InventoryCount: inventory.Count, AsOf: inventory.AsOf, LatestRunStatus: runBySite[site.ID]})
+	}
+	return result, nil
+}
 func (r *SiteChannelInventoryRepository) List(ctx context.Context, q dto.ChannelInventoryQuery) ([]SiteChannelInventoryReadRow, int64, error) {
-	db := r.db.WithContext(ctx).Table("site_channel_inventory AS c").Joins("JOIN site AS s ON s.id=c.site_id")
+	db := r.db.WithContext(ctx).Table("site_channel_inventory AS c").Joins("JOIN site AS s ON s.id=c.site_id AND s.management_status=?", constant.SiteManagementActive)
 	if len(q.SiteIDs) > 0 {
 		db = db.Where("c.site_id IN ?", q.SiteIDs)
 	}
@@ -282,7 +383,7 @@ func (r *SiteChannelInventoryRepository) Current(ctx context.Context, q dto.Chan
 	if expr == "" {
 		return nil, errors.New("invalid channel metric dimension")
 	}
-	db := r.db.WithContext(ctx).Table("site_channel_inventory AS c").Joins("JOIN site AS s ON s.id=c.site_id")
+	db := r.db.WithContext(ctx).Table("site_channel_inventory AS c").Joins("JOIN site AS s ON s.id=c.site_id AND s.management_status=?", constant.SiteManagementActive)
 	db = applyChannelMetricFilters(db, q, "c")
 	siteID, siteName := "0", "''"
 	if dim == "site" {
@@ -301,7 +402,7 @@ func (r *SiteChannelInventoryRepository) Current(ctx context.Context, q dto.Chan
 	return rows, err
 }
 func (r *SiteChannelInventoryRepository) Trend(ctx context.Context, q dto.ChannelInventoryStatisticsQuery) ([]SiteChannelInventoryMetricRow, error) {
-	db := r.db.WithContext(ctx).Table("site_channel_inventory_hourly AS h").Where("h.hour_ts>=? AND h.hour_ts<?", q.StartTimestamp, q.EndTimestamp)
+	db := r.db.WithContext(ctx).Table("site_channel_inventory_hourly AS h").Joins("JOIN site s ON s.id=h.site_id AND s.management_status=?", constant.SiteManagementActive).Where("h.hour_ts>=? AND h.hour_ts<?", q.StartTimestamp, q.EndTimestamp)
 	db = applyChannelMetricFilters(db, q, "h")
 	if channelTrendHasDimensionFilters(q) {
 		db = db.Where("h.dimensions_available=1")
@@ -311,11 +412,26 @@ func (r *SiteChannelInventoryRepository) Trend(ctx context.Context, q dto.Channe
 	return rows, err
 }
 
+func (r *SiteChannelInventoryRepository) TrendCoverage(ctx context.Context, q dto.ChannelInventoryStatisticsQuery) ([]SiteChannelInventoryCoverageRow, error) {
+	db := r.db.WithContext(ctx).Table("site_channel_inventory_hourly AS h").
+		Joins("JOIN site s ON s.id=h.site_id AND s.management_status=?", constant.SiteManagementActive).
+		Where("h.hour_ts>=? AND h.hour_ts<? AND h.data_status='complete'", q.StartTimestamp, q.EndTimestamp)
+	if len(q.SiteIDs) > 0 {
+		db = db.Where("h.site_id IN ?", q.SiteIDs)
+	}
+	if channelTrendHasDimensionFilters(q) {
+		db = db.Where("h.dimensions_available=1")
+	}
+	var rows []SiteChannelInventoryCoverageRow
+	err := db.Select("h.hour_ts bucket_start,COUNT(DISTINCT h.site_id) complete_site_count").Group("h.hour_ts").Order("h.hour_ts").Scan(&rows).Error
+	return rows, err
+}
+
 func (r *SiteChannelInventoryRepository) HasLegacyTrend(ctx context.Context, q dto.ChannelInventoryStatisticsQuery) (bool, error) {
 	if !channelTrendHasDimensionFilters(q) {
 		return false, nil
 	}
-	db := r.db.WithContext(ctx).Table("site_channel_inventory_hourly AS h").Where("h.hour_ts>=? AND h.hour_ts<? AND h.dimensions_available=0", q.StartTimestamp, q.EndTimestamp)
+	db := r.db.WithContext(ctx).Table("site_channel_inventory_hourly AS h").Joins("JOIN site s ON s.id=h.site_id AND s.management_status=?", constant.SiteManagementActive).Where("h.hour_ts>=? AND h.hour_ts<? AND h.dimensions_available=0", q.StartTimestamp, q.EndTimestamp)
 	if len(q.SiteIDs) > 0 {
 		db = db.Where("h.site_id IN ?", q.SiteIDs)
 	}

@@ -93,7 +93,11 @@ function channel(remoteState: 'normal' | 'missing', id: string) {
     id,
     last_seen_at: remoteState === 'missing' ? null : 1_784_348_700,
     missing_count: remoteState === 'missing' ? 2 : 0,
-    models: 'gpt-4.1,gpt-5',
+    models: Array.from(
+      { length: 12 },
+      (_, index) =>
+        `gpt-model-${String(index + 1).padStart(2, '0')}-${'x'.repeat(32)}`
+    ).join(','),
     name: `渠道-${remoteState}`,
     priority: '9007199254740993',
     remote_channel_id: id,
@@ -237,6 +241,24 @@ test('keeps channel inventory exact, filterable, exportable, secure and responsi
   })
 
   await page.goto('/channel-inventory')
+  if (testInfo.project.name !== 'chromium-mobile') {
+    const firstModel = page.locator('[title^="gpt-model-01-"]').first()
+    await expect(firstModel).toBeVisible()
+    const modelCell = firstModel.locator('xpath=ancestor::td')
+    const layout = await modelCell.evaluate((cell) => {
+      const modelList = cell.firstElementChild as HTMLElement | null
+      const cellRect = cell.getBoundingClientRect()
+      const listRect = modelList?.getBoundingClientRect()
+      return {
+        cellRight: cellRect.right,
+        listRight: listRect?.right ?? 0,
+        whiteSpace: modelList ? getComputedStyle(modelList).whiteSpace : '',
+      }
+    })
+    expect(layout.whiteSpace).toBe('normal')
+    expect(layout.listRight).toBeLessThanOrEqual(layout.cellRight + 1)
+    await expect(modelCell.getByRole('button')).toBeVisible()
+  }
   await expect(
     page.getByRole('heading', { name: '全局渠道库存' })
   ).toBeVisible()
@@ -254,6 +276,9 @@ test('keeps channel inventory exact, filterable, exportable, secure and responsi
   ).toBeVisible()
 
   await page.getByLabel('渠道名称或模型').fill('gpt')
+  await expect
+    .poll(() => listReads.at(-1)?.searchParams.get('keyword'))
+    .toBe('gpt')
   await page.getByRole('button', { name: /更多筛选/ }).click()
   await page.getByLabel('渠道类型 ID').fill('8')
   await page.getByLabel('分组').fill('vip')
@@ -288,6 +313,10 @@ test('keeps channel inventory exact, filterable, exportable, secure and responsi
   })
   expect(exportBody?.filters).not.toHaveProperty('key')
   expect(exportBody?.filters).not.toHaveProperty('multi_key')
+  await page
+    .getByRole('dialog', { name: '导出任务' })
+    .getByRole('button', { name: '关闭' })
+    .click()
   await page.getByRole('tab', { name: '趋势分析' }).click()
   await expect(
     page.getByRole('img', { name: '渠道库存小时趋势曲线图' })
@@ -296,6 +325,10 @@ test('keeps channel inventory exact, filterable, exportable, secure and responsi
   await expect(
     page.getByRole('table', { name: '渠道库存小时趋势数据列表' })
   ).toBeVisible()
+  await page.addStyleTag({
+    content:
+      "button[aria-label='Open TanStack Router Devtools'] { display: none !important; }",
+  })
   await page.getByRole('button', { name: '下一页' }).click()
   await expect(page).toHaveURL(/trendPage=2/)
   const bodyText = await page.locator('body').innerText()

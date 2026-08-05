@@ -14,15 +14,18 @@ import (
 )
 
 type fakeSubscriptionPlanApplication struct {
-	err   error
-	query dto.SubscriptionPlanQuery
+	err    error
+	query  dto.SubscriptionPlanQuery
+	called bool
 }
 
 func (application *fakeSubscriptionPlanApplication) List(_ context.Context, query dto.SubscriptionPlanQuery) (dto.SubscriptionPlanPageResponse, error) {
+	application.called = true
 	application.query = query
 	return dto.SubscriptionPlanPageResponse{Items: []dto.SubscriptionPlanItem{}, Page: query.Page, PageSize: query.PageSize, DataStatus: "pending"}, application.err
 }
 func (application *fakeSubscriptionPlanApplication) Statistics(_ context.Context, query dto.SubscriptionPlanQuery) (dto.SubscriptionPlanStatistics, error) {
+	application.called = true
 	application.query = query
 	return dto.SubscriptionPlanStatistics{Total: "0", Enabled: "0", Disabled: "0", Missing: "0", DataStatus: "pending", SiteBreakdown: []dto.SubscriptionPlanBreakdown{}}, application.err
 }
@@ -31,7 +34,10 @@ func TestSubscriptionPlanQueryValidatesBeforeCallingService(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	application := &fakeSubscriptionPlanApplication{}
 	engine := gin.New()
-	engine.GET("/plans", NewSubscriptionPlanController(application).Global)
+	controller := NewSubscriptionPlanController(application)
+	engine.GET("/plans", controller.Global)
+	engine.GET("/statistics", controller.GlobalStatistics)
+	engine.GET("/sites/:id/plans", controller.Site)
 
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/plans?keyword="+strings.Repeat("a", 129), nil)
@@ -59,7 +65,10 @@ func TestSubscriptionPlanQueryRejectsUnknownKeysAndParsesEnabled(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	application := &fakeSubscriptionPlanApplication{}
 	engine := gin.New()
-	engine.GET("/plans", NewSubscriptionPlanController(application).Global)
+	controller := NewSubscriptionPlanController(application)
+	engine.GET("/plans", controller.Global)
+	engine.GET("/statistics", controller.GlobalStatistics)
+	engine.GET("/sites/:id/plans", controller.Site)
 
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/plans?enabled=false&unknown=1", nil)
@@ -87,5 +96,20 @@ func TestSubscriptionPlanQueryRejectsUnknownKeysAndParsesEnabled(t *testing.T) {
 	engine.ServeHTTP(response, request)
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("invalid site_ids status=%d body=%s", response.Code, response.Body.String())
+	}
+
+	for _, target := range []string{"/plans?p=1&p=2", "/plans?site_ids=-1", "/sites/2/plans?site_ids=2", "/statistics?p=1", "/statistics?keyword=pro", "/statistics?enabled=true", "/statistics?states=normal"} {
+		application.called = false
+		response = httptest.NewRecorder()
+		engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, target, nil))
+		if response.Code != http.StatusBadRequest || application.called {
+			t.Fatalf("target=%s status=%d called=%v body=%s", target, response.Code, application.called, response.Body.String())
+		}
+	}
+	application.called = false
+	response = httptest.NewRecorder()
+	engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/plans", strings.NewReader(`{}`)))
+	if response.Code != http.StatusBadRequest || application.called {
+		t.Fatalf("non-empty body status=%d called=%v body=%s", response.Code, application.called, response.Body.String())
 	}
 }

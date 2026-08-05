@@ -2,6 +2,7 @@ package dto
 
 import (
 	"encoding/json"
+	"strconv"
 	"testing"
 )
 
@@ -26,5 +27,23 @@ func TestSettingPatchRequestAllowsExplicitClearAndEmptySecretKeep(t *testing.T) 
 	request.Normalize()
 	if fieldErrors := request.Validate(); fieldErrors != nil {
 		t.Fatalf("SettingPatchRequest.Validate() errors = %#v", fieldErrors)
+	}
+}
+
+func TestSettingPatchRequestAllowsCurrentFullWhitelistAndKeepsIndependentHardCap(t *testing.T) {
+	request := SettingPatchRequest{Items: make([]SettingPatchItem, 39)}
+	for index := range request.Items {
+		request.Items[index] = SettingPatchItem{
+			Key:   "setting." + strconv.Itoa(index),
+			Value: json.RawMessage(`1`),
+		}
+	}
+	if fieldErrors := request.Validate(); fieldErrors != nil {
+		t.Fatalf("39-item SettingPatchRequest.Validate() errors = %#v", fieldErrors)
+	}
+
+	request.Items = append(request.Items, make([]SettingPatchItem, SettingPatchMaximumItems-len(request.Items)+1)...)
+	if fieldErrors := request.Validate(); fieldErrors["items"] == "" {
+		t.Fatalf("oversized SettingPatchRequest.Validate() errors = %#v", fieldErrors)
 	}
 }

@@ -534,7 +534,7 @@ func TestMySQLExportRuntimeHardStopPreservesClaimAndCleansTemporaryArtifact(t *t
 	if err := database.GORM.First(&beforeClaim, job.ID).Error; err != nil || beforeClaim.Status != dto.ExportStatusPending {
 		t.Fatalf("runtime claimed before ready tick: %#v, %v", beforeClaim, err)
 	}
-	clock.Advance(time.Second)
+	clock.Advance(defaultExportPollInterval)
 	select {
 	case <-generationBlocked:
 	case <-time.After(10 * time.Second):

@@ -263,7 +263,7 @@ func NewSiteUserInventoryRepository(db *gorm.DB) *SiteUserInventoryRepository {
 }
 
 func (repository *SiteUserInventoryRepository) List(ctx context.Context, query dto.UserInventoryQuery) ([]SiteUserInventoryReadRow, int64, error) {
-	db := repository.db.WithContext(ctx).Table("site_user_inventory AS u").Joins("JOIN site AS s ON s.id = u.site_id").
+	db := repository.db.WithContext(ctx).Table("site_user_inventory AS u").Joins("JOIN site AS s ON s.id = u.site_id AND s.management_status = ?", constant.SiteManagementActive).
 		Joins("LEFT JOIN account AS a ON a.site_id = u.site_id AND a.remote_user_id = u.remote_user_id")
 	if len(query.SiteIDs) > 0 {
 		db = db.Where("u.site_id IN ?", query.SiteIDs)
@@ -308,7 +308,7 @@ func (repository *SiteUserInventoryRepository) CurrentMetrics(ctx context.Contex
 	if dimensionSQL == "" {
 		return nil, ErrCollectionRunContract
 	}
-	db := repository.db.WithContext(ctx).Table("site_user_inventory AS u").Joins("JOIN site AS s ON s.id = u.site_id").Where("u.remote_state = ?", SiteUserInventoryNormal)
+	db := repository.db.WithContext(ctx).Table("site_user_inventory AS u").Joins("JOIN site AS s ON s.id = u.site_id AND s.management_status = ?", constant.SiteManagementActive).Where("u.remote_state = ?", SiteUserInventoryNormal)
 	db = applyInventoryStatisticsFilters(db, query, "u")
 	siteIDSQL, siteNameSQL := "0", "''"
 	if dimension == "site" {
@@ -335,7 +335,7 @@ COALESCE(SUM(u.request_count),0) AS request_count, MAX(u.updated_at) AS as_of`
 }
 
 func (repository *SiteUserInventoryRepository) Trend(ctx context.Context, query dto.UserInventoryStatisticsQuery) ([]SiteUserInventoryMetricRow, error) {
-	db := repository.db.WithContext(ctx).Table("site_user_inventory_hourly AS h").Where("h.hour_ts >= ? AND h.hour_ts < ?", query.StartTimestamp, query.EndTimestamp)
+	db := repository.db.WithContext(ctx).Table("site_user_inventory_hourly AS h").Joins("JOIN site s ON s.id=h.site_id AND s.management_status=?", constant.SiteManagementActive).Where("h.hour_ts >= ? AND h.hour_ts < ?", query.StartTimestamp, query.EndTimestamp)
 	db = applyInventoryStatisticsFilters(db, query, "h")
 	var rows []SiteUserInventoryMetricRow
 	err := db.Select(`h.hour_ts AS bucket_start, SUM(h.user_count) AS user_count, SUM(h.new_user_count) AS new_user_count,
@@ -349,11 +349,12 @@ func (repository *SiteUserInventoryRepository) Completeness(ctx context.Context,
 		return nil, ErrCollectionRunContract
 	}
 	type siteRow struct {
-		ID   int64  `gorm:"column:id"`
-		Name string `gorm:"column:name"`
+		ID            int64  `gorm:"column:id"`
+		Name          string `gorm:"column:name"`
+		ConfigVersion int    `gorm:"column:config_version"`
 	}
 	var sites []siteRow
-	siteQuery := repository.db.WithContext(ctx).Table("site").Select("id, name")
+	siteQuery := repository.db.WithContext(ctx).Table("site").Select("id, name, config_version").Where("management_status=?", constant.SiteManagementActive)
 	if len(siteIDs) > 0 {
 		siteQuery = siteQuery.Where("id IN ?", siteIDs)
 	}
@@ -361,18 +362,21 @@ func (repository *SiteUserInventoryRepository) Completeness(ctx context.Context,
 		return nil, err
 	}
 	ids := make([]int64, 0, len(sites))
+	versions := make(map[int64]int, len(sites))
 	for _, site := range sites {
 		ids = append(ids, site.ID)
+		versions[site.ID] = site.ConfigVersion
 	}
 	type inventoryRow struct {
-		SiteID int64  `gorm:"column:site_id"`
-		Count  int64  `gorm:"column:inventory_count"`
-		AsOf   *int64 `gorm:"column:as_of"`
+		SiteID        int64  `gorm:"column:site_id"`
+		ConfigVersion int    `gorm:"column:config_version"`
+		Count         int64  `gorm:"column:inventory_count"`
+		AsOf          *int64 `gorm:"column:as_of"`
 	}
 	var inventories []inventoryRow
 	if err := repository.db.WithContext(ctx).Table("site_user_inventory").
-		Select("site_id, COUNT(*) AS inventory_count, MAX(updated_at) AS as_of").
-		Where("site_id IN ?", ids).Group("site_id").Scan(&inventories).Error; err != nil {
+		Select("site_id, config_version, COUNT(*) AS inventory_count, MAX(updated_at) AS as_of").
+		Where("site_id IN ?", ids).Group("site_id, config_version").Scan(&inventories).Error; err != nil {
 		return nil, err
 	}
 	type runRow struct {
@@ -382,17 +386,21 @@ func (repository *SiteUserInventoryRepository) Completeness(ctx context.Context,
 	var runs []runRow
 	if err := repository.db.WithContext(ctx).Raw(`SELECT r.site_id, r.status
 FROM collection_run AS r
+JOIN site AS s ON s.id=r.site_id AND s.config_version=r.site_config_version
 JOIN (
-  SELECT site_id, MAX(id) AS id
-  FROM collection_run
-  WHERE task_type = ? AND site_id IN ?
-  GROUP BY site_id
+  SELECT candidate.site_id, MAX(candidate.id) AS id
+  FROM collection_run candidate
+  JOIN site current_site ON current_site.id=candidate.site_id AND current_site.config_version=candidate.site_config_version
+  WHERE candidate.task_type = ? AND candidate.site_id IN ?
+  GROUP BY candidate.site_id
 ) AS latest ON latest.id = r.id`, constant.TaskTypeUserSync, ids).Scan(&runs).Error; err != nil {
 		return nil, err
 	}
 	inventoryBySite := make(map[int64]inventoryRow, len(inventories))
 	for _, row := range inventories {
-		inventoryBySite[row.SiteID] = row
+		if versions[row.SiteID] == row.ConfigVersion {
+			inventoryBySite[row.SiteID] = row
+		}
 	}
 	runBySite := make(map[int64]string, len(runs))
 	for _, row := range runs {
@@ -411,7 +419,7 @@ func (repository *SiteUserInventoryRepository) TrendCoverage(ctx context.Context
 	if repository == nil || repository.db == nil {
 		return nil, ErrCollectionRunContract
 	}
-	db := repository.db.WithContext(ctx).Table("site_user_inventory_hourly AS h").
+	db := repository.db.WithContext(ctx).Table("site_user_inventory_hourly AS h").Joins("JOIN site s ON s.id=h.site_id AND s.management_status=?", constant.SiteManagementActive).
 		Where("h.hour_ts >= ? AND h.hour_ts < ?", query.StartTimestamp, query.EndTimestamp)
 	if len(query.SiteIDs) > 0 {
 		db = db.Where("h.site_id IN ?", query.SiteIDs)

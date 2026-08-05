@@ -55,9 +55,33 @@ func (c *FinanceOperationsController) handle(g *gin.Context, forced []int64, kin
 		return
 	}
 	q, fields := parseFinanceInventoryQuery(g)
+	if kind == "redemption" {
+		if redemptionFields := q.ValidateRedemptionStatuses(); redemptionFields != nil {
+			if fields == nil {
+				fields = map[string]string{}
+			}
+			mergeFieldErrors(fields, redemptionFields)
+		}
+	}
 	if len(forced) > 0 {
 		q.SiteIDs = forced
-		fields = q.Validate()
+		if fields != nil {
+			delete(fields, "site_ids")
+		}
+		if validationFields := q.Validate(); validationFields != nil {
+			if fields == nil {
+				fields = map[string]string{}
+			}
+			mergeFieldErrors(fields, validationFields)
+		}
+		if kind == "redemption" {
+			if redemptionFields := q.ValidateRedemptionStatuses(); redemptionFields != nil {
+				if fields == nil {
+					fields = map[string]string{}
+				}
+				mergeFieldErrors(fields, redemptionFields)
+			}
+		}
 	}
 	if fields != nil {
 		common.AbortError(g, http.StatusBadRequest, constant.CodeValidationError, "Invalid finance inventory query", fields)

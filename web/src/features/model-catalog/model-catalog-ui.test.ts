@@ -58,17 +58,18 @@ describe('model catalog information architecture', () => {
     expect(source).toContain('modelCatalog.purpose.missingDescription')
   })
 
-  test('keeps list pagination in the fixed page footer without page scrolling', async () => {
+  test('keeps desktop pagination fixed while small screens use natural scrolling', async () => {
     const source = await readFile(pagePath, 'utf8')
     expect(source).toContain('fixedContent')
+    expect(source).toContain('mobileScrollableContent')
     expect(source).toContain(
-      "className='flex h-full min-h-0 min-w-0 flex-col gap-4'"
+      "className='flex min-w-0 flex-col gap-4 lg:h-full lg:min-h-0'"
     )
     expect(source).not.toContain('fillAvailableHeight={false}')
     expect(source).not.toContain('paginationInFooter={false}')
     expect(source).not.toContain('preserveHeaderWhenEmpty={false}')
     expect(source).toContain(
-      "className='min-h-0 flex-1 overflow-y-auto' tabIndex={0}"
+      "className='min-h-0 overflow-visible lg:flex-1 lg:overflow-y-auto'"
     )
   })
 
@@ -93,6 +94,30 @@ describe('model catalog information architecture', () => {
     expect(source).toContain("<dl className='min-w-0'>")
     expect(source).not.toContain(
       "<dl className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>"
+    )
+  })
+
+  test('keeps long catalog metadata expandable and mobile audit fields complete', async () => {
+    const source = await readFile(pagePath, 'utf8')
+    expect(source).toContain('function ExpandableText')
+    expect(source).toContain('value={row.original.description}')
+    expect(source).toContain('value={row.original.tags}')
+    expect(source).toContain('value={row.original.icon}')
+    expect(source).toContain("t('modelCatalog.sync.official')")
+    expect(source).toContain("t('common.createdAt')")
+    expect(source).toContain("t('common.updatedAt')")
+    expect(source).toContain("t('statistics.dataStatus')")
+    expect(source).toContain(
+      "t('modelCatalog.asOf', { time: timestamp(item.as_of) })"
+    )
+  })
+
+  test('shows an alert when the initial coverage request fails', async () => {
+    const source = await readFile(pagePath, 'utf8')
+    expect(source).toContain('{coverageQuery.isError && (')
+    expect(source).toContain("'common.dataLoadFailed'")
+    expect(source).toContain(
+      "tone={coverageQuery.data ? 'warning' : 'destructive'}"
     )
   })
 })

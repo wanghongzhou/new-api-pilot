@@ -12,7 +12,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import type { ColumnDef, SortingState } from '@tanstack/react-table'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { PageFooterPortal } from '@/components/layout/page-footer'
@@ -41,6 +41,7 @@ import {
 } from './user-dialogs'
 
 interface PlatformUsersPageProps {
+  onPageReplace: (page: number) => void
   onSearchChange: (changes: Partial<PlatformUserSearch>) => void
   search: PlatformUserSearch
 }
@@ -66,6 +67,7 @@ function UserStatusBadge({ user }: { user: PlatformUserItem }) {
 }
 
 export function PlatformUsersPage({
+  onPageReplace,
   onSearchChange,
   search,
 }: PlatformUsersPageProps) {
@@ -117,7 +119,32 @@ export function PlatformUsersPage({
   }
   const enabledAdminTotal = enabledAdminQuery.data?.total ?? null
   const pageData = usersQuery.data
+  const listStale = usersQuery.isError && pageData != null
+  let actionsDisabledReason: string | undefined
+  if (listStale) {
+    actionsDisabledReason = t('Platform user data may be outdated')
+  } else if (isAdmin && enabledAdminTotal == null) {
+    actionsDisabledReason = t('Unable to verify administrator safeguards')
+  }
   const initialLoading = usersQuery.isPending && !pageData
+  useEffect(() => {
+    if (
+      !pageData ||
+      pageData.total <= 0 ||
+      usersQuery.isFetching ||
+      usersQuery.isPlaceholderData
+    ) {
+      return
+    }
+    const lastPage = Math.max(1, Math.ceil(pageData.total / pageData.page_size))
+    if (search.page > lastPage) onPageReplace(lastPage)
+  }, [
+    onPageReplace,
+    pageData,
+    search.page,
+    usersQuery.isFetching,
+    usersQuery.isPlaceholderData,
+  ])
   const updateSorting = (
     updater: SortingState | ((old: SortingState) => SortingState)
   ) => {
@@ -150,6 +177,11 @@ export function PlatformUsersPage({
       },
       {
         accessorKey: 'display_name',
+        cell: ({ row }) => (
+          <span className='block min-w-0 break-words'>
+            {row.original.display_name}
+          </span>
+        ),
         enableSorting: false,
         header: t('Display name'),
       },
@@ -194,6 +226,7 @@ export function PlatformUsersPage({
               cell: ({ row }: { row: { original: PlatformUserItem } }) => (
                 <UserActions
                   currentUserId={currentUser?.id}
+                  disabledReason={actionsDisabledReason}
                   enabledAdminTotal={enabledAdminTotal}
                   isAdmin={isAdmin}
                   onEdit={setEditUser}
@@ -210,14 +243,18 @@ export function PlatformUsersPage({
           ]
         : []),
     ],
-    [currentUser?.id, enabledAdminTotal, isAdmin, t]
+    [actionsDisabledReason, currentUser?.id, enabledAdminTotal, isAdmin, t]
   )
 
   return (
     <SectionPageLayout
       actions={
         isAdmin ? (
-          <Button onClick={() => setCreateOpen(true)}>
+          <Button
+            disabled={Boolean(actionsDisabledReason)}
+            onClick={() => setCreateOpen(true)}
+            title={actionsDisabledReason}
+          >
             <HugeiconsIcon icon={Add01Icon} strokeWidth={2} />
             {t('Create user')}
           </Button>
@@ -253,6 +290,22 @@ export function PlatformUsersPage({
             </Button>
           </div>
         )}
+        {listStale && (
+          <div
+            className='border-warning/40 bg-warning/10 text-warning-foreground flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm'
+            role='alert'
+          >
+            <span>{t('Platform user data may be outdated')}</span>
+            <Button
+              onClick={() => void usersQuery.refetch()}
+              size='sm'
+              type='button'
+              variant='outline'
+            >
+              {t('common.retry')}
+            </Button>
+          </div>
+        )}
 
         <div className='flex min-h-0 flex-1 flex-col'>
           <DataTable
@@ -271,6 +324,7 @@ export function PlatformUsersPage({
             renderMobileCard={(user) => (
               <UserCard
                 currentUserId={currentUser?.id}
+                disabledReason={actionsDisabledReason}
                 enabledAdminTotal={enabledAdminTotal}
                 isAdmin={isAdmin}
                 onEdit={setEditUser}
@@ -302,11 +356,13 @@ export function PlatformUsersPage({
       </PageFooterPortal>
 
       <CreateUserDialog
+        disabledReason={actionsDisabledReason}
         onOpenChange={setCreateOpen}
         onSaved={invalidateUsers}
         open={createOpen}
       />
       <EditUserDialog
+        disabledReason={actionsDisabledReason}
         isLastEnabledAdmin={
           editUser?.role === 'admin' &&
           editUser.status === 1 &&
@@ -319,6 +375,7 @@ export function PlatformUsersPage({
         user={editUser}
       />
       <ResetPasswordDialog
+        disabledReason={actionsDisabledReason}
         onOpenChange={(open) => !open && setResetUser(null)}
         onSaved={invalidateUsers}
         open={resetUser != null}
@@ -326,6 +383,7 @@ export function PlatformUsersPage({
       />
       <ToggleUserDialog
         action={toggleState?.action ?? 'disable'}
+        disabledReason={actionsDisabledReason}
         onOpenChange={(open) => !open && setToggleState(null)}
         onSaved={invalidateUsers}
         open={toggleState != null}
@@ -337,6 +395,7 @@ export function PlatformUsersPage({
 
 interface UserActionsProps {
   currentUserId: string | undefined
+  disabledReason?: string
   enabledAdminTotal: number | null
   isAdmin: boolean
   onEdit: (user: PlatformUserItem) => void
@@ -347,6 +406,7 @@ interface UserActionsProps {
 
 function UserActions({
   currentUserId,
+  disabledReason,
   enabledAdminTotal,
   isAdmin,
   onEdit,
@@ -366,13 +426,20 @@ function UserActions({
   const adminSafeguardUnknown =
     user.role === 'admin' && user.status === 1 && enabledAdminTotal == null
   const toggleDisabled =
-    isCurrentUser || isLastEnabledAdmin || adminSafeguardUnknown
+    Boolean(disabledReason) ||
+    isCurrentUser ||
+    isLastEnabledAdmin ||
+    adminSafeguardUnknown
   const toggleLabel = user.status === 1 ? 'Disable user' : 'Enable user'
-  let toggleTitle = t(dynamicI18nKey('platformUser', toggleLabel))
-  const editTitle = adminSafeguardUnknown
-    ? t('Unable to verify administrator safeguards')
-    : t('Edit user')
-  if (isCurrentUser) toggleTitle = t('You cannot disable your own account')
+  let toggleTitle =
+    disabledReason ?? t(dynamicI18nKey('platformUser', toggleLabel))
+  const editTitle =
+    disabledReason ??
+    (adminSafeguardUnknown
+      ? t('Unable to verify administrator safeguards')
+      : t('Edit user'))
+  if (disabledReason) toggleTitle = disabledReason
+  else if (isCurrentUser) toggleTitle = t('You cannot disable your own account')
   else if (isLastEnabledAdmin) {
     toggleTitle = t('The last enabled administrator cannot be disabled')
   } else if (adminSafeguardUnknown) {
@@ -382,8 +449,8 @@ function UserActions({
   return (
     <div className='flex justify-end gap-1'>
       <Button
-        aria-label={editTitle}
-        disabled={adminSafeguardUnknown}
+        aria-label={t('Edit user')}
+        disabled={Boolean(disabledReason) || adminSafeguardUnknown}
         onClick={() => onEdit(user)}
         className='min-h-10 min-w-10'
         size='icon'
@@ -394,14 +461,15 @@ function UserActions({
       </Button>
       <Button
         aria-label={t('Reset password')}
-        disabled={isCurrentUser}
+        disabled={Boolean(disabledReason) || isCurrentUser}
         onClick={() => onReset(user)}
         className='min-h-10 min-w-10'
         size='icon'
         title={
-          isCurrentUser
+          disabledReason ??
+          (isCurrentUser
             ? t('Use Change password for your own account')
-            : t('Reset password')
+            : t('Reset password'))
         }
         variant='ghost'
       >
@@ -434,7 +502,7 @@ function UserCard(props: UserActionsProps) {
     <article className='bg-card text-card-foreground ring-foreground/10 rounded-xl p-4 ring-1'>
       <div className='flex items-start justify-between gap-3'>
         <div className='min-w-0'>
-          <h2 className='truncate font-medium'>{user.display_name}</h2>
+          <h2 className='font-medium break-words'>{user.display_name}</h2>
           <p className='text-muted-foreground truncate text-sm'>
             {user.username}
           </p>

@@ -255,7 +255,7 @@ func bootstrapApplication(
 		return nil, service.BootstrapResult{}, fmt.Errorf("initialize dashboard service: %w", err)
 	}
 	applicationRuntime, err := buildApplicationRuntime(options, metrics, alertService, dingTalkService,
-		clientFactory, siteRepository, siteService, logService, postCommit, maintenanceWake, redisStore)
+		clientFactory, siteRepository, siteService, logService, postCommit, maintenanceWake, redisStore, runtimeSettings)
 	if err != nil {
 		return nil, service.BootstrapResult{}, err
 	}
@@ -339,12 +339,15 @@ func buildApplicationRuntime(
 ) (runtimeLifecycle, error) {
 	var redisStore *common.RedisStore
 	var maintenanceWake *worker.DataMaintenanceWake
+	var runtimeSettings *service.RuntimeSettingsStore
 	for _, extra := range runtimeExtras {
 		switch typed := extra.(type) {
 		case *common.RedisStore:
 			redisStore = typed
 		case *worker.DataMaintenanceWake:
 			maintenanceWake = typed
+		case *service.RuntimeSettingsStore:
+			runtimeSettings = typed
 		}
 	}
 	if maintenanceWake == nil {
@@ -352,6 +355,9 @@ func buildApplicationRuntime(
 	}
 	if options.RuntimeMode == applicationRuntimeA49ReadOnly {
 		return &acceptanceReadOnlyRuntime{}, nil
+	}
+	if runtimeSettings == nil {
+		return nil, errors.New("runtime settings refresh is required")
 	}
 	alertScanner, err := service.NewAlertEvaluationScanner(service.AlertEvaluationScannerOptions{
 		Database: options.Database.GORM, Evaluator: alertService, Clock: options.Clock,
@@ -444,7 +450,7 @@ func buildApplicationRuntime(
 	if err != nil {
 		return nil, fmt.Errorf("initialize data maintenance runtime: %w", err)
 	}
-	applicationRuntime, err := newRuntimeGroup(workerRuntime, alertRuntime, exportRuntime, resourceRetentionRuntime, logRetentionRuntime, maintenanceRuntime)
+	applicationRuntime, err := newRuntimeGroup(runtimeSettings, workerRuntime, alertRuntime, exportRuntime, resourceRetentionRuntime, logRetentionRuntime, maintenanceRuntime)
 	if err != nil {
 		return nil, fmt.Errorf("initialize application runtime: %w", err)
 	}

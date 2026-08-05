@@ -157,7 +157,7 @@ func (r *SubscriptionPlanRepository) base(ctx context.Context, q dto.Subscriptio
 	return db
 }
 func (r *SubscriptionPlanRepository) ActiveSiteStates(ctx context.Context, q dto.SubscriptionPlanQuery) ([]SubscriptionPlanMetricRow, error) {
-	db := r.db.WithContext(ctx).Table("site s").Joins("LEFT JOIN site_subscription_plan_collection_state cs ON cs.site_id=s.id").Where("s.management_status='active'")
+	db := r.db.WithContext(ctx).Table("site s").Joins("LEFT JOIN site_subscription_plan_collection_state cs ON cs.site_id=s.id AND cs.config_version=s.config_version").Where("s.management_status='active'")
 	if len(q.SiteIDs) > 0 {
 		db = db.Where("s.id IN ?", q.SiteIDs)
 	}
@@ -205,7 +205,7 @@ func (r *SubscriptionPlanRepository) SiteMetrics(ctx context.Context, q dto.Subs
 		join += " AND p.title LIKE ?"
 		args = append(args, "%"+escapeLike(strings.TrimSpace(q.Keyword))+"%")
 	}
-	db := r.db.WithContext(ctx).Table("site s").Joins(join, args...).Joins("LEFT JOIN site_subscription_plan_collection_state cs ON cs.site_id=s.id").Where("s.management_status='active'")
+	db := r.db.WithContext(ctx).Table("site s").Joins(join, args...).Joins("LEFT JOIN site_subscription_plan_collection_state cs ON cs.site_id=s.id AND cs.config_version=s.config_version").Where("s.management_status='active'")
 	if len(q.SiteIDs) > 0 {
 		db = db.Where("s.id IN ?", q.SiteIDs)
 	}

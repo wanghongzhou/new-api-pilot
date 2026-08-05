@@ -4,8 +4,9 @@ import { QueryClient } from '@tanstack/react-query'
 import type { AxiosAdapter } from 'axios'
 
 import { api, setAuthenticatedUserId } from '@/lib/api'
+import { parseIdString } from '@/lib/api-types'
 
-import { listPlatformUsers } from './api'
+import { listPlatformUsers, updatePlatformUser } from './api'
 import type { PlatformUserPage } from './types'
 
 const originalAdapter = api.defaults.adapter
@@ -16,6 +17,50 @@ afterEach(() => {
 })
 
 describe('platform user API', () => {
+  test('sends the optimistic concurrency timestamp when updating a user', async () => {
+    let requestBody: unknown
+    api.defaults.adapter = async (config) => {
+      requestBody = JSON.parse(String(config.data))
+      return {
+        config,
+        data: {
+          code: '',
+          data: {
+            created_at: 100,
+            display_name: 'Updated',
+            id: '9007199254740993',
+            last_login_at: null,
+            must_change_password: false,
+            role: 'viewer',
+            status: 1,
+            updated_at: 101,
+            username: 'updated',
+          },
+          message: '',
+          request_id: 'req_update',
+          success: true,
+        },
+        headers: {},
+        status: 200,
+        statusText: 'OK',
+      }
+    }
+
+    await updatePlatformUser(parseIdString('9007199254740993'), {
+      display_name: 'Updated',
+      expected_updated_at: 100,
+      role: 'viewer',
+      username: 'updated',
+    })
+
+    expect(requestBody).toEqual({
+      display_name: 'Updated',
+      expected_updated_at: 100,
+      role: 'viewer',
+      username: 'updated',
+    })
+  })
+
   test('deduplicates concurrent feature GET requests', async () => {
     let calls = 0
     let release: (() => void) | undefined

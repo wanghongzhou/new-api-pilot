@@ -172,6 +172,70 @@ func TestSettingServiceGETSurvivesSecretDecryptFailureWithoutLeakingStorage(t *t
 	}
 }
 
+func TestRuntimeSettingsPollerPublishesCommittedSettingsAcrossInstances(t *testing.T) {
+	tx := openSiteTestTransaction(t)
+	clock := testsupport.NewFakeClock(time.Unix(1_752_400_800, 0))
+	repository := model.NewSettingRepository(tx)
+	firstRuntime, err := LoadRuntimeSettingsStore(context.Background(), repository, clock)
+	if err != nil {
+		t.Fatalf("load first runtime settings: %v", err)
+	}
+	secondRuntime, err := LoadRuntimeSettingsStore(context.Background(), repository, clock)
+	if err != nil {
+		t.Fatalf("load second runtime settings: %v", err)
+	}
+	secondGovernor := secondRuntime.Snapshot().Governor
+	secondRuntime.pollInterval = 10 * time.Millisecond
+	runtimeContext, cancelRuntime := context.WithCancel(context.Background())
+	defer cancelRuntime()
+	if err := secondRuntime.Start(runtimeContext); err != nil {
+		t.Fatalf("start second runtime poller: %v", err)
+	}
+	t.Cleanup(func() {
+		stopContext, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if err := secondRuntime.Stop(stopContext); err != nil {
+			t.Errorf("stop second runtime poller: %v", err)
+		}
+	})
+
+	cipher, err := common.NewCipher([]byte("abcdefghijklmnopqrstuvwxyz123456"))
+	if err != nil {
+		t.Fatalf("create cipher: %v", err)
+	}
+	settings, err := NewSettingService(SettingServiceOptions{
+		Repository: repository, Cipher: cipher, Clock: clock, Runtime: firstRuntime,
+	})
+	if err != nil {
+		t.Fatalf("create first setting service: %v", err)
+	}
+	_, err = settings.Update(context.Background(), dto.SettingPatchRequest{Items: []dto.SettingPatchItem{
+		{Key: "upstream.allowed_host_suffixes", Value: json.RawMessage(`"api.example.com"`)},
+		{Key: "upstream.max_inflight_per_origin", Value: json.RawMessage(`2`)},
+	}})
+	if err != nil {
+		t.Fatalf("update first instance settings: %v", err)
+	}
+	if got := firstRuntime.Snapshot().AllowedHosts; len(got) != 1 || got[0] != "api.example.com" {
+		t.Fatalf("writer runtime settings = %v", got)
+	}
+
+	deadline := time.Now().Add(time.Second)
+	for {
+		snapshot := secondRuntime.Snapshot()
+		if len(snapshot.AllowedHosts) == 1 && snapshot.AllowedHosts[0] == "api.example.com" {
+			if snapshot.Governor != secondGovernor {
+				t.Fatal("polling replaced the second instance governor")
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("second instance did not refresh within bound: %#v", snapshot)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
 func newIntegrationSettingService(
 	t *testing.T,
 	tx *gorm.DB,

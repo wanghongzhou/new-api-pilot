@@ -24,6 +24,9 @@ func NewPlatformUserController(users *service.PlatformUserService) *PlatformUser
 }
 
 func (controller *PlatformUserController) List(c *gin.Context) {
+	if !requireEmptyBody(c) {
+		return
+	}
 	query, fieldErrors := parsePlatformUserListQuery(c)
 	if fieldErrors != nil {
 		common.AbortError(c, http.StatusBadRequest, constant.CodeValidationError, "Invalid list query", fieldErrors)
@@ -38,6 +41,9 @@ func (controller *PlatformUserController) List(c *gin.Context) {
 }
 
 func (controller *PlatformUserController) Create(c *gin.Context) {
+	if !requireNoQuery(c) {
+		return
+	}
 	var request dto.CreatePlatformUserRequest
 	if !decodeJSON(c, &request, common.CredentialBodyLimit) {
 		return
@@ -57,7 +63,7 @@ func (controller *PlatformUserController) Create(c *gin.Context) {
 
 func (controller *PlatformUserController) Update(c *gin.Context) {
 	id, ok := parsePathID(c)
-	if !ok {
+	if !ok || !requireNoQuery(c) {
 		return
 	}
 	var request dto.UpdatePlatformUserRequest
@@ -87,7 +93,7 @@ func (controller *PlatformUserController) Disable(c *gin.Context) {
 
 func (controller *PlatformUserController) ResetPassword(c *gin.Context) {
 	targetID, ok := parsePathID(c)
-	if !ok {
+	if !ok || !requireNoQuery(c) {
 		return
 	}
 	actorID, ok := actorID(c)
@@ -111,7 +117,7 @@ func (controller *PlatformUserController) ResetPassword(c *gin.Context) {
 
 func (controller *PlatformUserController) setStatus(c *gin.Context, enabled bool) {
 	targetID, ok := parsePathID(c)
-	if !ok {
+	if !ok || !requireNoQuery(c) || !requireEmptyBody(c) {
 		return
 	}
 	actorID, ok := actorID(c)
@@ -149,7 +155,14 @@ func actorID(c *gin.Context) (int64, bool) {
 
 func parsePlatformUserListQuery(c *gin.Context) (dto.PlatformUserListQuery, map[string]string) {
 	query := dto.PlatformUserListQuery{Page: 1, PageSize: 20, SortBy: "created_at", SortOrder: "desc"}
-	errors := map[string]string{}
+	errors := validateQueryKeys(c, map[string]struct{}{
+		"p": {}, "page_size": {}, "keyword": {}, "sort_by": {}, "sort_order": {}, "role": {}, "status": {},
+	})
+	for _, key := range []string{"p", "page_size", "keyword", "sort_by", "sort_order", "role", "status"} {
+		if values, exists := c.Request.URL.Query()[key]; exists && len(values) != 1 {
+			errors[key] = "must be specified once"
+		}
+	}
 	if raw := c.Query("p"); raw != "" {
 		value, err := strconv.Atoi(raw)
 		if err != nil || value < 1 {

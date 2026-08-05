@@ -41,6 +41,7 @@ func (s *FinanceOperationsService) Topups(ctx context.Context, q dto.FinanceInve
 	}
 	var rows []model.TopupReadRow
 	var completeness []model.FinanceMetricRow
+	var coverage []model.FinanceCollectionCoverageRow
 	var total int64
 	if err := s.readSnapshot(ctx, func(repository *model.FinanceRepository) error {
 		var err error
@@ -49,6 +50,10 @@ func (s *FinanceOperationsService) Topups(ctx context.Context, q dto.FinanceInve
 			return err
 		}
 		completeness, err = repository.TopupMetrics(ctx, q, "summary")
+		if err != nil {
+			return err
+		}
+		coverage, err = repository.CollectionCoverage(ctx, q.SiteIDs, "topup")
 		return err
 	}); err != nil {
 		return dto.FinanceInventoryPage[dto.TopupInventoryItem]{}, err
@@ -57,29 +62,26 @@ func (s *FinanceOperationsService) Topups(ctx context.Context, q dto.FinanceInve
 	for _, r := range rows {
 		items = append(items, dto.TopupInventoryItem{ID: strconv.FormatInt(r.ID, 10), SiteID: strconv.FormatInt(r.SiteID, 10), RemoteID: strconv.FormatInt(r.RemoteID, 10), RemoteUserID: strconv.FormatInt(r.RemoteUserID, 10), SiteName: r.SiteName, Amount: strconv.FormatInt(r.Amount, 10), Money: r.Money, PaymentMethod: r.PaymentMethod, PaymentProvider: r.PaymentProvider, CreateTime: r.CreateTime, CompleteTime: r.CompleteTime, Status: r.RemoteStatus, RemoteState: r.RemoteState, MissingCount: r.MissingCount, FirstSeenAt: r.FirstSeenAt, LastSeenAt: r.LastSeenAt})
 	}
-	status := "complete"
-	var asOf *int64
-	if total == 0 {
-		status = "pending"
-	} else if len(completeness) != 1 {
+	if total > 0 && len(completeness) != 1 {
 		return dto.FinanceInventoryPage[dto.TopupInventoryItem]{}, model.ErrStatisticsReadContract
-	} else {
-		asOf = completeness[0].AsOf
-		if completeness[0].MissingCount > 0 {
-			status = "partial"
-		}
 	}
-	return dto.FinanceInventoryPage[dto.TopupInventoryItem]{Items: items, Total: total, Page: q.Page, PageSize: q.PageSize, DataStatus: status, AsOf: asOf}, nil
+	status, asOf, complete := financeCoverage(coverage)
+	return dto.FinanceInventoryPage[dto.TopupInventoryItem]{Items: items, Total: total, Page: q.Page, PageSize: q.PageSize, DataStatus: status, AsOf: asOf, Completeness: complete}, nil
 }
 
 func (s *FinanceOperationsService) Redemptions(ctx context.Context, q dto.FinanceInventoryQuery) (dto.FinanceInventoryPage[dto.RedemptionInventoryItem], error) {
 	q.Normalize()
-	if s == nil || q.Validate() != nil {
+	if s == nil || s.clock == nil {
 		return dto.FinanceInventoryPage[dto.RedemptionInventoryItem]{}, ErrStatisticsInvalid
 	}
 	now := s.clock.Now().Unix()
+	q.StatusAt = now
+	if q.Validate() != nil || q.ValidateRedemptionStatuses() != nil {
+		return dto.FinanceInventoryPage[dto.RedemptionInventoryItem]{}, ErrStatisticsInvalid
+	}
 	var rows []model.RedemptionReadRow
 	var completeness []model.FinanceMetricRow
+	var coverage []model.FinanceCollectionCoverageRow
 	var total int64
 	if err := s.readSnapshot(ctx, func(repository *model.FinanceRepository) error {
 		var err error
@@ -88,6 +90,10 @@ func (s *FinanceOperationsService) Redemptions(ctx context.Context, q dto.Financ
 			return err
 		}
 		completeness, err = repository.RedemptionMetrics(ctx, q, "summary", now)
+		if err != nil {
+			return err
+		}
+		coverage, err = repository.CollectionCoverage(ctx, q.SiteIDs, "redemption")
 		return err
 	}); err != nil {
 		return dto.FinanceInventoryPage[dto.RedemptionInventoryItem]{}, err
@@ -100,19 +106,11 @@ func (s *FinanceOperationsService) Redemptions(ctx context.Context, q dto.Financ
 		}
 		items = append(items, dto.RedemptionInventoryItem{ID: strconv.FormatInt(r.ID, 10), SiteID: strconv.FormatInt(r.SiteID, 10), RemoteID: strconv.FormatInt(r.RemoteID, 10), RemoteUserID: strconv.FormatInt(r.RemoteUserID, 10), SiteName: r.SiteName, Name: r.Name, Status: r.RemoteStatus, DerivedStatus: derived, Quota: strconv.FormatInt(r.Quota, 10), CreatedTime: r.CreatedTime, RedeemedTime: r.RedeemedTime, UsedUserID: strconv.FormatInt(r.UsedUserID, 10), ExpiredTime: r.ExpiredTime, RemoteState: r.RemoteState, MissingCount: r.MissingCount, FirstSeenAt: r.FirstSeenAt, LastSeenAt: r.LastSeenAt})
 	}
-	status := "complete"
-	var asOf *int64
-	if total == 0 {
-		status = "pending"
-	} else if len(completeness) != 1 {
+	if total > 0 && len(completeness) != 1 {
 		return dto.FinanceInventoryPage[dto.RedemptionInventoryItem]{}, model.ErrStatisticsReadContract
-	} else {
-		asOf = completeness[0].AsOf
-		if completeness[0].MissingCount > 0 {
-			status = "partial"
-		}
 	}
-	return dto.FinanceInventoryPage[dto.RedemptionInventoryItem]{Items: items, Total: total, Page: q.Page, PageSize: q.PageSize, DataStatus: status, AsOf: asOf}, nil
+	status, asOf, complete := financeCoverage(coverage)
+	return dto.FinanceInventoryPage[dto.RedemptionInventoryItem]{Items: items, Total: total, Page: q.Page, PageSize: q.PageSize, DataStatus: status, AsOf: asOf, Completeness: complete}, nil
 }
 
 func financeMetric(r model.FinanceMetricRow, topup bool) dto.FinanceMetric {
@@ -136,6 +134,64 @@ func financeBreakdown(rows []model.FinanceMetricRow, topup bool) []dto.FinanceBr
 	}
 	return out
 }
+
+func financeCoverageStatus(row model.FinanceCollectionCoverageRow) string {
+	if row.LastSuccessAt != nil {
+		if row.LastFailureAt != nil && *row.LastFailureAt > *row.LastSuccessAt {
+			return "partial"
+		}
+		return "complete"
+	}
+	if row.LastFailureAt != nil {
+		return "unavailable"
+	}
+	return "pending"
+}
+
+func financeCoverage(rows []model.FinanceCollectionCoverageRow) (string, *int64, dto.FinanceCompleteness) {
+	counts := map[string]int{}
+	var asOf *int64
+	for _, row := range rows {
+		counts[financeCoverageStatus(row)]++
+		if row.AsOf != nil && (asOf == nil || *row.AsOf > *asOf) {
+			value := *row.AsOf
+			asOf = &value
+		}
+	}
+	status := "pending"
+	if len(rows) > 0 {
+		status = "partial"
+		for _, candidate := range []string{"complete", "unavailable", "pending"} {
+			if counts[candidate] == len(rows) {
+				status = candidate
+				break
+			}
+		}
+	}
+	value := dto.FinanceCompleteness{DataStatus: status, CompleteSiteCount: counts["complete"], ExpectedSiteCount: len(rows), UnavailableCount: counts["unavailable"], PendingSiteCount: counts["pending"]}
+	return status, asOf, value
+}
+
+func financeSiteBreakdown(rows []model.FinanceMetricRow, coverage []model.FinanceCollectionCoverageRow, topup bool) []dto.FinanceBreakdown {
+	metrics := make(map[int64]model.FinanceMetricRow, len(rows))
+	for _, row := range rows {
+		metrics[row.SiteID] = row
+	}
+	out := make([]dto.FinanceBreakdown, 0, len(coverage))
+	for _, site := range coverage {
+		metric := dto.FinanceMetric{Count: "0", MissingCount: "0"}
+		if topup {
+			metric.Amount, metric.Money = "0", "0"
+		} else {
+			metric.Quota = "0"
+		}
+		if row, exists := metrics[site.SiteID]; exists {
+			metric = financeMetric(row, topup)
+		}
+		out = append(out, dto.FinanceBreakdown{DimensionID: strconv.FormatInt(site.SiteID, 10), DimensionName: site.SiteName, SiteID: strconv.FormatInt(site.SiteID, 10), SiteName: site.SiteName, FinanceMetric: metric, DataStatus: financeCoverageStatus(site), AsOf: site.AsOf})
+	}
+	return out
+}
 func (s *FinanceOperationsService) TopupStatistics(ctx context.Context, q dto.FinanceInventoryQuery) (dto.FinanceStatisticsResponse, error) {
 	q.Normalize()
 	q.Page, q.PageSize = 1, 1
@@ -143,6 +199,7 @@ func (s *FinanceOperationsService) TopupStatistics(ctx context.Context, q dto.Fi
 		return dto.FinanceStatisticsResponse{}, ErrStatisticsInvalid
 	}
 	var summary, statuses, providers, sites []model.FinanceMetricRow
+	var coverage []model.FinanceCollectionCoverageRow
 	if err := s.readSnapshot(ctx, func(repository *model.FinanceRepository) error {
 		var err error
 		if summary, err = repository.TopupMetrics(ctx, q, "summary"); err != nil {
@@ -154,33 +211,38 @@ func (s *FinanceOperationsService) TopupStatistics(ctx context.Context, q dto.Fi
 		if providers, err = repository.TopupMetrics(ctx, q, "provider"); err != nil {
 			return err
 		}
-		sites, err = repository.TopupMetrics(ctx, q, "site")
+		if sites, err = repository.TopupMetrics(ctx, q, "site"); err != nil {
+			return err
+		}
+		coverage, err = repository.CollectionCoverage(ctx, q.SiteIDs, "topup")
 		return err
 	}); err != nil {
 		return dto.FinanceStatisticsResponse{}, err
 	}
-	out := dto.FinanceStatisticsResponse{StatusBreakdown: financeBreakdown(statuses, true), ProviderBreakdown: financeBreakdown(providers, true), SiteBreakdown: financeBreakdown(sites, true), DataStatus: "complete"}
+	status, asOf, complete := financeCoverage(coverage)
+	out := dto.FinanceStatisticsResponse{StatusBreakdown: financeBreakdown(statuses, true), ProviderBreakdown: financeBreakdown(providers, true), SiteBreakdown: financeSiteBreakdown(sites, coverage, true), DataStatus: status, AsOf: asOf, Completeness: complete}
 	if len(summary) > 0 {
 		out.Summary = financeMetric(summary[0], true)
 		out.Summary.Amount = ""
 		out.Summary.Money = ""
-		if summary[0].MissingCount > 0 {
-			out.DataStatus = "partial"
-		}
 	} else {
 		out.Summary = dto.FinanceMetric{Count: "0", MissingCount: "0"}
-		out.DataStatus = "pending"
 	}
 	return out, nil
 }
 func (s *FinanceOperationsService) RedemptionStatistics(ctx context.Context, q dto.FinanceInventoryQuery) (dto.FinanceStatisticsResponse, error) {
 	q.Normalize()
 	q.Page, q.PageSize = 1, 1
-	if s == nil || q.Validate() != nil {
+	if s == nil || s.clock == nil {
 		return dto.FinanceStatisticsResponse{}, ErrStatisticsInvalid
 	}
 	now := s.clock.Now().Unix()
+	q.StatusAt = now
+	if q.Validate() != nil || q.ValidateRedemptionStatuses() != nil {
+		return dto.FinanceStatisticsResponse{}, ErrStatisticsInvalid
+	}
 	var summary, statuses, sites []model.FinanceMetricRow
+	var coverage []model.FinanceCollectionCoverageRow
 	if err := s.readSnapshot(ctx, func(repository *model.FinanceRepository) error {
 		var err error
 		if summary, err = repository.RedemptionMetrics(ctx, q, "summary", now); err != nil {
@@ -189,20 +251,20 @@ func (s *FinanceOperationsService) RedemptionStatistics(ctx context.Context, q d
 		if statuses, err = repository.RedemptionMetrics(ctx, q, "status", now); err != nil {
 			return err
 		}
-		sites, err = repository.RedemptionMetrics(ctx, q, "site", now)
+		if sites, err = repository.RedemptionMetrics(ctx, q, "site", now); err != nil {
+			return err
+		}
+		coverage, err = repository.CollectionCoverage(ctx, q.SiteIDs, "redemption")
 		return err
 	}); err != nil {
 		return dto.FinanceStatisticsResponse{}, err
 	}
-	out := dto.FinanceStatisticsResponse{StatusBreakdown: financeBreakdown(statuses, false), SiteBreakdown: financeBreakdown(sites, false), DataStatus: "complete"}
+	status, asOf, complete := financeCoverage(coverage)
+	out := dto.FinanceStatisticsResponse{StatusBreakdown: financeBreakdown(statuses, false), SiteBreakdown: financeSiteBreakdown(sites, coverage, false), DataStatus: status, AsOf: asOf, Completeness: complete}
 	if len(summary) > 0 {
 		out.Summary = financeMetric(summary[0], false)
-		if summary[0].MissingCount > 0 {
-			out.DataStatus = "partial"
-		}
 	} else {
 		out.Summary = dto.FinanceMetric{Count: "0", MissingCount: "0", Quota: "0"}
-		out.DataStatus = "pending"
 	}
 	return out, nil
 }

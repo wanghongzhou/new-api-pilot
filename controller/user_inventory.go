@@ -46,6 +46,17 @@ func (controller *UserInventoryController) list(c *gin.Context, forced []int64) 
 		common.AbortInternalError(c)
 		return
 	}
+	if !requireEmptyBody(c) {
+		return
+	}
+	allowed := map[string]bool{"p": true, "page_size": true, "keyword": true, "remote_user_id": true, "roles": true, "statuses": true, "groups": true, "states": true, "min_balance": true, "max_balance": true}
+	if len(forced) == 0 {
+		allowed["site_ids"] = true
+	}
+	if fields := strictQueryFields(c, allowed, "p", "page_size", "keyword", "remote_user_id", "min_balance", "max_balance"); fields != nil {
+		common.AbortError(c, http.StatusBadRequest, constant.CodeValidationError, "Invalid user inventory query", fields)
+		return
+	}
 	query, fields := parseUserInventoryQuery(c)
 	if len(forced) > 0 {
 		query.SiteIDs = forced
@@ -66,6 +77,17 @@ func (controller *UserInventoryController) list(c *gin.Context, forced []int64) 
 func (controller *UserInventoryController) statistics(c *gin.Context, forced []int64) {
 	if controller == nil || controller.inventory == nil {
 		common.AbortInternalError(c)
+		return
+	}
+	if !requireEmptyBody(c) {
+		return
+	}
+	allowed := map[string]bool{"start_timestamp": true, "end_timestamp": true, "roles": true, "statuses": true, "groups": true}
+	if len(forced) == 0 {
+		allowed["site_ids"] = true
+	}
+	if fields := strictQueryFields(c, allowed, "start_timestamp", "end_timestamp"); fields != nil {
+		common.AbortError(c, http.StatusBadRequest, constant.CodeValidationError, "Invalid user inventory statistics query", fields)
 		return
 	}
 	query, fields := parseUserInventoryStatisticsQuery(c)

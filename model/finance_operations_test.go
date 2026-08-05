@@ -120,4 +120,10 @@ func TestFinanceStatisticsNeverExposeCrossSiteTopupTotalsAndDeriveExpired(t *tes
 	if err != nil || len(statuses) == 0 || statuses[0].DimensionID != "expired" {
 		t.Fatalf("redemption statuses=%+v err=%v", statuses, err)
 	}
+	q.Statuses = []string{"expired"}
+	q.StatusAt = now
+	rows, total, err := repo.ListRedemptions(context.Background(), q)
+	if err != nil || total != 2 || len(rows) != 2 {
+		t.Fatalf("expired filter rows=%+v total=%d err=%v", rows, total, err)
+	}
 }

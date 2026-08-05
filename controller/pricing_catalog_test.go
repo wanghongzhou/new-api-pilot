@@ -66,6 +66,7 @@ func TestPricingCatalogParsesBillingModeAndRejectsVendorDrilldown(t *testing.T) 
 	controller := NewPricingCatalogController(application)
 	engine.GET("/pricing", controller.Global)
 	engine.GET("/statistics", controller.GlobalStatistics)
+	engine.GET("/sites/:id/pricing", controller.Site)
 
 	response := httptest.NewRecorder()
 	engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/pricing?billing_mode=tiered_expr", nil))
@@ -78,5 +79,20 @@ func TestPricingCatalogParsesBillingModeAndRejectsVendorDrilldown(t *testing.T) 
 	engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/pricing?vendor_id=9", nil))
 	if response.Code != http.StatusBadRequest || application.called {
 		t.Fatalf("status=%d called=%v body=%s", response.Code, application.called, response.Body.String())
+	}
+
+	for _, target := range []string{"/pricing?p=1&p=2", "/pricing?site_ids=-1", "/sites/2/pricing?site_ids=2", "/statistics?p=1", "/statistics?states=normal"} {
+		application.called = false
+		response = httptest.NewRecorder()
+		engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, target, nil))
+		if response.Code != http.StatusBadRequest || application.called {
+			t.Fatalf("target=%s status=%d called=%v body=%s", target, response.Code, application.called, response.Body.String())
+		}
+	}
+	application.called = false
+	response = httptest.NewRecorder()
+	engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/pricing", strings.NewReader(`{}`)))
+	if response.Code != http.StatusBadRequest || application.called {
+		t.Fatalf("non-empty body status=%d called=%v body=%s", response.Code, application.called, response.Body.String())
 	}
 }

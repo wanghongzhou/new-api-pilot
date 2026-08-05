@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"os"
 	"strconv"
@@ -26,7 +27,7 @@ type FinanceOperationsExportOptions struct {
 }
 
 func GenerateFinanceOperationsExport(ctx context.Context, o FinanceOperationsExportOptions) (ExportGenerateResult, error) {
-	if o.Database == nil || o.TemporaryPath == "" || o.DataSnapshotAt <= 0 || o.ExportedAt <= 0 || o.MaxFileBytes <= 0 || o.MinFreeBytes <= 0 || (o.Kind != "topup" && o.Kind != "redemption") || (o.Format != dto.ExportFormatCSV && o.Format != dto.ExportFormatXLSX) || o.Query.Validate() != nil {
+	if o.Database == nil || o.TemporaryPath == "" || o.DataSnapshotAt <= 0 || o.ExportedAt <= 0 || o.MaxFileBytes <= 0 || o.MinFreeBytes <= 0 || (o.Kind != "topup" && o.Kind != "redemption") || (o.Format != dto.ExportFormatCSV && o.Format != dto.ExportFormatXLSX) || o.Query.Validate() != nil || (o.Kind == "redemption" && o.Query.ValidateRedemptionStatuses() != nil) {
 		return ExportGenerateResult{}, ErrExportInvalid
 	}
 	if o.Now <= 0 {
@@ -68,65 +69,73 @@ func GenerateFinanceOperationsExport(ctx context.Context, o FinanceOperationsExp
 	if err = writer.WriteHeader(columns); err != nil {
 		return ExportGenerateResult{}, err
 	}
-	repo := model.NewFinanceRepository(o.Database)
 	var count int64
-	for page := 1; ; page++ {
-		q := o.Query
-		q.Page, q.PageSize = page, 100
-		if o.Kind == "topup" {
-			rows, total, e := repo.ListTopups(ctx, q)
-			if e != nil {
-				return ExportGenerateResult{}, e
-			}
-			for _, r := range rows {
-				last := ""
-				if r.LastSeenAt != nil {
-					last = strconv.FormatInt(*r.LastSeenAt, 10)
+	err = o.Database.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		repo := model.NewFinanceRepository(tx)
+		for page := 1; ; page++ {
+			q := o.Query
+			q.Page, q.PageSize = page, 100
+			q.SnapshotAt = o.DataSnapshotAt
+			q.StatusAt = o.Now
+			if o.Kind == "topup" {
+				rows, total, e := repo.ListTopups(ctx, q)
+				if e != nil {
+					return e
 				}
-				values := []string{strconv.FormatInt(r.SiteID, 10), r.SiteName, strconv.FormatInt(r.RemoteID, 10), strconv.FormatInt(r.RemoteUserID, 10), strconv.FormatInt(r.Amount, 10), r.Money, r.PaymentMethod, r.PaymentProvider, strconv.FormatInt(r.CreateTime, 10), strconv.FormatInt(r.CompleteTime, 10), r.RemoteStatus, r.RemoteState, strconv.Itoa(r.MissingCount), strconv.FormatInt(r.FirstSeenAt, 10), last, strconv.FormatInt(o.DataSnapshotAt, 10), strconv.FormatInt(o.ExportedAt, 10)}
-				if e = writer.WriteRow(values); e != nil {
-					return ExportGenerateResult{}, e
+				for _, r := range rows {
+					last := ""
+					if r.LastSeenAt != nil {
+						last = strconv.FormatInt(*r.LastSeenAt, 10)
+					}
+					values := []string{strconv.FormatInt(r.SiteID, 10), r.SiteName, strconv.FormatInt(r.RemoteID, 10), strconv.FormatInt(r.RemoteUserID, 10), strconv.FormatInt(r.Amount, 10), r.Money, r.PaymentMethod, r.PaymentProvider, strconv.FormatInt(r.CreateTime, 10), strconv.FormatInt(r.CompleteTime, 10), r.RemoteStatus, r.RemoteState, strconv.Itoa(r.MissingCount), strconv.FormatInt(r.FirstSeenAt, 10), last, strconv.FormatInt(o.DataSnapshotAt, 10), strconv.FormatInt(o.ExportedAt, 10)}
+					if e = writer.WriteRow(values); e != nil {
+						return e
+					}
+					count++
 				}
-				count++
-			}
-			if count >= total {
-				break
-			}
-			if len(rows) == 0 || count > 100000 {
-				return ExportGenerateResult{}, ErrExportContract
-			}
-		} else {
-			rows, total, e := repo.ListRedemptions(ctx, q)
-			if e != nil {
-				return ExportGenerateResult{}, e
-			}
-			for _, r := range rows {
-				last := ""
-				if r.LastSeenAt != nil {
-					last = strconv.FormatInt(*r.LastSeenAt, 10)
+				if count >= total {
+					break
 				}
-				derived := strconv.Itoa(r.RemoteStatus)
-				if r.RemoteStatus == 1 && r.ExpiredTime != 0 && r.ExpiredTime < o.Now {
-					derived = "expired"
+				if len(rows) == 0 || count > 100000 {
+					return ErrExportContract
 				}
-				values := []string{strconv.FormatInt(r.SiteID, 10), r.SiteName, strconv.FormatInt(r.RemoteID, 10), strconv.FormatInt(r.RemoteUserID, 10), r.Name, strconv.Itoa(r.RemoteStatus), derived, strconv.FormatInt(r.Quota, 10), strconv.FormatInt(r.CreatedTime, 10), strconv.FormatInt(r.RedeemedTime, 10), strconv.FormatInt(r.UsedUserID, 10), strconv.FormatInt(r.ExpiredTime, 10), r.RemoteState, strconv.Itoa(r.MissingCount), strconv.FormatInt(r.FirstSeenAt, 10), last, strconv.FormatInt(o.DataSnapshotAt, 10), strconv.FormatInt(o.ExportedAt, 10)}
-				if e = writer.WriteRow(values); e != nil {
-					return ExportGenerateResult{}, e
+			} else {
+				rows, total, e := repo.ListRedemptions(ctx, q)
+				if e != nil {
+					return e
 				}
-				count++
+				for _, r := range rows {
+					last := ""
+					if r.LastSeenAt != nil {
+						last = strconv.FormatInt(*r.LastSeenAt, 10)
+					}
+					derived := strconv.Itoa(r.RemoteStatus)
+					if r.RemoteStatus == 1 && r.ExpiredTime != 0 && r.ExpiredTime < o.Now {
+						derived = "expired"
+					}
+					values := []string{strconv.FormatInt(r.SiteID, 10), r.SiteName, strconv.FormatInt(r.RemoteID, 10), strconv.FormatInt(r.RemoteUserID, 10), r.Name, strconv.Itoa(r.RemoteStatus), derived, strconv.FormatInt(r.Quota, 10), strconv.FormatInt(r.CreatedTime, 10), strconv.FormatInt(r.RedeemedTime, 10), strconv.FormatInt(r.UsedUserID, 10), strconv.FormatInt(r.ExpiredTime, 10), r.RemoteState, strconv.Itoa(r.MissingCount), strconv.FormatInt(r.FirstSeenAt, 10), last, strconv.FormatInt(o.DataSnapshotAt, 10), strconv.FormatInt(o.ExportedAt, 10)}
+					if e = writer.WriteRow(values); e != nil {
+						return e
+					}
+					count++
+				}
+				if count >= total {
+					break
+				}
+				if len(rows) == 0 || count > 100000 {
+					return ErrExportContract
+				}
 			}
-			if count >= total {
-				break
-			}
-			if len(rows) == 0 || count > 100000 {
-				return ExportGenerateResult{}, ErrExportContract
+			if o.OnPage != nil {
+				if err = o.OnPage(ctx, page, count); err != nil {
+					return err
+				}
 			}
 		}
-		if o.OnPage != nil {
-			if err = o.OnPage(ctx, page, count); err != nil {
-				return ExportGenerateResult{}, err
-			}
-		}
+		return nil
+	}, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+	if err != nil {
+		return ExportGenerateResult{}, err
 	}
 	if err = writer.Close(); err != nil {
 		return ExportGenerateResult{}, err

@@ -3,10 +3,12 @@ package service
 import (
 	"context"
 	"errors"
+	"log"
 	"net/netip"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -15,6 +17,8 @@ import (
 	"new-api-pilot/common"
 	"new-api-pilot/model"
 )
+
+const runtimeSettingsRefreshInterval = time.Second
 
 type RuntimeSettingsSnapshot struct {
 	FastTaskRetention time.Duration
@@ -26,11 +30,21 @@ type RuntimeSettingsSnapshot struct {
 	RequestTimeout    time.Duration
 	ExportTimeout     time.Duration
 	Governor          UpstreamGovernor
+	governorOptions   UpstreamGovernorOptions
 }
 
 type RuntimeSettingsStore struct {
-	clock common.Clock
-	value atomic.Pointer[RuntimeSettingsSnapshot]
+	clock        common.Clock
+	repository   *model.SettingRepository
+	pollInterval time.Duration
+	value        atomic.Pointer[RuntimeSettingsSnapshot]
+	version      atomic.Int64
+	refreshMu    sync.Mutex
+	publishMu    sync.Mutex
+	lifecycleMu  sync.Mutex
+	cancel       context.CancelFunc
+	done         chan struct{}
+	ready        atomic.Bool
 }
 
 func LoadRuntimeSettingsStore(
@@ -57,8 +71,10 @@ func LoadRuntimeSettingsStore(
 	if err != nil {
 		return nil, err
 	}
-	store := &RuntimeSettingsStore{clock: clock}
-	store.Store(snapshot)
+	store := &RuntimeSettingsStore{clock: clock, repository: repository, pollInterval: runtimeSettingsRefreshInterval}
+	if err := store.StoreVersioned(snapshot, runtimeSettingsVersion(indexed)); err != nil {
+		return nil, err
+	}
 	return store, nil
 }
 
@@ -72,15 +88,42 @@ func (store *RuntimeSettingsStore) Snapshot() RuntimeSettingsSnapshot {
 	return snapshot
 }
 
-func (store *RuntimeSettingsStore) Store(snapshot RuntimeSettingsSnapshot) {
+func (store *RuntimeSettingsStore) Store(snapshot RuntimeSettingsSnapshot) error {
+	if store == nil {
+		return errors.New("runtime settings store is required")
+	}
+	return store.StoreVersioned(snapshot, store.version.Load())
+}
+
+func (store *RuntimeSettingsStore) StoreVersioned(snapshot RuntimeSettingsSnapshot, version int64) error {
+	if store == nil {
+		return errors.New("runtime settings store is required")
+	}
+	store.publishMu.Lock()
+	defer store.publishMu.Unlock()
+	if version < store.version.Load() {
+		return nil
+	}
+	if current := store.value.Load(); current != nil && current.Governor != nil {
+		if err := current.Governor.Reconfigure(snapshot.governorOptions); err != nil {
+			return err
+		}
+		snapshot.Governor = current.Governor
+	}
 	copyValue := snapshot
 	copyValue.AllowedHosts = append([]string(nil), snapshot.AllowedHosts...)
 	copyValue.AllowedCIDRs = append([]netip.Prefix(nil), snapshot.AllowedCIDRs...)
 	store.value.Store(&copyValue)
+	store.version.Store(version)
+	return nil
 }
 
 func (store *RuntimeSettingsStore) Build(values map[string]string) (RuntimeSettingsSnapshot, error) {
-	return runtimeSettingsFromValues(values, store.clock)
+	var governor UpstreamGovernor
+	if current := store.value.Load(); current != nil {
+		governor = current.Governor
+	}
+	return runtimeSettingsFromValues(values, store.clock, governor)
 }
 
 func (store *RuntimeSettingsStore) FastTaskHistorySettings() (time.Duration, int) {
@@ -88,7 +131,110 @@ func (store *RuntimeSettingsStore) FastTaskHistorySettings() (time.Duration, int
 	return snapshot.FastTaskRetention, snapshot.FastTaskCount
 }
 
-func runtimeSettingsFromValues(values map[string]string, clock common.Clock) (RuntimeSettingsSnapshot, error) {
+func (store *RuntimeSettingsStore) Refresh(ctx context.Context) error {
+	if store == nil || store.repository == nil {
+		return errors.New("runtime settings repository is required")
+	}
+	store.refreshMu.Lock()
+	defer store.refreshMu.Unlock()
+	rows, err := store.repository.List(ctx, settingKeys())
+	if err != nil {
+		return err
+	}
+	indexed, err := validateSettingRows(rows)
+	if err != nil {
+		return err
+	}
+	version := runtimeSettingsVersion(indexed)
+	if version <= store.version.Load() {
+		return nil
+	}
+	values := make(map[string]string, len(indexed))
+	for key, row := range indexed {
+		values[key] = row.Value
+	}
+	snapshot, err := store.Build(values)
+	if err != nil {
+		return err
+	}
+	return store.StoreVersioned(snapshot, version)
+}
+
+func (store *RuntimeSettingsStore) Start(parent context.Context) error {
+	if store == nil || parent == nil || store.repository == nil || store.pollInterval <= 0 {
+		return errors.New("runtime settings refresh dependencies are required")
+	}
+	store.lifecycleMu.Lock()
+	defer store.lifecycleMu.Unlock()
+	if store.cancel != nil {
+		return errors.New("runtime settings refresh is already started")
+	}
+	ctx, cancel := context.WithCancel(parent)
+	store.cancel = cancel
+	store.done = make(chan struct{})
+	store.ready.Store(true)
+	go store.run(ctx, store.done)
+	return nil
+}
+
+func (store *RuntimeSettingsStore) run(ctx context.Context, done chan<- struct{}) {
+	defer close(done)
+	ticker := time.NewTicker(store.pollInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := store.Refresh(ctx); err != nil && ctx.Err() == nil {
+				log.Printf("runtime settings refresh failed: %v", err)
+			}
+		}
+	}
+}
+
+func (store *RuntimeSettingsStore) Quiesce() error {
+	if store != nil {
+		store.ready.Store(false)
+	}
+	return nil
+}
+
+func (store *RuntimeSettingsStore) Stop(ctx context.Context) error {
+	if store == nil {
+		return nil
+	}
+	store.lifecycleMu.Lock()
+	cancel, done := store.cancel, store.done
+	store.cancel = nil
+	store.done = nil
+	store.lifecycleMu.Unlock()
+	store.ready.Store(false)
+	if cancel == nil {
+		return nil
+	}
+	cancel()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (store *RuntimeSettingsStore) Ready() bool {
+	return store != nil && store.ready.Load()
+}
+
+func runtimeSettingsVersion(rows map[string]model.PlatformSetting) int64 {
+	var version int64
+	for _, row := range rows {
+		version += row.UpdatedAt
+	}
+	return version
+}
+
+func runtimeSettingsFromValues(values map[string]string, clock common.Clock, governors ...UpstreamGovernor) (RuntimeSettingsSnapshot, error) {
 	integer := func(key string) (int, error) {
 		value, err := strconv.Atoi(values[key])
 		if err != nil || value <= 0 {
@@ -143,21 +289,30 @@ func runtimeSettingsFromValues(values map[string]string, clock common.Clock) (Ru
 	if err != nil {
 		return RuntimeSettingsSnapshot{}, err
 	}
-	governor, err := NewUpstreamGovernor(UpstreamGovernorOptions{
+	governorOptions := UpstreamGovernorOptions{
 		Requests: requests, Window: time.Duration(window) * time.Second,
 		MaxInFlight: maxInFlight, Clock: clock,
-	})
-	if err != nil {
-		return RuntimeSettingsSnapshot{}, err
+	}
+	var governor UpstreamGovernor
+	if len(governors) > 0 {
+		governor = governors[0]
+	}
+	if governor == nil {
+		var err error
+		governor, err = NewUpstreamGovernor(governorOptions)
+		if err != nil {
+			return RuntimeSettingsSnapshot{}, err
+		}
 	}
 	return RuntimeSettingsSnapshot{
 		FastTaskRetention: time.Duration(retention) * time.Second, FastTaskCount: count,
 		AllowedHosts: hosts, AllowedCIDRs: cidrs,
-		ConnectTimeout: time.Duration(connect) * time.Second,
-		HeaderTimeout:  time.Duration(header) * time.Second,
-		RequestTimeout: time.Duration(request) * time.Second,
-		ExportTimeout:  time.Duration(export) * time.Second,
-		Governor:       governor,
+		ConnectTimeout:  time.Duration(connect) * time.Second,
+		HeaderTimeout:   time.Duration(header) * time.Second,
+		RequestTimeout:  time.Duration(request) * time.Second,
+		ExportTimeout:   time.Duration(export) * time.Second,
+		Governor:        governor,
+		governorOptions: governorOptions,
 	}, nil
 }
 

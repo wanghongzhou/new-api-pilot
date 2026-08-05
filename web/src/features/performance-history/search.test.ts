@@ -49,6 +49,13 @@ describe('performance history URL state', () => {
     ).toBe('list')
   })
 
+  test.each(['models', 'groups'] as const)(
+    'preserves the documented %s aggregation view',
+    (view) => {
+      expect(buildPerformanceHistorySearch({ view }).view).toBe(view)
+    }
+  )
+
   test('preserves valid server pagination and normalizes invalid values', () => {
     expect(
       buildPerformanceHistorySearch({ page: 3, pageSize: 50 })

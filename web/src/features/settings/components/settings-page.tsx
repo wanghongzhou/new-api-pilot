@@ -8,6 +8,7 @@ import {
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useBlocker } from '@tanstack/react-router'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   Controller,
@@ -32,8 +33,9 @@ import { PasswordInput } from '@/components/ui/password-input'
 import { Spinner } from '@/components/ui/spinner'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { UnsavedChangesConfirmDialog } from '@/components/unsaved-changes-guard'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
-import { getApiErrorTranslationKey } from '@/lib/api'
+import { getApiErrorTranslationKey, normalizeApiError } from '@/lib/api'
 import { fromUnixSeconds } from '@/lib/dayjs'
 import { applyApiFieldErrors } from '@/lib/form-errors'
 import { translateMessageRef } from '@/lib/message-ref'
@@ -47,6 +49,7 @@ import {
   isCollectorIntervalKey,
   settingFieldDefinitions,
   settingItemsByKey,
+  settingSectionForField,
   settingValueForDisplay,
   settingsSecretState,
   settingsSections,
@@ -138,16 +141,24 @@ function UpdatedAt({ item }: { item: SettingItem | undefined }) {
 }
 
 function ReadonlySetting({
+  descriptionId,
   definition,
   item,
+  labelId,
 }: {
+  descriptionId: string
   definition: SettingFieldDefinition
   item: SettingItem | undefined
+  labelId: string
 }) {
   const { t } = useTranslation()
   return (
     <div className='grid gap-1.5'>
-      <output className='border-border bg-muted/35 flex min-h-10 items-center rounded-md border px-3 text-sm break-all whitespace-pre-wrap'>
+      <output
+        aria-describedby={descriptionId}
+        aria-labelledby={labelId}
+        className='border-border bg-muted/35 flex min-h-10 items-center rounded-md border px-3 text-sm break-all whitespace-pre-wrap'
+      >
         {displaySettingValue(definition, item, t)}
       </output>
       <UpdatedAt item={item} />
@@ -166,7 +177,14 @@ function EditableSetting({
 }) {
   const { t } = useTranslation()
   if (!definition.formName) {
-    return <ReadonlySetting definition={definition} item={item} />
+    return (
+      <ReadonlySetting
+        descriptionId={`setting-description-${definition.key}`}
+        definition={definition}
+        item={item}
+        labelId={`setting-label-${definition.key}`}
+      />
+    )
   }
   const error = validationMessage(form.formState.errors, definition.formName, t)
   if (definition.kind === 'boolean') {
@@ -324,6 +342,7 @@ function SecretSetting({
         </Button>
         <Button
           aria-pressed={action === 'replace'}
+          id={`setting-${inputField}-replace`}
           onClick={() => setAction('replace')}
           size='sm'
           type='button'
@@ -408,9 +427,18 @@ function SettingRow({
   item: SettingItem | undefined
 }) {
   const { t } = useTranslation()
+  const labelId = `setting-label-${definition.key}`
+  const descriptionId = `setting-description-${definition.key}`
   let control: ReactNode
   if (!isAdmin || definition.kind === 'readonly') {
-    control = <ReadonlySetting definition={definition} item={item} />
+    control = (
+      <ReadonlySetting
+        descriptionId={descriptionId}
+        definition={definition}
+        item={item}
+        labelId={labelId}
+      />
+    )
   } else if (definition.key === 'notification.dingtalk.webhook') {
     control = (
       <SecretSetting
@@ -439,20 +467,18 @@ function SettingRow({
 
   return (
     <div
+      className='grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,1fr)] xl:items-start xl:gap-6'
       data-setting-key={definition.key}
-      className={
-        definition.kind === 'boolean' || definition.kind === 'multiline'
-          ? 'grid min-w-0 gap-1.5 lg:col-span-2'
-          : 'grid min-w-0 gap-1.5'
-      }
     >
-      <h3 className='text-sm font-medium'>
-        {t(dynamicI18nKey('settings', definition.labelKey))}
-      </h3>
-      <p className='text-muted-foreground text-xs'>
-        {t(dynamicI18nKey('settings', definition.descriptionKey))}
-      </p>
-      <div className='min-w-0'>{control}</div>
+      <div className='grid min-w-0 gap-1.5'>
+        <h3 className='text-sm font-medium' id={labelId}>
+          {t(dynamicI18nKey('settings', definition.labelKey))}
+        </h3>
+        <p className='text-muted-foreground text-xs' id={descriptionId}>
+          {t(dynamicI18nKey('settings', definition.descriptionKey))}
+        </p>
+      </div>
+      <div className='w-full max-w-lg min-w-0 xl:max-w-none'>{control}</div>
     </div>
   )
 }
@@ -540,6 +566,23 @@ type SettingsPageProps = {
   onSectionChange: (section: SettingsSectionKey) => void
 }
 
+function firstErrorField(
+  errors: FieldErrors<SettingsFormValues>
+): FieldPath<SettingsFormValues> | undefined {
+  for (const definition of settingFieldDefinitions) {
+    if (definition.formName && errors[definition.formName]?.message) {
+      return definition.formName
+    }
+  }
+  for (const field of [
+    'dingTalkWebhookAction',
+    'dingTalkSecretAction',
+  ] as const) {
+    if (errors[field]?.message) return field
+  }
+  return undefined
+}
+
 export function SettingsPage({
   activeSection,
   onSectionChange,
@@ -571,7 +614,17 @@ export function SettingsPage({
   )
   const [notificationResult, setNotificationResult] =
     useState<NotificationTestResult | null>(null)
+  const [errorSummary, setErrorSummary] = useState<string | null>(null)
+  const [pendingFocusField, setPendingFocusField] =
+    useState<FieldPath<SettingsFormValues> | null>(null)
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
   const updateMutation = useMutation({ mutationFn: updateSettings })
+  const blocker = useBlocker({
+    disabled: !form.formState.isDirty,
+    enableBeforeUnload: () => form.formState.isDirty,
+    shouldBlockFn: ({ current, next }) => current.pathname !== next.pathname,
+    withResolver: true,
+  })
   useEffect(() => {
     if (!settingsQuery.data || form.formState.isDirty) return
     const values = settingsToFormValues(settingsQuery.data)
@@ -585,34 +638,80 @@ export function SettingsPage({
   )
   const dingTalkEnabledItem = items.get('notification.dingtalk.enabled')
   const savedDingTalkEnabled = dingTalkEnabledItem?.value === true
-  const save = form.handleSubmit(async (values) => {
-    const patchItems = buildSettingPatchItems(values, initialValues)
-    if (patchItems.length === 0) {
-      form.reset(initialValues)
-      return
-    }
-    try {
-      const updated = await updateMutation.mutateAsync({ items: patchItems })
-      queryClient.setQueryData(settingsKeys.all, updated)
-      const nextValues = settingsToFormValues(updated)
-      setInitialValues(nextValues)
-      form.reset(nextValues)
-      setNotificationResult(null)
-      toast.success(t('settings.toast.saved'))
-    } catch (error) {
-      const mapped = applyApiFieldErrors(
-        error,
-        form.setError,
-        buildSettingFieldMap(patchItems)
-      )
-      if (!mapped) {
-        form.setError('root', {
-          message: t(dynamicI18nKey('api', getApiErrorTranslationKey(error))),
-          type: 'server',
-        })
+  const dirtySections = new Set<SettingsSectionKey>()
+  for (const field of Object.keys(form.formState.dirtyFields)) {
+    const section = settingSectionForField(
+      field as FieldPath<SettingsFormValues>
+    )
+    if (section) dirtySections.add(section)
+  }
+
+  const revealError = (field: FieldPath<SettingsFormValues> | undefined) => {
+    setErrorSummary(t('settings.validation.summary'))
+    if (!field) return
+    const section = settingSectionForField(field)
+    setPendingFocusField(field)
+    if (section && section !== activeSection) onSectionChange(section)
+  }
+
+  useEffect(() => {
+    if (!pendingFocusField) return
+    const frame = requestAnimationFrame(() => {
+      const sensitiveInputMissing =
+        (pendingFocusField === 'dingTalkWebhook' ||
+          pendingFocusField === 'dingTalkSecret') &&
+        !document.querySelector(`#setting-${pendingFocusField}`)
+      if (sensitiveInputMissing) {
+        document
+          .querySelector<HTMLElement>(`#setting-${pendingFocusField}-replace`)
+          ?.focus()
+      } else {
+        form.setFocus(pendingFocusField, { shouldSelect: true })
       }
-    }
-  })
+      setPendingFocusField(null)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [activeSection, form, pendingFocusField])
+
+  const save = form.handleSubmit(
+    async (values) => {
+      setErrorSummary(null)
+      const patchItems = buildSettingPatchItems(values, initialValues)
+      if (patchItems.length === 0) {
+        form.reset(initialValues)
+        return
+      }
+      try {
+        const updated = await updateMutation.mutateAsync({ items: patchItems })
+        queryClient.setQueryData(settingsKeys.all, updated)
+        const nextValues = settingsToFormValues(updated)
+        setInitialValues(nextValues)
+        form.reset(nextValues)
+        setNotificationResult(null)
+        toast.success(t('settings.toast.saved'))
+        if (blocker.status === 'blocked') blocker.proceed()
+      } catch (error) {
+        const fieldMap = buildSettingFieldMap(patchItems)
+        const mapped = applyApiFieldErrors(error, form.setError, fieldMap)
+        if (mapped) {
+          const apiError = normalizeApiError(error)
+          const firstApiField = Object.keys(apiError.fieldErrors ?? {})[0]
+          revealError(
+            firstApiField
+              ? (fieldMap[firstApiField] as FieldPath<SettingsFormValues>)
+              : undefined
+          )
+        } else {
+          form.setError('root', {
+            message: t(dynamicI18nKey('api', getApiErrorTranslationKey(error))),
+            type: 'server',
+          })
+          revealError(undefined)
+        }
+      }
+    },
+    (errors) => revealError(firstErrorField(errors))
+  )
 
   const actions =
     isAdmin && settingsQuery.data ? (
@@ -621,10 +720,7 @@ export function SettingsPage({
           aria-label={t('settings.reset')}
           className='size-10 sm:size-8'
           disabled={!form.formState.isDirty || updateMutation.isPending}
-          onClick={() => {
-            form.reset(initialValues)
-            setNotificationResult(null)
-          }}
+          onClick={() => setResetConfirmOpen(true)}
           size='icon'
           title={t('settings.reset')}
           type='button'
@@ -648,132 +744,171 @@ export function SettingsPage({
     ) : undefined
 
   return (
-    <SectionPageLayout>
-      <SectionPageLayout.Title>{t('settings.title')}</SectionPageLayout.Title>
-      {actions && (
-        <SectionPageLayout.Actions>{actions}</SectionPageLayout.Actions>
-      )}
-      <SectionPageLayout.Content>
-        {settingsQuery.isPending && (
-          <LoadingState message={t('settings.loading')} />
+    <>
+      <SectionPageLayout>
+        <SectionPageLayout.Title>{t('settings.title')}</SectionPageLayout.Title>
+        {actions && (
+          <SectionPageLayout.Actions>{actions}</SectionPageLayout.Actions>
         )}
-        {settingsQuery.isError && (
-          <ErrorState
-            description={t('table.loadErrorDescription')}
-            onRetry={() => void settingsQuery.refetch()}
-            title={t('settings.loadError')}
-          />
-        )}
-        {settingsQuery.data && (
-          <form
-            className='grid w-full max-w-full min-w-0 gap-8 overflow-x-clip'
-            id='settings-form'
-            onSubmit={save}
-          >
-            <Tabs
-              className="bg-background before:bg-background sticky -top-1 z-10 -mt-2 w-full max-w-full min-w-0 pb-2 before:pointer-events-none before:absolute before:inset-x-0 before:-top-4 before:h-4 before:content-[''] sm:-top-1.5 sm:-mt-2.5 sm:before:-top-5 sm:before:h-5"
-              onValueChange={(section) =>
-                onSectionChange(section as SettingsSectionKey)
-              }
-              value={activeSection}
+        <SectionPageLayout.Content>
+          {settingsQuery.isPending && (
+            <LoadingState message={t('settings.loading')} />
+          )}
+          {settingsQuery.isError && (
+            <ErrorState
+              description={t('table.loadErrorDescription')}
+              onRetry={() => void settingsQuery.refetch()}
+              title={t('settings.loadError')}
+            />
+          )}
+          {settingsQuery.data && (
+            <form
+              className='grid w-full max-w-full min-w-0 gap-8 overflow-x-clip'
+              id='settings-form'
+              onSubmit={save}
             >
-              <div className='w-full min-w-0 overflow-x-auto overscroll-x-contain pb-1'>
-                <TabsList aria-label={t('settings.sections.label')}>
-                  {settingsSections.map((section) => (
-                    <TabsTrigger key={section.key} value={section.key}>
-                      {t(dynamicI18nKey('settings', section.titleKey))}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </div>
-            </Tabs>
-            {settingsSections
-              .filter((section) => section.key === activeSection)
-              .map((section) => (
-                <section
-                  aria-labelledby={`settings-section-${section.key}`}
-                  className='min-w-0'
-                  id={`settings-panel-${section.key}`}
-                  key={section.key}
-                  role='tabpanel'
+              <Tabs
+                className="bg-background before:bg-background sticky -top-1 z-10 -mt-2 w-full max-w-full min-w-0 pb-2 before:pointer-events-none before:absolute before:inset-x-0 before:-top-4 before:h-4 before:content-[''] sm:-top-1.5 sm:-mt-2.5 sm:before:-top-5 sm:before:h-5"
+                onValueChange={(section) =>
+                  onSectionChange(section as SettingsSectionKey)
+                }
+                value={activeSection}
+              >
+                <div className='w-full min-w-0 overflow-x-auto overscroll-x-contain pb-1'>
+                  <TabsList aria-label={t('settings.sections.label')}>
+                    {settingsSections.map((section) => (
+                      <TabsTrigger key={section.key} value={section.key}>
+                        {t(dynamicI18nKey('settings', section.titleKey))}
+                        {dirtySections.has(section.key) && (
+                          <span
+                            aria-label={t('settings.unsavedSection')}
+                            className='bg-warning size-2 rounded-full'
+                            title={t('settings.unsavedSection')}
+                          />
+                        )}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </div>
+              </Tabs>
+              {errorSummary && (
+                <div
+                  aria-live='assertive'
+                  className='border-destructive/35 bg-destructive/5 text-destructive rounded-lg border px-3 py-2 text-sm'
+                  role='alert'
                 >
-                  <div className='mb-2'>
-                    <h2
-                      className='text-base font-semibold'
-                      id={`settings-section-${section.key}`}
-                    >
-                      {t(dynamicI18nKey('settings', section.titleKey))}
-                    </h2>
-                    <p className='text-muted-foreground mt-1 text-sm'>
-                      {t(dynamicI18nKey('settings', section.descriptionKey))}
-                    </p>
-                  </div>
-                  <div className='grid min-w-0 gap-x-5 gap-y-6 lg:grid-cols-2'>
-                    {settingFieldDefinitions
-                      .filter(
-                        (definition) => definition.section === section.key
-                      )
-                      .map((definition) => (
-                        <SettingRow
-                          definition={definition}
-                          form={form}
-                          isAdmin={isAdmin}
-                          item={items.get(definition.key)}
-                          key={definition.key}
-                        />
-                      ))}
-                  </div>
-                  {section.key === 'notification' && isAdmin && (
-                    <div className='mt-4 flex flex-wrap items-center justify-end gap-3'>
-                      <NotificationTest
-                        dirty={form.formState.isDirty}
-                        enabled={savedDingTalkEnabled}
-                        onResult={setNotificationResult}
-                        secretReady={
-                          secretState.secret.configured &&
-                          !secretState.secret.decryptError
-                        }
-                        webhookReady={
-                          secretState.webhook.configured &&
-                          !secretState.webhook.decryptError
-                        }
-                      />
-                      {notificationResult && (
-                        <div
-                          className='flex min-w-0 items-center gap-2'
-                          role='status'
-                        >
-                          <Badge
-                            variant={notificationResultVariant(
-                              notificationResult
-                            )}
-                          >
-                            {t(
-                              dynamicI18nKey(
-                                'settings',
-                                notificationResult.status === 'success'
-                                  ? 'settings.notification.testSuccess'
-                                  : 'settings.notification.testFailed'
-                              )
-                            )}
-                          </Badge>
-                          <span className='text-sm break-words'>
-                            {translateMessageRef(notificationResult.message)}
-                          </span>
-                        </div>
-                      )}
+                  {errorSummary}
+                </div>
+              )}
+              {settingsSections
+                .filter((section) => section.key === activeSection)
+                .map((section) => (
+                  <section
+                    aria-labelledby={`settings-section-${section.key}`}
+                    className='min-w-0'
+                    id={`settings-panel-${section.key}`}
+                    key={section.key}
+                    role='tabpanel'
+                  >
+                    <div className='mb-2'>
+                      <h2
+                        className='text-base font-semibold'
+                        id={`settings-section-${section.key}`}
+                      >
+                        {t(dynamicI18nKey('settings', section.titleKey))}
+                      </h2>
+                      <p className='text-muted-foreground mt-1 text-sm'>
+                        {t(dynamicI18nKey('settings', section.descriptionKey))}
+                      </p>
                     </div>
-                  )}
-                </section>
-              ))}
-            {form.formState.errors.root?.message && (
-              <p className='text-destructive text-sm' role='alert'>
-                {form.formState.errors.root.message}
-              </p>
-            )}
-          </form>
-        )}
-      </SectionPageLayout.Content>
-    </SectionPageLayout>
+                    <div className='grid min-w-0 gap-y-6'>
+                      {settingFieldDefinitions
+                        .filter(
+                          (definition) => definition.section === section.key
+                        )
+                        .map((definition) => (
+                          <SettingRow
+                            definition={definition}
+                            form={form}
+                            isAdmin={isAdmin}
+                            item={items.get(definition.key)}
+                            key={definition.key}
+                          />
+                        ))}
+                    </div>
+                    {section.key === 'notification' && isAdmin && (
+                      <div className='mt-4 flex flex-wrap items-center justify-end gap-3'>
+                        <NotificationTest
+                          dirty={form.formState.isDirty}
+                          enabled={savedDingTalkEnabled}
+                          onResult={setNotificationResult}
+                          secretReady={
+                            secretState.secret.configured &&
+                            !secretState.secret.decryptError
+                          }
+                          webhookReady={
+                            secretState.webhook.configured &&
+                            !secretState.webhook.decryptError
+                          }
+                        />
+                        {notificationResult && (
+                          <div
+                            className='flex min-w-0 items-center gap-2'
+                            role='status'
+                          >
+                            <Badge
+                              variant={notificationResultVariant(
+                                notificationResult
+                              )}
+                            >
+                              {t(
+                                dynamicI18nKey(
+                                  'settings',
+                                  notificationResult.status === 'success'
+                                    ? 'settings.notification.testSuccess'
+                                    : 'settings.notification.testFailed'
+                                )
+                              )}
+                            </Badge>
+                            <span className='text-sm break-words'>
+                              {translateMessageRef(notificationResult.message)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </section>
+                ))}
+              {form.formState.errors.root?.message && (
+                <p className='text-destructive text-sm' role='alert'>
+                  {form.formState.errors.root.message}
+                </p>
+              )}
+            </form>
+          )}
+        </SectionPageLayout.Content>
+      </SectionPageLayout>
+      <ConfirmDialog
+        confirmLabel={t('common.discardChanges')}
+        description={t('settings.resetDescription')}
+        onConfirm={() => {
+          form.reset(initialValues)
+          setNotificationResult(null)
+          setErrorSummary(null)
+          setResetConfirmOpen(false)
+        }}
+        onOpenChange={setResetConfirmOpen}
+        open={resetConfirmOpen}
+        title={t('settings.resetTitle')}
+      />
+      <UnsavedChangesConfirmDialog
+        onConfirm={() => blocker.proceed?.()}
+        onOpenChange={(open) => {
+          if (!open && !updateMutation.isPending) blocker.reset?.()
+        }}
+        open={blocker.status === 'blocked'}
+        pending={updateMutation.isPending}
+      />
+    </>
   )
 }

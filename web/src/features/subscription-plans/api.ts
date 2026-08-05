@@ -7,15 +7,20 @@ import type {
   SubscriptionPlanStatistics,
 } from './types'
 
-function params(values: SubscriptionPlanQueryParams, forcedSite = false) {
+function params(
+  values: SubscriptionPlanQueryParams,
+  forcedSite = false,
+  statistics = false
+) {
   const params = new URLSearchParams()
-  params.set('p', String(values.p))
-  params.set('page_size', String(values.page_size))
   if (!forcedSite) {
     for (const siteId of values.site_ids ?? []) {
       params.append('site_ids', siteId)
     }
   }
+  if (statistics) return params
+  params.set('p', String(values.p))
+  params.set('page_size', String(values.page_size))
   for (const state of values.states ?? []) params.append('states', state)
   if (values.enabled != null) params.set('enabled', String(values.enabled))
   if (values.keyword) params.set('keyword', values.keyword)
@@ -29,7 +34,7 @@ function requestPlans<T>(
 ) {
   return requestApiData<T>({
     method: 'get',
-    params: params(values, siteId != null),
+    params: params(values, siteId != null, suffix === '/statistics'),
     url: siteId
       ? `/api/sites/${siteId}/subscription-plans${suffix}`
       : `/api/subscription-plans${suffix}`,

@@ -38,9 +38,10 @@ type CreatePlatformUserRequest struct {
 }
 
 type UpdatePlatformUserRequest struct {
-	Username    string `json:"username"`
-	DisplayName string `json:"display_name"`
-	Role        string `json:"role"`
+	Username          string `json:"username"`
+	DisplayName       string `json:"display_name"`
+	Role              string `json:"role"`
+	ExpectedUpdatedAt int64  `json:"expected_updated_at"`
 }
 
 type ResetPasswordRequest struct {
@@ -114,7 +115,11 @@ func (request *UpdatePlatformUserRequest) Normalize() {
 }
 
 func (request UpdatePlatformUserRequest) Validate() map[string]string {
-	return nilIfEmpty(validateUserFields(request.Username, request.DisplayName, request.Role))
+	errors := validateUserFields(request.Username, request.DisplayName, request.Role)
+	if request.ExpectedUpdatedAt <= 0 {
+		errors["expected_updated_at"] = "must be a positive Unix timestamp"
+	}
+	return nilIfEmpty(errors)
 }
 
 func (request ResetPasswordRequest) Validate() map[string]string {

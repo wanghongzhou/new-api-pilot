@@ -16,6 +16,7 @@ import { DataStatusBadge } from '@/components/data/data-status'
 import { FacetedFilter } from '@/components/data/faceted-filter'
 import { FilterPanel } from '@/components/data/filter-panel'
 import { MetricValue } from '@/components/data/metric-value'
+import { QueryStateAlert } from '@/components/data/query-state-alert'
 import { ErrorState } from '@/components/error-state'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
@@ -38,7 +39,7 @@ import type {
   StatisticsExportJobItem,
 } from '@/features/statistics/types'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
-import { getApiErrorTranslationKey } from '@/lib/api'
+import { getApiErrorTranslationKey, normalizeApiError } from '@/lib/api'
 import { isIdString, parseIdString } from '@/lib/api-types'
 import { fromUnixSeconds } from '@/lib/dayjs'
 import { hasFilterChanges } from '@/lib/filter-state'
@@ -51,6 +52,7 @@ import {
 } from '../api'
 import { buildPerformanceHistoryExportRequest } from '../export-request'
 import {
+  formatPerformanceTps,
   millisecondsToSeconds,
   successRateToPercent,
   trustedWeightedSummary,
@@ -61,6 +63,7 @@ import {
   type PerformanceHistorySearch,
 } from '../search'
 import type {
+  PerformanceDimensionBreakdown,
   PerformanceHistoryItem,
   PerformanceHistoryQueryParams,
   PerformanceMetricSource,
@@ -119,7 +122,11 @@ function SummaryGrid({ summary }: { summary: PerformanceWeightedMetric }) {
       millisecondsToSeconds(summary.avg_ttft_ms),
       false,
     ],
-    [t('performanceHistory.metric.tps'), summary.avg_tps, false],
+    [
+      t('performanceHistory.metric.tps'),
+      formatPerformanceTps(summary.avg_tps),
+      false,
+    ],
   ] as const
   return (
     <dl className='border-border grid overflow-hidden rounded-lg border sm:grid-cols-2 xl:grid-cols-5'>
@@ -292,6 +299,88 @@ function SiteRowsBreakdown({ items }: { items: PerformanceHistoryItem[] }) {
   )
 }
 
+function AggregateBreakdown({
+  items,
+  kind,
+}: {
+  items: PerformanceDimensionBreakdown[]
+  kind: 'group' | 'model'
+}) {
+  const { t } = useTranslation()
+  if (items.length === 0) {
+    return (
+      <p className='text-muted-foreground text-sm'>
+        {t('performanceHistory.aggregate.empty')}
+      </p>
+    )
+  }
+  return (
+    <section
+      aria-label={
+        kind === 'model'
+          ? t('performanceHistory.modelBreakdown.aria')
+          : t('performanceHistory.groupBreakdown.aria')
+      }
+      className='grid gap-3 md:grid-cols-2'
+    >
+      {items.map((item) => (
+        <article
+          className='border-border bg-card grid min-w-0 gap-3 rounded-xl border p-4'
+          key={item.dimension}
+        >
+          <h2 className='font-medium break-all'>
+            {item.dimension || t('data.unavailable')}
+          </h2>
+          <dl className='grid grid-cols-2 gap-3 text-sm'>
+            <div>
+              <dt className='text-muted-foreground text-xs'>
+                {t('performanceHistory.metric.requests')}
+              </dt>
+              <dd>{item.request_count ?? t('data.unavailableValue')}</dd>
+            </div>
+            <div>
+              <dt className='text-muted-foreground text-xs'>
+                {t('performanceHistory.metric.successRate')}
+              </dt>
+              <dd>
+                {successRateToPercent(item.success_rate) ??
+                  t('data.unavailableValue')}
+              </dd>
+            </div>
+            <div>
+              <dt className='text-muted-foreground text-xs'>
+                {t('performanceHistory.metric.ttft')}
+              </dt>
+              <dd>
+                {millisecondsToSeconds(item.avg_ttft_ms) ??
+                  t('data.unavailableValue')}
+              </dd>
+            </div>
+            <div>
+              <dt className='text-muted-foreground text-xs'>
+                {t('performanceHistory.metric.latency')}
+              </dt>
+              <dd>
+                {millisecondsToSeconds(item.avg_latency_ms) ??
+                  t('data.unavailableValue')}
+              </dd>
+            </div>
+            <div>
+              <dt className='text-muted-foreground text-xs'>
+                {t('performanceHistory.metric.tps')}
+              </dt>
+              <dd>
+                {formatPerformanceTps(item.avg_tps) ??
+                  t('data.unavailableValue')}
+              </dd>
+            </div>
+          </dl>
+        </article>
+      ))}
+    </section>
+  )
+}
+
 function RawRowsTable({
   items,
   label,
@@ -367,7 +456,9 @@ function RawRowsTable({
                   <td className='px-3 py-2'>
                     {successRateToPercent(item.success_rate)}
                   </td>
-                  <td className='px-3 py-2'>{item.avg_tps}</td>
+                  <td className='px-3 py-2'>
+                    {formatPerformanceTps(item.avg_tps)}
+                  </td>
                   <td className='px-3 py-2'>
                     <MetricSourceBadge source={item.metric_source} />
                   </td>
@@ -454,7 +545,13 @@ export function PerformanceHistoryPage({
   })
   const list = listQuery.data
   const statistics = statisticsQuery.data
+  const completeness =
+    search.view === 'list' ? list?.completeness : statistics?.completeness
   const summary = statistics ? trustedWeightedSummary(statistics) : undefined
+  const statisticsError = statisticsQuery.isError
+    ? normalizeApiError(statisticsQuery.error)
+    : undefined
+  const statisticsTooLarge = statisticsError?.code === 'PAYLOAD_TOO_LARGE'
   const purpose = {
     list: [
       t('performanceHistory.views.list'),
@@ -463,6 +560,14 @@ export function PerformanceHistoryPage({
     sites: [
       t('performanceHistory.views.sites'),
       t('performanceHistory.views.sitesDescription'),
+    ],
+    models: [
+      t('performanceHistory.views.models'),
+      t('performanceHistory.views.modelsDescription'),
+    ],
+    groups: [
+      t('performanceHistory.views.groups'),
+      t('performanceHistory.views.groupsDescription'),
     ],
     trend: [
       t('performanceHistory.views.trend'),
@@ -520,7 +625,7 @@ export function PerformanceHistoryPage({
             </div>
             <div>
               {t('performanceHistory.metricValue.tps', {
-                value: row.original.avg_tps,
+                value: formatPerformanceTps(row.original.avg_tps),
               })}
             </div>
           </dl>
@@ -591,7 +696,9 @@ export function PerformanceHistoryPage({
           <SummaryGrid summary={summary} />
         )}
         {statistics?.aggregation_status === 'unavailable' && (
-          <UnavailableSummary hasSamples={statistics.trend.length > 0} />
+          <UnavailableSummary
+            hasSamples={statistics.site_breakdown.length > 0}
+          />
         )}
         <Tabs
           onValueChange={(view) =>
@@ -602,12 +709,21 @@ export function PerformanceHistoryPage({
           }
           value={search.view}
         >
-          <TabsList aria-label={t('performanceHistory.views.label')}>
+          <TabsList
+            aria-label={t('performanceHistory.views.label')}
+            className='max-w-full flex-wrap justify-start group-data-horizontal/tabs:h-auto'
+          >
             <TabsTrigger value='list'>
               {t('performanceHistory.views.list')}
             </TabsTrigger>
             <TabsTrigger value='trend'>
               {t('performanceHistory.views.trend')}
+            </TabsTrigger>
+            <TabsTrigger value='models'>
+              {t('performanceHistory.views.models')}
+            </TabsTrigger>
+            <TabsTrigger value='groups'>
+              {t('performanceHistory.views.groups')}
             </TabsTrigger>
             <TabsTrigger value='sites'>
               {t('performanceHistory.views.sites')}
@@ -629,6 +745,15 @@ export function PerformanceHistoryPage({
                   {statistics.aggregation_status === 'complete'
                     ? t('performanceHistory.aggregation.weighted')
                     : t('performanceHistory.aggregation.unavailable')}
+                </Badge>
+              )}
+              {completeness && (
+                <Badge variant='outline'>
+                  {t('performanceHistory.completeness', {
+                    complete: completeness.successful_site_count,
+                    expected: completeness.expected_site_count,
+                    unavailable: completeness.unavailable_site_count,
+                  })}
                 </Badge>
               )}
             </>
@@ -656,6 +781,28 @@ export function PerformanceHistoryPage({
           search={search}
           sites={sitesQuery.data?.items ?? []}
         />
+        {!siteId && sitesQuery.isError && (
+          <QueryStateAlert
+            message={t('operationsAnalytics.siteOptionsError')}
+            onRetry={() => void sitesQuery.refetch()}
+          />
+        )}
+        {search.view === 'list' && listQuery.isError && list && (
+          <QueryStateAlert
+            message={t('operationsAnalytics.staleListData')}
+            onRetry={() => void listQuery.refetch()}
+          />
+        )}
+        {statisticsQuery.isError && statistics && (
+          <QueryStateAlert
+            message={
+              statisticsTooLarge
+                ? t('performanceHistory.statisticsTooLarge')
+                : t('operationsAnalytics.staleStatisticsData')
+            }
+            onRetry={() => void statisticsQuery.refetch()}
+          />
+        )}
         {search.view === 'list' && (
           <DataTable
             ariaLabel={t('performanceHistory.table')}
@@ -718,7 +865,7 @@ export function PerformanceHistoryPage({
                     <dt className='text-muted-foreground text-xs'>
                       {t('performanceHistory.metric.tps')}
                     </dt>
-                    <dd>{item.avg_tps}</dd>
+                    <dd>{formatPerformanceTps(item.avg_tps)}</dd>
                   </div>
                 </dl>
               </article>
@@ -729,8 +876,17 @@ export function PerformanceHistoryPage({
         {statisticsQuery.isError && !statistics && (
           <ErrorState
             className='min-h-40'
+            description={
+              statisticsTooLarge
+                ? t('performanceHistory.statisticsTooLargeDescription')
+                : undefined
+            }
             onRetry={() => void statisticsQuery.refetch()}
-            title={t('performanceHistory.statisticsError')}
+            title={
+              statisticsTooLarge
+                ? t('performanceHistory.statisticsTooLarge')
+                : t('performanceHistory.statisticsError')
+            }
           />
         )}
         {statistics && search.view !== 'list' && (
@@ -746,6 +902,18 @@ export function PerformanceHistoryPage({
             )}
             {search.view === 'sites' && (
               <SiteRowsBreakdown items={statistics.site_breakdown} />
+            )}
+            {search.view === 'models' && (
+              <AggregateBreakdown
+                items={statistics.model_breakdown}
+                kind='model'
+              />
+            )}
+            {search.view === 'groups' && (
+              <AggregateBreakdown
+                items={statistics.group_breakdown}
+                kind='group'
+              />
             )}
           </div>
         )}

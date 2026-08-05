@@ -2,6 +2,7 @@ declare const idStringBrand: unique symbol
 declare const nonNegativeIdStringBrand: unique symbol
 declare const metricStringBrand: unique symbol
 declare const decimalStringBrand: unique symbol
+declare const pricingDecimalStringBrand: unique symbol
 
 export type IdString = string & { readonly [idStringBrand]: true }
 export type NonNegativeIdString = string & {
@@ -9,6 +10,9 @@ export type NonNegativeIdString = string & {
 }
 export type MetricString = string & { readonly [metricStringBrand]: true }
 export type DecimalString = string & { readonly [decimalStringBrand]: true }
+export type PricingDecimalString = string & {
+  readonly [pricingDecimalStringBrand]: true
+}
 export type Timestamp = number
 
 export type FieldErrorValue = string | readonly string[]
@@ -60,6 +64,7 @@ const positiveIntegerPattern = /^[1-9]\d*$/
 const nonNegativeIntegerPattern = /^(?:0|[1-9]\d*)$/
 const signedIntegerPattern = /^-?(?:0|[1-9]\d*)$/
 const decimalPattern = /^-?(?:0|[1-9]\d*)(?:\.\d{1,10})?$/
+const pricingDecimalPattern = /^(?:0|[1-9]\d*)(?:\.\d{1,18})?$/
 
 export function isIdString(value: unknown): value is IdString {
   return typeof value === 'string' && positiveIntegerPattern.test(value)
@@ -101,6 +106,19 @@ export function parseMetricString(value: string): MetricString {
 export function parseDecimalString(value: string): DecimalString {
   if (!isDecimalString(value)) {
     throw new TypeError('Expected a canonical decimal string')
+  }
+  return value
+}
+
+export function isPricingDecimalString(
+  value: unknown
+): value is PricingDecimalString {
+  return typeof value === 'string' && pricingDecimalPattern.test(value)
+}
+
+export function parsePricingDecimalString(value: string): PricingDecimalString {
+  if (!isPricingDecimalString(value)) {
+    throw new TypeError('Expected a canonical non-negative pricing decimal')
   }
   return value
 }

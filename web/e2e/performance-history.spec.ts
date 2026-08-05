@@ -107,6 +107,12 @@ function listResponse(site: boolean, page = 1) {
       }
   return {
     as_of: 1_784_266_000,
+    completeness: {
+      data_status: 'complete',
+      expected_site_count: 1,
+      successful_site_count: 1,
+      unavailable_site_count: 0,
+    },
     data_status: 'complete',
     items: [row],
     page,
@@ -117,9 +123,30 @@ function listResponse(site: boolean, page = 1) {
 
 function statisticsResponse(site: boolean) {
   const row = site ? counterRow : upstreamRow
+  const aggregate = (dimension: string) => ({
+    avg_latency_ms: '123.4567890000',
+    avg_tps: '9876.5432100000',
+    avg_ttft_ms: '45.6789000000',
+    dimension,
+    request_count: '9007199254740993',
+    success_rate: '0.9900000000',
+  })
   return {
     aggregation_status: site ? 'complete' : 'unavailable',
+    as_of: 1_784_266_000,
+    completeness: {
+      data_status: 'complete',
+      expected_site_count: 1,
+      successful_site_count: 1,
+      unavailable_site_count: 0,
+    },
     data_status: 'complete',
+    group_breakdown: site
+      ? [aggregate('vip-group-with-a-very-long-production-identity')]
+      : [],
+    model_breakdown: site
+      ? [aggregate('gpt-5-model-with-a-very-long-production-identity')]
+      : [],
     site_breakdown: [row],
     summary: site
       ? {
@@ -146,6 +173,11 @@ test('shows upstream values in seconds with compact filters, server pagination a
 }, testInfo) => {
   test.setTimeout(60_000)
   await seedAuth(page, testInfo)
+  const browserErrors: string[] = []
+  page.on('console', (message) => {
+    if (message.type() === 'error') browserErrors.push(message.text())
+  })
+  page.on('pageerror', (error) => browserErrors.push(error.message))
   const globalReads: URL[] = []
   let exportBody: ExportBody | undefined
 
@@ -231,8 +263,11 @@ test('shows upstream values in seconds with compact filters, server pagination a
     /\/api\/performance-history\/statistics(?:\?.*)?$/,
     async (route) => {
       assertAuthenticated(route)
-      globalReads.push(new URL(route.request().url()))
-      await route.fulfill({ json: envelope(statisticsResponse(false)) })
+      const url = new URL(route.request().url())
+      globalReads.push(url)
+      await route.fulfill({
+        json: envelope(statisticsResponse(url.searchParams.has('site_ids'))),
+      })
     }
   )
   await page.route(
@@ -368,6 +403,18 @@ test('shows upstream values in seconds with compact filters, server pagination a
   expect(exportBody?.filters.use_groups).toEqual(['vip'])
   await page.getByRole('button', { name: '关闭' }).click()
 
+  await page.getByRole('tab', { name: '模型聚合' }).click()
+  await expect(
+    page.getByText('gpt-5-model-with-a-very-long-production-identity')
+  ).toBeVisible()
+  await page.getByRole('tab', { name: '分组聚合' }).click()
+  await expect(
+    page.getByText('vip-group-with-a-very-long-production-identity')
+  ).toBeVisible()
+  await expect(
+    page.getByText(/1\/1/).filter({ visible: true }).first()
+  ).toBeVisible()
+
   await page.getByRole('tab', { name: '接口原值趋势' }).click()
   await expect(
     page.getByRole('img', {
@@ -412,4 +459,5 @@ test('shows upstream values in seconds with compact filters, server pagination a
       () => document.documentElement.scrollWidth <= window.innerWidth
     )
   ).toBe(true)
+  expect(browserErrors).toEqual([])
 })

@@ -65,13 +65,18 @@ async function seedAuth(page: Page, testInfo: TestInfo) {
   })
 }
 
-const iconText = 'https://icons.example.invalid/model.svg'
+const longDescription = `安全模型描述：${'用于验证完整展开能力的长文本。'.repeat(24)}`
+const longTags = Array.from(
+  { length: 24 },
+  (_, index) => `production-tag-${index}`
+).join(',')
+const iconText = `https://icons.example.invalid/${'long-icon-segment-'.repeat(18)}model.svg`
 const catalogItems = [0, 1, 2, 3].map((nameRule, index) => ({
   covered_channels: String(index + 1),
   covered_groups: String(index + 2),
   created_time: 1_784_000_000,
   data_status: index === 0 ? 'complete' : 'partial',
-  description: `安全模型描述 ${index}`,
+  description: index === 0 ? longDescription : `安全模型描述 ${index}`,
   icon: index === 0 ? iconText : `icon-text-${index}`,
   id: String(9007199254740800 + index),
   model_name: index === 0 ? 'gpt-4o' : `gpt-rule-${index}`,
@@ -81,7 +86,7 @@ const catalogItems = [0, 1, 2, 3].map((nameRule, index) => ({
   site_name: '华东模型站点',
   status: index % 2,
   sync_official: index % 2,
-  tags: 'safe,official',
+  tags: index === 0 ? longTags : 'safe,official',
   updated_time: 1_784_348_700,
   vendor_id: index === 0 ? '0' : '9007199254740995',
 }))
@@ -177,7 +182,9 @@ test('A96 keeps model catalog exact, icon-text-only, private, exportable and res
     /\/api\/model-catalog\/coverage(?:\?.*)?$/,
     async (route) => {
       assertAuthenticated(route)
-      globalReads.push(new URL(route.request().url()))
+      const url = new URL(route.request().url())
+      expect([...url.searchParams.entries()]).toEqual([])
+      globalReads.push(url)
       await route.fulfill({ json: envelope(coverage()) })
     }
   )
@@ -206,6 +213,9 @@ test('A96 keeps model catalog exact, icon-text-only, private, exportable and res
           new URL(route.request().url()).searchParams.has('site_ids')
         ).toBe(false)
         if (suffix === '/coverage') {
+          expect([
+            ...new URL(route.request().url()).searchParams.entries(),
+          ]).toEqual([])
           await route.fulfill({ json: envelope(coverage()) })
         } else if (suffix === '/missing') {
           await route.fulfill({
@@ -290,6 +300,46 @@ test('A96 keeps model catalog exact, icon-text-only, private, exportable and res
   expect(externalIconRequests).toBe(0)
   await expect(page.locator(`img[src="${iconText}"]`)).toHaveCount(0)
   await expect(page.locator(`a[href="${iconText}"]`)).toHaveCount(0)
+  if (testInfo.project.name === 'chromium-mobile') {
+    await expect(
+      page.getByText(longDescription, { exact: true }).filter({ visible: true })
+    ).toBeVisible()
+    await expect(
+      page.getByText(longTags, { exact: true }).filter({ visible: true })
+    ).toBeVisible()
+    await expect(
+      page
+        .getByText('官方同步', { exact: true })
+        .filter({ visible: true })
+        .first()
+    ).toBeVisible()
+    await expect(
+      page
+        .getByText('创建时间', { exact: true })
+        .filter({ visible: true })
+        .first()
+    ).toBeVisible()
+    await expect(
+      page
+        .getByText('更新时间', { exact: true })
+        .filter({ visible: true })
+        .first()
+    ).toBeVisible()
+    await expect(
+      page
+        .getByText('数据状态', { exact: true })
+        .filter({ visible: true })
+        .first()
+    ).toBeVisible()
+  } else {
+    for (const field of ['description', 'tags', 'icon'] as const) {
+      const details = page.getByTestId(`model-${field}-9007199254740800`)
+      await expect(details).toBeVisible()
+      await details.locator('summary').click()
+      await expect(details).toHaveAttribute('open', '')
+      await expect(details.locator('p')).not.toBeEmpty()
+    }
+  }
   for (const rule of ['精确匹配', '前缀匹配', '包含匹配', '后缀匹配']) {
     await expect(
       page.getByText(rule, { exact: true }).filter({ visible: true }).first()
@@ -341,6 +391,11 @@ test('A96 keeps model catalog exact, icon-text-only, private, exportable and res
     page.getByText('gpt-prefix-child').filter({ visible: true }).first()
   ).toBeVisible()
   await expect(page.getByText(/前缀、包含和后缀规则/)).toBeVisible()
+  if (testInfo.project.name === 'chromium-mobile') {
+    await expect(
+      page.getByText(/采集截至/).filter({ visible: true })
+    ).toBeVisible()
+  }
   const serializedExport = JSON.stringify(exportBody).toLowerCase()
   for (const field of forbiddenFields()) {
     expect(serializedExport).not.toContain(field)
@@ -388,4 +443,45 @@ test('A96 keeps model catalog exact, icon-text-only, private, exportable and res
       () => document.documentElement.scrollWidth <= window.innerWidth
     )
   ).toBe(true)
+})
+
+test('shows a visible retry alert when initial model coverage loading fails', async ({
+  page,
+}, testInfo) => {
+  await seedAuth(page, testInfo)
+  await page.route(/\/api\/model-catalog(?:\?.*)?$/, async (route) => {
+    assertAuthenticated(route)
+    await route.fulfill({
+      json: envelope({
+        data_status: 'complete',
+        items: [],
+        page: 1,
+        page_size: 20,
+        total: 0,
+      }),
+    })
+  })
+  await page.route(
+    /\/api\/model-catalog\/coverage(?:\?.*)?$/,
+    async (route) => {
+      assertAuthenticated(route)
+      await route.fulfill({
+        body: JSON.stringify({
+          code: 'upstream_unavailable',
+          data: null,
+          message: 'coverage unavailable',
+          request_id: 'req_coverage_failure',
+          success: false,
+        }),
+        contentType: 'application/json',
+        status: 503,
+      })
+    }
+  )
+
+  await page.goto('/model-catalog')
+
+  const alert = page.getByRole('alert')
+  await expect(alert).toBeVisible({ timeout: 20_000 })
+  await expect(alert.getByRole('button')).toBeVisible()
 })

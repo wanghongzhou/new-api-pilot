@@ -6,10 +6,12 @@ export function UnsavedChangesConfirmDialog({
   onConfirm,
   onOpenChange,
   open,
+  pending = false,
 }: {
   onConfirm: () => void
   onOpenChange: (open: boolean) => void
   open: boolean
+  pending?: boolean
 }) {
   const { t } = useTranslation()
   return (
@@ -19,6 +21,7 @@ export function UnsavedChangesConfirmDialog({
       onConfirm={onConfirm}
       onOpenChange={onOpenChange}
       open={open}
+      pending={pending}
       title={t('common.unsavedChangesTitle')}
     />
   )

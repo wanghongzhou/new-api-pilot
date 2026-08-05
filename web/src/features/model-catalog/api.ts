@@ -21,10 +21,12 @@ function catalogParams(
   suffix: '' | '/coverage' | '/missing'
 ) {
   const params = new URLSearchParams()
+  appendValues(params, 'site_ids', values.site_ids)
+  if (suffix === '/coverage') return params
+
   params.set('p', String(values.p))
   params.set('page_size', String(values.page_size))
-  appendValues(params, 'site_ids', values.site_ids)
-  if (suffix !== '/missing') {
+  if (suffix === '') {
     appendValues(params, 'statuses', values.statuses)
     appendValues(params, 'sync_official', values.sync_official)
     if (values.vendor_id != null) params.set('vendor_id', values.vendor_id)

@@ -57,6 +57,36 @@ export function listSites(params: SiteListParams): Promise<SitePage> {
   })
 }
 
+const siteOptionPageSize = 100
+const siteOptionMaximumPages = 100
+
+export async function listAllSites(
+  params: Omit<SiteListParams, 'p' | 'page_size'> = {}
+): Promise<SitePage> {
+  const first = await listSites({
+    ...params,
+    p: 1,
+    page_size: siteOptionPageSize,
+  })
+  const pages = Math.ceil(first.total / siteOptionPageSize)
+  if (pages > siteOptionMaximumPages) {
+    throw new Error('site option result exceeds the supported page limit')
+  }
+  const items = [...first.items]
+  for (let page = 2; page <= pages; page += 1) {
+    const next = await listSites({
+      ...params,
+      p: page,
+      page_size: siteOptionPageSize,
+    })
+    items.push(...next.items)
+  }
+  return {
+    ...first,
+    items: [...new Map(items.map((item) => [item.id, item])).values()],
+  }
+}
+
 export function createSite(request: SiteCreateRequest): Promise<SiteDetail> {
   return requestApiData<SiteDetail>({
     data: request,

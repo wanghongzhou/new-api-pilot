@@ -147,6 +147,9 @@ func (service *PlatformUserService) Update(ctx context.Context, id int64, reques
 			}
 			return err
 		}
+		if user.UpdatedAt != request.ExpectedUpdatedAt {
+			return ErrPlatformUserChanged
+		}
 		if user.Role == constant.RoleAdmin && user.Status == constant.UserStatusEnabled && request.Role != constant.RoleAdmin && len(admins) <= 1 {
 			return ErrLastAdmin
 		}
@@ -157,7 +160,7 @@ func (service *PlatformUserService) Update(ctx context.Context, id int64, reques
 		if roleChanged {
 			user.SessionVersion++
 		}
-		user.UpdatedAt = service.clock.Now().Unix()
+		user.UpdatedAt = nextPlatformUserUpdatedAt(service.clock.Now().Unix(), user.UpdatedAt)
 		if err := repository.Save(ctx, &user); err != nil {
 			if model.IsDuplicateKey(err) {
 				return ErrUsernameConflict
@@ -198,7 +201,7 @@ func (service *PlatformUserService) SetStatus(ctx context.Context, actorID, targ
 		}
 		user.Status = targetStatus
 		user.SessionVersion++
-		user.UpdatedAt = service.clock.Now().Unix()
+		user.UpdatedAt = nextPlatformUserUpdatedAt(service.clock.Now().Unix(), user.UpdatedAt)
 		return repository.Save(ctx, &user)
 	})
 }
@@ -222,9 +225,16 @@ func (service *PlatformUserService) ResetPassword(ctx context.Context, actorID, 
 		user.PasswordHash = hash
 		user.MustChangePassword = true
 		user.SessionVersion++
-		user.UpdatedAt = service.clock.Now().Unix()
+		user.UpdatedAt = nextPlatformUserUpdatedAt(service.clock.Now().Unix(), user.UpdatedAt)
 		return repository.Save(ctx, &user)
 	})
+}
+
+func nextPlatformUserUpdatedAt(now, previous int64) int64 {
+	if now <= previous {
+		return previous + 1
+	}
+	return now
 }
 
 func PlatformUserItemFromModel(user model.PlatformUser) dto.PlatformUserItem {

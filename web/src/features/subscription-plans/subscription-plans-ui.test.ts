@@ -21,7 +21,7 @@ describe('subscription plans information architecture', () => {
     expect(source).not.toContain('paginationInFooter={false}')
     expect(source).not.toContain('preserveHeaderWhenEmpty={false}')
     expect(source).toContain(
-      "className='min-h-0 flex-1 overflow-y-auto' tabIndex={0}"
+      "className='min-h-0 overflow-visible lg:flex-1 lg:overflow-y-auto'"
     )
     expect(source).toContain('changeSubscriptionPlanTab')
     expect(source).toContain('canonicalizedSearch.current')
@@ -32,5 +32,20 @@ describe('subscription plans information architecture', () => {
     expect(source).not.toContain(
       "<dl className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>"
     )
+  })
+
+  test('keeps missing and lifecycle evidence visible on every layout', async () => {
+    const source = await readFile(pagePath, 'utf8')
+
+    expect(source).toContain('row.original.missing_count')
+    expect(source).toContain('item.missing_count')
+    expect(source).toContain('item.created_at')
+    expect(source).toContain('item.updated_at')
+    expect(source).toContain('item.sort_order')
+    expect(source).toContain('subscriptionPlans.createdAt')
+    expect(source).toContain('subscriptionPlans.updatedAt')
+    expect(source).toContain('break-all')
+    expect(source).toContain('break-words')
+    expect(source).toContain("className='max-w-72 min-w-44 whitespace-normal'")
   })
 })

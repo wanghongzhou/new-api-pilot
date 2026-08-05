@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"new-api-pilot/constant"
 )
 
 func TestSiteUserInventorySnapshotAtomicStatesAndHourly(t *testing.T) {
@@ -56,5 +58,37 @@ func TestSiteUserInventorySnapshotAtomicStatesAndHourly(t *testing.T) {
 	var count int64
 	if err := database.GORM.Model(&SiteUserInventory{}).Where("site_id = ?", site.ID).Count(&count).Error; err != nil || count != 2 {
 		t.Fatalf("failed snapshot partially committed count=%d err=%v", count, err)
+	}
+}
+
+func TestUserInventoryCompletenessIsFencedByCurrentSiteConfig(t *testing.T) {
+	database := openLockedSiteRunDatabase(t)
+	now := int64(2_100_201_000)
+	hour := now - now%3600
+	site := createRunnableSite(t, database, fmt.Sprintf("inventory-state-%d", time.Now().UnixNano()), now)
+	if _, err := NewCollectionTaskRepository(database.GORM).ApplySiteUserSnapshot(context.Background(), site, now, hour, []SiteUserObservation{{RemoteUserID: 1, RemoteCreatedAt: now - 1, Username: "alice", DisplayName: "Alice", RemoteRole: 1, RemoteStatus: 1, RemoteGroup: "default"}}); err != nil {
+		t.Fatal(err)
+	}
+	run, err := NewSiteCollectionRun(site, SiteRunSpec{TaskType: constant.TaskTypeUserSync, TriggerType: constant.CollectionTriggerSchedule, RequestID: "req_user_inventory_state", Now: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := database.GORM.Create(&run).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := database.GORM.Model(&CollectionRun{}).Where("id=?", run.ID).Updates(map[string]any{"status": CollectionTaskStatusSuccess, "active_key": nil, "finished_at": now + 1, "updated_at": now + 1}).Error; err != nil {
+		t.Fatal(err)
+	}
+	repository := NewSiteUserInventoryRepository(database.GORM)
+	rows, err := repository.Completeness(context.Background(), []int64{site.ID})
+	if err != nil || len(rows) != 1 || rows[0].LatestRunStatus != CollectionTaskStatusSuccess || rows[0].InventoryCount != 1 {
+		t.Fatalf("current user inventory completeness=%#v err=%v", rows, err)
+	}
+	if err := database.GORM.Model(&Site{}).Where("id=?", site.ID).Update("config_version", site.ConfigVersion+1).Error; err != nil {
+		t.Fatal(err)
+	}
+	rows, err = repository.Completeness(context.Background(), []int64{site.ID})
+	if err != nil || len(rows) != 1 || rows[0].LatestRunStatus != "" || rows[0].InventoryCount != 0 {
+		t.Fatalf("stale user inventory completeness leaked=%#v err=%v", rows, err)
 	}
 }

@@ -36,7 +36,13 @@ func (c *SubscriptionPlanController) run(g *gin.Context, sites []int64, stats bo
 		common.AbortInternalError(g)
 		return
 	}
-	allowed := map[string]bool{"p": true, "page_size": true, "states": true, "enabled": true, "keyword": true}
+	if !requireEmptyBody(g) {
+		return
+	}
+	allowed := map[string]bool{}
+	if !stats {
+		allowed = map[string]bool{"p": true, "page_size": true, "states": true, "enabled": true, "keyword": true}
+	}
 	if sites == nil {
 		allowed["site_ids"] = true
 	}
@@ -45,6 +51,10 @@ func (c *SubscriptionPlanController) run(g *gin.Context, sites []int64, stats bo
 			common.AbortError(g, http.StatusBadRequest, constant.CodeValidationError, "Invalid subscription plan query", nil)
 			return
 		}
+	}
+	if fields := strictQueryFields(g, allowed, "p", "page_size", "enabled", "keyword"); fields != nil {
+		common.AbortError(g, http.StatusBadRequest, constant.CodeValidationError, "Invalid subscription plan query", fields)
+		return
 	}
 	p, _ := strconv.Atoi(g.DefaultQuery("p", "1"))
 	size, _ := strconv.Atoi(g.DefaultQuery("page_size", "20"))

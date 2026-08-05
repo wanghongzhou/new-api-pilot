@@ -79,7 +79,7 @@ func TestConcurrentAdminDowngradePreservesOneEnabledAdmin(t *testing.T) {
 			defer wait.Done()
 			<-start
 			_, updateErr := users.Update(ctx, candidate.ID, dto.UpdatePlatformUserRequest{
-				Username: candidate.Username, DisplayName: candidate.DisplayName, Role: constant.RoleViewer,
+				Username: candidate.Username, DisplayName: candidate.DisplayName, Role: constant.RoleViewer, ExpectedUpdatedAt: candidate.UpdatedAt,
 			})
 			results <- result{id: candidate.ID, err: updateErr}
 		}()
@@ -134,35 +134,53 @@ func TestUserMutationsEnforceUniquenessAndRotateSessions(t *testing.T) {
 		t.Fatalf("duplicate username error = %v", err)
 	}
 
+	viewerBeforeUpdate := viewer
 	viewer, err = users.Update(ctx, viewer.ID, dto.UpdatePlatformUserRequest{
-		Username: "viewer-renamed", DisplayName: "Viewer Renamed", Role: constant.RoleAdmin,
+		Username: "viewer-renamed", DisplayName: "Viewer Renamed", Role: constant.RoleAdmin, ExpectedUpdatedAt: viewer.UpdatedAt,
 	})
-	if err != nil || viewer.SessionVersion != 2 {
+	if err != nil || viewer.SessionVersion != 2 || viewer.UpdatedAt <= viewerBeforeUpdate.UpdatedAt {
 		t.Fatalf("role update user = %#v, %v", viewer, err)
 	}
+	if _, err := users.Update(ctx, viewer.ID, dto.UpdatePlatformUserRequest{
+		Username: "stale-overwrite", DisplayName: "Stale Overwrite", Role: constant.RoleViewer, ExpectedUpdatedAt: viewerBeforeUpdate.UpdatedAt,
+	}); !errors.Is(err, service.ErrPlatformUserChanged) {
+		t.Fatalf("stale platform user update error = %v", err)
+	}
+	unchangedAfterConflict := mustFindUser(t, repository, viewer.ID)
+	if unchangedAfterConflict.Username != viewer.Username || unchangedAfterConflict.DisplayName != viewer.DisplayName || unchangedAfterConflict.Role != viewer.Role {
+		t.Fatalf("stale update overwrote platform user: %#v", unchangedAfterConflict)
+	}
+	beforeDisableUpdatedAt := viewer.UpdatedAt
 	if err := users.SetStatus(ctx, admin.ID, viewer.ID, false); err != nil {
 		t.Fatalf("disable viewer: %v", err)
 	}
 	viewer = mustFindUser(t, repository, viewer.ID)
-	if viewer.Status != constant.UserStatusDisabled || viewer.SessionVersion != 3 {
+	if viewer.Status != constant.UserStatusDisabled || viewer.SessionVersion != 3 || viewer.UpdatedAt <= beforeDisableUpdatedAt {
 		t.Fatalf("disabled user = %#v", viewer)
 	}
+	beforeEnableUpdatedAt := viewer.UpdatedAt
 	if err := users.SetStatus(ctx, admin.ID, viewer.ID, true); err != nil {
 		t.Fatalf("enable viewer: %v", err)
 	}
 	viewer = mustFindUser(t, repository, viewer.ID)
-	if viewer.Status != constant.UserStatusEnabled || viewer.SessionVersion != 4 {
+	if viewer.Status != constant.UserStatusEnabled || viewer.SessionVersion != 4 || viewer.UpdatedAt <= beforeEnableUpdatedAt {
 		t.Fatalf("enabled user = %#v", viewer)
 	}
+	beforeResetUpdatedAt := viewer.UpdatedAt
 	if err := users.ResetPassword(ctx, admin.ID, viewer.ID, "rotated-pass"); err != nil {
 		t.Fatalf("reset password: %v", err)
 	}
 	viewer = mustFindUser(t, repository, viewer.ID)
-	if !viewer.MustChangePassword || viewer.SessionVersion != 5 {
+	if !viewer.MustChangePassword || viewer.SessionVersion != 5 || viewer.UpdatedAt <= beforeResetUpdatedAt {
 		t.Fatalf("password-reset user = %#v", viewer)
 	}
 	if err := common.CheckPassword(viewer.PasswordHash, "rotated-pass"); err != nil {
 		t.Fatalf("reset password does not match: %v", err)
+	}
+	if _, err := users.Update(ctx, viewer.ID, dto.UpdatePlatformUserRequest{
+		Username: viewer.Username, DisplayName: viewer.DisplayName, Role: viewer.Role, ExpectedUpdatedAt: beforeDisableUpdatedAt,
+	}); !errors.Is(err, service.ErrPlatformUserChanged) {
+		t.Fatalf("pre-status-change timestamp remained valid after later mutations: %v", err)
 	}
 }
 
@@ -184,7 +202,7 @@ func TestPlatformUserSafetyInvariantsRejectSelfAndLastAdminMutations(t *testing.
 		t.Fatalf("self-reset error = %v", err)
 	}
 	if _, err := users.Update(ctx, admin.ID, dto.UpdatePlatformUserRequest{
-		Username: admin.Username, DisplayName: admin.DisplayName, Role: constant.RoleViewer,
+		Username: admin.Username, DisplayName: admin.DisplayName, Role: constant.RoleViewer, ExpectedUpdatedAt: admin.UpdatedAt,
 	}); !errors.Is(err, service.ErrLastAdmin) {
 		t.Fatalf("last-admin downgrade error = %v", err)
 	}

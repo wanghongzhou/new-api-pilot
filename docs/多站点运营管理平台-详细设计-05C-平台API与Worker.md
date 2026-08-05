@@ -90,6 +90,7 @@ UpdatePlatformUserRequest {
   username: lowercase ASCII string(3..64)
   display_name: string(1..128)
   role: "admin" | "viewer"
+  expected_updated_at: positive Unix seconds
 }
 
 ResetPasswordRequest {
@@ -99,7 +100,7 @@ ResetPasswordRequest {
 Password = 至少 8 个 Unicode 字符且 UTF-8 编码不超过 72 字节；仅创建、重置和修改密码使用该约束，登录仅要求 password 非空。
 ~~~
 
-新建和重置后的用户 must_change_password=true。用户名唯一；不能禁用或降级最后一个启用 admin；用户不能禁用自己，admin 重置自己的密码应使用自助修改密码接口。用户名不存在、密码错误以及禁用用户提交错误密码均返回通用登录失败；仅在密码校验成功后发现账户禁用时返回 USER_DISABLED。自助改密的 original_password 错误返回 original_password 字段错误。
+新建和重置后的用户 must_change_password=true。用户名唯一；不能禁用或降级最后一个启用 admin；用户不能禁用自己，admin 重置自己的密码应使用自助修改密码接口。平台用户编辑必须携带列表快照中的 `expected_updated_at`；事务锁定目标行后若时间戳不一致则返回 HTTP 409、code=CONFLICT，且不得覆盖并发修改。编辑、启停、重置密码、成功登录和自助改密等每次实际用户写入都把 `updated_at` 更新为 `max(now, previous_updated_at+1)`，保证同秒连续写入时并发令牌仍单调前进；`last_login_at` 仍记录实际登录时刻，不得用单调并发令牌冒充登录时间。平台用户接口只接受文档列出的查询参数且每个参数只能出现一次；声明“无”请求体的 GET/POST 必须拒绝非空 body，其他 mutation 也不得携带未声明 query。用户名不存在、密码错误以及禁用用户提交错误密码均返回通用登录失败；仅在密码校验成功后发现账户禁用时返回 USER_DISABLED。自助改密的 original_password 错误返回 original_password 字段错误。
 
 ### 33.3 站点
 
@@ -377,6 +378,8 @@ AlertRuleUpdateRequest 仅允许 enabled、threshold_value、for_times。AlertRu
 
 SettingPatchRequest 是 key/value 数组，后端按白名单验证类型和范围。collector.probe_interval_seconds、collector.realtime_interval_seconds、collector.resource_interval_seconds、collector.operational_interval_seconds、collector.catalog_interval_seconds 允许管理员 PUT 60～3600 的整分钟秒数；调度器每分钟重新加载 platform_setting，保存后最迟在下一次调度检查时采用新周期，无需重启。operational 默认 300 秒，承载 performance/topup/redemption/upstream-task；catalog 默认 600 秒，承载 model/plan/pricing/system-task，二者不得再隐式复用分钟资源监控周期。敏感项 GET 只返回 configured、masked_value、decrypt_error，不返回 setting_value；PUT 中空字符串表示“不修改”，显式 clear=true 才清空。SettingGroup 只返回分组元数据和设置项，不返回 H+15 发布资格或原因码；production 与 development/test 使用相同的字段级及跨字段校验规则。
 
+除调度器按分钟读取采集周期外，每个 API 实例还以 1 秒周期读取、完整校验并原子发布 RuntimeSettingsSnapshot；写请求所在实例在事务提交后立即发布。快照版本使用全部 `platform_setting.updated_at` 的单调聚合，旧轮询结果不得覆盖较新的本地提交结果。跨实例最迟 2 秒采用快速任务历史、上游白名单/CIDR、四级超时、限流和单 origin 并发的新值。刷新沿用同一个可重配 UpstreamGovernor，不能重建 origin 状态或遗留 goroutine；新限制只约束后续发放，既有在途请求自然完成。
+
 GET 按 collector、export、rate、notification、upstream、system 固定顺序返回 37 个 platform_setting 以及只读虚拟项 `system.public_origin`；`logs.retention_days`、`performance.retention_days`、`task.retention_days`、`system_task_terminal_retention_days` 均位于 collector 分组，范围 1～3650，其中 `logs.retention_days` 默认 90 天。虚拟项来自运行环境、updated_at=null，PUT 必须拒绝。配置范围固定为：probe_interval_seconds/realtime_interval_seconds/resource_interval_seconds 60～3600 且必须为 60 的整数倍，usage_delay_minutes 1～59，minute_retention_days/logs.retention_days/performance_retention_days/task.retention_days/system_task_terminal_retention_days 1～3650，六个队列 concurrency 1～100，manual_backfill_max_days 1～3660，export.file_ttl_hours 1～168，两个活跃导出上限 1～100 且单用户不得超过全局，max_file_bytes/min_free_disk_bytes 为正 int64；fast_task.history_retention_seconds 60～31536000、fast_task.history_count 1～1000；upstream.connect_timeout_seconds 1～60、response_header_timeout_seconds 1～300、request_timeout_seconds 1～600、export_timeout_seconds 1～3600，并满足 connect<=request、response_header<=request<=export；upstream.rate_limit_requests 1～10000、rate_limit_window_seconds 1～3600、max_inflight_per_origin 1～100。普通 int 只接受规范的正整数 JSON number，不接受字符串、小数、指数、符号或超过 `9007199254740991` 的值；两个字节阈值只接受规范的正 int64 十进制 JSON string，不接受 JSON number。两个 decimal 只接受 ASCII 固定点 JSON string，语法为整数位数字加可选的非空小数位，拒绝空白、符号、指数、非 ASCII 数字和零；小数位最多 10 位、总精度最多 30 位、规范化后整数位最多 20 位，并规范化整数前导零和小数尾零。CPU/内存/磁盘阈值、instance_stale 和任务重试预算不属于 platform_setting，继续由 alert-rules 或固定任务策略管理。
 
 本节不再冻结 platform_setting 的总数；实际集合以 SettingService 白名单为准。collector 周期范围包含 probe/realtime/resource/operational/catalog 五项，均为 60～3600 秒且必须为 60 的整数倍；operational 默认 300 秒，catalog 默认 600 秒。前述“37 个”及只列三个 collector 周期的历史描述由本段取代。
@@ -385,7 +388,7 @@ GET 按 collector、export、rate、notification、upstream、system 固定顺�
 
 费率兜底仅用于站点从未成功同步过费率的情况，不能覆盖已经同步到的站点费率。`rate.fallback_quota_per_unit` 默认 `500000`，表示 500,000 quota = 1 USD，`amount_usd = quota / quota_per_unit`；`rate.fallback_usd_exchange_rate` 默认 `6.8`，表示 1 USD = 6.8 CNY，`amount_cny = amount_usd * usd_exchange_rate`。两项必须同时为正数才会生效，任一被清空时金额状态为 unavailable。
 
-PUT 在进入事务前完成 items 数量、重复 key、白名单、read_only、JSON 表示、类型、单字段范围以及新 webhook 的 HTTPS/allowlist 校验。随后单事务按 setting_key 顺序 `SELECT ... FOR UPDATE` 锁定全部当前白名单设置行，构造最终状态并校验活跃导出上限、上游超时关系和钉钉完整配置，全部通过后才统一 UPDATE；任一错误必须零写入。事务采用原子 last-write-wins，不接收未文档化的 CAS/version 字段；只有实际变化的行更新 updated_at，值为 `max(now, previous_updated_at+1)`，未变化和敏感 keep 保持原时间。
+PUT 在进入事务前完成 items 数量、重复 key、白名单、read_only、JSON 表示、类型、单字段范围以及新 webhook 的 HTTPS/allowlist 校验。items 使用独立于当前白名单数量的 100 项请求硬上限，防止资源滥用但不得因白名单从历史 37 项演进到更多设置而拒绝一次完整原子批量。随后单事务按 setting_key 顺序 `SELECT ... FOR UPDATE` 锁定全部当前白名单设置行，构造最终状态并校验活跃导出上限、上游超时关系和钉钉完整配置，全部通过后才统一 UPDATE；任一错误必须零写入。事务采用原子 last-write-wins，不接收未文档化的 CAS/version 字段；只有实际变化的行更新 updated_at，值为 `max(now, previous_updated_at+1)`，未变化和敏感 keep 保持原时间。
 
 敏感 value 缺失或空字符串表示 keep，非空字符串表示替换，clear=true 表示显式清除；clear 与非空 value 冲突。替换值使用 AES-256-GCM 和 AAD=`setting:<key>` 后写库。GET 的 value 永远为 null，configured 只表示密文非空，masked_value 使用固定长度掩码；密文无法解密时仍返回其他非敏感配置，并置 configured=true、decrypt_error=true，不返回密文、明文或解密详情。notification.dingtalk.enabled=true 的最终状态要求 webhook 和 secret 均非空、可解密，且 webhook 为 allowlist 内 HTTPS 地址；停用与两项 clear 可以在同一原子 PUT 中完成。
 
@@ -1425,7 +1428,7 @@ export_job 新增 `user_inventory`，与日志/统计导出共享 owner、claim�
 
 P0-C 补充：用户库存列表支持 `remote_user_id` 规范正 bigint 字符串精确筛选。该参数与 keyword（仅 username/display_name 模糊匹配）相互独立，适用于全局和站点列表接口；`statistics_type=user_inventory` 导出必须冻结并透传同一 `remote_user_id`，不得退化为未筛选导出。
 
-只读接口：`GET /api/channel-inventory`、`GET /api/channel-inventory/statistics`、`GET /api/sites/:id/channel-inventory`、`GET /api/sites/:id/channel-inventory/statistics`。列表支持分页及 site/type/status/group/tag/state/keyword/balance/response_time 筛选；统计支持左闭右开整点范围和站点/type/status/group/tag 筛选。所有接口使用统一响应 envelope、viewer 可读、强制改密期间禁止，并返回稳定完整性状态。
+只读接口：`GET /api/channel-inventory`、`GET /api/channel-inventory/statistics`、`GET /api/sites/:id/channel-inventory`、`GET /api/sites/:id/channel-inventory/statistics`。列表支持分页及 site/type/status/group/tag/state/keyword/balance/response_time 筛选；统计支持左闭右开整点范围和站点/type/status/group/tag 筛选。两类接口均拒绝未知参数、重复 scalar 参数、非空请求体、非法整数和超限数组；site/type/group/tag 分别最多 100 项、status 最多 20 项，group/tag 单值分别最多 128/255 个 UTF-8 字符；强制站点接口拒绝 `site_ids`。用户库存接口采用相同的未知参数、重复 scalar、非空请求体与强制站点 `site_ids` 拒绝边界。所有接口使用统一响应 envelope、viewer 可读、强制改密期间禁止，并返回稳定完整性状态。
 
 周期 `channel_sync` 调用完整分页 SnapshotChannels 后通过原子仓储提交，不再只替换 name/status 元数据。成功后可发布渠道告警采样触发；采集失败沿用任务分类、重试、租约和 config fence，不写部分事实。导出 worker 新增 `channel_inventory` scope，使用 repeatable-read 数据快照、现有 claim/heartbeat/lease/TTL/publish 生命周期。
 
@@ -1445,12 +1448,12 @@ API：`GET /api/performance-history`、`GET /api/performance-history/statistics`
 # T1 任务 API 与 Worker
 
 新增 `upstream_task_sync` required task、metadata queue、resource concurrency、独立 lease/active_key/max attempts=3。API：`GET /api/upstream-tasks`、`/statistics` 及对应站点四接口；支持 site/task/platform/user/group/channel/action/status/model/submit time 筛选。export runtime 接受 `upstream_tasks`。所有 bigint 为字符串，统一 envelope，viewer 可读。
-平台新增 `/api/model-catalog`、`/api/model-catalog/coverage`、`/api/model-catalog/missing` 及对应 `/api/sites/:id/...` 只读接口；导出类型 `model_catalog` 复用异步导出运行时。目录类 GET 接口执行严格查询契约：未知参数、超长关键词/分组、超过 100 个站点、重复枚举归一化后仍超出枚举基数，以及视图不支持的筛选均返回 `VALIDATION_ERROR`；强制站点接口拒绝 `site_ids`。`model-catalog` 仅接受目录筛选，`missing` 仅接受站点与关键词，`coverage` 不接受列表筛选。参数校验在数据库访问前完成，数据库或未分类服务错误返回内部错误，不得伪装成客户端参数错误。
+平台新增 `/api/model-catalog`、`/api/model-catalog/coverage`、`/api/model-catalog/missing` 及对应 `/api/sites/:id/...` 只读接口；导出类型 `model_catalog` 复用异步导出运行时。目录类 GET 接口执行严格查询契约：未知参数、重复 scalar、非空请求体、超长或非法 UTF-8 关键词/分组、超过 100 个站点、重复枚举归一化后仍超出枚举基数，以及视图不支持的筛选均返回 `VALIDATION_ERROR`；强制站点接口拒绝 `site_ids`。`model-catalog` 仅接受目录筛选，`missing` 仅接受站点与关键词，`coverage` 不接受列表筛选或分页参数。参数校验在数据库访问前完成，数据库或未分类服务错误返回内部错误，不得伪装成客户端参数错误。
 本地排行提供 `/api/rankings/models`、`/api/rankings/vendors` 与 `/api/sites/:id/rankings/...`，支持 `period=today|week|month|year`；`statistics_type=model_rankings|vendor_rankings` 支持 CSV/XLSX。
-新增 `/api/subscription-plans`、`/api/subscription-plans/statistics` 与对应站点接口；无用户订阅/订单全局聚合端点。订阅计划查询最多接受 100 个站点、2 个库存状态和 128 UTF-8 字节关键词；定价与分组查询最多接受 100 个站点、2 个库存状态、255 UTF-8 字节关键词和 128 UTF-8 字节精确分组。两类接口均拒绝未知参数，并在进入数据库前完成校验。
+新增 `/api/subscription-plans`、`/api/subscription-plans/statistics` 与对应站点接口；无用户订阅/订单全局聚合端点。订阅计划列表查询最多接受 100 个站点、2 个库存状态和 128 UTF-8 字节关键词；statistics 固定读取完整 scope，只允许全局端点用 `site_ids` 缩小站点范围，不接受分页、状态、启用状态或关键词。定价与分组查询最多接受 100 个站点、2 个库存状态、255 UTF-8 字节关键词和 128 UTF-8 字节精确分组。两类接口均拒绝未知参数、重复 scalar 和非空请求体，并在进入数据库前完成校验。
 # D138 定价与分组目录 API/Worker
 
-提供 `GET /api/pricing-catalog`、`GET /api/pricing-catalog/statistics`、`GET /api/group-catalog`，以及三个对应的 `/api/sites/:id/...` 强制站点端点。全局端点可接收 `site_ids`，站点端点拒绝 `site_ids`；列表统一服务端分页。statistics 固定读取完整 scope，不接受或继承列表关键词、状态、分组与 billing-mode 筛选。pricing item 的身份是 `(site_id,model_name)`，包含模型厂商元数据、固定价格或 Token 各价格维度、`billing_mode/billing_expr`、可用分组、supported endpoints、remote state 与采集元数据；禁止把 vendor 当作价格身份或提供“供应商定价”聚合。
+提供 `GET /api/pricing-catalog`、`GET /api/pricing-catalog/statistics`、`GET /api/group-catalog`，以及三个对应的 `/api/sites/:id/...` 强制站点端点。全局端点可接收 `site_ids`，站点端点拒绝 `site_ids`；列表统一服务端分页。statistics 固定读取完整 scope，不接受分页，也不接受或继承列表关键词、状态、分组与 billing-mode 筛选。pricing item 的身份是 `(site_id,model_name)`，包含模型厂商元数据、固定价格或 Token 各价格维度、`billing_mode/billing_expr`、可用分组、supported endpoints、remote state 与采集元数据；禁止把 vendor 当作价格身份或提供“供应商定价”聚合。
 
 Worker 除 `/api/group/` 与 `/api/pricing` 外，使用 RootAuth 调用 `/api/option/`，只接受 D138 固定 option allowlist：`ModelPrice`、`ModelRatio`、`CompletionRatio`、`CacheRatio`、`CreateCacheRatio`、`ImageRatio`、`AudioRatio`、`AudioCompletionRatio`、`billing_setting.billing_mode`、`billing_setting.billing_expr`、`GroupRatio`、`TopupGroupRatio`、`UserUsableGroups`、`GroupGroupRatio`、`AutoGroups`、`DefaultUseAutoGroup`、`group_ratio_setting.group_special_usable_group`。未知 option 一律忽略；allowlist 值执行严格 JSON、长度、数量和 decimal 校验。group item 返回基础倍率、充值倍率、用户可选状态与说明、自动顺序、默认自动分组开关、入向/出向覆盖倍率、特殊可见/隐藏规则及当前/历史模型名。
 

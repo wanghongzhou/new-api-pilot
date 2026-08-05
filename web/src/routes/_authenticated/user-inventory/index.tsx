@@ -14,6 +14,12 @@ function GlobalUserInventoryRoute() {
   const navigate = Route.useNavigate()
   return (
     <UserInventoryPage
+      onPageReplace={(page) =>
+        void navigate({
+          replace: true,
+          search: (current) => ({ ...current, page }),
+        })
+      }
       onSearchChange={(changes) =>
         void navigate({ search: (current) => ({ ...current, ...changes }) })
       }

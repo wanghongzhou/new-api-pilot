@@ -24,6 +24,7 @@ func TestA63PerformanceHistoryAverageBoundaryAndWeightedCounters(t *testing.T) {
 	}
 	db := openCoreAcceptanceTransaction(t)
 	now := int64(2101000000)
+	queryEnd := now - now%3600 + 3600
 	bucket := now - 60
 	cipher := newCoreCipher(t)
 	sites := []model.Site{createCoreAuthorizedSite(t, db, cipher, now), createCoreAuthorizedSite(t, db, cipher, now+1)}
@@ -36,9 +37,9 @@ func TestA63PerformanceHistoryAverageBoundaryAndWeightedCounters(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	query := dto.PerformanceHistoryQuery{Page: 1, PageSize: 100, StartTimestamp: now - 3600, EndTimestamp: now + 1, SiteIDs: []int64{sites[0].ID, sites[1].ID}}
+	query := dto.PerformanceHistoryQuery{Page: 1, PageSize: 100, StartTimestamp: queryEnd - 3600, EndTimestamp: queryEnd, SiteIDs: []int64{sites[0].ID, sites[1].ID}}
 	average, err := svc.Statistics(context.Background(), query)
-	if err != nil || average.AggregationStatus != "unavailable" || len(average.SiteBreakdown) != 2 || average.Summary.SuccessRate != nil {
+	if err != nil || average.AggregationStatus != "unavailable" || len(average.SiteBreakdown) != 2 || len(average.Trend) != 2 || average.Trend[0].SiteID == "" || average.Trend[0].ModelName == "" || average.ModelBreakdown == nil || average.GroupBreakdown == nil || average.Summary.SuccessRate != nil {
 		t.Fatalf("average-only stats=%#v err=%v", average, err)
 	}
 	counterFixtures := []dto.UpstreamPerformanceHistory{perfHistory(bucket, true, 1, 1, 100, 50, 1, 100, 1000), perfHistory(bucket, true, 9, 0, 9000, 4500, 9, 900, 9000)}
@@ -51,6 +52,9 @@ func TestA63PerformanceHistoryAverageBoundaryAndWeightedCounters(t *testing.T) {
 	if err != nil || weighted.AggregationStatus != "complete" || weighted.Summary.SuccessRate == nil || *weighted.Summary.SuccessRate != "0.1000000000" || weighted.Summary.AvgLatencyMS == nil || *weighted.Summary.AvgLatencyMS != "910.0000000000" {
 		t.Fatalf("weighted stats=%#v err=%v", weighted, err)
 	}
+	if len(weighted.Trend) != 2 || len(weighted.ModelBreakdown) != 1 || weighted.ModelBreakdown[0].Dimension != "gpt-4o" || len(weighted.GroupBreakdown) != 1 || weighted.GroupBreakdown[0].Dimension != "default" {
+		t.Fatalf("weighted breakdown contract=%#v", weighted)
+	}
 }
 
 func TestPerformanceHistorySuccessfulEmptySnapshotIsComplete(t *testing.T) {
@@ -59,6 +63,7 @@ func TestPerformanceHistorySuccessfulEmptySnapshotIsComplete(t *testing.T) {
 	}
 	db := openCoreAcceptanceTransaction(t)
 	now := int64(2101000000)
+	queryEnd := now - now%3600 + 3600
 	cipher := newCoreCipher(t)
 	site := createCoreAuthorizedSite(t, db, cipher, now)
 	if written, err := model.NewSiteRepository(db).ApplyPerformanceHistorySnapshot(
@@ -71,7 +76,7 @@ func TestPerformanceHistorySuccessfulEmptySnapshotIsComplete(t *testing.T) {
 		t.Fatal(err)
 	}
 	query := dto.PerformanceHistoryQuery{
-		Page: 1, PageSize: 100, StartTimestamp: now - 24*3600, EndTimestamp: now, SiteIDs: []int64{site.ID},
+		Page: 1, PageSize: 100, StartTimestamp: queryEnd - 24*3600, EndTimestamp: queryEnd, SiteIDs: []int64{site.ID},
 	}
 	page, err := svc.List(context.Background(), query)
 	if err != nil || page.Total != 0 || page.DataStatus != "complete" || page.AsOf == nil || *page.AsOf != now {

@@ -54,7 +54,17 @@ describe('fixed-height data table layout', () => {
       "<TableHeader className='sticky top-0 z-10 bg-[var(--table-header)] text-left'>"
     )
     expect(dataTableSource).toContain(
-      'overflow-y-auto pb-16 transition-opacity duration-150 min-[641px]:hidden'
+      'grid min-h-0 flex-1 gap-3 pb-16 transition-opacity duration-150'
+    )
+    expect(dataTableSource).toContain("mobileCardBreakpoint === 'wide'")
+    expect(dataTableSource).toContain("? 'hidden lg:block'")
+    expect(dataTableSource).toContain(
+      "? 'overflow-visible lg:hidden lg:overflow-y-auto'"
+    )
+    expect(dataTableSource).toContain("role='alert'")
+    expect(dataTableSource).toContain("scope='row'")
+    expect(dataTableSource).toContain(
+      'text-left align-top font-normal whitespace-normal'
     )
     expect(dataTableSource).toContain('aria-label={ariaLabel}')
     expect(dataTableSource).toContain("role='region'")

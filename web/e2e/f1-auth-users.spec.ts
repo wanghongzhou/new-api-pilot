@@ -460,6 +460,7 @@ test('edits, resets, disables, and re-enables a platform user', async ({
     .poll(() => updateBody)
     .toEqual({
       display_name: '运营查看者',
+      expected_updated_at: userItems[1].updated_at,
       role: 'admin',
       username: 'viewer-ops',
     })
@@ -580,6 +581,59 @@ test('keeps the current user identity in sync after editing it', async ({
     },
     uid: admin.id,
   })
+})
+
+test('reports optimistic edit conflicts and protects an unfinished password reset', async ({
+  page,
+}) => {
+  await seedAuth(page, admin)
+  await mockSelf(page, admin)
+  await mockUserList(page)
+  let conflictCalls = 0
+  await page.route(`**/api/user/${viewer.id}`, async (route) => {
+    conflictCalls += 1
+    await route.fulfill({
+      json: {
+        code: 'CONFLICT',
+        data: null,
+        field_errors: null,
+        message: 'Platform user changed; refresh and retry',
+        request_id: 'req_user_conflict',
+        success: false,
+      },
+      status: 409,
+    })
+  })
+
+  await page.goto('/settings/users')
+  const viewerSurface = page
+    .locator('tr, article')
+    .filter({ hasText: 'viewer' })
+    .filter({ visible: true })
+  await viewerSurface.getByRole('button', { name: '编辑用户' }).click()
+  const editDialog = page.getByRole('dialog', { name: '编辑平台用户' })
+  await editDialog.getByLabel('显示名称').fill('并发修改')
+  await editDialog.getByRole('button', { name: '保存更改' }).click()
+  await expect.poll(() => conflictCalls).toBe(1)
+  await expect(
+    page.getByText('该用户已被其他操作更新，请刷新列表后重试。').first()
+  ).toBeVisible()
+
+  await editDialog.getByRole('button', { name: '取消' }).click()
+  await page
+    .getByRole('alertdialog', { name: '放弃未保存的更改？' })
+    .getByRole('button', { name: '放弃更改' })
+    .click()
+  await viewerSurface.getByRole('button', { name: '重置密码' }).click()
+  const resetDialog = page.getByRole('dialog', { name: '重置密码' })
+  await resetDialog.getByLabel('临时密码').fill('Temporary123!')
+  await page.keyboard.press('Escape')
+  const discardDialog = page.getByRole('alertdialog', {
+    name: '放弃未保存的更改？',
+  })
+  await expect(discardDialog).toBeVisible()
+  await discardDialog.getByRole('button', { name: '取消' }).click()
+  await expect(resetDialog).toBeVisible()
 })
 
 test('clears local authentication and returns to sign-in on self 401', async ({
@@ -740,6 +794,125 @@ test('restores auto-applied user filters through browser history', async ({
   await expect(page).toHaveURL(/role=viewer/)
 })
 
+test('does not let a pending keyword debounce overwrite browser history', async ({
+  page,
+}) => {
+  await seedAuth(page, admin)
+  await mockSelf(page, admin)
+  await mockUserList(page)
+  await page.goto('/settings/users')
+
+  await page
+    .getByRole('button', { name: '角色', exact: true })
+    .filter({ visible: true })
+    .click()
+  await page
+    .getByRole('button', { name: '查看者', exact: true })
+    .filter({ visible: true })
+    .click()
+  await expect(page).toHaveURL(/role=viewer/)
+  await page
+    .getByLabel('搜索平台用户', { exact: true })
+    .filter({ visible: true })
+    .fill('pending-keyword')
+  await page.goBack()
+  await page.waitForTimeout(500)
+
+  await expect(page).not.toHaveURL(/role=viewer/)
+  await expect(page).not.toHaveURL(/filter=pending-keyword/)
+  await expect(
+    page.getByLabel('搜索平台用户', { exact: true }).filter({ visible: true })
+  ).toHaveValue('')
+})
+
+test('marks retained platform-user data stale and disables write actions after refresh failure', async ({
+  page,
+}) => {
+  await seedAuth(page, admin)
+  await mockSelf(page, admin)
+  let failList = false
+  await page.route(`**/api/user/${viewer.id}`, async (route) => {
+    failList = true
+    await fulfillMutation(route, {
+      ...userItems[1],
+      display_name: '触发后台刷新',
+      updated_at: userItems[1].updated_at + 1,
+    })
+  })
+  await page.route(/\/api\/user\/(?:\?.*)?$/, async (route) => {
+    const url = new URL(route.request().url())
+    const adminCountQuery =
+      url.searchParams.get('role') === 'admin' &&
+      url.searchParams.get('status') === '1' &&
+      url.searchParams.get('page_size') === '1'
+    if (failList && !adminCountQuery) {
+      await route.fulfill({
+        json: {
+          code: 'INTERNAL_ERROR',
+          data: null,
+          message: 'refresh failed',
+          request_id: 'req_user_refresh_failed',
+          success: false,
+        },
+        status: 500,
+      })
+      return
+    }
+    await route.fulfill({
+      json: envelope({
+        items: adminCountQuery ? [userItems[0]] : userItems,
+        page: 1,
+        page_size: adminCountQuery ? 1 : 20,
+        total: adminCountQuery ? 1 : userItems.length,
+      }),
+    })
+  })
+
+  await page.goto('/settings/users')
+  const viewerSurface = page
+    .locator('tr, article')
+    .filter({ hasText: 'viewer' })
+    .filter({ visible: true })
+  await expect(viewerSurface).toHaveCount(1)
+  await viewerSurface.getByRole('button', { name: '编辑用户' }).click()
+  const editDialog = page.getByRole('dialog', { name: '编辑平台用户' })
+  await editDialog.getByLabel('显示名称').fill('触发后台刷新')
+  await editDialog.getByRole('button', { name: '保存更改' }).click()
+  await expect(
+    page.getByText(
+      '平台用户数据刷新失败，当前列表可能已过期；写操作已暂时禁用。'
+    )
+  ).toBeVisible({ timeout: 10_000 })
+  await expect(
+    viewerSurface.getByRole('button', { name: '编辑用户' })
+  ).toBeDisabled()
+  await expect(
+    viewerSurface.getByRole('button', { name: '重置密码' })
+  ).toBeDisabled()
+})
+
+test('replaces an out-of-range platform-user page with the last valid page', async ({
+  page,
+}) => {
+  await seedAuth(page, admin)
+  await mockSelf(page, admin)
+  await page.route(/\/api\/user\/(?:\?.*)?$/, async (route) => {
+    const url = new URL(route.request().url())
+    const adminCountQuery = url.searchParams.get('page_size') === '1'
+    await route.fulfill({
+      json: envelope({
+        items: adminCountQuery ? [userItems[0]] : [],
+        page: adminCountQuery ? 1 : 4,
+        page_size: adminCountQuery ? 1 : 20,
+        total: adminCountQuery ? 1 : 21,
+      }),
+    })
+  })
+
+  await page.goto('/settings/users?page=4')
+  await expect(page).toHaveURL(/page=2/)
+})
+
 test('sorts platform users by status and account timestamps', async ({
   isMobile,
   page,
@@ -859,6 +1032,12 @@ test('keeps the 375px workspace within the viewport and exposes mobile navigatio
       .getByRole('button', { name: '角色', exact: true })
       .filter({ visible: true })
   ).toBeVisible()
+  const displayName = page
+    .locator('#main-content article h2')
+    .filter({ visible: true })
+    .first()
+  await expect(displayName).toHaveCSS('white-space', 'normal')
+  await expect(displayName).not.toHaveCSS('text-overflow', 'ellipsis')
 
   await page.getByRole('button', { name: '打开导航' }).click()
   await expect(page.getByRole('dialog', { name: '主导航' })).toBeVisible()

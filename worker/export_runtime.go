@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	defaultExportPollInterval      = time.Second
+	defaultExportPollInterval      = 5 * time.Second
 	defaultExportRecoveryInterval  = time.Minute
 	defaultExportCleanupInterval   = time.Hour
 	defaultExportLeaseDuration     = 5 * time.Minute

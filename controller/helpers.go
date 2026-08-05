@@ -35,6 +35,8 @@ func writeServiceError(c *gin.Context, err error) {
 		common.AbortError(c, http.StatusNotFound, constant.CodeNotFound, "Platform user not found", nil)
 	case errors.Is(err, service.ErrUsernameConflict):
 		common.AbortError(c, http.StatusConflict, constant.CodeConflict, "Username already exists", map[string]string{"username": "already exists"})
+	case errors.Is(err, service.ErrPlatformUserChanged):
+		common.AbortError(c, http.StatusConflict, constant.CodeConflict, "Platform user changed; refresh and retry", nil)
 	case errors.Is(err, service.ErrLastAdmin):
 		common.AbortError(c, http.StatusConflict, constant.CodeLastAdmin, "The last enabled admin cannot be disabled or downgraded", nil)
 	case errors.Is(err, service.ErrDisableSelf):
