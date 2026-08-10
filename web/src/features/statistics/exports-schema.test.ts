@@ -2,7 +2,11 @@ import { describe, expect, test } from 'bun:test'
 
 import { parseIdString } from '@/lib/api-types'
 
-import { exportListParams, hasExportFilters } from './exports-contract'
+import {
+  exportListParams,
+  exportUrlSearch,
+  hasExportFilters,
+} from './exports-contract'
 import { exportsSearchSchema } from './exports-schema'
 import type { StatisticsExportSearch } from './types'
 
@@ -93,5 +97,48 @@ describe('export task URL and list contract', () => {
         status: [],
       })
     ).toBeFalse()
+  })
+
+  test('keeps only non-default export center state in the URL', () => {
+    expect(
+      exportUrlSearch({
+        order: 'desc',
+        page: 1,
+        pageSize: 20,
+        sort: 'created_at',
+        status: [],
+      })
+    ).toEqual({
+      exportId: undefined,
+      format: undefined,
+      order: undefined,
+      page: undefined,
+      pageSize: undefined,
+      scope: undefined,
+      sort: undefined,
+      status: undefined,
+    })
+
+    expect(
+      exportUrlSearch({
+        exportId: parseIdString('9007199254740993'),
+        format: 'csv',
+        order: 'asc',
+        page: 3,
+        pageSize: 50,
+        scope: 'logs',
+        sort: 'finished_at',
+        status: ['failed'],
+      })
+    ).toEqual({
+      exportId: parseIdString('9007199254740993'),
+      format: 'csv',
+      order: 'asc',
+      page: 3,
+      pageSize: 50,
+      scope: 'logs',
+      sort: 'finished_at',
+      status: ['failed'],
+    })
   })
 })

@@ -26,10 +26,12 @@ func TestGenerateUpstreamLogExportCSVAndXLSX(t *testing.T) {
 	if err := database.GORM.Create(&site).Error; err != nil {
 		t.Fatalf("create log export site: %v", err)
 	}
+	firstResponseTimeMs := int64(450)
 	fact := model.UpstreamLogFact{SiteID: site.ID, ConfigVersion: 1, UpstreamLogKey: strings.Repeat("b", 64), CreatedAt: now - 10,
 		Type: 2, RemoteUserID: 3, Username: "alice", ModelName: "gpt", TokenID: 4, TokenName: "key", ChannelID: 5,
 		UseGroup: "vip", RequestID: "req", UpstreamRequestID: "up", Quota: 6, PromptTokens: 7, CompletionTokens: 8,
-		UseTimeSeconds: 9, ContentRedacted: "[redacted]", CollectedAt: now}
+		UseTimeSeconds: 9, IsStream: true, FirstResponseTimeMs: &firstResponseTimeMs, StreamStatus: "ok",
+		StreamEndReason: "done", ContentRedacted: "[redacted]", CollectedAt: now}
 	if err := database.GORM.Create(&fact).Error; err != nil {
 		t.Fatalf("create log export fact: %v", err)
 	}
@@ -44,7 +46,9 @@ func TestGenerateUpstreamLogExportCSVAndXLSX(t *testing.T) {
 		}
 		if format == dto.ExportFormatCSV {
 			contents, readErr := os.ReadFile(path)
-			if readErr != nil || !strings.Contains(string(contents), "[redacted]") || strings.Contains(string(contents), "203.0.113") {
+			if readErr != nil || !strings.Contains(string(contents), "first_response_time_ms") ||
+				!strings.Contains(string(contents), ",true,450,ok,done,0,[redacted],") ||
+				!strings.Contains(string(contents), "[redacted]") || strings.Contains(string(contents), "203.0.113") {
 				t.Fatalf("csv log export = %s, %v", contents, readErr)
 			}
 		} else {

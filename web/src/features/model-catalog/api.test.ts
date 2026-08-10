@@ -105,9 +105,12 @@ describe('model catalog API contract', () => {
       '/api/sites/9007199254740993/model-catalog/missing',
     ])
     for (const request of requests) {
-      expect((request.params as URLSearchParams).has('site_ids')).toBe(false)
+      expect(
+        request.params instanceof URLSearchParams
+          ? request.params.has('site_ids')
+          : false
+      ).toBe(false)
     }
-    const siteCoverageParams = requests[1]?.params as URLSearchParams
-    expect([...siteCoverageParams.entries()]).toEqual([])
+    expect(requests[1]?.params).toBeUndefined()
   })
 })

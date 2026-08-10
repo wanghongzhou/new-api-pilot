@@ -16,6 +16,7 @@ import { toast } from 'sonner'
 import { DataStatusBadge } from '@/components/data/data-status'
 import { FacetedFilter } from '@/components/data/faceted-filter'
 import { MetricValue } from '@/components/data/metric-value'
+import { QueryStateAlert } from '@/components/data/query-state-alert'
 import { ErrorState } from '@/components/error-state'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
@@ -782,6 +783,7 @@ export function SystemTasksPage({
           : t('systemTasks.description')
       }
       fixedContent
+      mobileScrollableContent
       title={siteId ? t('systemTasks.siteTitle') : t('systemTasks.title')}
     >
       <div className='flex h-full min-h-0 min-w-0 flex-col gap-4'>
@@ -839,6 +841,24 @@ export function SystemTasksPage({
             sites={sitesQuery.data?.items ?? []}
           />
         )}
+        {!siteId && sitesQuery.isError && search.tab === 'list' && (
+          <QueryStateAlert
+            message={t('common.siteOptionsRefreshFailed')}
+            onRetry={() => void sitesQuery.refetch()}
+          />
+        )}
+        {listQuery.isError && data && search.tab === 'list' && (
+          <QueryStateAlert
+            message={t('common.retainedDataRefreshFailed')}
+            onRetry={() => void listQuery.refetch()}
+          />
+        )}
+        {statisticsQuery.isError && stats && (
+          <QueryStateAlert
+            message={t('common.retainedDataRefreshFailed')}
+            onRetry={() => void statisticsQuery.refetch()}
+          />
+        )}
         {statisticsQuery.isError && !stats && (
           <ErrorState
             className='min-h-40'
@@ -857,9 +877,10 @@ export function SystemTasksPage({
               dynamicI18nKey('systemTasks', emptyDescriptionKey)
             )}
             emptyTitle={t(dynamicI18nKey('systemTasks', emptyTitleKey))}
-            error={!validSiteId || listQuery.isError}
+            error={!validSiteId || (listQuery.isError && !data)}
             fetching={listQuery.isFetching}
             loading={listQuery.isPending}
+            mobileCardBreakpoint='wide'
             onPageChange={(page) => onSearchChange({ page })}
             onPageSizeChange={(pageSize) =>
               onSearchChange({ page: 1, pageSize })
@@ -867,11 +888,14 @@ export function SystemTasksPage({
             onRetry={validSiteId ? () => void listQuery.refetch() : undefined}
             page={search.page}
             pageSize={search.pageSize}
+            paginationHasKnownLastPage={false}
+            paginationHasNextPage={hasNext}
+            paginationTotalDisplay={data?.total ?? '0'}
             renderMobileCard={(item) => (
               <article className='bg-card text-card-foreground ring-foreground/10 grid gap-3 rounded-xl p-4 ring-1'>
                 <div className='flex items-start justify-between gap-2'>
-                  <div>
-                    <strong>{item.task_id}</strong>
+                  <div className='min-w-0'>
+                    <strong className='block break-all'>{item.task_id}</strong>
                     <p className='text-muted-foreground text-xs'>
                       {item.site_name} · {item.site_id} · {item.remote_id}
                     </p>
@@ -887,6 +911,26 @@ export function SystemTasksPage({
                   </Badge>
                 )}
                 <DataStatusBadge status={item.data_status} />
+                <dl className='border-border grid gap-2 border-t pt-3 text-xs'>
+                  <div>
+                    <dt className='text-muted-foreground'>
+                      {t('systemTasks.time.created')}
+                    </dt>
+                    <dd>{timestamp(item.remote_created_at)}</dd>
+                  </div>
+                  <div>
+                    <dt className='text-muted-foreground'>
+                      {t('systemTasks.time.updated')}
+                    </dt>
+                    <dd>{timestamp(item.remote_updated_at)}</dd>
+                  </div>
+                  <div>
+                    <dt className='text-muted-foreground'>
+                      {t('systemTasks.time.collected')}
+                    </dt>
+                    <dd>{timestamp(item.collected_at)}</dd>
+                  </div>
+                </dl>
               </article>
             )}
             total={approximateTotal}

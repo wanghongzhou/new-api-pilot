@@ -269,7 +269,7 @@ test('A97 keeps local rankings exact, bounded, exportable and responsive', async
     page.getByText('history-21').filter({ visible: true }).first()
   ).toBeVisible()
 
-  await page.getByRole('tab', { name: '站点拆分' }).click()
+  await page.getByRole('tab', { name: '站点明细' }).click()
   await expect(page).toHaveURL(/page=1/)
   await page.getByRole('button', { name: '下一页' }).click()
   await expect(

@@ -5,6 +5,7 @@ import {
   ArrowRightDoubleIcon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { getPageNumbers } from '@/lib/utils'
@@ -26,26 +27,32 @@ const PAGE_SIZE_SELECT_ITEMS = PAGE_SIZE_OPTIONS.map((pageSize) => ({
 }))
 
 interface DataTablePaginationProps {
+  hasKnownLastPage?: boolean
+  hasNextPage?: boolean
   onPageChange: (page: number) => void
   onPageSizeChange?: (pageSize: number) => void
   page: number
   pageSize: number
   total: number
+  totalDisplay?: ReactNode
 }
 
 export function DataTablePagination({
+  hasKnownLastPage = true,
+  hasNextPage,
   onPageChange,
   onPageSizeChange,
   page,
   pageSize,
   total,
+  totalDisplay,
 }: DataTablePaginationProps) {
   const { t } = useTranslation()
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const currentPage = Math.min(Math.max(page, 1), totalPages)
   const pageNumbers = getPageNumbers(currentPage, totalPages)
   const canGoPrevious = currentPage > 1
-  const canGoNext = currentPage < totalPages
+  const canGoNext = hasNextPage ?? currentPage < totalPages
 
   return (
     <div
@@ -56,7 +63,7 @@ export function DataTablePagination({
         <div className='flex shrink-0 items-baseline gap-1.5 text-xs font-medium whitespace-nowrap sm:text-sm'>
           <span className='text-muted-foreground'>{t('table.totalLabel')}</span>
           <span className='text-foreground tabular-nums'>
-            {total.toLocaleString()}
+            {totalDisplay ?? total.toLocaleString()}
           </span>
         </div>
 
@@ -158,19 +165,21 @@ export function DataTablePagination({
             <span className='sr-only'>{t('table.next')}</span>
             <HugeiconsIcon icon={ArrowRight01Icon} size={16} strokeWidth={2} />
           </Button>
-          <Button
-            className='text-muted-foreground hover:text-foreground disabled:text-muted-foreground/50 size-10 p-0 sm:size-8 @max-lg/pagination:hidden'
-            disabled={!canGoNext}
-            onClick={() => onPageChange(totalPages)}
-            variant='outline'
-          >
-            <span className='sr-only'>{t('table.last')}</span>
-            <HugeiconsIcon
-              icon={ArrowRightDoubleIcon}
-              size={16}
-              strokeWidth={2}
-            />
-          </Button>
+          {hasKnownLastPage && (
+            <Button
+              className='text-muted-foreground hover:text-foreground disabled:text-muted-foreground/50 size-10 p-0 sm:size-8 @max-lg/pagination:hidden'
+              disabled={!canGoNext}
+              onClick={() => onPageChange(totalPages)}
+              variant='outline'
+            >
+              <span className='sr-only'>{t('table.last')}</span>
+              <HugeiconsIcon
+                icon={ArrowRightDoubleIcon}
+                size={16}
+                strokeWidth={2}
+              />
+            </Button>
+          )}
         </div>
       </div>
     </div>

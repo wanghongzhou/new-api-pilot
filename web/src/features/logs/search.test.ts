@@ -2,7 +2,12 @@ import { describe, expect, test } from 'bun:test'
 
 import { BEIJING_TIMEZONE, dayjs } from '@/lib/dayjs'
 
-import { buildLogSearch } from './search'
+import {
+  buildLogQuickRange,
+  buildLogSearch,
+  getLogQuickRange,
+  mergeLogSearch,
+} from './search'
 
 const now = dayjs.tz('2026-07-17 12:34:56', BEIJING_TIMEZONE)
 
@@ -45,5 +50,38 @@ describe('log URL search normalization', () => {
     expect(invalid.end).toBe(defaults.end)
     expect(invalid.type).toBeUndefined()
     expect(defaults.end - defaults.start).toBe(24 * 3600)
+  })
+
+  test('builds Beijing quick ranges and detects frozen custom ranges', () => {
+    expect(buildLogQuickRange('today', now)).toEqual({
+      end: dayjs.tz('2026-07-17 12:00:00', BEIJING_TIMEZONE).unix(),
+      start: dayjs.tz('2026-07-17 00:00:00', BEIJING_TIMEZONE).unix(),
+    })
+    expect(
+      buildLogQuickRange('24h', now).end - buildLogQuickRange('24h', now).start
+    ).toBe(24 * 3600)
+    expect(
+      buildLogQuickRange('7d', now).end - buildLogQuickRange('7d', now).start
+    ).toBe(7 * 24 * 3600)
+    expect(
+      buildLogQuickRange('14d', now).end - buildLogQuickRange('14d', now).start
+    ).toBe(14 * 24 * 3600)
+    expect(getLogQuickRange(buildLogQuickRange('7d', now))).toBe('7d')
+    expect(
+      getLogQuickRange({
+        end: now.unix(),
+        start: now.subtract(2, 'day').unix(),
+      })
+    ).toBe('custom')
+  })
+
+  test('removes cleared optional filters instead of reviving URL values', () => {
+    const merged = mergeLogSearch(
+      buildLogSearch({ channelId: '1', modelName: 'gpt-5', page: 4 }, now),
+      { channelId: undefined, page: 1 }
+    )
+    expect(merged).not.toHaveProperty('channelId')
+    expect(merged.modelName).toBe('gpt-5')
+    expect(merged.page).toBe(1)
   })
 })

@@ -13,12 +13,13 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import type { ColumnDef } from '@tanstack/react-table'
-import { useMemo, useState } from 'react'
+import { type ReactNode, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { DataStatusBadge } from '@/components/data/data-status'
 import { FacetedFilter } from '@/components/data/faceted-filter'
+import { QueryStateAlert } from '@/components/data/query-state-alert'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Badge } from '@/components/ui/badge'
@@ -38,6 +39,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import { SelectControl } from '@/components/ui/select-control'
 import { listSites } from '@/features/sites/api'
 import { siteKeys } from '@/features/sites/query-keys'
 import type { SiteListItem } from '@/features/sites/types'
@@ -48,21 +50,37 @@ import type {
   StatisticsExportJobItem,
 } from '@/features/statistics/types'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
+import {
+  calculateCrossSiteQuotaAmount,
+  calculateQuotaAmount,
+  formatDecimal,
+  PRECISE_AMOUNT_FRACTION_DIGITS,
+} from '@/lib/amount'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import {
   isIdString,
   isNonNegativeIdString,
   parseIdString,
   parseNonNegativeIdString,
+  type MetricString,
+  type RateInfo,
 } from '@/lib/api-types'
 import { BEIJING_TIMEZONE, dayjs, fromUnixSeconds } from '@/lib/dayjs'
 import { formatDisplayValue } from '@/lib/display-value'
 import { hasFilterChanges } from '@/lib/filter-state'
+import { cn } from '@/lib/utils'
 
-import { listLogs, listSiteLogs } from '../api'
+import { getLogStats, getSiteLogStats, listLogs, listSiteLogs } from '../api'
+import { isConsumptionLogType } from '../display'
 import { buildLogExportRequest } from '../export-request'
 import { logKeys } from '../query-keys'
-import { buildLogSearch } from '../search'
+import {
+  buildLogQuickRange,
+  buildLogSearch,
+  getLogQuickRange,
+  logQuickRanges,
+  type LogQuickRange,
+} from '../search'
 import type {
   LogDataStatus,
   LogItem,
@@ -160,14 +178,311 @@ function logTypeLabel(type: LogType, t: (key: string) => string) {
   }
 }
 
+type LogTranslate = (
+  key: string,
+  options?: Record<string, string | number>
+) => string
+
+function formatMilliseconds(value: string | null) {
+  if (value == null) return '-'
+  try {
+    const milliseconds = BigInt(value)
+    if (milliseconds < 0n) return '-'
+    const tenths = (milliseconds + 50n) / 100n
+    return formatDurationTenths(tenths)
+  } catch {
+    return '-'
+  }
+}
+
+function formatDurationSeconds(value: string) {
+  try {
+    const seconds = BigInt(value)
+    if (seconds < 0n) return '-'
+    return formatDurationTenths(seconds * 10n)
+  } catch {
+    return '-'
+  }
+}
+
+function formatDurationTenths(tenths: bigint) {
+  if (tenths < 600n) {
+    return `${tenths / 10n}.${tenths % 10n}s`
+  }
+  const roundedSeconds = (tenths + 5n) / 10n
+  return `${roundedSeconds / 60n}m ${roundedSeconds % 60n}s`
+}
+
+function cacheWriteTokens(item: LogItem) {
+  const fiveMinutes = tokenBigInt(item.cache_creation_tokens_5m)
+  const oneHour = tokenBigInt(item.cache_creation_tokens_1h)
+  if (fiveMinutes > 0n || oneHour > 0n) return fiveMinutes + oneHour
+  return tokenBigInt(item.cache_creation_tokens)
+}
+
+function tokenBigInt(value: string | bigint) {
+  try {
+    const parsed = BigInt(value)
+    return parsed >= 0n ? parsed : 0n
+  } catch {
+    return 0n
+  }
+}
+
+function formatTokenCount(value: string | bigint) {
+  try {
+    return BigInt(value).toLocaleString('en-US')
+  } catch {
+    return '-'
+  }
+}
+
+function LogTokenUsage({ item }: { item: LogItem }) {
+  const { t } = useTranslation()
+  const cacheRead = tokenBigInt(item.cache_read_tokens)
+  const cacheWrite = cacheWriteTokens(item)
+  return (
+    <div className='grid gap-0.5 font-mono text-xs tabular-nums'>
+      <span>
+        {formatTokenCount(item.prompt_tokens)} /{' '}
+        {formatTokenCount(item.completion_tokens)}
+      </span>
+      {cacheRead > 0n || cacheWrite > 0n ? (
+        <span className='text-muted-foreground/60 text-[11px] leading-none'>
+          {cacheRead > 0n &&
+            `${t('logs.tokens.cacheRead')}↓ ${formatTokenCount(cacheRead)}`}
+          {cacheRead > 0n && cacheWrite > 0n ? ' · ' : ''}
+          {cacheWrite > 0n && `↑ ${formatTokenCount(cacheWrite)}`}
+        </span>
+      ) : (
+        <span className='text-muted-foreground/50 text-[11px] leading-none'>
+          —
+        </span>
+      )}
+    </div>
+  )
+}
+
+function LogCost({
+  quota,
+  rate,
+  inline = false,
+}: {
+  quota: MetricString
+  rate: RateInfo
+  inline?: boolean
+}) {
+  const { t } = useTranslation()
+  const amount = calculateQuotaAmount(quota, rate)
+  if (amount.status !== 'available') {
+    return (
+      <span className='text-muted-foreground text-xs'>
+        {t('amount.rateUnavailable')}
+      </span>
+    )
+  }
+  const cny = formatDecimal(amount.amountCny, PRECISE_AMOUNT_FRACTION_DIGITS)
+  const usd = formatDecimal(amount.amountUsd, PRECISE_AMOUNT_FRACTION_DIGITS)
+  if (inline) {
+    return (
+      <span className='font-mono text-xs font-medium tabular-nums'>
+        {t('logs.cost.summary', { cny, usd })}
+      </span>
+    )
+  }
+  return (
+    <div className='flex flex-col gap-0.5 font-mono text-xs leading-tight font-medium tabular-nums'>
+      <span>{t('logs.cost.cny', { amount: cny })}</span>
+      <span className='text-muted-foreground/60'>
+        {t('logs.cost.usd', { amount: usd })}
+      </span>
+    </div>
+  )
+}
+
+type TimingVariant = 'danger' | 'neutral' | 'success' | 'warning'
+
+const timingTextClass: Record<TimingVariant, string> = {
+  danger: 'text-destructive',
+  neutral: 'text-muted-foreground',
+  success: 'text-success',
+  warning: 'text-warning',
+}
+
+const timingIndicatorClass: Record<TimingVariant, string> = {
+  danger: 'bg-destructive/80',
+  neutral: 'bg-muted-foreground/60',
+  success: 'bg-success/90',
+  warning: 'bg-warning/80',
+}
+
+function timingNumber(value: string | null) {
+  if (value == null) return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
+}
+
+function firstTokenTimingVariant(milliseconds: string | null): TimingVariant {
+  const value = timingNumber(milliseconds)
+  if (value == null || value <= 0) return 'neutral'
+  const seconds = value / 1000
+  if (seconds < 5) return 'success'
+  if (seconds < 10) return 'warning'
+  return 'danger'
+}
+
+function durationTimingVariant(item: LogItem): TimingVariant {
+  const seconds = timingNumber(item.use_time_seconds)
+  const completionTokens = timingNumber(item.completion_tokens)
+  if (seconds == null || completionTokens == null) return 'neutral'
+  if (completionTokens >= 100 && seconds > 0) {
+    const throughput = completionTokens / seconds
+    if (throughput >= 30) return 'success'
+    if (throughput >= 15) return 'warning'
+    return 'danger'
+  }
+  if (seconds < 10) return 'success'
+  if (seconds < 30) return 'warning'
+  return 'danger'
+}
+
+function LogTiming({
+  item,
+  indicator = 'bar',
+}: {
+  item: LogItem
+  indicator?: 'bar' | 'dot'
+}) {
+  const { t } = useTranslation()
+  const firstTokenVariant = firstTokenTimingVariant(item.first_response_time_ms)
+  const durationVariant = durationTimingVariant(item)
+  const labels = (
+    <div className='flex min-h-8 min-w-0 flex-col justify-center gap-0.5 text-xs leading-tight'>
+      {item.is_stream && (
+        <div className='flex items-baseline gap-1.5'>
+          {indicator === 'dot' && (
+            <span
+              aria-hidden
+              className={cn(
+                'size-1.5 shrink-0 rounded-full',
+                timingIndicatorClass[firstTokenVariant]
+              )}
+            />
+          )}
+          <span className='text-muted-foreground shrink-0'>
+            {t('logs.timing.firstToken')}
+          </span>
+          <span
+            className={cn(
+              'font-mono tabular-nums',
+              timingTextClass[firstTokenVariant]
+            )}
+          >
+            {formatMilliseconds(item.first_response_time_ms)}
+          </span>
+        </div>
+      )}
+      <div className='flex items-baseline gap-1.5'>
+        {indicator === 'dot' && (
+          <span
+            aria-hidden
+            className={cn(
+              'size-1.5 shrink-0 rounded-full',
+              timingIndicatorClass[durationVariant]
+            )}
+          />
+        )}
+        <span className='text-muted-foreground shrink-0'>
+          {t('logs.timing.duration')}
+        </span>
+        <span
+          className={cn(
+            'font-mono tabular-nums',
+            timingTextClass[durationVariant]
+          )}
+        >
+          {formatDurationSeconds(item.use_time_seconds)}
+        </span>
+      </div>
+    </div>
+  )
+
+  if (indicator === 'dot') return labels
+
+  return (
+    <div className='flex min-w-28 items-stretch gap-2'>
+      <span
+        aria-hidden
+        className={cn(
+          'flex w-1 shrink-0 flex-col overflow-hidden rounded-full',
+          !item.is_stream && timingIndicatorClass[durationVariant]
+        )}
+      >
+        {item.is_stream && (
+          <>
+            <span
+              className={cn('flex-1', timingIndicatorClass[firstTokenVariant])}
+            />
+            <span
+              className={cn('flex-1', timingIndicatorClass[durationVariant])}
+            />
+          </>
+        )}
+      </span>
+      {labels}
+    </div>
+  )
+}
+
+function StatBadge({
+  accent,
+  label,
+  value,
+}: {
+  accent: string
+  label: string
+  value: ReactNode
+}) {
+  return (
+    <span className='border-border/60 bg-muted/25 inline-flex h-7 items-center gap-2 rounded-md border px-2.5 text-xs shadow-xs'>
+      <span className={cn('h-3.5 w-0.5 rounded-full', accent)} />
+      <span className='text-muted-foreground'>{label}</span>
+      <span className='text-foreground/85 font-mono font-semibold tabular-nums'>
+        {value}
+      </span>
+    </span>
+  )
+}
+
+function formatTokensPerSecond(
+  completionTokens: string,
+  durationSeconds: string,
+  t: LogTranslate
+) {
+  try {
+    const tokens = BigInt(completionTokens)
+    const seconds = BigInt(durationSeconds)
+    if (tokens <= 0n || seconds <= 0n) return '-'
+    return t('logs.timing.tps', {
+      value: String((tokens + seconds / 2n) / seconds),
+    })
+  } catch {
+    return '-'
+  }
+}
+
 function LogFilters({
   global,
+  isSearching,
   onChange,
+  onSearch,
   search,
   sites,
 }: {
   global: boolean
+  isSearching: boolean
   onChange: (changes: Partial<LogSearch>) => void
+  onSearch: () => void
   search: LogSearch
   sites: SiteListItem[]
 }) {
@@ -186,6 +501,7 @@ function LogFilters({
     'upstreamRequestId',
     'username',
   ])
+  const quickRange = getLogQuickRange(search)
   const advancedTextFilter = (
     key: 'group' | 'requestId' | 'tokenName' | 'upstreamRequestId',
     label: string
@@ -202,17 +518,19 @@ function LogFilters({
   )
   const advancedCount = [
     search.tokenName !== '',
-    search.channelId != null,
     search.group !== '',
     search.requestId !== '',
     search.upstreamRequestId !== '',
-    search.start !== reset.start,
-    search.end !== reset.end,
+    quickRange === 'custom',
   ].filter(Boolean).length
   return (
-    <section
+    <form
       aria-label={t('logs.filters.title')}
       className='flex min-w-0 flex-wrap items-center gap-2'
+      onSubmit={(event) => {
+        event.preventDefault()
+        onSearch()
+      }}
     >
       <label className='relative min-w-48 flex-1 sm:max-w-72'>
         <span className='sr-only'>{t('logs.fields.username')}</span>
@@ -232,6 +550,31 @@ function LogFilters({
           value={search.username}
         />
       </label>
+      <Input
+        aria-label={t('logs.fields.model')}
+        className='h-10 min-w-36 flex-1 sm:h-8 sm:max-w-52'
+        onChange={(event) =>
+          onChange({ modelName: event.target.value, page: 1 })
+        }
+        placeholder={t('logs.fields.model')}
+        value={search.modelName}
+      />
+      <Input
+        aria-label={t('logs.fields.channelId')}
+        className='h-10 w-36 sm:h-8'
+        inputMode='numeric'
+        onChange={(event) => {
+          const value = event.target.value
+          onChange({
+            channelId: isNonNegativeIdString(value)
+              ? parseNonNegativeIdString(value)
+              : undefined,
+            page: 1,
+          })
+        }}
+        placeholder={t('logs.fields.channelId')}
+        value={search.channelId ?? ''}
+      />
       {global && (
         <FacetedFilter
           clearLabel={t('logs.filters.allSites')}
@@ -263,15 +606,28 @@ function LogFilters({
         title={t('logs.filters.type')}
         value={search.type == null ? '' : String(search.type)}
       />
-      <Input
-        aria-label={t('logs.fields.model')}
-        className='h-10 w-40 sm:h-8'
-        onChange={(event) =>
-          onChange({ modelName: event.target.value, page: 1 })
-        }
-        placeholder={t('logs.fields.model')}
-        value={search.modelName}
-      />
+      <SelectControl
+        aria-label={t('logs.filters.quickRange')}
+        className='h-10 w-32 sm:h-8 sm:w-28'
+        onChange={(event) => {
+          const value = event.target.value
+          if (!logQuickRanges.includes(value as LogQuickRange)) return
+          onChange({
+            ...buildLogQuickRange(value as LogQuickRange),
+            page: 1,
+          })
+        }}
+        size='sm'
+        value={quickRange}
+      >
+        <option value='today'>{t('logs.range.today')}</option>
+        <option value='24h'>{t('logs.range.hours24')}</option>
+        <option value='7d'>{t('logs.range.days7')}</option>
+        <option value='14d'>{t('logs.range.days14')}</option>
+        <option disabled value='custom'>
+          {t('logs.range.custom')}
+        </option>
+      </SelectControl>
       <Popover>
         <PopoverTrigger
           render={
@@ -297,26 +653,6 @@ function LogFilters({
         >
           <div className='grid gap-3 sm:grid-cols-2'>
             {advancedTextFilter('tokenName', t('logs.fields.token'))}
-            <label className='grid gap-1.5'>
-              <span className='text-muted-foreground text-xs'>
-                {t('logs.fields.channelId')}
-              </span>
-              <Input
-                aria-label={t('logs.fields.channelId')}
-                className='h-8'
-                inputMode='numeric'
-                onChange={(event) => {
-                  const value = event.target.value
-                  onChange({
-                    channelId: isNonNegativeIdString(value)
-                      ? parseNonNegativeIdString(value)
-                      : undefined,
-                    page: 1,
-                  })
-                }}
-                value={search.channelId ?? ''}
-              />
-            </label>
             {advancedTextFilter('group', t('logs.fields.group'))}
             {advancedTextFilter('requestId', t('logs.fields.requestId'))}
             {advancedTextFilter(
@@ -356,6 +692,10 @@ function LogFilters({
           </div>
         </PopoverContent>
       </Popover>
+      <Button disabled={isSearching} size='sm' type='submit'>
+        <HugeiconsIcon icon={Search01Icon} size={15} strokeWidth={2} />
+        {t('common.search')}
+      </Button>
       {hasActiveFilters && (
         <Button
           className='text-muted-foreground px-2'
@@ -367,7 +707,7 @@ function LogFilters({
           {t('common.reset')}
         </Button>
       )}
-    </section>
+    </form>
   )
 }
 
@@ -379,6 +719,25 @@ function LogDetailDialog({
   onClose: () => void
 }) {
   const { t } = useTranslation()
+  const consumptionOnlyLabels = new Set([
+    t('logs.fields.model'),
+    t('logs.fields.token'),
+    t('logs.fields.channelId'),
+    t('logs.fields.quota'),
+    t('logs.fields.cost'),
+    t('logs.fields.promptTokens'),
+    t('logs.fields.completionTokens'),
+    t('logs.fields.cacheReadTokens'),
+    t('logs.fields.cacheCreationTokens'),
+    t('logs.fields.cacheCreationTokens5m'),
+    t('logs.fields.cacheCreationTokens1h'),
+    t('logs.fields.duration'),
+    t('logs.fields.firstResponseTime'),
+    t('logs.fields.stream'),
+    t('logs.fields.streamStatus'),
+    t('logs.fields.streamEndReason'),
+    t('logs.fields.streamErrorCount'),
+  ])
   const values = [
     [t('logs.fields.site'), `${item.site_name} · ${item.site_id}`],
     [
@@ -396,13 +755,28 @@ function LogDetailDialog({
     [t('logs.fields.requestId'), item.request_id || '-'],
     [t('logs.fields.upstreamRequestId'), item.upstream_request_id || '-'],
     [t('logs.fields.quota'), item.quota],
+    [
+      t('logs.fields.cost'),
+      <LogCost key='cost' quota={item.quota} rate={item.rate} />,
+    ],
     [t('logs.fields.promptTokens'), item.prompt_tokens],
     [t('logs.fields.completionTokens'), item.completion_tokens],
-    [t('logs.fields.duration'), item.use_time_seconds],
+    [t('logs.fields.cacheReadTokens'), item.cache_read_tokens],
+    [t('logs.fields.cacheCreationTokens'), item.cache_creation_tokens],
+    [t('logs.fields.cacheCreationTokens5m'), item.cache_creation_tokens_5m],
+    [t('logs.fields.cacheCreationTokens1h'), item.cache_creation_tokens_1h],
+    [t('logs.fields.duration'), formatDurationSeconds(item.use_time_seconds)],
+    [
+      t('logs.fields.firstResponseTime'),
+      formatMilliseconds(item.first_response_time_ms),
+    ],
     [
       t('logs.fields.stream'),
       item.is_stream ? t('common.yes') : t('common.no'),
     ],
+    [t('logs.fields.streamStatus'), item.stream_status || '-'],
+    [t('logs.fields.streamEndReason'), item.stream_end_reason || '-'],
+    [t('logs.fields.streamErrorCount'), item.stream_error_count],
     [t('logs.fields.ip'), item.ip || t('logs.notRecorded')],
   ] as const
   return (
@@ -418,12 +792,15 @@ function LogDetailDialog({
             <code className='text-muted-foreground text-xs'>{item.id}</code>
           </div>
           <dl className='grid gap-3 text-sm sm:grid-cols-2'>
-            {values.map(([label, value]) => (
-              <div className='min-w-0' key={label}>
-                <dt className='text-muted-foreground text-xs'>{label}</dt>
-                <dd className='mt-1 break-all'>{value}</dd>
-              </div>
-            ))}
+            {values.map(([label, value]) =>
+              !isConsumptionLogType(item.type) &&
+              consumptionOnlyLabels.has(label) ? null : (
+                <div className='min-w-0' key={label}>
+                  <dt className='text-muted-foreground text-xs'>{label}</dt>
+                  <dd className='mt-1 break-all'>{value}</dd>
+                </div>
+              )
+            )}
           </dl>
           <section className='grid gap-2'>
             <h3 className='text-sm font-medium'>{t('logs.fields.content')}</h3>
@@ -486,6 +863,18 @@ export function LogsPage({
         ? logKeys.site(siteId, params)
         : logKeys.global(params),
   })
+  const statsQuery = useQuery({
+    enabled: validSiteId,
+    placeholderData: keepPreviousData,
+    queryFn: () =>
+      siteId && isIdString(siteId)
+        ? getSiteLogStats(parseIdString(siteId), params)
+        : getLogStats(params),
+    queryKey:
+      siteId && isIdString(siteId)
+        ? [...logKeys.site(siteId, params), 'stats']
+        : [...logKeys.global(params), 'stats'],
+  })
   const exportMutation = useMutation({
     mutationFn: ({ format }: { format: StatisticsExportFormat }) =>
       createStatisticsExport(
@@ -503,6 +892,30 @@ export function LogsPage({
     },
   })
   const data = logsQuery.data
+  const stats = statsQuery.data
+  const usageAmount = useMemo(
+    () =>
+      calculateCrossSiteQuotaAmount(
+        (stats?.site_breakdown ?? []).map((site) => ({
+          quota: site.quota,
+          rate: site.rate,
+          siteId: site.site_id,
+        }))
+      ),
+    [stats?.site_breakdown]
+  )
+  let usageValue = t('amount.rateUnavailable')
+  if (usageAmount.status === 'available') {
+    usageValue = t('logs.cost.summary', {
+      cny: formatDecimal(usageAmount.amountCny, PRECISE_AMOUNT_FRACTION_DIGITS),
+      usd: formatDecimal(usageAmount.amountUsd, PRECISE_AMOUNT_FRACTION_DIGITS),
+    })
+  } else if (stats?.quota === '0') {
+    usageValue = t('logs.cost.summary', {
+      cny: '0.000000',
+      usd: '0.000000',
+    })
+  }
   const columns = useMemo<ColumnDef<LogItem, unknown>[]>(
     () => [
       {
@@ -546,37 +959,63 @@ export function LogsPage({
         id: 'user',
       },
       {
-        cell: ({ row }) => (
-          <div className='min-w-40'>
-            <span>{formatDisplayValue(row.original.model_name)}</span>
-            <span className='text-muted-foreground block text-xs'>
-              {row.original.token_name || t('logs.tokenUnnamed')} ·{' '}
-              {row.original.channel_id}
-            </span>
-          </div>
-        ),
+        cell: ({ row }) =>
+          isConsumptionLogType(row.original.type) ? (
+            <div className='min-w-40'>
+              <span>{formatDisplayValue(row.original.model_name)}</span>
+              <span className='text-muted-foreground block text-xs'>
+                {row.original.token_name || t('logs.tokenUnnamed')} ·{' '}
+                {row.original.channel_id}
+              </span>
+            </div>
+          ) : null,
         header: t('logs.fields.modelTokenChannel'),
         id: 'model',
       },
       {
-        cell: ({ row }) => (
-          <div className='grid min-w-32 gap-1 text-xs'>
-            <span>{t('logs.metric.quota', { value: row.original.quota })}</span>
-            <span>
-              {t('logs.metric.tokens', {
-                completion: row.original.completion_tokens,
-                prompt: row.original.prompt_tokens,
-              })}
-            </span>
-            <span>
-              {t('logs.metric.duration', {
-                value: row.original.use_time_seconds,
-              })}
-            </span>
-          </div>
-        ),
-        header: t('logs.fields.metrics'),
-        id: 'metrics',
+        cell: ({ row }) =>
+          isConsumptionLogType(row.original.type) ? (
+            <div className='grid min-w-20 gap-1 text-xs'>
+              <Badge variant={row.original.is_stream ? 'success' : 'neutral'}>
+                {row.original.is_stream
+                  ? t('logs.stream.streaming')
+                  : t('logs.stream.nonStreaming')}
+              </Badge>
+              <span className='text-muted-foreground font-mono tabular-nums'>
+                {formatTokensPerSecond(
+                  row.original.completion_tokens,
+                  row.original.use_time_seconds,
+                  t
+                )}
+              </span>
+            </div>
+          ) : null,
+        header: t('logs.fields.mode'),
+        id: 'mode',
+      },
+      {
+        cell: ({ row }) =>
+          isConsumptionLogType(row.original.type) ? (
+            <LogTokenUsage item={row.original} />
+          ) : null,
+        header: t('logs.fields.tokens'),
+        id: 'tokens',
+      },
+      {
+        cell: ({ row }) =>
+          isConsumptionLogType(row.original.type) ? (
+            <LogCost quota={row.original.quota} rate={row.original.rate} />
+          ) : null,
+        header: t('logs.fields.cost'),
+        id: 'cost',
+      },
+      {
+        cell: ({ row }) =>
+          isConsumptionLogType(row.original.type) ? (
+            <LogTiming item={row.original} />
+          ) : null,
+        header: t('logs.fields.timing'),
+        id: 'timing',
       },
       {
         cell: ({ row }) => (
@@ -613,11 +1052,6 @@ export function LogsPage({
   )
   const overviewItems = [
     {
-      icon: Database01Icon,
-      label: t('logs.overview.total'),
-      value: <span className='text-2xl font-semibold'>{data?.total ?? 0}</span>,
-    },
-    {
       icon: Chart01Icon,
       label: t('logs.completeness'),
       value: <DataStatusBadge status={data?.data_status ?? 'pending'} />,
@@ -638,6 +1072,7 @@ export function LogsPage({
   return (
     <SectionPageLayout
       fixedContent
+      mobileScrollableContent
       actions={actions}
       description={
         siteId
@@ -655,7 +1090,29 @@ export function LogsPage({
             {t('logs.backToSite')}
           </DetailBackLink>
         )}
-        <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
+        <div className='flex flex-wrap items-center gap-2'>
+          <StatBadge
+            accent='bg-violet-500/70'
+            label={t('logs.overview.total')}
+            value={data?.total ?? 0}
+          />
+          <StatBadge
+            accent='bg-sky-500/70'
+            label={t('logs.stats.usage')}
+            value={usageValue}
+          />
+          <StatBadge
+            accent='bg-rose-500/65'
+            label={t('logs.stats.rpm')}
+            value={stats?.rpm ?? '0'}
+          />
+          <StatBadge
+            accent='bg-slate-400/70'
+            label={t('logs.stats.tpm')}
+            value={stats?.tpm ?? '0'}
+          />
+        </div>
+        <div className='grid gap-3 sm:grid-cols-3'>
           {overviewItems.map(({ icon, label, value }) => (
             <div
               className='bg-card text-card-foreground ring-foreground/10 flex min-w-0 items-center gap-3 rounded-xl p-4 ring-1'
@@ -696,10 +1153,30 @@ export function LogsPage({
         </section>
         <LogFilters
           global={!siteId}
+          isSearching={logsQuery.isFetching}
           onChange={onSearchChange}
+          onSearch={() => void logsQuery.refetch()}
           search={search}
           sites={sitesQuery.data?.items ?? []}
         />
+        {!siteId && sitesQuery.isError && (
+          <QueryStateAlert
+            message={t('common.siteOptionsRefreshFailed')}
+            onRetry={() => void sitesQuery.refetch()}
+          />
+        )}
+        {logsQuery.isError && data && (
+          <QueryStateAlert
+            message={t('common.retainedDataRefreshFailed')}
+            onRetry={() => void logsQuery.refetch()}
+          />
+        )}
+        {statsQuery.isError && stats && (
+          <QueryStateAlert
+            message={t('logs.stats.refreshFailed')}
+            onRetry={() => void statsQuery.refetch()}
+          />
+        )}
         <DataTable
           ariaLabel={t('logs.table')}
           columns={columns}
@@ -708,9 +1185,10 @@ export function LogsPage({
             data ? statusDescription(data.data_status, t) : undefined
           }
           emptyTitle={t('logs.empty')}
-          error={!validSiteId || logsQuery.isError}
+          error={!validSiteId || (logsQuery.isError && !data)}
           fetching={logsQuery.isFetching}
           loading={logsQuery.isPending}
+          mobileCardBreakpoint='wide'
           onPageChange={(page) => onSearchChange({ page })}
           onPageSizeChange={(pageSize) => onSearchChange({ page: 1, pageSize })}
           onRetry={validSiteId ? () => void logsQuery.refetch() : undefined}
@@ -738,24 +1216,67 @@ export function LogsPage({
                   </dt>
                   <dd>{formatDisplayValue(item.username)}</dd>
                 </div>
-                <div>
-                  <dt className='text-muted-foreground text-xs'>
-                    {t('logs.fields.model')}
-                  </dt>
-                  <dd className='break-all'>{item.model_name || '-'}</dd>
-                </div>
+                {isConsumptionLogType(item.type) && (
+                  <div>
+                    <dt className='text-muted-foreground text-xs'>
+                      {t('logs.fields.model')}
+                    </dt>
+                    <dd className='break-all'>{item.model_name || '-'}</dd>
+                  </div>
+                )}
                 <div>
                   <dt className='text-muted-foreground text-xs'>
                     {t('logs.fields.group')}
                   </dt>
                   <dd className='break-all'>{item.group || '-'}</dd>
                 </div>
-                <div>
-                  <dt className='text-muted-foreground text-xs'>
-                    {t('logs.fields.quota')}
-                  </dt>
-                  <dd>{item.quota}</dd>
-                </div>
+                {isConsumptionLogType(item.type) && (
+                  <>
+                    <div>
+                      <dt className='text-muted-foreground text-xs'>
+                        {t('logs.fields.cost')}
+                      </dt>
+                      <dd className='mt-1'>
+                        <LogCost quota={item.quota} rate={item.rate} />
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className='text-muted-foreground text-xs'>
+                        {t('logs.fields.mode')}
+                      </dt>
+                      <dd className='mt-1 flex flex-wrap items-center gap-2'>
+                        <Badge variant={item.is_stream ? 'success' : 'neutral'}>
+                          {item.is_stream
+                            ? t('logs.stream.streaming')
+                            : t('logs.stream.nonStreaming')}
+                        </Badge>
+                        <span className='text-muted-foreground font-mono text-xs tabular-nums'>
+                          {formatTokensPerSecond(
+                            item.completion_tokens,
+                            item.use_time_seconds,
+                            t
+                          )}
+                        </span>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className='text-muted-foreground text-xs'>
+                        {t('logs.fields.tokens')}
+                      </dt>
+                      <dd>
+                        <LogTokenUsage item={item} />
+                      </dd>
+                    </div>
+                    <div className='col-span-2'>
+                      <dt className='text-muted-foreground text-xs'>
+                        {t('logs.fields.timing')}
+                      </dt>
+                      <dd className='mt-1'>
+                        <LogTiming indicator='dot' item={item} />
+                      </dd>
+                    </div>
+                  </>
+                )}
               </dl>
               <Button onClick={() => setSelected(item)} variant='outline'>
                 <HugeiconsIcon icon={ViewIcon} strokeWidth={2} />

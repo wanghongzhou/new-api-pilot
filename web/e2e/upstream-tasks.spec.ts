@@ -286,7 +286,7 @@ test('A95 keeps upstream tasks exact, read-only, private, exportable and respons
 
   await page.getByRole('tab', { name: /平台分析/ }).click()
   await expect(page).toHaveURL(/tab=platforms/)
-  await expect(page.getByText('Platform 拆分')).toBeVisible()
+  await expect(page.getByText('平台分析')).toBeVisible()
   await page.getByRole('tab', { name: /任务列表/ }).click()
 
   await page.getByRole('button', { name: '站点' }).click()

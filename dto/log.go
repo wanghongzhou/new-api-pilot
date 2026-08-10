@@ -15,25 +15,33 @@ const (
 )
 
 type UpstreamLogRow struct {
-	ID                int64
-	UserID            int64
-	CreatedAt         int64
-	Type              int
-	Content           string
-	Username          string
-	TokenName         string
-	ModelName         string
-	Quota             int64
-	PromptTokens      int64
-	CompletionTokens  int64
-	UseTimeSeconds    int64
-	IsStream          bool
-	ChannelID         int64
-	TokenID           int64
-	UseGroup          string
-	IP                string
-	RequestID         string
-	UpstreamRequestID string
+	ID                  int64
+	UserID              int64
+	CreatedAt           int64
+	Type                int
+	Content             string
+	Username            string
+	TokenName           string
+	ModelName           string
+	Quota               int64
+	PromptTokens        int64
+	CompletionTokens    int64
+	CacheReadTokens     int64
+	CacheCreationTokens int64
+	CacheCreation5m     int64
+	CacheCreation1h     int64
+	UseTimeSeconds      int64
+	IsStream            bool
+	FirstResponseTimeMs *int64
+	StreamStatus        string
+	StreamEndReason     string
+	StreamErrorCount    int64
+	ChannelID           int64
+	TokenID             int64
+	UseGroup            string
+	IP                  string
+	RequestID           string
+	UpstreamRequestID   string
 }
 
 type UpstreamLogPage struct {
@@ -109,27 +117,50 @@ func (query LogQuery) Offset() int {
 }
 
 type LogItem struct {
-	ID                string `json:"id"`
-	SiteID            string `json:"site_id"`
-	SiteName          string `json:"site_name"`
-	CreatedAt         int64  `json:"created_at"`
-	Type              int    `json:"type"`
-	RemoteUserID      string `json:"remote_user_id"`
-	Username          string `json:"username"`
-	ModelName         string `json:"model_name"`
-	TokenID           string `json:"token_id"`
-	TokenName         string `json:"token_name"`
-	ChannelID         string `json:"channel_id"`
-	UseGroup          string `json:"group"`
-	RequestID         string `json:"request_id"`
-	UpstreamRequestID string `json:"upstream_request_id"`
-	Quota             string `json:"quota"`
-	PromptTokens      string `json:"prompt_tokens"`
-	CompletionTokens  string `json:"completion_tokens"`
-	UseTimeSeconds    string `json:"use_time_seconds"`
-	IsStream          bool   `json:"is_stream"`
-	Content           string `json:"content"`
-	IP                string `json:"ip"`
+	ID                  string   `json:"id"`
+	SiteID              string   `json:"site_id"`
+	SiteName            string   `json:"site_name"`
+	CreatedAt           int64    `json:"created_at"`
+	Type                int      `json:"type"`
+	RemoteUserID        string   `json:"remote_user_id"`
+	Username            string   `json:"username"`
+	ModelName           string   `json:"model_name"`
+	TokenID             string   `json:"token_id"`
+	TokenName           string   `json:"token_name"`
+	ChannelID           string   `json:"channel_id"`
+	UseGroup            string   `json:"group"`
+	RequestID           string   `json:"request_id"`
+	UpstreamRequestID   string   `json:"upstream_request_id"`
+	Quota               string   `json:"quota"`
+	PromptTokens        string   `json:"prompt_tokens"`
+	CompletionTokens    string   `json:"completion_tokens"`
+	CacheReadTokens     string   `json:"cache_read_tokens"`
+	CacheCreationTokens string   `json:"cache_creation_tokens"`
+	CacheCreation5m     string   `json:"cache_creation_tokens_5m"`
+	CacheCreation1h     string   `json:"cache_creation_tokens_1h"`
+	UseTimeSeconds      string   `json:"use_time_seconds"`
+	IsStream            bool     `json:"is_stream"`
+	FirstResponseTimeMs *string  `json:"first_response_time_ms"`
+	StreamStatus        string   `json:"stream_status"`
+	StreamEndReason     string   `json:"stream_end_reason"`
+	StreamErrorCount    string   `json:"stream_error_count"`
+	Content             string   `json:"content"`
+	IP                  string   `json:"ip"`
+	Rate                RateInfo `json:"rate"`
+}
+
+type LogStatSiteBreakdown struct {
+	SiteID   string   `json:"site_id"`
+	SiteName string   `json:"site_name"`
+	Quota    string   `json:"quota"`
+	Rate     RateInfo `json:"rate"`
+}
+
+type LogStatResponse struct {
+	Quota         string                 `json:"quota"`
+	RPM           string                 `json:"rpm"`
+	TPM           string                 `json:"tpm"`
+	SiteBreakdown []LogStatSiteBreakdown `json:"site_breakdown"`
 }
 
 type LogResponse struct {
@@ -142,3 +173,11 @@ type LogResponse struct {
 }
 
 func Int64String(value int64) string { return strconv.FormatInt(value, 10) }
+
+func OptionalInt64String(value *int64) *string {
+	if value == nil {
+		return nil
+	}
+	result := strconv.FormatInt(*value, 10)
+	return &result
+}

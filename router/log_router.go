@@ -13,6 +13,8 @@ func RegisterLogRoutes(engine *gin.Engine, logs *controller.LogController, resol
 	}
 	authenticated := []gin.HandlerFunc{middleware.UserAuth(resolver), middleware.ForcePasswordChange()}
 	routes := engine.Group("/api", authenticated...)
+	routes.GET("/logs/stat", logs.GlobalStats)
+	routes.GET("/sites/:id/logs/stat", logs.SiteStats)
 	routes.GET("/logs", logs.Global)
 	routes.GET("/sites/:id/logs", logs.Site)
 }

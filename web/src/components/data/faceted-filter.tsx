@@ -15,17 +15,20 @@ import { cn } from '@/lib/utils'
 
 export type FacetedFilterOption = {
   count?: number
+  group?: string
   label: string
   value: string
 }
 
 export function FacetedFilter({
+  className,
   clearLabel,
   onChange,
   options,
   title,
   value,
 }: {
+  className?: string
   clearLabel: string
   onChange: (value: string) => void
   options: FacetedFilterOption[]
@@ -42,6 +45,14 @@ export function FacetedFilter({
       option.label.toLocaleLowerCase().includes(normalized)
     )
   }, [options, query])
+  const visibleGroups = useMemo(() => {
+    const groups = new Map<string, FacetedFilterOption[]>()
+    visibleOptions.forEach((option) => {
+      const group = option.group ?? ''
+      groups.set(group, [...(groups.get(group) ?? []), option])
+    })
+    return [...groups.entries()]
+  }, [visibleOptions])
 
   return (
     <Popover onOpenChange={setOpen} open={open}>
@@ -50,7 +61,10 @@ export function FacetedFilter({
           <Button
             variant='outline'
             size='sm'
-            className='h-10 border-dashed sm:h-8'
+            className={cn(
+              'h-10 overflow-hidden border-dashed sm:h-8',
+              className
+            )}
           />
         }
       >
@@ -59,8 +73,11 @@ export function FacetedFilter({
         {selected && (
           <>
             <Separator className='mx-1 h-4' orientation='vertical' />
-            <Badge className='rounded-sm px-1 font-normal' variant='secondary'>
-              {selected.label}
+            <Badge
+              className='min-w-0 overflow-hidden rounded-sm px-1 font-normal'
+              variant='secondary'
+            >
+              <span className='truncate'>{selected.label}</span>
             </Badge>
           </>
         )}
@@ -77,41 +94,60 @@ export function FacetedFilter({
           value={query}
         />
         <div className='max-h-72 overflow-y-auto p-1'>
-          {visibleOptions.map((option) => {
-            const active = option.value === value
-            return (
-              <button
-                className='data-[active=true]:bg-muted flex min-h-10 w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-hidden sm:min-h-8'
-                data-active={active}
-                key={option.value}
-                onClick={() => {
-                  onChange(active ? '' : option.value)
-                  setOpen(false)
-                  setQuery('')
-                }}
-                type='button'
-              >
-                <span
-                  className={cn(
-                    'border-primary flex size-4 items-center justify-center rounded-sm border',
-                    active
-                      ? 'bg-primary text-primary-foreground'
-                      : 'opacity-50 [&_svg]:invisible'
-                  )}
-                >
-                  <HugeiconsIcon icon={Tick02Icon} size={14} strokeWidth={2} />
-                </span>
-                <span className='min-w-0 flex-1 truncate' title={option.label}>
-                  {option.label}
-                </span>
-                {typeof option.count === 'number' && (
-                  <span className='text-muted-foreground font-mono text-xs'>
-                    {option.count}
-                  </span>
-                )}
-              </button>
-            )
-          })}
+          {visibleGroups.map(([group, groupOptions], groupIndex) => (
+            <div key={group || 'ungrouped'}>
+              {group && (
+                <>
+                  {groupIndex > 0 && <Separator className='my-1' />}
+                  <p className='text-muted-foreground px-2 py-1 text-xs font-medium'>
+                    {group}
+                  </p>
+                </>
+              )}
+              {groupOptions.map((option) => {
+                const active = option.value === value
+                return (
+                  <button
+                    className='data-[active=true]:bg-muted flex min-h-10 w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-hidden sm:min-h-8'
+                    data-active={active}
+                    key={option.value}
+                    onClick={() => {
+                      onChange(active ? '' : option.value)
+                      setOpen(false)
+                      setQuery('')
+                    }}
+                    type='button'
+                  >
+                    <span
+                      className={cn(
+                        'border-primary flex size-4 items-center justify-center rounded-sm border',
+                        active
+                          ? 'bg-primary text-primary-foreground'
+                          : 'opacity-50 [&_svg]:invisible'
+                      )}
+                    >
+                      <HugeiconsIcon
+                        icon={Tick02Icon}
+                        size={14}
+                        strokeWidth={2}
+                      />
+                    </span>
+                    <span
+                      className='min-w-0 flex-1 truncate'
+                      title={option.label}
+                    >
+                      {option.label}
+                    </span>
+                    {typeof option.count === 'number' && (
+                      <span className='text-muted-foreground font-mono text-xs'>
+                        {option.count}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          ))}
           {visibleOptions.length === 0 && (
             <p className='text-muted-foreground py-6 text-center text-sm'>-</p>
           )}

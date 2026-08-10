@@ -20,6 +20,10 @@ func (routerLogApplication) Query(_ context.Context, query dto.LogQuery) (dto.Lo
 	return dto.LogResponse{Items: []dto.LogItem{}, Page: query.Page, PageSize: query.PageSize, DataStatus: dto.LogCollectionComplete}, nil
 }
 
+func (routerLogApplication) Stats(context.Context, dto.LogQuery) (dto.LogStatResponse, error) {
+	return dto.LogStatResponse{Quota: "0", RPM: "0", TPM: "0", SiteBreakdown: []dto.LogStatSiteBreakdown{}}, nil
+}
+
 type logRouteResolver struct{}
 
 func (logRouteResolver) ResolveIdentity(*gin.Context) (middleware.Identity, error) {
@@ -31,7 +35,7 @@ func TestLogRoutesRequireAuthenticationAndAllowViewerReads(t *testing.T) {
 	engine := gin.New()
 	RegisterLogRoutes(engine, controller.NewLogController(routerLogApplication{}), logRouteResolver{})
 	query := "?start_timestamp=100&end_timestamp=200&p=1&page_size=20"
-	for _, path := range []string{"/api/logs", "/api/sites/2/logs"} {
+	for _, path := range []string{"/api/logs", "/api/sites/2/logs", "/api/logs/stat", "/api/sites/2/logs/stat"} {
 		unauthorized := httptest.NewRecorder()
 		engine.ServeHTTP(unauthorized, httptest.NewRequest(http.MethodGet, path+query, nil))
 		if unauthorized.Code != http.StatusUnauthorized {

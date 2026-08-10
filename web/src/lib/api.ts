@@ -9,6 +9,7 @@ import axios, {
 import type { ApiResponse, FieldErrors } from './api-types'
 import { isStableI18nCode } from './message-codes'
 import type { UnknownMessageRef } from './message-ref'
+import { compactQueryUrl, compactRequestParams } from './query-params'
 
 declare module 'axios' {
   export interface AxiosRequestConfig {
@@ -104,6 +105,8 @@ export const api = axios.create({
 })
 
 api.interceptors.request.use((config) => {
+  if (config.url) config.url = compactQueryUrl(config.url)
+  config.params = compactRequestParams(config.params)
   const headers = AxiosHeaders.from(config.headers)
   if (authenticatedUserId) {
     headers.set('New-Api-User', authenticatedUserId)
@@ -248,14 +251,22 @@ function createGetDedupeKey(url: string, config: AxiosRequestConfig): string {
 }
 
 api.get = ((url: string, config: AxiosRequestConfig = {}) => {
-  const dedupeEnabled = !config.disableDedupe && !config.signal
-  const key = dedupeEnabled ? createGetDedupeKey(url, config) : null
+  const compactedUrl = compactQueryUrl(url)
+  const compactedConfig = {
+    ...config,
+    params: compactRequestParams(config.params),
+  }
+  const dedupeEnabled =
+    !compactedConfig.disableDedupe && !compactedConfig.signal
+  const key = dedupeEnabled
+    ? createGetDedupeKey(compactedUrl, compactedConfig)
+    : null
   const existing = key ? inFlightGets.get(key) : undefined
   if (existing) return existing.promise
 
   const requestEpoch = authenticationEpoch
   const controller = new AbortController()
-  const externalSignal = config.signal
+  const externalSignal = compactedConfig.signal
   const abortFromExternal = () => controller.abort()
   if (externalSignal?.aborted) abortFromExternal()
   else {
@@ -263,8 +274,8 @@ api.get = ((url: string, config: AxiosRequestConfig = {}) => {
       once: true,
     })
   }
-  const request = originalGet(url, {
-    ...config,
+  const request = originalGet(compactedUrl, {
+    ...compactedConfig,
     signal: controller.signal,
   }) as Promise<AxiosResponse<unknown>>
   const guardedRequest = request.then(

@@ -160,7 +160,7 @@ describe('statistics export API', () => {
     expect(urls[2]).toContain('/api/statistics/options/channels?')
   })
 
-  test('uses flow parity endpoints and preserves empty and bigint-safe identities', async () => {
+  test('uses flow parity endpoints and omits empty values while preserving bigint-safe identities', async () => {
     const urls: string[] = []
     api.defaults.adapter = (async (config) => {
       urls.push(`${config.url}?${String(config.params)}`)
@@ -200,11 +200,13 @@ describe('statistics export API', () => {
     await listNodeOptions({ site_ids: common.site_ids })
 
     expect(urls[0]).toContain('/api/statistics/groups?')
-    expect(urls[0]).toContain('use_groups=&use_groups=vip')
+    expect(urls[0]).toContain('use_groups=vip')
+    expect(urls[0]).not.toContain('use_groups=&')
     expect(urls[1]).toContain('/api/statistics/tokens?')
     expect(urls[1]).toContain('token_keys=9007199254740993%3A0')
     expect(urls[2]).toContain('/api/statistics/nodes?')
-    expect(urls[2]).toContain('node_names=&node_names=Node-A')
+    expect(urls[2]).toContain('node_names=Node-A')
+    expect(urls[2]).not.toContain('node_names=&')
     expect(urls.slice(3).map((url) => url.split('?')[0])).toEqual([
       '/api/statistics/options/groups',
       '/api/statistics/options/tokens',

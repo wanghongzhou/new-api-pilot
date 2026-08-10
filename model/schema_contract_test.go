@@ -49,6 +49,15 @@ func TestAuthoritativeSchemaContractsLoadFlattenedInitialSchema(t *testing.T) {
 			t.Errorf("usage_fact_hourly contract is missing the 0006 capacity index %s", name)
 		}
 	}
+	logColumns := make(map[string]ColumnContract)
+	for _, column := range contracts["upstream_log_fact"].Columns {
+		logColumns[column.Name] = column
+	}
+	for _, name := range []string{"first_response_time_ms", "stream_status", "stream_end_reason", "stream_error_count", "cache_read_tokens", "cache_creation_tokens", "cache_creation_tokens_5m", "cache_creation_tokens_1h"} {
+		if _, exists := logColumns[name]; !exists {
+			t.Errorf("upstream_log_fact contract is missing %s", name)
+		}
+	}
 }
 
 func TestPricingGroupCatalogSchemaContract(t *testing.T) {

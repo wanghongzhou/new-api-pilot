@@ -23,18 +23,63 @@ func TestNewAPIClientLogPageContract(t *testing.T) {
 			request.URL.Query().Get("start_timestamp") != "100" || request.URL.Query().Get("end_timestamp") != "199" {
 			t.Fatalf("log request = %s", request.URL.String())
 		}
-		_, _ = writer.Write([]byte(`{"success":true,"message":"","data":{"page":1,"page_size":100,"total":1,"items":[{"id":88,"user_id":7,"created_at":150,"type":2,"content":"consume","username":"alice","token_name":"key","model_name":"gpt","quota":9,"prompt_tokens":3,"completion_tokens":4,"use_time":2,"is_stream":true,"channel":5,"token_id":6,"group":"vip","ip":"203.0.113.1"}]}}`))
+		_, _ = writer.Write([]byte(`{"success":true,"message":"","data":{"page":1,"page_size":100,"total":1,"items":[{"id":88,"user_id":7,"created_at":150,"type":2,"content":"consume","username":"alice","token_name":"key","model_name":"gpt","quota":9,"prompt_tokens":3,"completion_tokens":4,"use_time":2,"is_stream":true,"channel":5,"token_id":6,"group":"vip","ip":"203.0.113.1","other":"{\"frt\":450,\"cache_tokens\":2,\"cache_creation_tokens\":3,\"cache_creation_tokens_5m\":4,\"cache_creation_tokens_1h\":5,\"stream_status\":{\"status\":\"ok\",\"end_reason\":\"done\",\"error_count\":0}}"}]}}`))
 	}))
 	defer server.Close()
 	client := testClientForServer(t, server, true, testClientSettings{})
 	page, err := client.LogPage(context.Background(), "req-log", 100, 199, 1)
-	if err != nil || page.Total != 1 || len(page.Items) != 1 || page.Items[0].RequestID != "" || page.Items[0].TokenID != 6 {
+	if err != nil || page.Total != 1 || len(page.Items) != 1 || page.Items[0].RequestID != "" || page.Items[0].TokenID != 6 ||
+		page.Items[0].FirstResponseTimeMs == nil || *page.Items[0].FirstResponseTimeMs != 450 || page.Items[0].StreamStatus != "ok" ||
+		page.Items[0].StreamEndReason != "done" || page.Items[0].StreamErrorCount != 0 || page.Items[0].CacheReadTokens != 2 ||
+		page.Items[0].CacheCreationTokens != 3 || page.Items[0].CacheCreation5m != 4 || page.Items[0].CacheCreation1h != 5 {
 		t.Fatalf("log page = %+v, %v", page, err)
+	}
+}
+
+func TestSafeUpstreamLogOtherIgnoresUnsafeTimingDiagnostics(t *testing.T) {
+	for _, test := range []struct {
+		raw        string
+		wantStatus string
+	}{
+		{raw: `{"frt":-1}`},
+		{raw: `{"frt":1.5}`},
+		{raw: `{"stream_status":{"status":"ok","error_count":-1}}`, wantStatus: "ok"},
+		{raw: `{"stream_status":{"status":"status-name-that-is-too-long"}}`},
+	} {
+		firstResponseTimeMs, status, endReason, errorCount, cacheRead, cacheCreation, cache5m, cache1h := safeUpstreamLogOther(&test.raw)
+		if firstResponseTimeMs != nil || status != test.wantStatus || endReason != "" || errorCount != 0 {
+			t.Fatalf("unsafe log other was not safely normalized: %s", test.raw)
+		}
+		if cacheRead != 0 || cacheCreation != 0 || cache5m != 0 || cache1h != 0 {
+			t.Fatalf("unsafe cache diagnostics were not normalized: %s", test.raw)
+		}
+	}
+}
+
+func TestResolveLogRateUsesSiteThenFallback(t *testing.T) {
+	quotaPerUnit, exchangeRate, updatedAt := "500000", "7.2", int64(123)
+	site := resolveLogRate(&quotaPerUnit, &exchangeRate, &updatedAt, "400000", "6.8")
+	if site.Source != "site" || site.UpdatedAt == nil || *site.UpdatedAt != updatedAt {
+		t.Fatalf("site rate = %+v", site)
+	}
+	fallback := resolveLogRate(nil, nil, nil, "400000", "6.8")
+	if fallback.Source != "fallback" || fallback.QuotaPerUnit == nil || *fallback.QuotaPerUnit != "400000" {
+		t.Fatalf("fallback rate = %+v", fallback)
+	}
+	unavailable := resolveLogRate(nil, nil, &updatedAt, "400000", "6.8")
+	if unavailable.Source != "unavailable" {
+		t.Fatalf("unavailable rate = %+v", unavailable)
 	}
 }
 
 func TestCanonicalUpstreamLogFactIgnoresDisplayIDAndRedactsSecrets(t *testing.T) {
 	row := upstreamLogRowForTest()
+	firstResponseTimeMs := int64(345)
+	row.FirstResponseTimeMs = &firstResponseTimeMs
+	row.StreamStatus = "ok"
+	row.StreamEndReason = "done"
+	row.CacheReadTokens = 10
+	row.CacheCreationTokens = 20
 	row.Content = "Authorization: Bearer secret-value"
 	row.ID = 1
 	first, firstKey, err := canonicalUpstreamLogFact(row)
@@ -46,7 +91,8 @@ func TestCanonicalUpstreamLogFactIgnoresDisplayIDAndRedactsSecrets(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if firstKey != secondKey || first.ContentRedacted != "[redacted]" || second.IP != "" {
+	if firstKey != secondKey || first.ContentRedacted != "[redacted]" || second.IP != "" ||
+		first.FirstResponseTimeMs == nil || *first.FirstResponseTimeMs != firstResponseTimeMs || first.StreamStatus != "ok" || first.CacheReadTokens != 10 {
 		t.Fatalf("canonical log key/redaction = %s/%s %+v %+v", firstKey, secondKey, first, second)
 	}
 	if strings.Contains(first.ContentRedacted, "secret-value") {
@@ -190,6 +236,64 @@ func TestScheduledLogTaskBackfillsToStatisticsStartThenStaysIncremental(t *testi
 	}
 	if len(client.windows) != 1 || client.windows[0] != wantWindows[0] {
 		t.Fatalf("incremental log windows=%v want=%v", client.windows, wantWindows[:1])
+	}
+}
+
+func TestScheduledLogTaskRepairsDowntimeGapBeforeRecentOverlap(t *testing.T) {
+	tx := openSiteTestTransaction(t)
+	clock := testsupport.NewFakeClock(time.Unix(1_752_400_800, 0))
+	now := clock.Now().Unix()
+	currentHour := now - now%3600
+	cipher, err := common.NewCipher([]byte("abcdefghijklmnopqrstuvwxyz123456"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootID := int64(1)
+	statisticsStart := currentHour - 4*3600
+	site := model.Site{
+		Name: "Log gap recovery", BaseURL: "https://log-gap.example", ConfigVersion: 1,
+		ManagementStatus: constant.SiteManagementActive, AuthStatus: constant.SiteAuthAuthorized,
+		OnlineStatus: constant.SiteOnlineOnline, StatisticsStatus: constant.SiteStatisticsReady,
+		HealthStatus: constant.SiteHealthOK, RootUserID: &rootID, StatisticsStartAt: &statisticsStart,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	if err := tx.Create(&site).Error; err != nil {
+		t.Fatal(err)
+	}
+	token, err := cipher.Encrypt([]byte("log-gap-secret"), siteTokenAAD(site.ID))
+	if err != nil || tx.Model(&model.Site{}).Where("id = ?", site.ID).Update("access_token_encrypted", token).Error != nil {
+		t.Fatalf("store log gap token: %v", err)
+	}
+	client := &historyLogClient{testSiteClient: authorizedTestSiteClient(now)}
+	collector, err := NewUpstreamLogService(UpstreamLogServiceOptions{
+		Database: tx, SiteRepository: model.NewSiteRepository(tx),
+		ClientFactory: &testSiteClientFactory{authenticated: client, public: client}, Cipher: cipher, Clock: clock,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := collector.ExecuteScheduledLogTask(context.Background(), site.ID, site.ConfigVersion, "log-gap-initial"); err != nil {
+		t.Fatal(err)
+	}
+	client.windows = nil
+	clock.Advance(30 * time.Hour)
+	newCurrentHour := clock.Now().Unix()
+	newCurrentHour -= newCurrentHour % 3600
+	if _, _, err := collector.ExecuteScheduledLogTask(context.Background(), site.ID, site.ConfigVersion, "log-gap-recovery"); err != nil {
+		t.Fatal(err)
+	}
+	want := [][2]int64{
+		{currentHour, currentHour + 24*3600 - 1},
+		{currentHour + 24*3600, newCurrentHour - 2*3600 - 1},
+		{newCurrentHour - 2*3600, newCurrentHour - 1},
+	}
+	if len(client.windows) != len(want) {
+		t.Fatalf("gap recovery windows=%v want=%v", client.windows, want)
+	}
+	for index := range want {
+		if client.windows[index] != want[index] {
+			t.Fatalf("gap recovery window[%d]=%v want=%v", index, client.windows[index], want[index])
+		}
 	}
 }
 

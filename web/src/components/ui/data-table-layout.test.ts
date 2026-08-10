@@ -80,6 +80,9 @@ describe('fixed-height data table layout', () => {
     expect(source).toContain(
       'hidden items-center gap-1 @lg/pagination:flex @xl/pagination:gap-2'
     )
+    expect(source).toContain('totalDisplay ?? total.toLocaleString()')
+    expect(source).toContain('hasNextPage ?? currentPage < totalPages')
+    expect(source).toContain('hasKnownLastPage && (')
   })
 
   test('bounds generic overlays to the dynamic viewport and allows scrolling', async () => {

@@ -11,12 +11,12 @@ import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import { FacetedFilter } from '@/components/data/faceted-filter'
 import { FilterPanel } from '@/components/data/filter-panel'
+import { MultiFacetedFilter } from '@/components/data/multi-faceted-filter'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import { DataTable } from '@/components/ui/data-table'
-import { SelectControl as Select } from '@/components/ui/select-control'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import { translateMessageRef } from '@/lib/message-ref'
@@ -40,6 +40,7 @@ import {
   ExportStatusBadge,
   ExportTimestamp,
 } from './export-ui'
+import { exportScopeGroups } from './exports-filter-options'
 
 const exportStatuses: StatisticsExportStatus[] = [
   'pending',
@@ -49,31 +50,6 @@ const exportStatuses: StatisticsExportStatus[] = [
   'expired',
 ]
 const exportFormats: StatisticsExportFormat[] = ['xlsx', 'csv']
-export const exportScopes: StatisticsExportScope[] = [
-  'global',
-  'site',
-  'customer',
-  'account',
-  'model',
-  'channel',
-  'group',
-  'token',
-  'node',
-  'logs',
-  'user_inventory',
-  'channel_inventory',
-  'performance_history',
-  'topup_inventory',
-  'redemption_inventory',
-  'upstream_tasks',
-  'model_catalog',
-  'model_rankings',
-  'vendor_rankings',
-  'subscription_plans',
-  'pricing_catalog',
-  'group_catalog',
-  'system_tasks',
-]
 const exportSorts: ReadonlySet<StatisticsExportListSort> = new Set([
   'created_at',
   'finished_at',
@@ -235,6 +211,37 @@ export function ExportsPage({
   })
   const items = exportsQuery.data?.items ?? []
   const activeFilters = hasExportFilters(search)
+  const statusOptions = useMemo(
+    () =>
+      exportStatuses.map((status) => ({
+        label: exportStatusText(t, status),
+        value: status,
+      })),
+    [t]
+  )
+  const formatOptions = useMemo(
+    () =>
+      exportFormats.map((format) => ({
+        label: exportFormatText(t, format),
+        value: format,
+      })),
+    [t]
+  )
+  const scopeOptions = useMemo(() => {
+    const groupLabels = {
+      finance: t('exports.filters.group.finance'),
+      operations: t('exports.filters.group.operations'),
+      resources: t('exports.filters.group.resources'),
+      tasks: t('exports.filters.group.tasks'),
+    }
+    return exportScopeGroups.flatMap((group) =>
+      group.scopes.map((scope) => ({
+        group: groupLabels[group.key],
+        label: exportScopeText(t, scope),
+        value: scope,
+      }))
+    )
+  }, [t])
   const openJob = useCallback(
     (job: StatisticsExportJobItem) => {
       setSelectedJob(job)
@@ -358,80 +365,45 @@ export function ExportsPage({
           onReset={activeFilters ? resetFilters : undefined}
           title={t('exports.filters.title')}
         >
-          <div className='grid min-w-0 flex-1 gap-3 sm:grid-cols-3'>
-            <fieldset className='grid gap-1.5 text-sm'>
-              <legend className='font-medium'>
-                {t('exports.table.status')}
-              </legend>
-              <div className='flex flex-wrap gap-x-4 gap-y-1'>
-                {exportStatuses.map((status) => (
-                  <label
-                    className='hover:bg-muted flex min-h-10 items-center gap-2 rounded-md px-2'
-                    key={status}
-                  >
-                    <Checkbox
-                      checked={search.status.includes(status)}
-                      onCheckedChange={() =>
-                        onSearchChange({
-                          page: 1,
-                          status: search.status.includes(status)
-                            ? search.status.filter((value) => value !== status)
-                            : [...search.status, status],
-                        })
-                      }
-                    />
-                    {exportStatusText(t, status)}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-            <label className='grid gap-1.5 text-sm'>
-              <span className='font-medium'>
-                {t('statistics.export.format')}
-              </span>
-              <Select
-                onChange={(event) =>
-                  onSearchChange({
-                    format: event.target.value
-                      ? (event.target.value as StatisticsExportFormat)
-                      : undefined,
-                    page: 1,
-                  })
-                }
-                value={search.format ?? ''}
-              >
-                <option value=''>{t('common.all')}</option>
-                {exportFormats.map((format) => (
-                  <option key={format} value={format}>
-                    {exportFormatText(t, format)}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <label className='grid gap-1.5 text-sm'>
-              <span className='font-medium'>
-                {t('statistics.export.scope')}
-              </span>
-              <Select
-                onChange={(event) =>
-                  onSearchChange({
-                    page: 1,
-                    scope: event.target.value
-                      ? (event.target.value as StatisticsExportScope)
-                      : undefined,
-                  })
-                }
-                value={search.scope ?? ''}
-              >
-                <option value=''>{t('common.all')}</option>
-                {exportScopes.map((scope) => (
-                  <option key={scope} value={scope}>
-                    {exportScopeText(t, scope)}
-                  </option>
-                ))}
-              </Select>
-            </label>
-          </div>
+          <MultiFacetedFilter
+            className='w-full justify-start sm:w-auto'
+            clearLabel={t('common.clearFilters')}
+            onChange={(values) =>
+              onSearchChange({
+                page: 1,
+                status: values as StatisticsExportStatus[],
+              })
+            }
+            options={statusOptions}
+            title={t('exports.table.status')}
+            values={search.status}
+          />
+          <FacetedFilter
+            className='w-full justify-between sm:w-40'
+            clearLabel={t('common.clearFilters')}
+            onChange={(value) =>
+              onSearchChange({
+                format: value ? (value as StatisticsExportFormat) : undefined,
+                page: 1,
+              })
+            }
+            options={formatOptions}
+            title={t('statistics.export.format')}
+            value={search.format ?? ''}
+          />
+          <FacetedFilter
+            className='w-full justify-between sm:w-64'
+            clearLabel={t('common.clearFilters')}
+            onChange={(value) =>
+              onSearchChange({
+                page: 1,
+                scope: value ? (value as StatisticsExportScope) : undefined,
+              })
+            }
+            options={scopeOptions}
+            title={t('statistics.export.scope')}
+            value={search.scope ?? ''}
+          />
         </FilterPanel>
         <DataTable
           ariaLabel={t('exports.table.label')}

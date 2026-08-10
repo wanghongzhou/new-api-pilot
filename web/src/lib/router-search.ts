@@ -1,5 +1,7 @@
 import { stringifySearchWith } from '@tanstack/react-router'
 
+import { compactQueryRecord } from './query-params'
+
 const positiveDecimalIntegerPattern = /^[1-9]\d*$/
 const idSearchKeyPattern = /ids?$/i
 
@@ -45,7 +47,11 @@ export function parseRouterSearch(search: string): Record<string, unknown> {
   return result
 }
 
-export const stringifyRouterSearch = stringifySearchWith(
+const stringifyCompactedSearch = stringifySearchWith(
   JSON.stringify,
   probeSerializableString
 )
+
+export function stringifyRouterSearch(search: Record<string, unknown>): string {
+  return stringifyCompactedSearch(compactQueryRecord(search))
+}

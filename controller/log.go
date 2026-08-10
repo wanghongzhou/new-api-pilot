@@ -16,6 +16,7 @@ import (
 
 type logApplication interface {
 	Query(context.Context, dto.LogQuery) (dto.LogResponse, error)
+	Stats(context.Context, dto.LogQuery) (dto.LogStatResponse, error)
 }
 
 type LogController struct{ logs logApplication }
@@ -24,6 +25,8 @@ func NewLogController(logs logApplication) *LogController { return &LogControlle
 
 func (controller *LogController) Global(c *gin.Context) { controller.query(c, nil) }
 
+func (controller *LogController) GlobalStats(c *gin.Context) { controller.stats(c, nil) }
+
 func (controller *LogController) Site(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || id <= 0 {
@@ -31,6 +34,40 @@ func (controller *LogController) Site(c *gin.Context) {
 		return
 	}
 	controller.query(c, []int64{id})
+}
+
+func (controller *LogController) SiteStats(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		common.AbortError(c, http.StatusBadRequest, constant.CodeValidationError, "Invalid site id", map[string]string{"id": "must be positive"})
+		return
+	}
+	controller.stats(c, []int64{id})
+}
+
+func (controller *LogController) stats(c *gin.Context, forcedSiteIDs []int64) {
+	if controller == nil || controller.logs == nil {
+		common.AbortInternalError(c)
+		return
+	}
+	query, fieldErrors := parseLogQuery(c)
+	if len(forcedSiteIDs) > 0 {
+		query.SiteIDs = forcedSiteIDs
+	}
+	if fieldErrors != nil {
+		common.AbortError(c, http.StatusBadRequest, constant.CodeValidationError, "Invalid log query", fieldErrors)
+		return
+	}
+	response, err := controller.logs.Stats(c.Request.Context(), query)
+	if err != nil {
+		if err == service.ErrStatisticsInvalid {
+			common.AbortError(c, http.StatusBadRequest, constant.CodeValidationError, "Invalid log query", nil)
+			return
+		}
+		common.AbortInternalError(c)
+		return
+	}
+	common.WriteSuccess(c, http.StatusOK, response)
 }
 
 func (controller *LogController) query(c *gin.Context, forcedSiteIDs []int64) {

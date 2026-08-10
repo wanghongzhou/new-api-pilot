@@ -1014,6 +1014,22 @@ type upstreamLogRowWire struct {
 	IP                *string `json:"ip"`
 	RequestID         *string `json:"request_id"`
 	UpstreamRequestID *string `json:"upstream_request_id"`
+	Other             *string `json:"other"`
+}
+
+type upstreamLogOtherWire struct {
+	FirstResponseTimeMs *float64                     `json:"frt"`
+	StreamStatus        *upstreamLogStreamStatusWire `json:"stream_status"`
+	CacheReadTokens     *int64                       `json:"cache_tokens"`
+	CacheCreationTokens *int64                       `json:"cache_creation_tokens"`
+	CacheCreation5m     *int64                       `json:"cache_creation_tokens_5m"`
+	CacheCreation1h     *int64                       `json:"cache_creation_tokens_1h"`
+}
+
+type upstreamLogStreamStatusWire struct {
+	Status     *string `json:"status"`
+	EndReason  *string `json:"end_reason"`
+	ErrorCount *int64  `json:"error_count"`
 }
 
 type upstreamLogPageWire struct {
@@ -1042,15 +1058,67 @@ func validateLogPage(wire upstreamLogPageWire, expectedPage int) (dto.UpstreamLo
 			!validOptionalUpstreamString(raw.RequestID, 64) || !validOptionalUpstreamString(raw.UpstreamRequestID, 128) {
 			return dto.UpstreamLogPage{}, invalidUpstreamResponse()
 		}
+		firstResponseTimeMs, streamStatus, streamEndReason, streamErrorCount, cacheReadTokens, cacheCreationTokens, cacheCreation5m, cacheCreation1h := safeUpstreamLogOther(raw.Other)
 		items = append(items, dto.UpstreamLogRow{
 			ID: *raw.ID, UserID: *raw.UserID, CreatedAt: *raw.CreatedAt, Type: *raw.Type, Content: *raw.Content,
 			Username: *raw.Username, TokenName: *raw.TokenName, ModelName: *raw.ModelName, Quota: *raw.Quota,
 			PromptTokens: *raw.PromptTokens, CompletionTokens: *raw.CompletionTokens, UseTimeSeconds: *raw.UseTime,
 			IsStream: *raw.IsStream, ChannelID: *raw.ChannelID, TokenID: *raw.TokenID, UseGroup: *raw.Group,
+			FirstResponseTimeMs: firstResponseTimeMs, StreamStatus: streamStatus, StreamEndReason: streamEndReason, StreamErrorCount: streamErrorCount,
+			CacheReadTokens: cacheReadTokens, CacheCreationTokens: cacheCreationTokens, CacheCreation5m: cacheCreation5m, CacheCreation1h: cacheCreation1h,
 			IP: *raw.IP, RequestID: optionalUpstreamString(raw.RequestID), UpstreamRequestID: optionalUpstreamString(raw.UpstreamRequestID),
 		})
 	}
 	return dto.UpstreamLogPage{Page: *wire.Page, PageSize: *wire.PageSize, Total: *wire.Total, Items: items}, nil
+}
+
+func safeUpstreamLogOther(raw *string) (*int64, string, string, int64, int64, int64, int64, int64) {
+	if raw == nil || strings.TrimSpace(*raw) == "" {
+		return nil, "", "", 0, 0, 0, 0, 0
+	}
+	if !validUpstreamString(*raw, 0, 64*1024) {
+		return nil, "", "", 0, 0, 0, 0, 0
+	}
+	var other upstreamLogOtherWire
+	if err := json.Unmarshal([]byte(*raw), &other); err != nil {
+		return nil, "", "", 0, 0, 0, 0, 0
+	}
+	var firstResponseTimeMs *int64
+	if other.FirstResponseTimeMs != nil {
+		value := *other.FirstResponseTimeMs
+		if math.IsNaN(value) || math.IsInf(value, 0) || value < 0 || value > 31*24*60*60*1000 || math.Trunc(value) != value {
+			other.FirstResponseTimeMs = nil
+		} else {
+			parsed := int64(value)
+			firstResponseTimeMs = &parsed
+		}
+	}
+	if other.StreamStatus == nil {
+		return firstResponseTimeMs, "", "", 0, safeNonNegativeDiagnostic(other.CacheReadTokens), safeNonNegativeDiagnostic(other.CacheCreationTokens), safeNonNegativeDiagnostic(other.CacheCreation5m), safeNonNegativeDiagnostic(other.CacheCreation1h)
+	}
+	status := optionalUpstreamString(other.StreamStatus.Status)
+	endReason := optionalUpstreamString(other.StreamStatus.EndReason)
+	errorCount := int64(0)
+	if other.StreamStatus.ErrorCount != nil {
+		errorCount = *other.StreamStatus.ErrorCount
+	}
+	if !validUpstreamString(status, 0, 16) {
+		status = ""
+	}
+	if !validUpstreamString(endReason, 0, 64) {
+		endReason = ""
+	}
+	if errorCount < 0 {
+		errorCount = 0
+	}
+	return firstResponseTimeMs, status, endReason, errorCount, safeNonNegativeDiagnostic(other.CacheReadTokens), safeNonNegativeDiagnostic(other.CacheCreationTokens), safeNonNegativeDiagnostic(other.CacheCreation5m), safeNonNegativeDiagnostic(other.CacheCreation1h)
+}
+
+func safeNonNegativeDiagnostic(value *int64) int64 {
+	if value == nil || *value < 0 {
+		return 0
+	}
+	return *value
 }
 
 func validOptionalUpstreamString(value *string, limit int) bool {

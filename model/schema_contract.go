@@ -168,6 +168,40 @@ func AuthoritativeSchemaContracts() (map[string]TableContract, error) {
 	channelHourly.Indexes["uk_site_channel_inventory_hourly"] = IndexContract{Unique: true, Columns: []string{"site_id", "remote_type", "remote_status", "remote_group", "tag", "hour_ts"}}
 	channelHourly.Indexes["idx_site_channel_inventory_hourly_filters"] = IndexContract{Columns: []string{"site_id", "hour_ts", "dimensions_available", "remote_type", "remote_status"}}
 	contracts["site_channel_inventory_hourly"] = channelHourly
+	if _, err := readMigrationStatements("0007_log_timing_diagnostics.sql"); err != nil {
+		return nil, err
+	}
+	logColumns := []struct {
+		after  string
+		column ColumnContract
+	}{
+		{"is_stream", ColumnContract{Name: "first_response_time_ms", ColumnType: "bigint", IsNullable: "YES"}},
+		{"first_response_time_ms", ColumnContract{Name: "stream_status", ColumnType: "varchar(16)", IsNullable: "NO", Default: sql.NullString{String: "", Valid: true}, CharacterSet: sql.NullString{String: "ascii", Valid: true}, Collation: sql.NullString{String: "ascii_bin", Valid: true}}},
+		{"stream_status", ColumnContract{Name: "stream_end_reason", ColumnType: "varchar(64)", IsNullable: "NO", Default: sql.NullString{String: "", Valid: true}, CharacterSet: sql.NullString{String: "utf8mb4", Valid: true}, Collation: sql.NullString{String: "utf8mb4_bin", Valid: true}}},
+		{"stream_end_reason", ColumnContract{Name: "stream_error_count", ColumnType: "bigint", IsNullable: "NO", Default: sql.NullString{String: "0", Valid: true}}},
+	}
+	for _, addition := range logColumns {
+		if err := insertSchemaColumnAfter(contracts, "upstream_log_fact", addition.after, addition.column); err != nil {
+			return nil, err
+		}
+	}
+	if _, err := readMigrationStatements("0008_log_cache_tokens.sql"); err != nil {
+		return nil, err
+	}
+	cacheColumns := []struct {
+		after  string
+		column ColumnContract
+	}{
+		{"completion_tokens", ColumnContract{Name: "cache_read_tokens", ColumnType: "bigint", IsNullable: "NO", Default: sql.NullString{String: "0", Valid: true}}},
+		{"cache_read_tokens", ColumnContract{Name: "cache_creation_tokens", ColumnType: "bigint", IsNullable: "NO", Default: sql.NullString{String: "0", Valid: true}}},
+		{"cache_creation_tokens", ColumnContract{Name: "cache_creation_tokens_5m", ColumnType: "bigint", IsNullable: "NO", Default: sql.NullString{String: "0", Valid: true}}},
+		{"cache_creation_tokens_5m", ColumnContract{Name: "cache_creation_tokens_1h", ColumnType: "bigint", IsNullable: "NO", Default: sql.NullString{String: "0", Valid: true}}},
+	}
+	for _, addition := range cacheColumns {
+		if err := insertSchemaColumnAfter(contracts, "upstream_log_fact", addition.after, addition.column); err != nil {
+			return nil, err
+		}
+	}
 	return contracts, nil
 }
 

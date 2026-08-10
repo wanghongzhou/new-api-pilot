@@ -15,7 +15,9 @@ import (
 var upstreamLogExportColumns = []string{
 	"site_id", "site_name", "created_at", "type", "remote_user_id", "username", "model_name", "token_id", "token_name",
 	"channel_id", "group", "request_id", "upstream_request_id", "quota", "prompt_tokens", "completion_tokens",
-	"use_time_seconds", "is_stream", "content_redacted", "data_snapshot_at", "exported_at",
+	"cache_read_tokens", "cache_creation_tokens", "cache_creation_tokens_5m", "cache_creation_tokens_1h",
+	"use_time_seconds", "is_stream", "first_response_time_ms", "stream_status", "stream_end_reason", "stream_error_count",
+	"content_redacted", "data_snapshot_at", "exported_at",
 }
 
 type UpstreamLogExportOptions struct {
@@ -78,11 +80,17 @@ func GenerateUpstreamLogExport(ctx context.Context, options UpstreamLogExportOpt
 			return ExportGenerateResult{}, readErr
 		}
 		for _, row := range rows {
+			firstResponseTimeMs := ""
+			if row.FirstResponseTimeMs != nil {
+				firstResponseTimeMs = strconv.FormatInt(*row.FirstResponseTimeMs, 10)
+			}
 			values := []string{strconv.FormatInt(row.SiteID, 10), row.SiteName, strconv.FormatInt(row.CreatedAt, 10), strconv.Itoa(row.Type),
 				strconv.FormatInt(row.RemoteUserID, 10), row.Username, row.ModelName, strconv.FormatInt(row.TokenID, 10), row.TokenName,
 				strconv.FormatInt(row.ChannelID, 10), row.UseGroup, row.RequestID, row.UpstreamRequestID, strconv.FormatInt(row.Quota, 10),
-				strconv.FormatInt(row.PromptTokens, 10), strconv.FormatInt(row.CompletionTokens, 10), strconv.FormatInt(row.UseTimeSeconds, 10),
-				strconv.FormatBool(row.IsStream), row.ContentRedacted, strconv.FormatInt(options.DataSnapshotAt, 10), strconv.FormatInt(options.ExportedAt, 10)}
+				strconv.FormatInt(row.PromptTokens, 10), strconv.FormatInt(row.CompletionTokens, 10), strconv.FormatInt(row.CacheReadTokens, 10),
+				strconv.FormatInt(row.CacheCreationTokens, 10), strconv.FormatInt(row.CacheCreation5m, 10), strconv.FormatInt(row.CacheCreation1h, 10), strconv.FormatInt(row.UseTimeSeconds, 10),
+				strconv.FormatBool(row.IsStream), firstResponseTimeMs, row.StreamStatus, row.StreamEndReason,
+				strconv.FormatInt(row.StreamErrorCount, 10), row.ContentRedacted, strconv.FormatInt(options.DataSnapshotAt, 10), strconv.FormatInt(options.ExportedAt, 10)}
 			if err := writer.WriteRow(values); err != nil {
 				return ExportGenerateResult{}, err
 			}

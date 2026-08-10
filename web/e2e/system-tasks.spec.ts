@@ -286,7 +286,7 @@ test('A100 system tasks stay read-only, typed, bounded and responsive', async ({
   await page.getByRole('tab', { name: /类型分析/ }).click()
   await expect(page).toHaveURL(/tab=types/)
   await expect(page).not.toHaveURL(/types=log_cleanup/)
-  await expect(page.getByText('任务类型拆分')).toBeVisible()
+  await expect(page.getByText('任务类型分析')).toBeVisible()
   await page.getByRole('tab', { name: /任务列表/ }).click()
   await expect(page.getByRole('button', { name: '导出 CSV' })).toBeVisible()
 

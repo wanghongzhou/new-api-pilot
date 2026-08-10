@@ -5,7 +5,7 @@ import type { AxiosAdapter } from 'axios'
 import { api } from '@/lib/api'
 import { parseIdString, parseNonNegativeIdString } from '@/lib/api-types'
 
-import { listLogs, listSiteLogs } from './api'
+import { getLogStats, getSiteLogStats, listLogs, listSiteLogs } from './api'
 
 const originalAdapter = api.defaults.adapter
 
@@ -90,5 +90,44 @@ describe('log API contract', () => {
       site_ids: [parseIdString('9007199254740995')],
       start_timestamp: 1_784_176_000,
     })
+  })
+
+  test('uses matching global and forced-site statistics endpoints', async () => {
+    const urls: string[] = []
+    api.defaults.adapter = (async (config) => {
+      urls.push(config.url ?? '')
+      const params = config.params as URLSearchParams
+      if (config.url?.includes('/sites/')) {
+        expect(params.has('site_ids')).toBe(false)
+      } else {
+        expect(params.getAll('site_ids')).toEqual(['9007199254740993'])
+      }
+      return {
+        config,
+        data: {
+          code: '',
+          data: { quota: '0', rpm: '0', site_breakdown: [], tpm: '0' },
+          message: '',
+          request_id: 'req_log_stats',
+          success: true,
+        },
+        headers: {},
+        status: 200,
+        statusText: 'OK',
+      }
+    }) as AxiosAdapter
+    const params = {
+      end_timestamp: 1_784_262_400,
+      p: 1,
+      page_size: 20,
+      site_ids: [parseIdString('9007199254740993')],
+      start_timestamp: 1_784_176_000,
+    }
+    await getLogStats(params)
+    await getSiteLogStats(parseIdString('9007199254740993'), params)
+    expect(urls).toEqual([
+      '/api/logs/stat',
+      '/api/sites/9007199254740993/logs/stat',
+    ])
   })
 })

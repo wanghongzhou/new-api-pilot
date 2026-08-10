@@ -52,7 +52,10 @@ interface DataTableProps<TData> {
   onSortingChange?: OnChangeFn<SortingState>
   page?: number
   pageSize?: number
+  paginationHasKnownLastPage?: boolean
+  paginationHasNextPage?: boolean
   paginationInFooter?: boolean
+  paginationTotalDisplay?: ReactNode
   preserveHeaderWhenEmpty?: boolean
   renderMobileCard?: (item: TData) => ReactNode
   rowHeaderColumnId?: string
@@ -78,7 +81,10 @@ export function DataTable<TData>({
   onSortingChange,
   page = 1,
   pageSize = 20,
+  paginationHasKnownLastPage = true,
+  paginationHasNextPage,
   paginationInFooter = true,
+  paginationTotalDisplay,
   preserveHeaderWhenEmpty = true,
   renderMobileCard,
   rowHeaderColumnId,
@@ -96,11 +102,14 @@ export function DataTable<TData>({
   })
   const paginationControl = onPageChange ? (
     <DataTablePagination
+      hasKnownLastPage={paginationHasKnownLastPage}
+      hasNextPage={paginationHasNextPage}
       onPageChange={onPageChange}
       onPageSizeChange={onPageSizeChange}
       page={page}
       pageSize={pageSize}
       total={total}
+      totalDisplay={paginationTotalDisplay}
     />
   ) : null
   const pagination =

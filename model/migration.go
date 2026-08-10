@@ -461,6 +461,16 @@ func verifyMigrationDDLPostcondition(ctx context.Context, connection *sql.Conn, 
 			return columnsReady, err
 		}
 		return verifyMigrationIndexColumns(ctx, connection, "site_channel_inventory_hourly", "uk_site_channel_inventory_hourly", []string{"site_id", "remote_type", "remote_status", "remote_group", "tag", "hour_ts"})
+	case "0007_log_timing_diagnostics":
+		if index != 0 {
+			return false, fmt.Errorf("no postcondition for DDL statement %d", index+1)
+		}
+		return verifyMigrationColumns(ctx, connection, "upstream_log_fact", []string{"first_response_time_ms", "stream_status", "stream_end_reason", "stream_error_count"}, false)
+	case "0008_log_cache_tokens":
+		if index != 0 {
+			return false, fmt.Errorf("no postcondition for DDL statement %d", index+1)
+		}
+		return verifyMigrationColumns(ctx, connection, "upstream_log_fact", []string{"cache_read_tokens", "cache_creation_tokens", "cache_creation_tokens_5m", "cache_creation_tokens_1h"}, true)
 	default:
 		return false, fmt.Errorf("migration %s has no registered DDL postconditions", version)
 	}

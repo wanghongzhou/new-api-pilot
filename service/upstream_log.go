@@ -63,12 +63,73 @@ func (service *UpstreamLogService) ExecuteScheduledLogTask(ctx context.Context, 
 	if end <= 2*3600 {
 		return 0, 0, model.ErrCollectionRunContract
 	}
-	fetched, written, err := service.collectWindow(ctx, siteID, configVersion, end-2*3600, end, requestID)
+	recentStart := end - 2*3600
+	fetched, written, err := service.recoverScheduledGap(ctx, siteID, configVersion, recentStart)
+	if err != nil {
+		return fetched, written, err
+	}
+	recentFetched, recentWritten, err := service.collectWindow(ctx, siteID, configVersion, recentStart, end, requestID)
+	fetched += recentFetched
+	written += recentWritten
 	if err != nil {
 		return fetched, written, err
 	}
 	backfillFetched, backfillWritten, err := service.backfillHistory(ctx, siteID, configVersion, end)
 	return fetched + backfillFetched, written + backfillWritten, err
+}
+
+func (service *UpstreamLogService) recoverScheduledGap(ctx context.Context, siteID int64, configVersion int, recentStart int64) (int64, int64, error) {
+	state, err := service.repository.LoadState(ctx, siteID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return 0, 0, nil
+	}
+	if err != nil {
+		return 0, 0, err
+	}
+	if state.ConfigVersion != configVersion || state.WindowEnd <= 0 || state.WindowEnd >= recentStart {
+		return 0, 0, nil
+	}
+	site, err := service.sites.FindByID(ctx, siteID)
+	if err != nil {
+		return 0, 0, err
+	}
+	if site.ConfigVersion != configVersion {
+		return 0, 0, model.ErrSiteRunConfigChanged
+	}
+	retentionDays, err := service.repository.LoadRetentionDays(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+	targetStart := recentStart - int64(retentionDays)*86400
+	if site.StatisticsStartAt != nil && *site.StatisticsStartAt > targetStart {
+		targetStart = *site.StatisticsStartAt
+	}
+	targetStart -= targetStart % 3600
+	cursor := state.WindowEnd
+	if cursor < targetStart {
+		cursor = targetStart
+	}
+	var fetched, written int64
+	for window := 0; cursor < recentStart && window < maximumLogBackfillWindowsPerRun; window++ {
+		windowEnd := cursor + 24*3600
+		if windowEnd > recentStart {
+			windowEnd = recentStart
+		}
+		windowFetched, windowWritten, collectErr := service.collectWindow(
+			ctx, siteID, configVersion, cursor, windowEnd,
+			fmt.Sprintf("loggap-%d-%d-%d", siteID, recentStart, window+1),
+		)
+		fetched += windowFetched
+		written += windowWritten
+		if collectErr != nil {
+			return fetched, written, collectErr
+		}
+		cursor = windowEnd
+	}
+	if cursor < recentStart {
+		return fetched, written, ErrUpstreamResponseTooLarge
+	}
+	return fetched, written, nil
 }
 
 func (service *UpstreamLogService) backfillHistory(ctx context.Context, siteID int64, configVersion int, currentHour int64) (int64, int64, error) {
@@ -250,7 +311,9 @@ func canonicalUpstreamLogFact(row dto.UpstreamLogRow) (model.UpstreamLogFact, st
 		RemoteUserID: row.UserID, Username: row.Username, ModelName: row.ModelName, TokenID: row.TokenID, TokenName: row.TokenName,
 		ChannelID: row.ChannelID, UseGroup: row.UseGroup, RequestID: row.RequestID, UpstreamRequestID: row.UpstreamRequestID,
 		Quota: row.Quota, PromptTokens: row.PromptTokens, CompletionTokens: row.CompletionTokens, UseTimeSeconds: row.UseTimeSeconds,
-		IsStream: row.IsStream, ContentRedacted: content, IP: ""}, key, nil
+		CacheReadTokens: row.CacheReadTokens, CacheCreationTokens: row.CacheCreationTokens, CacheCreation5m: row.CacheCreation5m, CacheCreation1h: row.CacheCreation1h,
+		IsStream: row.IsStream, FirstResponseTimeMs: row.FirstResponseTimeMs, StreamStatus: row.StreamStatus,
+		StreamEndReason: row.StreamEndReason, StreamErrorCount: row.StreamErrorCount, ContentRedacted: content, IP: ""}, key, nil
 }
 
 func redactUpstreamLogContent(value string) string {
@@ -277,14 +340,24 @@ func (service *UpstreamLogService) Query(ctx context.Context, query dto.LogQuery
 	if err != nil {
 		return dto.LogResponse{}, err
 	}
+	fallbackQuotaPerUnit, fallbackExchangeRate, err := service.repository.LoadFallbackRate(ctx)
+	if err != nil {
+		return dto.LogResponse{}, err
+	}
 	items := make([]dto.LogItem, 0, len(rows))
 	for _, row := range rows {
+		rate := resolveLogRate(row.QuotaPerUnit, row.USDExchangeRate, row.LastRateAt, fallbackQuotaPerUnit, fallbackExchangeRate)
 		items = append(items, dto.LogItem{ID: dto.Int64String(row.ID), SiteID: dto.Int64String(row.SiteID), SiteName: row.SiteName,
 			CreatedAt: row.CreatedAt, Type: row.Type, RemoteUserID: dto.Int64String(row.RemoteUserID), Username: row.Username,
 			ModelName: row.ModelName, TokenID: dto.Int64String(row.TokenID), TokenName: row.TokenName, ChannelID: dto.Int64String(row.ChannelID),
 			UseGroup: row.UseGroup, RequestID: row.RequestID, UpstreamRequestID: row.UpstreamRequestID, Quota: dto.Int64String(row.Quota),
 			PromptTokens: dto.Int64String(row.PromptTokens), CompletionTokens: dto.Int64String(row.CompletionTokens),
-			UseTimeSeconds: dto.Int64String(row.UseTimeSeconds), IsStream: row.IsStream, Content: row.ContentRedacted, IP: ""})
+			CacheReadTokens: dto.Int64String(row.CacheReadTokens), CacheCreationTokens: dto.Int64String(row.CacheCreationTokens),
+			CacheCreation5m: dto.Int64String(row.CacheCreation5m), CacheCreation1h: dto.Int64String(row.CacheCreation1h),
+			UseTimeSeconds: dto.Int64String(row.UseTimeSeconds), IsStream: row.IsStream,
+			FirstResponseTimeMs: dto.OptionalInt64String(row.FirstResponseTimeMs), StreamStatus: row.StreamStatus,
+			StreamEndReason: row.StreamEndReason, StreamErrorCount: dto.Int64String(row.StreamErrorCount),
+			Content: row.ContentRedacted, IP: "", Rate: rate})
 	}
 	states, err := service.repository.LoadStates(ctx, query.SiteIDs)
 	if err != nil {
@@ -292,6 +365,41 @@ func (service *UpstreamLogService) Query(ctx context.Context, query dto.LogQuery
 	}
 	status, asOf := summarizeLogStates(states)
 	return dto.LogResponse{Items: items, Total: total, Page: query.Page, PageSize: query.PageSize, DataStatus: status, AsOf: asOf}, nil
+}
+
+func (service *UpstreamLogService) Stats(ctx context.Context, query dto.LogQuery) (dto.LogStatResponse, error) {
+	query.Normalize()
+	if service == nil || query.Validate() != nil {
+		return dto.LogStatResponse{}, ErrStatisticsInvalid
+	}
+	rows, rpm, tpm, err := service.repository.Stats(ctx, query, service.clock.Now().Unix())
+	if err != nil {
+		return dto.LogStatResponse{}, err
+	}
+	fallbackQuotaPerUnit, fallbackExchangeRate, err := service.repository.LoadFallbackRate(ctx)
+	if err != nil {
+		return dto.LogStatResponse{}, err
+	}
+	breakdown := make([]dto.LogStatSiteBreakdown, 0, len(rows))
+	var quota int64
+	for _, row := range rows {
+		quota += row.Quota
+		breakdown = append(breakdown, dto.LogStatSiteBreakdown{
+			SiteID: dto.Int64String(row.SiteID), SiteName: row.SiteName, Quota: dto.Int64String(row.Quota),
+			Rate: resolveLogRate(row.QuotaPerUnit, row.USDExchangeRate, row.LastRateAt, fallbackQuotaPerUnit, fallbackExchangeRate),
+		})
+	}
+	return dto.LogStatResponse{Quota: dto.Int64String(quota), RPM: dto.Int64String(rpm), TPM: dto.Int64String(tpm), SiteBreakdown: breakdown}, nil
+}
+
+func resolveLogRate(quotaPerUnit, exchangeRate *string, lastRateAt *int64, fallbackQuotaPerUnit, fallbackExchangeRate string) dto.RateInfo {
+	if lastRateAt != nil && statisticsPositiveDecimal(quotaPerUnit) && statisticsPositiveDecimal(exchangeRate) {
+		return dto.RateInfo{QuotaPerUnit: quotaPerUnit, USDExchangeRate: exchangeRate, Source: "site", UpdatedAt: lastRateAt}
+	}
+	if lastRateAt == nil && statisticsPositiveDecimalString(fallbackQuotaPerUnit) && statisticsPositiveDecimalString(fallbackExchangeRate) {
+		return dto.RateInfo{QuotaPerUnit: &fallbackQuotaPerUnit, USDExchangeRate: &fallbackExchangeRate, Source: "fallback"}
+	}
+	return dto.RateInfo{Source: "unavailable"}
 }
 
 func summarizeLogStates(states []model.UpstreamLogCollectionState) (string, *int64) {

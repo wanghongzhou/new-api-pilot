@@ -53,4 +53,18 @@ describe('system task truncation contract', () => {
     expect(page).toContain('systemTasks.truncation.source_limit_and_id_gap')
     expect(locale).toContain('"systemTasks.truncation.source_limit_and_id_gap"')
   })
+
+  test('keeps bigint totals exact while pagination remains sequential', async () => {
+    const page = await readFile(
+      new URL('components/system-tasks-page.tsx', import.meta.url),
+      'utf8'
+    )
+
+    expect(page).toContain("paginationTotalDisplay={data?.total ?? '0'}")
+    expect(page).toContain('paginationHasKnownLastPage={false}')
+    expect(page).toContain('paginationHasNextPage={hasNext}')
+    expect(page).toContain("mobileCardBreakpoint='wide'")
+    expect(page).toContain("t('systemTasks.time.collected')")
+    expect(page).toContain('common.retainedDataRefreshFailed')
+  })
 })

@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { LogsPage } from '@/features/logs/components/logs-page'
 import { logSearchSchema } from '@/features/logs/schema'
-import { buildLogSearch } from '@/features/logs/search'
+import { buildLogSearch, mergeLogSearch } from '@/features/logs/search'
 
 export const Route = createFileRoute('/_authenticated/sites/$siteId/logs')({
   component: SiteLogsRoute,
@@ -16,7 +16,7 @@ function SiteLogsRoute() {
   return (
     <LogsPage
       onSearchChange={(changes) =>
-        void navigate({ search: (current) => ({ ...current, ...changes }) })
+        void navigate({ search: (current) => mergeLogSearch(current, changes) })
       }
       search={search}
       siteId={siteId}

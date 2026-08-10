@@ -43,7 +43,9 @@ describe('shared mobile touch target contract', () => {
       ]
     )
 
-    expect(facetedFilter).toContain("className='h-10 border-dashed sm:h-8'")
+    expect(facetedFilter).toContain(
+      "'h-10 overflow-hidden border-dashed sm:h-8'"
+    )
     expect(viewToggle).toContain('inline-flex h-12 items-center')
     expect(viewToggle).toContain('inline-flex h-10 w-10')
     expect(columnHeader).toContain('-ms-3 h-10 sm:h-8')

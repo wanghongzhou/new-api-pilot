@@ -90,12 +90,12 @@ describe('subscription plan pilot API contract', () => {
       '/api/sites/9007199254740993/subscription-plans/statistics',
     ])
     for (const request of requests) {
-      expect((request.params as URLSearchParams).has('site_ids')).toBe(false)
+      expect(
+        request.params instanceof URLSearchParams
+          ? request.params.has('site_ids')
+          : false
+      ).toBe(false)
     }
-    const statisticsParams = requests[1]?.params
-    if (!(statisticsParams instanceof URLSearchParams)) {
-      throw new Error('statistics params missing')
-    }
-    expect(statisticsParams.toString()).toBe('')
+    expect(requests[1]?.params).toBeUndefined()
   })
 })

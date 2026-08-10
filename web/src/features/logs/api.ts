@@ -1,7 +1,7 @@
 import { requestApiData } from '@/lib/api'
 import type { IdString } from '@/lib/api-types'
 
-import type { LogQueryParams, LogResponse } from './types'
+import type { LogQueryParams, LogResponse, LogStatResponse } from './types'
 
 function logSearchParams(values: LogQueryParams) {
   const params = new URLSearchParams()
@@ -39,5 +39,24 @@ export function listSiteLogs(
     method: 'get',
     params: logSearchParams({ ...params, site_ids: undefined }),
     url: `/api/sites/${siteId}/logs`,
+  })
+}
+
+export function getLogStats(params: LogQueryParams): Promise<LogStatResponse> {
+  return requestApiData<LogStatResponse>({
+    method: 'get',
+    params: logSearchParams(params),
+    url: '/api/logs/stat',
+  })
+}
+
+export function getSiteLogStats(
+  siteId: IdString,
+  params: LogQueryParams
+): Promise<LogStatResponse> {
+  return requestApiData<LogStatResponse>({
+    method: 'get',
+    params: logSearchParams({ ...params, site_ids: undefined }),
+    url: `/api/sites/${siteId}/logs/stat`,
   })
 }

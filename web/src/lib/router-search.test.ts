@@ -33,4 +33,26 @@ describe('router search serialization', () => {
       statuses: ['pending', 'running'],
     })
   })
+
+  test('omits empty search values while preserving meaningful falsy values', () => {
+    const serialized = stringifyRouterSearch({
+      enabled: false,
+      keyword: '',
+      missing: undefined,
+      nullable: null,
+      page: 1,
+      siteIds: [],
+      status: 0,
+      types: ['', 'active', null],
+    })
+
+    expect(parseRouterSearch(serialized)).toEqual({
+      enabled: false,
+      page: 1,
+      status: 0,
+      types: ['active'],
+    })
+    expect(serialized).not.toContain('keyword=')
+    expect(serialized).not.toContain('siteIds=')
+  })
 })

@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils'
 import type { FacetedFilterOption } from './faceted-filter'
 
 export function MultiFacetedFilter({
+  className,
   clearLabel,
   maximumSelected = 100,
   onChange,
@@ -24,6 +25,7 @@ export function MultiFacetedFilter({
   title,
   values,
 }: {
+  className?: string
   clearLabel: string
   maximumSelected?: number
   onChange: (values: string[]) => void
@@ -49,7 +51,7 @@ export function MultiFacetedFilter({
       <PopoverTrigger
         render={
           <Button
-            className='h-10 border-dashed sm:h-8'
+            className={cn('h-10 border-dashed sm:h-8', className)}
             size='sm'
             variant='outline'
           />

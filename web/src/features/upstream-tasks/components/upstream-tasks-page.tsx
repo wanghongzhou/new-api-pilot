@@ -18,6 +18,7 @@ import { toast } from 'sonner'
 import { DataStatusBadge } from '@/components/data/data-status'
 import { FacetedFilter } from '@/components/data/faceted-filter'
 import { MetricValue } from '@/components/data/metric-value'
+import { QueryStateAlert } from '@/components/data/query-state-alert'
 import { ErrorState } from '@/components/error-state'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
@@ -790,6 +791,7 @@ export function UpstreamTasksPage({
           : t('upstreamTasks.description')
       }
       fixedContent
+      mobileScrollableContent
       title={siteId ? t('upstreamTasks.siteTitle') : t('upstreamTasks.title')}
     >
       <div className='flex h-full min-h-0 min-w-0 flex-col gap-4'>
@@ -867,6 +869,24 @@ export function UpstreamTasksPage({
             sites={sitesQuery.data?.items ?? []}
           />
         )}
+        {!siteId && sitesQuery.isError && search.tab === 'list' && (
+          <QueryStateAlert
+            message={t('common.siteOptionsRefreshFailed')}
+            onRetry={() => void sitesQuery.refetch()}
+          />
+        )}
+        {listQuery.isError && list && search.tab === 'list' && (
+          <QueryStateAlert
+            message={t('common.retainedDataRefreshFailed')}
+            onRetry={() => void listQuery.refetch()}
+          />
+        )}
+        {statisticsQuery.isError && statistics && (
+          <QueryStateAlert
+            message={t('common.retainedDataRefreshFailed')}
+            onRetry={() => void statisticsQuery.refetch()}
+          />
+        )}
         {search.tab === 'list' && (
           <DataTable
             ariaLabel={t('upstreamTasks.table')}
@@ -874,9 +894,10 @@ export function UpstreamTasksPage({
             data={list?.items ?? []}
             emptyDescription={t('upstreamTasks.emptyDescription')}
             emptyTitle={t('upstreamTasks.empty')}
-            error={!validSiteId || listQuery.isError}
+            error={!validSiteId || (listQuery.isError && !list)}
             fetching={listQuery.isFetching}
             loading={listQuery.isPending}
+            mobileCardBreakpoint='wide'
             onPageChange={(page) => onSearchChange({ page })}
             onPageSizeChange={(pageSize) =>
               onSearchChange({ page: 1, pageSize })
@@ -923,7 +944,48 @@ export function UpstreamTasksPage({
                     </dt>
                     <dd>{item.quota}</dd>
                   </div>
+                  <div>
+                    <dt className='text-muted-foreground text-xs'>
+                      {t('upstreamTasks.filters.groups')}
+                    </dt>
+                    <dd className='break-all'>{item.group || '-'}</dd>
+                  </div>
+                  <div>
+                    <dt className='text-muted-foreground text-xs'>
+                      {t('upstreamTasks.user')}
+                    </dt>
+                    <dd>{item.user_id}</dd>
+                  </div>
+                  <div>
+                    <dt className='text-muted-foreground text-xs'>
+                      {t('upstreamTasks.channel')}
+                    </dt>
+                    <dd>{item.channel_id}</dd>
+                  </div>
                 </dl>
+                <div className='border-border grid gap-1 border-t pt-3 text-xs'>
+                  <span>
+                    {t('upstreamTasks.submitValue', {
+                      value: timestamp(item.submit_time),
+                    })}
+                  </span>
+                  <span>
+                    {t('upstreamTasks.startValue', {
+                      value: timestamp(item.start_time),
+                    })}
+                  </span>
+                  <span>
+                    {t('upstreamTasks.finishValue', {
+                      value: timestamp(item.finish_time),
+                    })}
+                  </span>
+                  <span className='text-muted-foreground'>
+                    {t('upstreamTasks.seenValue', {
+                      first: timestamp(item.first_seen_at),
+                      last: timestamp(item.last_seen_at),
+                    })}
+                  </span>
+                </div>
               </article>
             )}
             total={list?.total ?? 0}

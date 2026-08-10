@@ -421,7 +421,7 @@ test('shows upstream values in seconds with compact filters, server pagination a
       name: '逐站逐模型延迟与 TTFT 秒值趋势曲线图',
     })
   ).toBeVisible()
-  await page.getByRole('tab', { name: '站点拆分' }).click()
+  await page.getByRole('tab', { name: '站点明细' }).click()
   await expect(
     page.getByRole('region', {
       name: '华东生产站点（9007199254740995）性能原值表',

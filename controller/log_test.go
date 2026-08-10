@@ -19,6 +19,11 @@ func (application *fakeLogApplication) Query(_ context.Context, query dto.LogQue
 	return dto.LogResponse{Items: []dto.LogItem{}, Page: query.Page, PageSize: query.PageSize, DataStatus: dto.LogCollectionComplete}, nil
 }
 
+func (application *fakeLogApplication) Stats(_ context.Context, query dto.LogQuery) (dto.LogStatResponse, error) {
+	application.query = query
+	return dto.LogStatResponse{}, nil
+}
+
 func TestLogControllerGlobalAndSiteQueries(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	application := &fakeLogApplication{}
@@ -26,6 +31,8 @@ func TestLogControllerGlobalAndSiteQueries(t *testing.T) {
 	engine := gin.New()
 	engine.GET("/logs", controller.Global)
 	engine.GET("/sites/:id/logs", controller.Site)
+	engine.GET("/logs/stat", controller.GlobalStats)
+	engine.GET("/sites/:id/logs/stat", controller.SiteStats)
 	base := "?start_timestamp=100&end_timestamp=200&type=2&channel_id=0&username=alice&model_name=gpt&token_name=key&group=vip&request_id=req&upstream_request_id=up&p=2&page_size=10"
 
 	global := httptest.NewRecorder()
@@ -38,6 +45,12 @@ func TestLogControllerGlobalAndSiteQueries(t *testing.T) {
 	engine.ServeHTTP(site, httptest.NewRequest(http.MethodGet, "/sites/9/logs"+base, nil))
 	if site.Code != http.StatusOK || len(application.query.SiteIDs) != 1 || application.query.SiteIDs[0] != 9 {
 		t.Fatalf("site log query = %d %#v %s", site.Code, application.query, site.Body.String())
+	}
+
+	stat := httptest.NewRecorder()
+	engine.ServeHTTP(stat, httptest.NewRequest(http.MethodGet, "/sites/9/logs/stat"+base, nil))
+	if stat.Code != http.StatusOK || len(application.query.SiteIDs) != 1 || application.query.SiteIDs[0] != 9 {
+		t.Fatalf("site log stat query = %d %#v %s", stat.Code, application.query, stat.Body.String())
 	}
 
 	invalid := httptest.NewRecorder()

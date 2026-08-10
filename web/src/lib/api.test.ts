@@ -57,6 +57,50 @@ describe('shared API client', () => {
     expect(calls).toBe(1)
   })
 
+  test('omits empty query values from object, URLSearchParams, and inline URLs', async () => {
+    const received: string[] = []
+    api.defaults.adapter = async (config) => {
+      received.push(api.getUri(config))
+      return {
+        config,
+        data: {
+          success: true,
+          message: '',
+          code: '',
+          data: null,
+          request_id: 'req_query_params',
+        },
+        headers: {},
+        status: 200,
+        statusText: 'OK',
+      }
+    }
+
+    await api.get('/api/object?inline=&kept=1', {
+      params: {
+        enabled: false,
+        keyword: '',
+        missing: undefined,
+        nullable: null,
+        page: 1,
+        site_ids: [],
+        status: 0,
+      },
+    })
+    await api.get('/api/search-params', {
+      params: new URLSearchParams([
+        ['empty', ''],
+        ['site_ids', ''],
+        ['site_ids', '9'],
+      ]),
+    })
+
+    expect(received).toEqual([
+      '/api/object?kept=1&enabled=false&page=1&status=0',
+      '/api/search-params?site_ids=9',
+    ])
+  })
+
   test('turns a failed success envelope into a typed business error', async () => {
     api.defaults.adapter = async (config) => ({
       config,

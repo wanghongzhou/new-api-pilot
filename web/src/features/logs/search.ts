@@ -8,6 +8,20 @@ import { BEIJING_TIMEZONE, dayjs } from '@/lib/dayjs'
 
 import type { LogSearch, LogType } from './types'
 
+export const logQuickRanges = ['today', '24h', '7d', '14d'] as const
+export type LogQuickRange = (typeof logQuickRanges)[number]
+
+export function mergeLogSearch(
+  current: LogSearch,
+  changes: Partial<LogSearch>
+) {
+  const next = { ...current, ...changes }
+  for (const key of Object.keys(changes) as (keyof LogSearch)[]) {
+    if (changes[key] === undefined) delete next[key]
+  }
+  return next
+}
+
 type LogSearchInput = Omit<
   Partial<LogSearch>,
   'channelId' | 'exportId' | 'siteIds' | 'type'
@@ -18,9 +32,36 @@ type LogSearchInput = Omit<
   type?: number
 }
 
-function defaultRange(now = dayjs().tz(BEIJING_TIMEZONE)) {
+export function buildLogQuickRange(
+  range: LogQuickRange,
+  now = dayjs().tz(BEIJING_TIMEZONE)
+) {
   const end = now.startOf('hour')
-  return { end: end.unix(), start: end.subtract(24, 'hour').unix() }
+  let start = end.subtract(24, 'hour')
+  if (range === 'today') start = end.startOf('day')
+  else if (range === '7d') start = end.subtract(7, 'day')
+  else if (range === '14d') start = end.subtract(14, 'day')
+  return { end: end.unix(), start: start.unix() }
+}
+
+export function getLogQuickRange(
+  search: Pick<LogSearch, 'end' | 'start'>
+): LogQuickRange | 'custom' {
+  const duration = search.end - search.start
+  const startOfEndDay = dayjs
+    .unix(search.end)
+    .tz(BEIJING_TIMEZONE)
+    .startOf('day')
+    .unix()
+  if (search.start === startOfEndDay && duration < 24 * 3600) return 'today'
+  if (duration === 24 * 3600) return '24h'
+  if (duration === 7 * 24 * 3600) return '7d'
+  if (duration === 14 * 24 * 3600) return '14d'
+  return 'custom'
+}
+
+function defaultRange(now = dayjs().tz(BEIJING_TIMEZONE)) {
+  return buildLogQuickRange('24h', now)
 }
 
 function bounded(value: unknown, limit: number): string {
