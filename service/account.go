@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/big"
 	"strconv"
+	"time"
 
 	"new-api-pilot/common"
 	"new-api-pilot/constant"
@@ -186,10 +188,11 @@ func (service *AccountService) Get(ctx context.Context, id int64) (dto.AccountDe
 }
 
 func (service *AccountService) List(ctx context.Context, query dto.AccountListQuery) (common.PageData[dto.AccountListItem], error) {
+	now := service.clock.Now()
 	filter := model.AccountFilter{
 		Keyword: query.Keyword, RemoteStatus: query.RemoteStatus, RemoteState: query.RemoteState,
 		ManagedStatus: query.ManagedStatus, SortBy: query.SortBy, SortOrder: query.SortOrder,
-		TodayDateKey: beijingDateKey(service.clock.Now()), Offset: query.Offset(), Limit: query.PageSize,
+		TodayDateKey: beijingDateKey(now), Offset: query.Offset(), Limit: query.PageSize,
 	}
 	if query.SiteID != "" {
 		value, _ := strconv.ParseInt(query.SiteID, 10, 64)
@@ -208,13 +211,13 @@ func (service *AccountService) List(ctx context.Context, query dto.AccountListQu
 	for index := range accounts {
 		accountIDs[index] = accounts[index].ID
 	}
-	metadata, err := repository.LoadListMetadata(ctx, accountIDs)
+	metadata, err := repository.LoadListMetadata(ctx, accountIDs, filter.TodayDateKey)
 	if err != nil {
 		return common.PageData[dto.AccountListItem]{}, err
 	}
 	items := make([]dto.AccountListItem, 0, len(accounts))
 	for _, account := range accounts {
-		item, err := accountListItemFromMetadata(account, metadata[account.ID])
+		item, err := accountListItemFromMetadata(account, metadata[account.ID], now)
 		if err != nil {
 			return common.PageData[dto.AccountListItem]{}, err
 		}
@@ -478,10 +481,18 @@ func (service *AccountService) listItemFromModel(ctx context.Context, account mo
 	if site.QuotaPerUnit != nil && site.USDExchangeRate != nil {
 		rate.Source = "site"
 	}
-	return newAccountListItem(account, site.Name, customer.Name, rate, backfill), nil
+	today := missingUsageSummary()
+	now := service.clock.Now()
+	stat, err := model.NewAccountRepository(service.db).FindDailyStat(ctx, account.ID, beijingDateKey(now))
+	if err == nil {
+		today = accountTodayUsageSummary(stat, now)
+	} else if !model.IsNotFound(err) {
+		return dto.AccountListItem{}, fmt.Errorf("read account today summary: %w", err)
+	}
+	return newAccountListItem(account, site.Name, customer.Name, rate, today, backfill), nil
 }
 
-func accountListItemFromMetadata(account model.Account, metadata model.AccountListMetadata) (dto.AccountListItem, error) {
+func accountListItemFromMetadata(account model.Account, metadata model.AccountListMetadata, now time.Time) (dto.AccountListItem, error) {
 	if metadata.AccountID != account.ID {
 		return dto.AccountListItem{}, model.ErrAccountListContract
 	}
@@ -496,7 +507,43 @@ func accountListItemFromMetadata(account model.Account, metadata model.AccountLi
 	if metadata.QuotaPerUnit != nil && metadata.USDExchangeRate != nil {
 		rate.Source = "site"
 	}
-	return newAccountListItem(account, metadata.SiteName, metadata.CustomerName, rate, backfill), nil
+	today := missingUsageSummary()
+	if metadata.TodayStatID != nil {
+		if metadata.TodayDataStatus == nil || metadata.TodayLastCalculatedAt == nil {
+			return dto.AccountListItem{}, model.ErrAccountListContract
+		}
+		today = accountTodayUsageSummary(model.AccountStatDaily{
+			ID: *metadata.TodayStatID, AccountID: account.ID,
+			RequestCount: metadata.TodayRequestCount, Quota: metadata.TodayQuota, TokenUsed: metadata.TodayTokenUsed,
+			DataStatus: *metadata.TodayDataStatus, IsFinal: metadata.TodayIsFinal,
+			LastCalculatedAt: *metadata.TodayLastCalculatedAt,
+		}, now)
+	}
+	return newAccountListItem(account, metadata.SiteName, metadata.CustomerName, rate, today, backfill), nil
+}
+
+func accountTodayUsageSummary(stat model.AccountStatDaily, now time.Time) dto.UsageSummary {
+	requestCount := strconv.FormatInt(stat.RequestCount, 10)
+	quota := strconv.FormatInt(stat.Quota, 10)
+	tokenUsed := strconv.FormatInt(stat.TokenUsed, 10)
+	asOf := stat.LastCalculatedAt
+	var activeUsers *string
+	if stat.RequestCount != 0 || stat.Quota != 0 || stat.TokenUsed != 0 {
+		value := "1"
+		activeUsers = &value
+	} else if stat.DataStatus == model.UsageAggregationStatusComplete {
+		value := "0"
+		activeUsers = &value
+	}
+	return dto.UsageSummary{
+		RequestCount: &requestCount, Quota: &quota, TokenUsed: &tokenUsed,
+		ActiveUsers: activeUsers,
+		AvgRPM:      todayAverageMetric(big.NewInt(stat.RequestCount), now),
+		AvgTPM:      todayAverageMetric(big.NewInt(stat.TokenUsed), now),
+		AsOf:        &asOf,
+		DataStatus:  stat.DataStatus,
+		IsFinal:     stat.IsFinal,
+	}
 }
 
 func accountBackfillFromMetadata(status string, metadata model.AccountListMetadata) (dto.BackfillSummary, error) {
@@ -520,6 +567,7 @@ func newAccountListItem(
 	account model.Account,
 	siteName, customerName string,
 	rate dto.RateInfo,
+	today dto.UsageSummary,
 	backfill dto.BackfillSummary,
 ) dto.AccountListItem {
 	return dto.AccountListItem{
@@ -530,7 +578,7 @@ func newAccountListItem(
 		RemoteStatus: account.RemoteStatus, RemoteState: account.RemoteState, ManagedStatus: account.ManagedStatus,
 		Quota: strconv.FormatInt(account.Quota, 10), UsedQuota: strconv.FormatInt(account.UsedQuota, 10),
 		RequestCount: strconv.FormatInt(account.RequestCount, 10), Rate: rate, LastSyncedAt: account.LastSyncedAt,
-		Today: missingUsageSummary(), Backfill: backfill, UpdatedAt: account.UpdatedAt,
+		Today: today, Backfill: backfill, UpdatedAt: account.UpdatedAt,
 	}
 }
 

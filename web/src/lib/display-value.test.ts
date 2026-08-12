@@ -6,6 +6,7 @@ import {
   EMPTY_DISPLAY_VALUE,
   EMPTY_NUMERIC_DISPLAY_VALUE,
   formatDisplayValue,
+  formatDecimalDisplayValue,
   formatNumericDisplayValue,
 } from './display-value'
 
@@ -47,5 +48,28 @@ describe('formatNumericDisplayValue', () => {
     expect(formatNumericDisplayValue(0)).toBe('0')
     expect(formatNumericDisplayValue(12)).toBe('12')
     expect(formatNumericDisplayValue('42')).toBe('42')
+  })
+})
+
+describe('formatDecimalDisplayValue', () => {
+  test.each([
+    ['1000000.0000000000', '1,000,000'],
+    ['1000.5000000000', '1,000.5'],
+    ['0.0000000001', '0.0000000001'],
+    ['0', '0'],
+  ])('formats %s without losing meaningful precision', (value, expected) => {
+    expect(formatDecimalDisplayValue(value)).toBe(expected)
+  })
+
+  test('uses the numeric placeholder for invalid or absent decimals', () => {
+    expect(formatDecimalDisplayValue(null)).toBe(EMPTY_NUMERIC_DISPLAY_VALUE)
+    expect(formatDecimalDisplayValue('not-a-number')).toBe(
+      EMPTY_NUMERIC_DISPLAY_VALUE
+    )
+  })
+
+  test('rounds display-only decimals without retaining storage scale', () => {
+    expect(formatDecimalDisplayValue('3042.7560000000', 2)).toBe('3,042.76')
+    expect(formatDecimalDisplayValue('0.0000000000', 4)).toBe('0')
   })
 })

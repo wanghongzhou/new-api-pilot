@@ -237,16 +237,15 @@
       "id": "performance_proxy_cache_fence",
       "initial": {"site_id": "101", "config_version": 8, "hours": 24},
       "events": [
-        {"type": "proxy_success", "request_count": "40"},
+        {"type": "proxy_success", "model_count": 2},
         {"type": "list_cache_read", "config_version": 8},
         {"type": "bump_site_fence", "new_config_version": 9},
         {"type": "list_cache_read", "config_version": 9},
         {"type": "proxy_failure"}
       ],
       "expected": {
-        "weighted_success_rate": 97.5,
-        "weighted_avg_latency_ms": 90,
-        "weighted_avg_tps": 40,
+        "preserves_per_model_values": true,
+        "site_aggregate_available": false,
         "same_version_cache_status": "ready",
         "new_version_cache_status": "unavailable",
         "success_ttl_seconds": 3600,

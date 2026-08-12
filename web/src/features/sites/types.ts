@@ -73,7 +73,6 @@ export interface UsageSummary {
 
 export interface SitePerformanceModel {
   model_name: string
-  request_count: MetricString
   success_rate: number
   avg_latency_ms: number
   avg_tps: number
@@ -82,11 +81,7 @@ export interface SitePerformanceModel {
 export interface SitePerformanceSummary {
   hours: number
   sampled_at: Timestamp | null
-  data_status: DataStatus
-  request_count: MetricString
-  success_rate: number
-  avg_latency_ms: number
-  avg_tps: number
+  data_status: 'ready' | 'unavailable'
   models: SitePerformanceModel[]
 }
 

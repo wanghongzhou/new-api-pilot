@@ -1,17 +1,13 @@
-import type { ILineChartSpec } from '@visactor/react-vchart'
-import { lazy, Suspense, useMemo } from 'react'
+import { VChart, type ILineChartSpec } from '@visactor/react-vchart'
+import { useMemo } from 'react'
 
 import { useTheme } from '@/context/theme-provider'
-import { fromUnixSeconds } from '@/lib/dayjs'
 
-import { millisecondsToSeconds } from '../presentation'
+import {
+  buildPerformanceTrendValues,
+  hasRenderablePerformanceTrendValues,
+} from '../performance-trend-chart-data'
 import type { PerformanceHistoryItem } from '../types'
-
-const LazyVChart = lazy(() =>
-  import('@visactor/react-vchart').then((module) => ({
-    default: module.VChart,
-  }))
-)
 
 export function PerformanceTrendChart({
   ariaLabel,
@@ -28,27 +24,7 @@ export function PerformanceTrendChart({
 }) {
   const { resolvedTheme } = useTheme()
   const values = useMemo(
-    () =>
-      items.flatMap((item) => {
-        const identity = `${item.site_name} · ${item.model_name} / ${item.group || '-'}`
-        const bucket = fromUnixSeconds(item.bucket_start).format('MM-DD HH:mm')
-        const latency = millisecondsToSeconds(item.avg_latency_ms) ?? '0'
-        const ttft = millisecondsToSeconds(item.avg_ttft_ms) ?? '0'
-        return [
-          {
-            bucket,
-            rawValue: latency,
-            series: `${latencyLabel} · ${identity}`,
-            value: Number(latency),
-          },
-          {
-            bucket,
-            rawValue: ttft,
-            series: `${ttftLabel} · ${identity}`,
-            value: Number(ttft),
-          },
-        ]
-      }),
+    () => buildPerformanceTrendValues(items, latencyLabel, ttftLabel),
     [items, latencyLabel, ttftLabel]
   )
   const spec = useMemo<ILineChartSpec>(
@@ -58,6 +34,7 @@ export function PerformanceTrendChart({
         { orient: 'left', type: 'linear' },
       ],
       data: [{ id: 'performance-trend', values }],
+      invalidType: 'break',
       legends: { orient: 'bottom', visible: true },
       line: { style: { lineWidth: 2 } },
       point: { style: { size: 5 }, visible: true },
@@ -71,7 +48,7 @@ export function PerformanceTrendChart({
     [resolvedTheme, values]
   )
 
-  if (items.length === 0) {
+  if (!hasRenderablePerformanceTrendValues(values)) {
     return (
       <p className='text-muted-foreground py-8 text-center text-sm'>
         {emptyText}
@@ -86,13 +63,7 @@ export function PerformanceTrendChart({
         className='h-full min-h-96 w-full min-w-0 overflow-hidden'
         role='img'
       >
-        <Suspense
-          fallback={
-            <div className='bg-muted h-full animate-pulse rounded-md' />
-          }
-        >
-          <LazyVChart spec={spec} />
-        </Suspense>
+        <VChart spec={spec} />
       </div>
     </figure>
   )

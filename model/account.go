@@ -84,6 +84,14 @@ type AccountListMetadata struct {
 	USDExchangeRate *string `gorm:"column:usd_exchange_rate"`
 	LastRateAt      *int64  `gorm:"column:last_rate_at"`
 
+	TodayStatID           *int64  `gorm:"column:today_stat_id"`
+	TodayRequestCount     int64   `gorm:"column:today_request_count"`
+	TodayQuota            int64   `gorm:"column:today_quota"`
+	TodayTokenUsed        int64   `gorm:"column:today_token_used"`
+	TodayDataStatus       *string `gorm:"column:today_data_status"`
+	TodayIsFinal          bool    `gorm:"column:today_is_final"`
+	TodayLastCalculatedAt *int64  `gorm:"column:today_last_calculated_at"`
+
 	LatestRunID               *int64  `gorm:"column:latest_run_id"`
 	LatestRunStatus           *string `gorm:"column:latest_run_status"`
 	LatestRunStartTimestamp   *int64  `gorm:"column:latest_run_start_timestamp"`
@@ -252,12 +260,16 @@ func (repository *AccountRepository) List(ctx context.Context, filter AccountFil
 func (repository *AccountRepository) LoadListMetadata(
 	ctx context.Context,
 	accountIDs []int64,
+	todayDateKey int,
 ) (map[int64]AccountListMetadata, error) {
 	if repository == nil || repository.db == nil {
 		return nil, ErrAccountListContract
 	}
 	if len(accountIDs) == 0 {
 		return map[int64]AccountListMetadata{}, nil
+	}
+	if todayDateKey <= 0 {
+		return nil, ErrAccountListContract
 	}
 	ids := make([]int64, 0, len(accountIDs))
 	seen := make(map[int64]struct{}, len(accountIDs))
@@ -281,6 +293,10 @@ func (repository *AccountRepository) LoadListMetadata(
 		Select(`account.id AS account_id, site.name AS site_name, customer.name AS customer_name,
   CAST(site.quota_per_unit AS CHAR) AS quota_per_unit,
   CAST(site.usd_exchange_rate AS CHAR) AS usd_exchange_rate, site.last_rate_at,
+  today_stat.id AS today_stat_id, today_stat.request_count AS today_request_count,
+  today_stat.quota AS today_quota, today_stat.token_used AS today_token_used,
+  today_stat.data_status AS today_data_status, today_stat.is_final AS today_is_final,
+  today_stat.last_calculated_at AS today_last_calculated_at,
   run.id AS latest_run_id, run.status AS latest_run_status,
   run.start_timestamp AS latest_run_start_timestamp, run.end_timestamp AS latest_run_end_timestamp,
   run.total_windows AS latest_run_total_windows,
@@ -288,6 +304,7 @@ func (repository *AccountRepository) LoadListMetadata(
   run.failed_windows AS latest_run_failed_windows`).
 		Joins("JOIN site ON site.id = account.site_id").
 		Joins("JOIN customer ON customer.id = account.customer_id").
+		Joins("LEFT JOIN account_stat_daily AS today_stat ON today_stat.account_id = account.id AND today_stat.date_key = ?", todayDateKey).
 		Joins("LEFT JOIN (?) AS latest ON latest.target_id = account.id", latestRuns).
 		Joins("LEFT JOIN collection_run AS run ON run.id = latest.run_id").
 		Where("account.id IN ?", ids).
@@ -309,6 +326,21 @@ func (repository *AccountRepository) LoadListMetadata(
 		return nil, ErrAccountListContract
 	}
 	return result, nil
+}
+
+func (repository *AccountRepository) FindDailyStat(
+	ctx context.Context,
+	accountID int64,
+	dateKey int,
+) (AccountStatDaily, error) {
+	if repository == nil || repository.db == nil || accountID <= 0 || dateKey <= 0 {
+		return AccountStatDaily{}, ErrAccountListContract
+	}
+	var stat AccountStatDaily
+	err := repository.db.WithContext(ctx).
+		Where("account_id = ? AND date_key = ?", accountID, dateKey).
+		First(&stat).Error
+	return stat, err
 }
 
 func (repository *AccountRepository) UpdateRemark(ctx context.Context, id int64, remark string, updatedAt int64) error {

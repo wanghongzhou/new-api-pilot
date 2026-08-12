@@ -5,6 +5,8 @@ import {
   collectionRunStatuses,
   collectionTaskTypes,
   collectionRunWindowStatuses,
+  fastCollectionTaskTypes,
+  fastTaskHistoryStatuses,
   siteAuthStatuses,
   siteHealthStatuses,
   siteManagementStatuses,
@@ -83,12 +85,16 @@ export const siteSearchMiddlewares = [
 ]
 
 export const siteDetailSearchSchema = z.object({
+  tab: z.enum(['runs', 'fast']).optional().catch(undefined),
   runId: idStringSchema.optional().catch(undefined),
   runPage: z.coerce.number().int().min(1).optional().catch(undefined),
   runStatus: z.enum(collectionRunStatuses).optional().catch(undefined),
   runTaskType: z.enum(collectionTaskTypes).optional().catch(undefined),
   windowPage: z.coerce.number().int().min(1).optional().catch(undefined),
   windowStatus: z.enum(collectionRunWindowStatuses).optional().catch(undefined),
+  fastPage: z.coerce.number().int().min(1).optional().catch(undefined),
+  fastStatus: z.enum(fastTaskHistoryStatuses).optional().catch(undefined),
+  fastTaskType: z.enum(fastCollectionTaskTypes).optional().catch(undefined),
 })
 
 export const siteStatusSearchSchema = z.object({

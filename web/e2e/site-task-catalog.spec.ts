@@ -330,7 +330,7 @@ test('A101 shows the F12 nineteen-task catalog and exact fast-task subset', asyn
   expect(f12.tasks).toHaveLength(19)
   await seedAuth(page)
   const requests = await mockPage(page)
-  await page.goto('/sites/1')
+  await page.goto('/sites/1/collection-runs')
 
   await expect(
     page.getByRole('heading', { name: 'A101 任务目录站点' })

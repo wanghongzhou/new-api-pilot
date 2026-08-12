@@ -70,6 +70,76 @@ func TestCustomerAmountsPersistAcrossCreateUpdateAndRead(t *testing.T) {
 	}
 }
 
+func TestCustomerTodaySummaryPreservesZeroFactsAndSiteRates(t *testing.T) {
+	tx := openSiteTestTransaction(t)
+	clock := testsupport.NewFakeClock(time.Unix(1_752_400_800, 0))
+	cipher := accountTestCipher(t)
+	site := createAccountReadySite(t, tx, clock.Now().Unix(), cipher)
+	quotaPerUnit := "500000.0000000000"
+	exchangeRate := "6.8200000000"
+	rateAt := clock.Now().Unix() - 60
+	site.QuotaPerUnit = &quotaPerUnit
+	site.USDExchangeRate = &exchangeRate
+	site.LastRateAt = &rateAt
+	if err := model.NewSiteRepository(tx).Save(context.Background(), &site); err != nil {
+		t.Fatalf("save site rates: %v", err)
+	}
+	withFacts := model.Customer{
+		Name: "Zero Fact Customer", Status: dto.CustomerStatusUsing,
+		StatisticsBackfillStatus: "none", CreatedAt: clock.Now().Unix(), UpdatedAt: clock.Now().Unix(),
+	}
+	withoutFacts := model.Customer{
+		Name: "Missing Fact Customer", Status: dto.CustomerStatusUsing,
+		StatisticsBackfillStatus: "none", CreatedAt: clock.Now().Unix(), UpdatedAt: clock.Now().Unix(),
+	}
+	for _, customer := range []*model.Customer{&withFacts, &withoutFacts} {
+		if err := model.NewCustomerRepository(tx).Create(context.Background(), customer); err != nil {
+			t.Fatalf("create customer %s: %v", customer.Name, err)
+		}
+	}
+	stat := model.CustomerStatDaily{
+		CustomerID: withFacts.ID, SiteID: site.ID, DateKey: beijingDateKey(clock.Now()),
+		RequestCount: 0, Quota: 0, TokenUsed: 0, ActiveUsers: 0,
+		DataStatus: "partial", IsFinal: false, LastCalculatedAt: clock.Now().Unix() - 30,
+		CreatedAt: clock.Now().Unix(), UpdatedAt: clock.Now().Unix(),
+	}
+	if err := tx.Create(&stat).Error; err != nil {
+		t.Fatalf("create customer daily stat: %v", err)
+	}
+	customers, err := NewCustomerService(CustomerServiceOptions{Database: tx, Clock: clock})
+	if err != nil {
+		t.Fatalf("create customer service: %v", err)
+	}
+	page, err := customers.List(context.Background(), dto.CustomerListQuery{
+		Page: 1, PageSize: 20, SortBy: "name", SortOrder: "asc",
+	})
+	if err != nil {
+		t.Fatalf("list customers: %v", err)
+	}
+	items := make(map[string]dto.CustomerListItem, len(page.Items))
+	for _, item := range page.Items {
+		items[item.Name] = item
+	}
+	zero := items[withFacts.Name].Today
+	if stringValue(zero.RequestCount) != "0" || stringValue(zero.Quota) != "0" ||
+		stringValue(zero.TokenUsed) != "0" || stringValue(zero.ActiveUsers) != "0" ||
+		zero.DataStatus != "partial" || zero.IsFinal || zero.AsOf == nil || *zero.AsOf != stat.LastCalculatedAt {
+		t.Fatalf("zero customer today summary = %#v", zero)
+	}
+	if len(zero.SiteBreakdown) != 1 || stringValue(zero.SiteBreakdown[0].Quota) != "0" ||
+		zero.SiteBreakdown[0].SiteID != strconv.FormatInt(site.ID, 10) ||
+		zero.SiteBreakdown[0].RateSource != "site" || zero.SiteBreakdown[0].QuotaPerUnit == nil ||
+		*zero.SiteBreakdown[0].QuotaPerUnit != quotaPerUnit || zero.SiteBreakdown[0].USDExchangeRate == nil ||
+		*zero.SiteBreakdown[0].USDExchangeRate != exchangeRate {
+		t.Fatalf("zero customer site breakdown = %#v", zero.SiteBreakdown)
+	}
+	missing := items[withoutFacts.Name].Today
+	if missing.RequestCount != nil || missing.Quota != nil || missing.TokenUsed != nil ||
+		missing.ActiveUsers != nil || missing.DataStatus != "missing" || len(missing.SiteBreakdown) != 0 {
+		t.Fatalf("missing customer today summary = %#v", missing)
+	}
+}
+
 func (client *accountTestClient) ListUsersPage(_ context.Context, _ string, page int) (dto.UpstreamUserPage, error) {
 	result, exists := client.listPages[page]
 	if !exists {
@@ -184,6 +254,21 @@ func TestAccountListUsesBoundedQueriesAndPreservesMetadataContracts(t *testing.T
 			t.Fatalf("create bounded account %d: %v", index, err)
 		}
 	}
+	dateKey := beijingDateKey(clock.Now())
+	if err := tx.Create(&[]model.AccountStatDaily{
+		{
+			AccountID: accounts[0].ID, DateKey: dateKey, RequestCount: 7, Quota: 70, TokenUsed: 700,
+			DataStatus: model.UsageAggregationStatusPartial, LastCalculatedAt: clock.Now().Unix(),
+			CreatedAt: clock.Now().Unix(), UpdatedAt: clock.Now().Unix(),
+		},
+		{
+			AccountID: accounts[1].ID, DateKey: dateKey,
+			DataStatus: model.UsageAggregationStatusPartial, LastCalculatedAt: clock.Now().Unix(),
+			CreatedAt: clock.Now().Unix(), UpdatedAt: clock.Now().Unix(),
+		},
+	}).Error; err != nil {
+		t.Fatalf("create account today summaries: %v", err)
+	}
 	run, err := newLocalRebuildRun("account", accounts[0].ID, constant.TaskTypeAccountRebuild,
 		clock.Now().Unix()-7200, clock.Now().Unix(), "req_bounded_account_list", clock.Now().Unix())
 	if err != nil {
@@ -235,6 +320,49 @@ func TestAccountListUsesBoundedQueriesAndPreservesMetadataContracts(t *testing.T
 	if runItem.Backfill.RunID == nil || *runItem.Backfill.RunID != strconv.FormatInt(run.ID, 10) ||
 		runItem.Backfill.Status != "running" || runItem.Backfill.TotalWindows != 4 || runItem.Backfill.CompletedWindows != 1 {
 		t.Fatalf("account list backfill metadata = %#v", runItem.Backfill)
+	}
+	if runItem.Today.RequestCount == nil || *runItem.Today.RequestCount != "7" ||
+		runItem.Today.Quota == nil || *runItem.Today.Quota != "70" ||
+		runItem.Today.TokenUsed == nil || *runItem.Today.TokenUsed != "700" ||
+		runItem.Today.ActiveUsers == nil || *runItem.Today.ActiveUsers != "1" ||
+		runItem.Today.DataStatus != model.UsageAggregationStatusPartial || runItem.Today.AsOf == nil {
+		t.Fatalf("account list today summary = %#v", runItem.Today)
+	}
+	zeroItem := items[strconv.FormatInt(accounts[1].ID, 10)]
+	if zeroItem.Today.RequestCount == nil || *zeroItem.Today.RequestCount != "0" ||
+		zeroItem.Today.Quota == nil || *zeroItem.Today.Quota != "0" ||
+		zeroItem.Today.TokenUsed == nil || *zeroItem.Today.TokenUsed != "0" ||
+		zeroItem.Today.ActiveUsers != nil || zeroItem.Today.DataStatus != model.UsageAggregationStatusPartial {
+		t.Fatalf("partial zero account today summary = %#v", zeroItem.Today)
+	}
+	detail, err := service.Get(context.Background(), accounts[0].ID)
+	if err != nil || detail.Today.RequestCount == nil || *detail.Today.RequestCount != "7" ||
+		detail.Today.TokenUsed == nil || *detail.Today.TokenUsed != "700" {
+		t.Fatalf("account detail today summary = %#v, %v", detail.Today, err)
+	}
+}
+
+func TestAccountTodayUsageSummaryDistinguishesKnownZeroFromPartialZero(t *testing.T) {
+	now := time.Date(2026, time.July, 13, 12, 0, 0, 0, time.FixedZone("Asia/Shanghai", 8*60*60))
+	complete := accountTodayUsageSummary(model.AccountStatDaily{
+		RequestCount: 0, Quota: 0, TokenUsed: 0,
+		DataStatus: model.UsageAggregationStatusComplete, LastCalculatedAt: 123, IsFinal: true,
+	}, now)
+	if complete.RequestCount == nil || *complete.RequestCount != "0" ||
+		complete.ActiveUsers == nil || *complete.ActiveUsers != "0" ||
+		complete.AvgRPM == nil || *complete.AvgRPM != "0.000000" ||
+		complete.AvgTPM == nil || *complete.AvgTPM != "0.000000" || !complete.IsFinal {
+		t.Fatalf("complete zero account summary = %#v", complete)
+	}
+	partial := accountTodayUsageSummary(model.AccountStatDaily{
+		RequestCount: 720, Quota: 0, TokenUsed: 7200,
+		DataStatus: model.UsageAggregationStatusPartial, LastCalculatedAt: 124,
+	}, now)
+	if partial.RequestCount == nil || *partial.RequestCount != "720" ||
+		partial.ActiveUsers == nil || *partial.ActiveUsers != "1" ||
+		partial.AvgRPM == nil || *partial.AvgRPM != "1.000000" ||
+		partial.AvgTPM == nil || *partial.AvgTPM != "10.000000" {
+		t.Fatalf("partial zero account summary = %#v", partial)
 	}
 }
 

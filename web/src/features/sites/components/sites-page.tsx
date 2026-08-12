@@ -1,4 +1,11 @@
-import { Add01Icon, Refresh01Icon } from '@hugeicons/core-free-icons'
+import {
+  Add01Icon,
+  Chart01Icon,
+  Copy01Icon,
+  Refresh01Icon,
+  ServerStack01Icon,
+  ViewIcon,
+} from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   keepPreviousData,
@@ -11,7 +18,6 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
-import { DataFreshness } from '@/components/data/data-freshness'
 import { DataViewModeToggle } from '@/components/data/data-view-mode-toggle'
 import { MetricValue } from '@/components/data/metric-value'
 import { QuotaAmount } from '@/components/data/quota-amount'
@@ -24,8 +30,10 @@ import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
 import { DataTablePagination } from '@/components/ui/data-table-pagination'
 import { Spinner } from '@/components/ui/spinner'
+import { buildStatisticsSearch } from '@/features/statistics/search'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
+import { fromUnixSeconds } from '@/lib/dayjs'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -33,9 +41,14 @@ import { listSites, refreshSites } from '../api'
 import { siteListParams } from '../list-contract'
 import { siteKeys } from '../query-keys'
 import {
+  formatAverageRate,
   formatInstanceAvailability,
-  formatLatencySeconds,
+  formatPerformanceLatency,
+  formatPerformanceSuccessRate,
+  formatPerformanceThroughput,
   formatPercentValue,
+  isSitePerformanceReady,
+  sitePerformanceDashboardSummary,
 } from '../site-card-metrics'
 import type { SiteListItem, SiteSearch } from '../types'
 import { SiteActions, type SiteAction } from './site-actions'
@@ -50,15 +63,142 @@ interface SitesPageProps {
   search: SiteSearch
 }
 
-function resourceSummary(site: SiteListItem, unavailableLabel: string): string {
-  const values = [
-    site.resource.cpu_max_percent,
-    site.resource.memory_max_percent,
-    site.resource.disk_max_used_percent,
-  ]
-  return values
-    .map((value) => formatPercentValue(value, unavailableLabel))
-    .join(' / ')
+function ListMetric({
+  children,
+  label,
+}: {
+  children: React.ReactNode
+  label: string
+}) {
+  return (
+    <div className='min-w-0'>
+      <p className='text-muted-foreground truncate text-[11px]'>{label}</p>
+      <div className='text-foreground mt-1 min-w-0 font-semibold tabular-nums'>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function CompletenessBar({ label, value }: { label: string; value: number }) {
+  const percent = Math.max(0, Math.min(100, value * 100))
+  return (
+    <div className='grid min-w-28 gap-1.5'>
+      <div className='flex items-center justify-between gap-3'>
+        <span className='text-muted-foreground text-xs'>{label}</span>
+        <span className='text-xs font-semibold tabular-nums'>
+          {percent.toFixed(0)}%
+        </span>
+      </div>
+      <div
+        aria-label={label}
+        aria-valuemax={100}
+        aria-valuemin={0}
+        aria-valuenow={percent}
+        className='bg-muted h-1.5 overflow-hidden rounded-full'
+        role='progressbar'
+      >
+        <div
+          className='from-primary to-success h-full rounded-full bg-gradient-to-r'
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+    </div>
+  )
+}
+
+function SiteIdentityCell({ site }: { site: SiteListItem }) {
+  const { t } = useTranslation()
+  const copyBaseUrl = async () => {
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error('clipboard unavailable')
+      }
+      await navigator.clipboard.writeText(site.base_url)
+      toast.success(t('site.toast.baseUrlCopied'))
+    } catch {
+      toast.error(t('site.toast.copyFailed'))
+    }
+  }
+
+  return (
+    <div className='grid min-w-52 gap-2'>
+      <div className='min-w-0'>
+        <Link
+          className='text-foreground font-semibold hover:underline'
+          params={{ siteId: site.id }}
+          to='/sites/$siteId'
+        >
+          {site.name}
+        </Link>
+        <div className='mt-1 flex min-w-0 items-center gap-1.5'>
+          <span
+            className='text-muted-foreground max-w-64 truncate font-mono text-xs'
+            title={site.base_url}
+          >
+            {site.base_url}
+          </span>
+          <button
+            aria-label={t('site.copyBaseUrl')}
+            className='text-muted-foreground hover:text-foreground shrink-0'
+            onClick={() => void copyBaseUrl()}
+            title={t('site.copyBaseUrl')}
+            type='button'
+          >
+            <HugeiconsIcon icon={Copy01Icon} size={14} strokeWidth={2} />
+          </button>
+        </div>
+      </div>
+      <SiteStatusBadges site={site} />
+    </div>
+  )
+}
+
+function SiteRowActions({
+  isAdmin,
+  onAction,
+  site,
+}: {
+  isAdmin: boolean
+  onAction: (action: SiteAction, site: SiteListItem) => void
+  site: SiteListItem
+}) {
+  const { t } = useTranslation()
+  const linkClass =
+    'text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring flex size-9 items-center justify-center rounded-md outline-none focus-visible:ring-2'
+  return (
+    <div className='flex items-center justify-end gap-1'>
+      <Link
+        aria-label={t('site.actions.stats')}
+        className={linkClass}
+        params={{ siteId: site.id }}
+        search={buildStatisticsSearch({})}
+        title={t('site.actions.stats')}
+        to='/sites/$siteId/stats'
+      >
+        <HugeiconsIcon icon={Chart01Icon} size={17} strokeWidth={2} />
+      </Link>
+      <Link
+        aria-label={t('site.instanceStatus')}
+        className={linkClass}
+        params={{ siteId: site.id }}
+        title={t('site.instanceStatus')}
+        to='/sites/$siteId/status'
+      >
+        <HugeiconsIcon icon={ServerStack01Icon} size={17} strokeWidth={2} />
+      </Link>
+      <Link
+        aria-label={t('site.viewDetails')}
+        className={linkClass}
+        params={{ siteId: site.id }}
+        title={t('site.viewDetails')}
+        to='/sites/$siteId'
+      >
+        <HugeiconsIcon icon={ViewIcon} size={17} strokeWidth={2} />
+      </Link>
+      {isAdmin && <SiteActions onAction={onAction} site={site} />}
+    </div>
+  )
 }
 
 function CardGridState({
@@ -161,7 +301,7 @@ export function SitesPage({
     void queryClient.invalidateQueries({ queryKey: siteKeys.all })
   }
   const saveView = (view: SiteSearch['view']) => {
-    window.localStorage.setItem('sites:view-mode', view)
+    window.localStorage.setItem('sites:view-mode-v2', view)
     onSearchChange({ view })
   }
   const runBatchRefresh = async () => {
@@ -197,73 +337,98 @@ export function SitesPage({
     () => [
       {
         accessorKey: 'name',
-        cell: ({ row }) => (
-          <div className='min-w-44'>
-            <Link
-              className='font-medium hover:underline'
-              params={{ siteId: row.original.id }}
-              to='/sites/$siteId'
-            >
-              {row.original.name}
-            </Link>
-            <p className='text-muted-foreground max-w-60 truncate text-xs'>
-              {row.original.base_url}
-            </p>
-          </div>
-        ),
+        cell: ({ row }) => <SiteIdentityCell site={row.original} />,
         enableSorting: true,
         header: t('site.name'),
         id: 'name',
       },
       {
-        cell: ({ row }) => <SiteStatusBadges site={row.original} />,
-        enableSorting: true,
-        header: t('site.statuses'),
-        id: 'priority',
-      },
-      {
-        cell: ({ row }) => (
-          <span>
-            {formatInstanceAvailability(
-              row.original.resource.online_instance_count,
-              row.original.resource.instance_count,
-              t('data.unavailableValue')
-            )}
-          </span>
-        ),
-        header: t('site.instances'),
-        id: 'instances',
-      },
-      {
-        cell: ({ row }) => (
-          <span className='whitespace-nowrap' title={t('site.resourceOrder')}>
-            {resourceSummary(row.original, t('data.unavailableValue'))}
-          </span>
-        ),
-        header: t('site.resources'),
+        cell: ({ row }) => {
+          const resource = row.original.resource
+          const unavailableValue = t('data.unavailableValue')
+          return (
+            <div className='grid min-w-48 gap-2.5'>
+              <div className='grid grid-cols-2 gap-x-5 gap-y-2'>
+                <ListMetric label={t('site.instances')}>
+                  {formatInstanceAvailability(
+                    resource.online_instance_count,
+                    resource.instance_count,
+                    unavailableValue
+                  )}
+                </ListMetric>
+                <ListMetric label={t('metric.cpu')}>
+                  {formatPercentValue(
+                    resource.cpu_max_percent,
+                    unavailableValue
+                  )}
+                </ListMetric>
+                <ListMetric label={t('metric.memory')}>
+                  {formatPercentValue(
+                    resource.memory_max_percent,
+                    unavailableValue
+                  )}
+                </ListMetric>
+                <ListMetric label={t('metric.disk')}>
+                  {formatPercentValue(
+                    resource.disk_max_used_percent,
+                    unavailableValue
+                  )}
+                </ListMetric>
+              </div>
+              <p className='text-muted-foreground text-xs whitespace-nowrap'>
+                {resource.updated_at == null
+                  ? t('data.noUpdateTime')
+                  : t('site.resourceUpdatedAt', {
+                      time: fromUnixSeconds(resource.updated_at).format(
+                        'YYYY-MM-DD HH:mm:ss'
+                      ),
+                    })}
+              </p>
+            </div>
+          )
+        },
+        header: t('site.resourceStatus'),
         id: 'resources',
       },
       {
         cell: ({ row }) => {
           const today = row.original.today
           return (
-            <div className='grid gap-1 whitespace-nowrap'>
-              <span>
-                {t('site.todayRequests')}:{' '}
-                <MetricValue
-                  compact
-                  nullLabel='0'
-                  value={today.request_count}
-                />
-              </span>
-              <span>
-                {t('metric.token')}:{' '}
-                <MetricValue compact nullLabel='0' value={today.token_used} />
-              </span>
-              <span>
-                {t('site.activeUsers')}:{' '}
-                <MetricValue compact nullLabel='0' value={today.active_users} />
-              </span>
+            <div className='grid min-w-64 gap-3'>
+              <div className='grid grid-cols-2 gap-x-5'>
+                <ListMetric label={t('site.dashboard.totalQuota')}>
+                  <QuotaAmount
+                    emphasizeAmount
+                    inline
+                    nullLabel='0'
+                    quota={today.quota}
+                    rate={row.original.rate}
+                    showQuota={false}
+                  />
+                </ListMetric>
+                <ListMetric label={t('site.dashboard.totalTokens')}>
+                  <MetricValue compact nullLabel='0' value={today.token_used} />
+                </ListMetric>
+              </div>
+              <div className='grid grid-cols-3 gap-x-5'>
+                <ListMetric label={t('site.dashboard.totalCount')}>
+                  <MetricValue
+                    compact
+                    nullLabel='0'
+                    value={today.request_count}
+                  />
+                </ListMetric>
+                <ListMetric label={t('site.averageRpm')}>
+                  <span title={today.avg_rpm ?? undefined}>
+                    {formatAverageRate(today.avg_rpm)}
+                  </span>
+                </ListMetric>
+                <ListMetric label={t('site.averageTpm')}>
+                  <span title={today.avg_tpm ?? undefined}>
+                    {formatAverageRate(today.avg_tpm)}
+                  </span>
+                </ListMetric>
+              </div>
             </div>
           )
         },
@@ -271,53 +436,56 @@ export function SitesPage({
         id: 'usage_24h',
       },
       {
-        cell: ({ row }) => (
-          <div className='grid gap-1 whitespace-nowrap'>
-            <span>
-              <MetricValue
-                compact
-                nullLabel='0'
-                value={row.original.today.avg_rpm}
-              />
-            </span>
-            <span>
-              <MetricValue
-                compact
-                nullLabel='0'
-                value={row.original.today.avg_tpm}
-              />
-            </span>
-          </div>
-        ),
-        header: `${t('site.averageRpm')} / ${t('site.averageTpm')}`,
-        id: 'average_throughput',
-      },
-      {
         cell: ({ row }) => {
           const performance = row.original.performance
-          if (performance.data_status !== 'complete') {
+          const performanceModels = performance.models ?? []
+          const performanceSummary =
+            sitePerformanceDashboardSummary(performanceModels)
+          const unavailableValue = t('data.unavailableValue')
+          if (
+            !isSitePerformanceReady(performance.data_status) ||
+            performanceModels.length === 0
+          ) {
             return (
-              <span className='text-muted-foreground whitespace-nowrap'>
-                {t('site.performance.unavailable')}
-              </span>
+              <div className='grid min-w-52 gap-1'>
+                <span className='font-semibold'>{unavailableValue}</span>
+                <span className='text-muted-foreground text-xs'>
+                  {t('site.performance.unavailable')}
+                </span>
+              </div>
             )
           }
           return (
-            <div className='grid gap-1 whitespace-nowrap'>
-              <span>
-                {(performance.success_rate * 100).toFixed(1)}%{' '}
-                {t('site.performance.successRate')}
-              </span>
-              <span>
-                {t('site.performance.latencyValue', {
-                  value: formatLatencySeconds(performance.avg_latency_ms),
-                })}
-              </span>
-              <span>
-                {t('site.performance.tpsValue', {
-                  value: performance.avg_tps.toFixed(1),
-                })}
-              </span>
+            <div className='grid min-w-64 gap-2.5'>
+              <div className='grid grid-cols-3 gap-x-4'>
+                <ListMetric label={t('site.performance.successRate')}>
+                  {formatPerformanceSuccessRate(
+                    performanceSummary.successRate,
+                    unavailableValue
+                  )}
+                </ListMetric>
+                <ListMetric label={t('site.performance.avgLatency')}>
+                  {formatPerformanceLatency(
+                    performanceSummary.avgLatencyMs,
+                    unavailableValue
+                  )}
+                </ListMetric>
+                <ListMetric label={t('site.performance.avgTps')}>
+                  {formatPerformanceThroughput(
+                    performanceSummary.throughput,
+                    unavailableValue
+                  )}
+                </ListMetric>
+              </div>
+              {performance.sampled_at != null && (
+                <p className='text-muted-foreground text-xs whitespace-nowrap'>
+                  {t('site.performance.sampledAt', {
+                    time: fromUnixSeconds(performance.sampled_at).format(
+                      'YYYY-MM-DD HH:mm:ss'
+                    ),
+                  })}
+                </p>
+              )}
             </div>
           )
         },
@@ -326,42 +494,25 @@ export function SitesPage({
       },
       {
         cell: ({ row }) => (
-          <QuotaAmount
-            inline
-            nullLabel='0'
-            quota={row.original.today.quota}
-            rate={row.original.rate}
+          <CompletenessBar
+            label={t('site.completeness')}
+            value={row.original.completeness_rate}
           />
-        ),
-        enableSorting: true,
-        header: t('site.todayQuota'),
-        id: 'today_quota',
-      },
-      {
-        cell: ({ row }) => (
-          <div className='grid gap-1 whitespace-nowrap'>
-            <span>{(row.original.completeness_rate * 100).toFixed(1)}%</span>
-            <DataFreshness
-              expired={row.original.realtime.expired}
-              labelKey='site.currentUpdatedAt'
-              timestamp={row.original.realtime.updated_at}
-            />
-          </div>
         ),
         header: t('site.completeness'),
         id: 'completeness',
       },
-      ...(isAdmin
-        ? ([
-            {
-              cell: ({ row }) => (
-                <SiteActions onAction={setDialogAction} site={row.original} />
-              ),
-              header: t('common.actions'),
-              id: 'actions',
-            },
-          ] satisfies ColumnDef<SiteListItem, unknown>[])
-        : []),
+      {
+        cell: ({ row }) => (
+          <SiteRowActions
+            isAdmin={isAdmin}
+            onAction={setDialogAction}
+            site={row.original}
+          />
+        ),
+        header: t('common.actions'),
+        id: 'actions',
+      },
     ],
     [isAdmin, t]
   )

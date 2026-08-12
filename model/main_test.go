@@ -34,6 +34,30 @@ func TestGORMLoggerNeverExpandsSensitiveParameters(t *testing.T) {
 	}
 }
 
+func TestGORMLoggerIgnoresExpectedRecordNotFoundErrors(t *testing.T) {
+	var output bytes.Buffer
+	databaseLogger := newParameterizedGORMLogger(&output, logger.Warn)
+	databaseLogger.Trace(context.Background(), time.Now(), func() (string, int64) {
+		return "SELECT * FROM `alert_event` WHERE `active_key` = ? LIMIT 1", 0
+	}, gorm.ErrRecordNotFound)
+	if output.Len() != 0 {
+		t.Fatalf("record-not-found lookup was logged: %s", output.String())
+	}
+}
+
+func TestGORMLoggerRetainsUnexpectedDatabaseErrors(t *testing.T) {
+	var output bytes.Buffer
+	databaseLogger := newParameterizedGORMLogger(&output, logger.Warn)
+	databaseLogger.Trace(context.Background(), time.Now(), func() (string, int64) {
+		return "SELECT * FROM `site` WHERE `id` = ?", 0
+	}, context.DeadlineExceeded)
+	logged := output.String()
+	if !strings.Contains(logged, context.DeadlineExceeded.Error()) ||
+		!strings.Contains(logged, "SELECT * FROM `site`") {
+		t.Fatalf("unexpected database error was not logged: %s", logged)
+	}
+}
+
 func TestValidateMySQLVersion(t *testing.T) {
 	for _, version := range []string{"8.0.36", "8.4.6", "9.0.1-commercial"} {
 		if err := ValidateMySQLVersion(version); err != nil {

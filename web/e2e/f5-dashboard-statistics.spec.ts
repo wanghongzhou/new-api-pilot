@@ -202,6 +202,26 @@ function dashboardHealth(state: DashboardFixtureState = 'partial') {
             status: 'firing',
             target_name: 'CPU 使用率连续超过阈值的超长实例名称',
           },
+          {
+            first_observed_at: rangeEnd - 500,
+            id: '9007199254740999',
+            last_fired_at: rangeEnd - 30,
+            level: 'warning',
+            message: {
+              code: 'ALERT_CHANNEL_RESPONSE_TIME_HIGH',
+              params: {
+                site_id: '9007199254740993',
+                site_name: siteBreakdown[0]?.site_name,
+                threshold: '3000.0000000000',
+                value: '3042.7500000000',
+              },
+              technical_detail: '',
+            },
+            site_id: '9007199254740993',
+            site_name: siteBreakdown[0]?.site_name,
+            status: 'firing',
+            target_name: '渠道响应时间',
+          },
         ],
     reason: state === 'partial' ? missingReason : null,
     sites: empty
@@ -299,6 +319,12 @@ async function fulfillDashboard(
   } else if (endpoint === 'top') {
     const url = new URL(route.request().url())
     const type = url.searchParams.get('type') ?? 'customer'
+    const rankingIds: Record<string, string> = {
+      channel: '9007199254740993:8',
+      customer: '9007199254740995',
+      model: 'gpt-4o',
+      site: '9007199254740993',
+    }
     const rankingNames: Record<string, string> = {
       channel: '跨站通道超长名称',
       customer: '重点客户超长中文名称用于移动端换行',
@@ -312,13 +338,13 @@ async function fulfillDashboard(
             {
               as_of: rangeEnd - 3600,
               data_status: state === 'complete' ? 'complete' : 'partial',
-              dimension_id: '9007199254740995',
+              dimension_id: rankingIds[type],
               dimension_name: rankingNames[type],
               dimension_type: type,
               is_final: state === 'complete',
               reason: state === 'partial' ? missingReason : null,
               site_breakdown: siteBreakdown,
-              site_id: null,
+              site_id: type === 'customer' ? null : '9007199254740993',
               value: '9007199254740997',
             },
           ]
@@ -358,7 +384,7 @@ async function expectAccessibleSkipLink(page: Page) {
 test('Dashboard renders the complete fixture across all five sections', async ({
   page,
 }) => {
-  test.setTimeout(60_000)
+  test.setTimeout(90_000)
   await seedAuth(page)
   await mockDashboard(page, 'complete')
   await page.goto('/dashboard')
@@ -385,11 +411,27 @@ test('Dashboard renders the complete fixture across all five sections', async ({
   await expect(
     trend.getByTestId('statistics-chart-exact-values')
   ).not.toContainText('当前显示值 -')
+  const trendHref = await trend
+    .locator('a[href*="/statistics/global"]')
+    .getAttribute('href')
+  const trendUrl = new URL(trendHref ?? '', 'http://127.0.0.1')
+  expect(trendUrl.pathname).toBe('/statistics/global')
+  expect(trendUrl.searchParams.get('start')).toBe(String(rangeStart))
+  expect(trendUrl.searchParams.get('end')).toBe(String(rangeStart + 2 * 86_400))
+  expect(trendUrl.searchParams.get('granularity')).toBe('day')
+  expect(trendUrl.searchParams.get('metric')).toBe('request_count')
 
   const ranking = page.getByRole('region', { name: '今日快速排行' })
-  await expect(
-    ranking.getByText('重点客户超长中文名称用于移动端换行')
-  ).toBeVisible()
+  const customerRanking = ranking.getByRole('link', {
+    name: /重点客户超长中文名称用于移动端换行/,
+  })
+  await expect(customerRanking).toBeVisible()
+  const customerHref = await customerRanking.getAttribute('href')
+  const customerUrl = new URL(customerHref ?? '', 'http://127.0.0.1')
+  expect(customerUrl.pathname).toBe('/statistics/customers')
+  expect(
+    JSON.parse(customerUrl.searchParams.get('customerIds') ?? '[]')
+  ).toContain('9007199254740995')
   await expect(ranking.getByText('完整', { exact: true })).toBeVisible()
 
   const health = page.getByRole('region', {
@@ -401,23 +443,34 @@ test('Dashboard renders the complete fixture across all five sections', async ({
   await expect(health.getByText('昨日校验状态')).toBeVisible()
   await expect(health.getByText('已最终确认')).toBeVisible()
   await expect(
-    health.getByRole('link', { name: '授权过期站点 ID 0' })
+    health.getByRole('link', { name: '授权过期站点 0' })
   ).toBeVisible()
   await expect(
-    health.getByRole('link', { name: '统计未就绪站点 ID 0' })
+    health.getByRole('link', { name: '统计未就绪站点 0' })
   ).toBeVisible()
-  await expect(
-    health.getByText('华东超长名称生产站点用于验证移动端不会横向溢出')
-  ).toBeVisible()
-  await expect(health.getByText('就绪', { exact: true })).toBeVisible()
+  await expect(health.getByText('当前没有需要关注的异常站点。')).toBeVisible()
   await expect(
     health.getByText('CPU 使用率连续超过阈值的超长实例名称')
+  ).toBeVisible()
+  await expect(
+    health.getByText(
+      '站点 华东超长名称生产站点用于验证移动端不会横向溢出 的渠道平均响应时间为 3,042.75 毫秒，超过阈值 3,000 毫秒'
+    )
   ).toBeVisible()
   await expect(
     health.locator('a[href*="/alerts?alertId=9007199254740998"]')
   ).toBeVisible()
   await expect(page.getByText('该区块加载失败')).toHaveCount(0)
   await expect(page.getByText('暂无可展示数据')).toHaveCount(0)
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth
+    )
+  ).toBe(false)
+  const accessibility = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa'])
+    .analyze()
+  expect(accessibility.violations).toEqual([])
 })
 
 test('Dashboard renders partial values without presenting missing data as zero', async ({
@@ -465,11 +518,35 @@ test('Dashboard renders partial values without presenting missing data as zero',
   await expect(health.getByText('昨日校验状态')).toBeVisible()
   await expect(health.getByText('尚未最终确认')).toBeVisible()
   await expect(
-    health.getByRole('link', { name: '授权过期站点 ID 1' })
+    health.getByRole('link', { name: '授权过期站点 1' })
   ).toBeVisible()
   await expect(
-    health.getByRole('link', { name: '统计未就绪站点 ID 1' })
+    health.getByRole('link', { name: '统计未就绪站点 1' })
   ).toBeVisible()
+  const firingHref = await health
+    .getByRole('link', { name: '当前告警 2' })
+    .getAttribute('href')
+  const firingUrl = new URL(firingHref ?? '', 'http://127.0.0.1')
+  expect(JSON.parse(firingUrl.searchParams.get('status') ?? '[]')).toEqual([
+    'firing',
+  ])
+  const criticalHref = await health
+    .getByRole('link', { name: '严重 1' })
+    .getAttribute('href')
+  const criticalUrl = new URL(criticalHref ?? '', 'http://127.0.0.1')
+  expect(JSON.parse(criticalUrl.searchParams.get('level') ?? '[]')).toEqual([
+    'critical',
+  ])
+  const expiredHref = await health
+    .getByRole('link', { name: '授权过期站点 1' })
+    .getAttribute('href')
+  const expiredUrl = new URL(expiredHref ?? '', 'http://127.0.0.1')
+  expect(JSON.parse(expiredUrl.searchParams.get('auth') ?? '[]')).toEqual([
+    'expired',
+  ])
+  await expect(
+    realtime.getByRole('link', { name: '9007199254740996' })
+  ).toHaveCount(2)
   await expect(health.getByRole('link', { name: /部分完整/ })).toBeVisible()
   await expect(health.getByText('该范围的数据缺失')).toHaveCount(3)
   await expect(page.getByText('该区块加载失败')).toHaveCount(0)
@@ -511,10 +588,10 @@ test('Dashboard renders empty trend, ranking, site and alert states', async ({
   await expect(health.getByText('昨日校验状态')).toBeVisible()
   await expect(health.getByText('已最终确认')).toBeVisible()
   await expect(
-    health.getByRole('link', { name: '授权过期站点 ID 0' })
+    health.getByRole('link', { name: '授权过期站点 0' })
   ).toBeVisible()
   await expect(
-    health.getByRole('link', { name: '统计未就绪站点 ID 0' })
+    health.getByRole('link', { name: '统计未就绪站点 0' })
   ).toBeVisible()
   await expect(page.getByText('该区块加载失败')).toHaveCount(0)
 })
@@ -522,7 +599,7 @@ test('Dashboard renders empty trend, ranking, site and alert states', async ({
 test('Dashboard isolates each of its four endpoint failures', async ({
   page,
 }, testInfo) => {
-  test.setTimeout(90_000)
+  test.setTimeout(150_000)
   await seedAuth(page)
   let failed: string | null = 'summary'
   let cycleRequests: string[] = []
@@ -554,17 +631,17 @@ test('Dashboard isolates each of its four endpoint failures', async ({
     const failedSections = page.getByText('该区块加载失败')
     await expect(failedSections).toHaveCount(endpoint === 'summary' ? 2 : 1)
     await expect
-      .poll(() => cycleRequests.length)
-      .toBe(endpoint === 'top' ? 15 : 9)
+      .poll(() =>
+        [
+          ...new Set(topRequests.map((url) => url.searchParams.get('type'))),
+        ].sort()
+      )
+      .toEqual(['customer'])
+    await expect.poll(() => cycleRequests.length).toBe(6)
     expect(new Set(cycleRequests)).toEqual(
       new Set(['health', 'summary', 'top', 'trend'])
     )
-    expect(cycleRequests.filter((value) => value === endpoint)).toHaveLength(
-      endpoint === 'top' ? 12 : 3
-    )
-    expect(
-      new Set(topRequests.map((url) => url.searchParams.get('type')))
-    ).toEqual(new Set(['site', 'customer', 'model', 'channel']))
+    expect(cycleRequests.filter((value) => value === endpoint)).toHaveLength(3)
     if (endpoint !== 'summary') {
       await expect(
         page.getByText('9,007,199,254,740,995').first()
@@ -611,10 +688,9 @@ test('Dashboard isolates each of its four endpoint failures', async ({
     path: testInfo.outputPath('dashboard-top.png'),
   })
   const rankingRegion = page.getByRole('region', { name: '今日快速排行' })
-  await rankingRegion
-    .getByRole('button', { name: 'quota', exact: true })
-    .click()
-  await rankingRegion.getByLabel('显示数量').fill('10')
+  await rankingRegion.getByRole('button', { name: '额度', exact: true }).click()
+  await rankingRegion.getByLabel('显示数量').click()
+  await page.getByRole('option', { name: '10', exact: true }).click()
   await expect
     .poll(
       () =>
@@ -628,7 +704,7 @@ test('Dashboard isolates each of its four endpoint failures', async ({
             .map((url) => url.searchParams.get('type'))
         ).size
     )
-    .toBe(4)
+    .toBe(1)
   for (const [tab, name] of [
     ['站点', '华东生产站点超长名称'],
     ['模型', '跨站模型超长名称'],
@@ -637,6 +713,17 @@ test('Dashboard isolates each of its four endpoint failures', async ({
     await page.getByRole('tab', { name: tab, exact: true }).click()
     await expect(page.getByText(name)).toBeVisible()
   }
+  expect(
+    new Set(
+      topRequests
+        .filter(
+          (url) =>
+            url.searchParams.get('metric') === 'quota' &&
+            url.searchParams.get('limit') === '10'
+        )
+        .map((url) => url.searchParams.get('type'))
+    )
+  ).toEqual(new Set(['customer', 'site', 'model', 'channel']))
   await page.screenshot({
     fullPage: true,
     path: testInfo.outputPath('dashboard-ranking-controls.png'),
@@ -716,7 +803,7 @@ function statisticsResponse(scope: string, url: URL) {
       items: [{ ...base, ...extras }],
       page: Number(url.searchParams.get('p') ?? 1),
       page_size: Number(url.searchParams.get('page_size') ?? 20),
-      total: 1,
+      total: 201,
     },
     completeness: completeness(),
     granularity,
@@ -752,7 +839,7 @@ function statisticsResponse(scope: string, url: URL) {
 test('nine statistics scopes preserve URL filters, partial and null contracts', async ({
   page,
 }, testInfo) => {
-  test.setTimeout(60_000)
+  test.setTimeout(90_000)
   await seedAuth(page)
   const statisticsRequests: URL[] = []
   await page.route(
@@ -874,9 +961,10 @@ test('nine statistics scopes preserve URL filters, partial and null contracts', 
   await expect(page.getByTestId('statistics-chart-exact-values')).toContainText(
     '-'
   )
-  const scopeNavigation = page.getByRole('tablist', { name: '统计作用域' })
-  await expect(scopeNavigation.getByRole('tab')).toHaveCount(9)
-  await scopeNavigation.getByRole('tab', { name: '模型' }).click()
+  await expect(page.getByRole('tablist', { name: '统计作用域' })).toHaveCount(0)
+  await page.goto(
+    `/statistics/models?start=${rangeStart}&end=${rangeEnd}&granularity=hour&metric=request_count&view=chart`
+  )
   await expect(page.getByRole('heading', { name: '模型统计' })).toBeVisible()
 
   await page.getByRole('button', { name: '对象筛选' }).click()
@@ -924,11 +1012,27 @@ test('nine statistics scopes preserve URL filters, partial and null contracts', 
     path: testInfo.outputPath('statistics-model-chart.png'),
   })
   await page.getByRole('button', { name: '表格视图' }).click()
+  await hideDeveloperOverlays(page)
   const statisticsLongName = page
     .getByText('跨站统计超长中文维度名称用于验证表格和移动卡片换行')
     .filter({ visible: true })
   await statisticsLongName.scrollIntoViewIfNeeded()
   await expect(statisticsLongName).toBeVisible()
+  await page.getByRole('button', { name: '下一页' }).click()
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get('page'))
+    .toBe('2')
+  await expect
+    .poll(() => statisticsRequests.at(-1)?.searchParams.get('p'))
+    .toBe('2')
+  await page.getByRole('combobox', { name: '每页行数' }).click()
+  await page.getByRole('option', { name: '50', exact: true }).click()
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get('pageSize'))
+    .toBe('50')
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get('page'))
+    .toBe('1')
   await page.screenshot({
     path: testInfo.outputPath('statistics-model-breakdown.png'),
   })

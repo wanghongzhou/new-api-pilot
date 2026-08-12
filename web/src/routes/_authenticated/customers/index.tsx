@@ -38,6 +38,12 @@ function CustomersRoute() {
           to: '/accounts',
         })
       }
+      onPageReplace={(page) =>
+        void navigate({
+          replace: true,
+          search: (current) => ({ ...current, page }),
+        })
+      }
       onSearchChange={(changes) => {
         if (changes.view) {
           window.localStorage.setItem('customers:view-mode', changes.view)

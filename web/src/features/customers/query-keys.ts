@@ -19,6 +19,8 @@ export const customerKeys = {
   lists: () => ['customers', 'list'] as const,
   list: (params: CustomerListParams) =>
     ['customers', 'list', stableParams(params)] as const,
+  options: (params: Omit<CustomerListParams, 'p' | 'page_size'>) =>
+    ['customers', 'options', stableParams(params)] as const,
   detail: (id: string) => ['customers', 'detail', id] as const,
   accounts: (id: string, page: number) =>
     ['customers', 'detail', id, 'accounts', page] as const,

@@ -153,7 +153,7 @@ func (service *SiteService) List(ctx context.Context, query dto.SiteListQuery) (
 	}
 	nowTime := service.clock.Now()
 	now := nowTime.Unix()
-	usageStart, usageEnd := siteTodayUsageRange(nowTime)
+	usageStart, usageEnd := siteListUsageRange(nowTime)
 	usage, err := service.sites.ListUsageOverviews(ctx, siteIDs, usageStart, usageEnd)
 	if err != nil {
 		return common.PageData[dto.SiteListItem]{}, fmt.Errorf("list site usage overviews: %w", err)
@@ -347,7 +347,7 @@ func (service *SiteService) detailFromModel(ctx context.Context, site model.Site
 	if err != nil {
 		return dto.SiteDetail{}, fmt.Errorf("read latest site resource: %w", err)
 	}
-	usageStart, usageEnd := siteTodayUsageRange(nowTime)
+	usageStart, usageEnd := siteListUsageRange(nowTime)
 	usage, err := service.sites.ListUsageOverviews(ctx, []int64{site.ID}, usageStart, usageEnd)
 	if err != nil {
 		return dto.SiteDetail{}, fmt.Errorf("read site usage overview: %w", err)
@@ -375,9 +375,8 @@ func (service *SiteService) detailFromModel(ctx context.Context, site model.Site
 	return detail, nil
 }
 
-func siteTodayUsageRange(now time.Time) (int64, int64) {
-	start, _ := dashboardTodayRange(now)
-	return start, now.Unix()
+func siteListUsageRange(now time.Time) (int64, int64) {
+	return now.Add(-24 * time.Hour).Unix(), now.Unix()
 }
 
 func siteListItemFromModel(site model.Site, now int64, resource model.SiteStatusMinutely, usage model.SiteUsageOverview, performance dto.SitePerformanceSummary, completenessRate float64) dto.SiteListItem {
@@ -398,7 +397,7 @@ func siteListItemFromModel(site model.Site, now int64, resource model.SiteStatus
 		Today: dto.UsageSummary{
 			RequestCount: &zeroMetric, Quota: &zeroMetric, TokenUsed: &zeroMetric,
 			ActiveUsers: &zeroMetric, AvgRPM: &zeroMetric, AvgTPM: &zeroMetric, DataStatus: "missing",
-		}, CompletenessRate: completenessRate, DisabledAt: site.DisabledAt, UpdatedAt: site.UpdatedAt,
+		}, Performance: performance, CompletenessRate: completenessRate, DisabledAt: site.DisabledAt, UpdatedAt: site.UpdatedAt,
 	}
 	if site.Version != "" {
 		item.Version = stringPointer(site.Version)

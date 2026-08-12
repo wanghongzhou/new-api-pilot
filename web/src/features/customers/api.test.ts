@@ -8,6 +8,7 @@ import { parseIdString } from '@/lib/api-types'
 import {
   enableCustomer,
   getCustomerStatistics,
+  listAllCustomers,
   listCustomers,
   updateCustomer,
 } from './api'
@@ -102,5 +103,53 @@ describe('customer API', () => {
       status: 'using',
     })
     await enableCustomer(customerId)
+  })
+
+  test('loads and deduplicates every customer option page', async () => {
+    const requestedPages: string[] = []
+    let active = 0
+    let maximumActive = 0
+    api.defaults.adapter = async (config) => {
+      const params = config.params as URLSearchParams
+      const page = params.get('p') ?? ''
+      requestedPages.push(page)
+      active += 1
+      maximumActive = Math.max(maximumActive, active)
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      active -= 1
+      const id = page === '3' ? '1' : page
+      return {
+        config,
+        data: {
+          code: '',
+          data: {
+            items: [{ id }],
+            p: Number(page),
+            page_size: 100,
+            total: 501,
+          },
+          message: '',
+          request_id: 'req_customer_options',
+          success: true,
+        },
+        headers: {},
+        status: 200,
+        statusText: 'OK',
+      }
+    }
+
+    const result = await listAllCustomers({
+      sort_by: 'name',
+      sort_order: 'asc',
+    })
+    expect(requestedPages.sort()).toEqual(['1', '2', '3', '4', '5', '6'])
+    expect(maximumActive).toBe(4)
+    expect(result.items.map((item) => String(item.id))).toEqual([
+      '1',
+      '2',
+      '4',
+      '5',
+      '6',
+    ])
   })
 })

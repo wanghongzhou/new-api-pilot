@@ -1,4 +1,9 @@
-import { Add01Icon, Refresh01Icon } from '@hugeicons/core-free-icons'
+import {
+  Add01Icon,
+  Chart01Icon,
+  Refresh01Icon,
+  ViewIcon,
+} from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   keepPreviousData,
@@ -7,7 +12,7 @@ import {
 } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import type { ColumnDef, SortingState } from '@tanstack/react-table'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -25,11 +30,14 @@ import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
 import { DataTablePagination } from '@/components/ui/data-table-pagination'
 import { Spinner } from '@/components/ui/spinner'
-import { listCustomers } from '@/features/customers/api'
+import { listAllCustomers } from '@/features/customers/api'
 import { customerKeys } from '@/features/customers/query-keys'
-import { listSites } from '@/features/sites/api'
+import { listAllSites } from '@/features/sites/api'
 import { siteKeys } from '@/features/sites/query-keys'
+import { formatAverageRate } from '@/features/sites/site-card-metrics'
 import type { CollectionRunItem } from '@/features/sites/types'
+import { buildStatisticsSearch } from '@/features/statistics/search'
+import { useLastValidPage } from '@/hooks/use-last-valid-page'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -53,6 +61,23 @@ import {
   RemoteStatusBadge,
   type AccountAction,
 } from './account-ui'
+
+function ListMetric({
+  children,
+  label,
+}: {
+  children: ReactNode
+  label: string
+}) {
+  return (
+    <div className='min-w-0'>
+      <p className='text-muted-foreground truncate text-[11px]'>{label}</p>
+      <div className='text-foreground mt-1 min-w-0 font-semibold tabular-nums'>
+        {children}
+      </div>
+    </div>
+  )
+}
 
 function AccountCardGridState({
   error,
@@ -127,10 +152,12 @@ function AccountCardGridState({
 
 export function AccountsPage({
   onOpenAccount,
+  onPageReplace,
   onSearchChange,
   search,
 }: {
   onOpenAccount: (accountId: string) => void
+  onPageReplace: (page: number) => void
   onSearchChange: (changes: Partial<AccountSearch>) => void
   search: AccountSearch
 }) {
@@ -178,35 +205,36 @@ export function AccountsPage({
     staleTime: 30_000,
   })
   const siteParams = useMemo(
-    () => ({
-      p: 1,
-      page_size: 100,
-      sort_by: 'name',
-      sort_order: 'asc' as const,
-    }),
+    () => ({ sort_by: 'name', sort_order: 'asc' as const }),
     []
   )
   const sitesQuery = useQuery({
-    queryFn: () => listSites(siteParams),
-    queryKey: siteKeys.list(siteParams),
+    queryFn: () => listAllSites(siteParams),
+    queryKey: siteKeys.options(siteParams),
     staleTime: 5 * 60_000,
   })
   const customerParams = useMemo(
-    () => ({
-      p: 1,
-      page_size: 100,
-      sort_by: 'name',
-      sort_order: 'asc' as const,
-    }),
+    () => ({ sort_by: 'name', sort_order: 'asc' as const }),
     []
   )
   const customersQuery = useQuery({
-    queryFn: () => listCustomers(customerParams),
-    queryKey: customerKeys.list(customerParams),
+    queryFn: () => listAllCustomers(customerParams),
+    queryKey: customerKeys.options(customerParams),
     staleTime: 5 * 60_000,
   })
   const accounts = accountsQuery.data?.items ?? []
   const total = accountsQuery.data?.total ?? 0
+  const listStale = accountsQuery.isError && accountsQuery.data != null
+  const optionLoadFailed = sitesQuery.isError || customersQuery.isError
+
+  useLastValidPage({
+    isFetching: accountsQuery.isFetching,
+    isPlaceholderData: accountsQuery.isPlaceholderData,
+    onReplace: onPageReplace,
+    page: search.page,
+    pageSize: search.pageSize,
+    total: accountsQuery.data?.total,
+  })
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: accountKeys.all })
@@ -247,9 +275,9 @@ export function AccountsPage({
       {
         accessorKey: 'username',
         cell: ({ row }) => (
-          <div className='min-w-40'>
+          <div className='grid min-w-48 gap-2'>
             <Link
-              className='font-medium hover:underline'
+              className='text-base leading-tight font-semibold hover:underline'
               params={{ accountId: row.original.id }}
               to='/accounts/$accountId'
             >
@@ -260,64 +288,92 @@ export function AccountsPage({
                 id: row.original.remote_user_id,
               })}
             </p>
+            <div className='flex flex-wrap gap-1.5'>
+              <RemoteStateBadge state={row.original.remote_state} />
+              <ManagedStatusBadge status={row.original.managed_status} />
+              <RemoteStatusBadge status={row.original.remote_status} />
+            </div>
           </div>
         ),
         enableSorting: true,
-        header: t('account.username'),
+        header: t('account.list.identity'),
         id: 'username',
       },
-      { accessorKey: 'site_name', header: t('account.site') },
-      { accessorKey: 'customer_name', header: t('account.customer') },
-      { accessorKey: 'remote_group', header: t('account.remoteGroup') },
       {
         cell: ({ row }) => (
-          <RemoteStatusBadge status={row.original.remote_status} />
+          <div className='grid min-w-44 gap-3'>
+            <ListMetric label={t('account.site')}>
+              {row.original.site_name}
+            </ListMetric>
+            <ListMetric label={t('account.customer')}>
+              {row.original.customer_name}
+            </ListMetric>
+            <ListMetric label={t('account.remoteGroup')}>
+              {row.original.remote_group || '-'}
+            </ListMetric>
+          </div>
         ),
-        header: t('account.remoteStatusLabel'),
-        id: 'remoteStatus',
+        header: t('account.list.ownership'),
+        id: 'ownership',
       },
       {
         cell: ({ row }) => (
-          <RemoteStateBadge state={row.original.remote_state} />
-        ),
-        header: t('account.remoteStateLabel'),
-        id: 'remoteState',
-      },
-      {
-        cell: ({ row }) => (
-          <ManagedStatusBadge status={row.original.managed_status} />
-        ),
-        header: t('account.managedStatusLabel'),
-        id: 'managedStatus',
-      },
-      {
-        cell: ({ row }) => (
-          <div className='whitespace-nowrap'>
-            <MetricValue compact value={row.original.quota} /> /{' '}
-            <MetricValue compact value={row.original.used_quota} />
+          <div className='grid min-w-72 gap-3'>
+            <div className='grid grid-cols-2 gap-x-4'>
+              <ListMetric label={t('site.dashboard.totalQuota')}>
+                <QuotaAmount
+                  nullLabel='0'
+                  quota={row.original.today.quota}
+                  rate={row.original.rate}
+                />
+              </ListMetric>
+              <ListMetric label={t('site.dashboard.totalTokens')}>
+                <MetricValue
+                  compact
+                  nullLabel='0'
+                  value={row.original.today.token_used}
+                />
+              </ListMetric>
+            </div>
+            <div className='grid grid-cols-3 gap-x-4'>
+              <ListMetric label={t('site.dashboard.totalCount')}>
+                <MetricValue
+                  compact
+                  nullLabel='0'
+                  value={row.original.today.request_count}
+                />
+              </ListMetric>
+              <ListMetric label={t('site.averageRpm')}>
+                {formatAverageRate(row.original.today.avg_rpm)}
+              </ListMetric>
+              <ListMetric label={t('site.averageTpm')}>
+                {formatAverageRate(row.original.today.avg_tpm)}
+              </ListMetric>
+            </div>
           </div>
         ),
         enableSorting: true,
-        header: t('account.quotaUsed'),
-        id: 'quota',
+        header: t('account.list.todayUsage'),
+        id: 'today_quota',
       },
       {
         cell: ({ row }) => (
-          <MetricValue compact value={row.original.today.request_count} />
-        ),
-        header: t('account.todayRequests'),
-        id: 'todayRequests',
-      },
-      {
-        cell: ({ row }) => (
-          <QuotaAmount
-            quota={row.original.today.quota}
-            rate={row.original.rate}
-          />
+          <div className='grid min-w-40 grid-cols-2 gap-x-4'>
+            <ListMetric label={t('account.currentQuota')}>
+              <MetricValue compact nullLabel='0' value={row.original.quota} />
+            </ListMetric>
+            <ListMetric label={t('account.usedQuota')}>
+              <MetricValue
+                compact
+                nullLabel='0'
+                value={row.original.used_quota}
+              />
+            </ListMetric>
+          </div>
         ),
         enableSorting: true,
-        header: t('account.todayQuota'),
-        id: 'today_quota',
+        header: t('account.list.quota'),
+        id: 'quota',
       },
       {
         cell: ({ row }) => (
@@ -329,20 +385,39 @@ export function AccountsPage({
             />
           </div>
         ),
-        header: t('account.completeness'),
+        header: t('account.list.dataStatus'),
         id: 'dataStatus',
       },
-      ...(isAdmin
-        ? ([
-            {
-              cell: ({ row }) => (
-                <AccountActions account={row.original} onAction={onAction} />
-              ),
-              header: t('common.actions'),
-              id: 'actions',
-            },
-          ] satisfies ColumnDef<AccountListItem, unknown>[])
-        : []),
+      {
+        cell: ({ row }) => (
+          <div className='flex items-center gap-1'>
+            <Link
+              aria-label={t('account.actions.stats')}
+              className='hover:bg-muted inline-flex size-8 items-center justify-center rounded-md'
+              params={{ accountId: row.original.id }}
+              search={buildStatisticsSearch({})}
+              title={t('account.actions.stats')}
+              to='/accounts/$accountId/stats'
+            >
+              <HugeiconsIcon icon={Chart01Icon} strokeWidth={2} />
+            </Link>
+            <Link
+              aria-label={t('account.actions.detail')}
+              className='hover:bg-muted inline-flex size-8 items-center justify-center rounded-md'
+              params={{ accountId: row.original.id }}
+              title={t('account.actions.detail')}
+              to='/accounts/$accountId'
+            >
+              <HugeiconsIcon icon={ViewIcon} strokeWidth={2} />
+            </Link>
+            {isAdmin && (
+              <AccountActions account={row.original} onAction={onAction} />
+            )}
+          </div>
+        ),
+        header: t('common.actions'),
+        id: 'actions',
+      },
     ],
     [isAdmin, t]
   )
@@ -376,6 +451,28 @@ export function AccountsPage({
       title={t('accounts.title')}
     >
       <div className='flex h-full min-h-0 min-w-0 flex-col gap-5'>
+        {listStale && (
+          <section
+            className='border-warning/40 bg-warning/10 flex flex-wrap items-center justify-between gap-3 rounded-md border p-3'
+            role='status'
+          >
+            <div>
+              <p className='font-medium'>{t('accounts.refreshError')}</p>
+              <p className='text-muted-foreground mt-1 text-sm'>
+                {t('accounts.staleData')}
+              </p>
+            </div>
+            <Button
+              disabled={accountsQuery.isFetching}
+              onClick={() => void accountsQuery.refetch()}
+              size='sm'
+              variant='outline'
+            >
+              {accountsQuery.isFetching && <Spinner />}
+              {t('common.retry')}
+            </Button>
+          </section>
+        )}
         <AccountFilters
           actions={
             <DataViewModeToggle
@@ -398,6 +495,28 @@ export function AccountsPage({
             siteId: search.siteId,
           }}
         />
+        {optionLoadFailed && (
+          <section
+            className='border-warning/40 bg-warning/10 flex flex-wrap items-center justify-between gap-3 rounded-md border p-3'
+            role='status'
+          >
+            <p className='text-sm'>{t('accounts.filterOptionsError')}</p>
+            <Button
+              disabled={sitesQuery.isFetching || customersQuery.isFetching}
+              onClick={() => {
+                if (sitesQuery.isError) void sitesQuery.refetch()
+                if (customersQuery.isError) void customersQuery.refetch()
+              }}
+              size='sm'
+              variant='outline'
+            >
+              {(sitesQuery.isFetching || customersQuery.isFetching) && (
+                <Spinner />
+              )}
+              {t('common.retry')}
+            </Button>
+          </section>
+        )}
         {search.view === 'card' ? (
           <div className='min-h-0 flex-1 overflow-y-auto' tabIndex={0}>
             <AccountCardGridState
@@ -423,6 +542,14 @@ export function AccountsPage({
               fillAvailableHeight
               loading={accountsQuery.isPending}
               onRetry={() => void accountsQuery.refetch()}
+              renderMobileCard={(account) => (
+                <AccountCard
+                  account={account}
+                  isAdmin={Boolean(isAdmin)}
+                  onAction={onAction}
+                />
+              )}
+              rowHeaderColumnId='username'
               onSortingChange={updateSorting}
               preserveHeaderWhenEmpty
               sorting={[{ desc: search.order === 'desc', id: search.sort }]}

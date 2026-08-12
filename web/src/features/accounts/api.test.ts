@@ -6,10 +6,16 @@ import { api } from '@/lib/api'
 import { parseIdString } from '@/lib/api-types'
 
 import {
+  archiveAccount,
   createAccount,
+  deleteAccount,
+  getAccount,
   getAccountStatistics,
   listAccounts,
+  listRemoteUsers,
+  refreshAccount,
   restoreAccount,
+  updateAccount,
 } from './api'
 
 const originalAdapter = api.defaults.adapter
@@ -105,5 +111,53 @@ describe('account API', () => {
       start_timestamp: 1_781_280_000,
     })
     await restoreAccount(accountId)
+  })
+
+  test('uses bigint-safe detail and mutation routes without leaking binding fields', async () => {
+    const accountId = parseIdString('9007199254740993')
+    const expected = [
+      ['get', '/api/accounts/9007199254740993', undefined],
+      ['put', '/api/accounts/9007199254740993', { remark: 'production owner' }],
+      ['post', '/api/accounts/9007199254740993/archive', undefined],
+      ['post', '/api/accounts/9007199254740993/refresh', undefined],
+      ['delete', '/api/accounts/9007199254740993', undefined],
+    ] as const
+    let call = 0
+    api.defaults.adapter = successAdapter((config) => {
+      const request = expected[call]
+      if (!request) throw new Error(`unexpected account API call ${call + 1}`)
+      const [method, url, body] = request
+      expect(config.method).toBe(method)
+      expect(config.url).toBe(url)
+      expect(
+        config.data == null ? undefined : JSON.parse(String(config.data))
+      ).toEqual(body)
+      call += 1
+    })
+
+    await getAccount(accountId)
+    await updateAccount(accountId, { remark: 'production owner' })
+    await archiveAccount(accountId)
+    await refreshAccount(accountId)
+    await deleteAccount(accountId)
+    expect(call).toBe(expected.length)
+  })
+
+  test('searches remote users on the selected site with explicit pagination', async () => {
+    api.defaults.adapter = successAdapter((config) => {
+      const params = config.params as URLSearchParams
+      expect(config.method).toBe('get')
+      expect(config.url).toBe(
+        '/api/accounts/site/9007199254740994/remote-users'
+      )
+      expect(params.get('keyword')).toBe('alice')
+      expect(params.get('p')).toBe('2')
+      expect(params.get('page_size')).toBe('100')
+    })
+    await listRemoteUsers(parseIdString('9007199254740994'), {
+      keyword: 'alice',
+      p: 2,
+      page_size: 100,
+    })
   })
 })

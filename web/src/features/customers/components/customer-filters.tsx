@@ -2,8 +2,8 @@ import { type ReactNode, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { FilterPanel } from '@/components/data/filter-panel'
+import { MultiFacetedFilter } from '@/components/data/multi-faceted-filter'
 import { Input } from '@/components/ui/input'
-import { SelectControl as Select } from '@/components/ui/select-control'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { hasFilterChanges } from '@/lib/filter-state'
 
@@ -51,26 +51,22 @@ export function CustomerFilters({
             value={draft.filter}
           />
         </label>
-        <label className='grid w-full gap-1 text-sm sm:w-52'>
-          <span>{t('customer.statusLabel')}</span>
-          <Select
-            onChange={(event) => {
-              const status = event.target.value as CustomerStatus
-              setDraft((current) => ({
-                ...current,
-                status: status ? [status] : [],
-              }))
-            }}
-            value={draft.status[0] ?? ''}
-          >
-            <option value=''>{t('common.all')}</option>
-            {customerStatuses.map((status) => (
-              <option key={status} value={status}>
-                {t(dynamicI18nKey('customer', `customer.status.${status}`))}
-              </option>
-            ))}
-          </Select>
-        </label>
+        <MultiFacetedFilter
+          clearLabel={t('common.clearFilters')}
+          maximumSelected={customerStatuses.length}
+          onChange={(statuses) =>
+            setDraft((current) => ({
+              ...current,
+              status: statuses as CustomerStatus[],
+            }))
+          }
+          options={customerStatuses.map((status) => ({
+            label: t(dynamicI18nKey('customer', `customer.status.${status}`)),
+            value: status,
+          }))}
+          title={t('customer.statusLabel')}
+          values={draft.status}
+        />
       </div>
     </FilterPanel>
   )

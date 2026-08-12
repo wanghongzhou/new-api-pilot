@@ -1,6 +1,6 @@
 import { ArrowLeft01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 
@@ -8,7 +8,10 @@ import { ErrorState } from '@/components/error-state'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { OperationsAnalyticsNavigation } from '@/features/operations-analytics/components/operations-analytics-workspace'
-import { EntityStatistics } from '@/features/statistics/components/entity-statistics'
+import {
+  StatisticsPage,
+  type StatisticsPageDataSource,
+} from '@/features/statistics/components/statistics-page'
 import type {
   EntityStatisticsParams,
   StatisticsSearch,
@@ -17,6 +20,20 @@ import { isIdString, parseIdString } from '@/lib/api-types'
 
 import { getSite, getSiteStatistics } from '../api'
 import { siteKeys } from '../query-keys'
+
+function siteStatisticsParams(
+  search: StatisticsSearch
+): EntityStatisticsParams {
+  return {
+    end_timestamp: search.end,
+    granularity: search.granularity,
+    p: search.page,
+    page_size: search.pageSize,
+    sort_by: search.sort,
+    sort_order: search.order,
+    start_timestamp: search.start,
+  }
+}
 
 export function SiteStatsPage({
   onSearchChange,
@@ -29,85 +46,57 @@ export function SiteStatsPage({
 }) {
   const { t } = useTranslation()
   const validSiteId = isIdString(siteId)
-  const params: EntityStatisticsParams = {
-    end_timestamp: search.end,
-    granularity: search.granularity,
-    p: search.page,
-    page_size: search.pageSize,
-    sort_by: search.sort,
-    sort_order: search.order,
-    start_timestamp: search.start,
-  }
+  const parsedSiteId = validSiteId ? parseIdString(siteId) : undefined
   const detailQuery = useQuery({
     enabled: validSiteId,
     queryFn: () => getSite(parseIdString(siteId)),
     queryKey: siteKeys.detail(siteId),
     staleTime: 5 * 60_000,
   })
-  const statisticsQuery = useQuery({
-    enabled: validSiteId,
-    placeholderData: keepPreviousData,
-    queryFn: () => getSiteStatistics(parseIdString(siteId), params),
-    queryKey: siteKeys.statistics(siteId, params),
-    staleTime: 5 * 60_000,
-  })
-  const response = statisticsQuery.data
-  const contractValid =
-    response == null ||
-    (response.scope === 'site' &&
-      response.granularity === search.granularity &&
-      response.range.start_timestamp === search.start &&
-      response.range.end_timestamp === search.end)
-  const rangeTransition = Boolean(
-    response &&
-    !contractValid &&
-    statisticsQuery.isPlaceholderData &&
-    statisticsQuery.isFetching
-  )
-  const data = contractValid || rangeTransition ? response : undefined
+
+  if (!parsedSiteId) {
+    return (
+      <SectionPageLayout
+        description={t('site.stats.description')}
+        title={t('site.stats.title')}
+      >
+        <ErrorState title={t('site.detail.invalidId')} />
+      </SectionPageLayout>
+    )
+  }
+
+  const dataSource: StatisticsPageDataSource = {
+    query: (nextSearch) =>
+      getSiteStatistics(parsedSiteId, siteStatisticsParams(nextSearch)),
+    queryKey: (nextSearch) =>
+      siteKeys.statistics(siteId, siteStatisticsParams(nextSearch)),
+  }
 
   return (
-    <SectionPageLayout
+    <StatisticsPage
+      dataSource={dataSource}
       description={t('site.stats.description')}
-      fixedContent
+      entity={{ id: parsedSiteId, scope: 'site' }}
+      header={
+        <div className='grid gap-4'>
+          <DetailBackLink
+            render={<Link params={{ siteId }} to='/sites/$siteId' />}
+          >
+            <HugeiconsIcon icon={ArrowLeft01Icon} strokeWidth={2} />
+            {t('site.stats.backToDetail')}
+          </DetailBackLink>
+          <OperationsAnalyticsNavigation active='statistics' siteId={siteId} />
+        </div>
+      }
+      hideScopeNavigation
+      onSearchChange={onSearchChange}
+      scope='site'
+      search={search}
       title={
         detailQuery.data
           ? t('site.stats.namedTitle', { name: detailQuery.data.name })
           : t('site.stats.title')
       }
-    >
-      <div className='flex h-full min-h-0 min-w-0 flex-col gap-4'>
-        <DetailBackLink
-          render={<Link params={{ siteId }} to='/sites/$siteId' />}
-        >
-          <HugeiconsIcon icon={ArrowLeft01Icon} strokeWidth={2} />
-          {t('site.stats.backToDetail')}
-        </DetailBackLink>
-        <OperationsAnalyticsNavigation active='statistics' siteId={siteId} />
-        {!validSiteId ? (
-          <ErrorState title={t('site.detail.invalidId')} />
-        ) : (
-          <div className='min-h-0 flex-1 overflow-y-auto pr-1' tabIndex={0}>
-            <EntityStatistics
-              data={data}
-              entityId={parseIdString(siteId)}
-              error={
-                statisticsQuery.isError ||
-                (!contractValid &&
-                  !rangeTransition &&
-                  !statisticsQuery.isFetching)
-              }
-              fetching={statisticsQuery.isFetching}
-              loading={statisticsQuery.isPending}
-              onRetry={() => void statisticsQuery.refetch()}
-              onSearchChange={onSearchChange}
-              rangeTransition={rangeTransition}
-              scope='site'
-              search={search}
-            />
-          </div>
-        )}
-      </div>
-    </SectionPageLayout>
+    />
   )
 }

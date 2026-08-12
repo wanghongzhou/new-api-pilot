@@ -12,6 +12,7 @@ import type {
   EntityStatisticsParams,
   StatisticsSearch,
 } from '@/features/statistics/types'
+import { useLastValidPage } from '@/hooks/use-last-valid-page'
 import { isIdString, parseIdString } from '@/lib/api-types'
 
 import { getAccount, getAccountStatistics } from '../api'
@@ -19,10 +20,12 @@ import { accountKeys } from '../query-keys'
 
 export function AccountStatsPage({
   accountId,
+  onPageReplace,
   onSearchChange,
   search,
 }: {
   accountId: string
+  onPageReplace: (page: number) => void
   onSearchChange: (changes: Partial<StatisticsSearch>) => void
   search: StatisticsSearch
 }) {
@@ -64,6 +67,15 @@ export function AccountStatsPage({
     statisticsQuery.isFetching
   )
   const data = contractValid || rangeTransition ? response : undefined
+
+  useLastValidPage({
+    isFetching: statisticsQuery.isFetching,
+    isPlaceholderData: statisticsQuery.isPlaceholderData,
+    onReplace: onPageReplace,
+    page: search.page,
+    pageSize: search.pageSize,
+    total: contractValid ? response?.breakdown.total : undefined,
+  })
 
   return (
     <SectionPageLayout

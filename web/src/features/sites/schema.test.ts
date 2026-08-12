@@ -59,4 +59,20 @@ describe('site schemas', () => {
   test('normalizes numeric run deep links to bigint-safe strings', () => {
     expect(siteDetailSearchSchema.parse({ runId: 10 }).runId).toBe('10')
   })
+
+  test('validates independent collection history tab state', () => {
+    expect(
+      siteDetailSearchSchema.parse({
+        fastPage: 3,
+        fastStatus: 'failed',
+        fastTaskType: 'resource_snapshot',
+        tab: 'fast',
+      })
+    ).toEqual({
+      fastPage: 3,
+      fastStatus: 'failed',
+      fastTaskType: 'resource_snapshot',
+      tab: 'fast',
+    })
+  })
 })

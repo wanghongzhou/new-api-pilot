@@ -275,8 +275,10 @@ export function DataTable<TData>({
           aria-label={ariaLabel}
           aria-busy={loading || fetching}
           className={cn(
-            'focus-visible:ring-ring overflow-auto overscroll-contain focus-visible:ring-2 focus-visible:outline-none',
-            fillAvailableHeight && 'h-full'
+            'focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none',
+            fillAvailableHeight
+              ? 'h-full overflow-auto overscroll-contain'
+              : 'overflow-x-auto overflow-y-hidden'
           )}
           role='region'
           tabIndex={0}
@@ -361,8 +363,12 @@ export function DataTable<TData>({
           className={cn(
             'grid min-h-0 flex-1 gap-3 pb-16 transition-opacity duration-150',
             mobileCardBreakpoint === 'wide'
-              ? 'overflow-visible lg:hidden lg:overflow-y-auto'
-              : 'overflow-y-auto min-[641px]:hidden',
+              ? fillAvailableHeight
+                ? 'overflow-visible lg:hidden lg:overflow-y-auto'
+                : 'overflow-visible lg:hidden'
+              : fillAvailableHeight
+                ? 'overflow-y-auto min-[641px]:hidden'
+                : 'overflow-visible min-[641px]:hidden',
             fetching && !loading && 'pointer-events-none opacity-60'
           )}
           role='region'

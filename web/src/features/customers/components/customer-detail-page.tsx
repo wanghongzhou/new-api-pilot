@@ -34,11 +34,15 @@ import {
 import { accountKeys } from '@/features/accounts/query-keys'
 import type { AccountListItem } from '@/features/accounts/types'
 import type { CollectionRunItem } from '@/features/sites/types'
+import { statisticsKeys } from '@/features/statistics/query-keys'
 import { buildStatisticsSearch } from '@/features/statistics/search'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { isIdString, parseIdString } from '@/lib/api-types'
 import { fromUnixSeconds } from '@/lib/dayjs'
-import { formatDisplayValue } from '@/lib/display-value'
+import {
+  formatDecimalDisplayValue,
+  formatDisplayValue,
+} from '@/lib/display-value'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { getCustomer, listCustomerAccounts } from '../api'
@@ -171,6 +175,7 @@ export function CustomerDetailPage({
     const deleted = dialogState?.action === 'delete'
     void queryClient.invalidateQueries({ queryKey: customerKeys.all })
     void queryClient.invalidateQueries({ queryKey: accountKeys.all })
+    void queryClient.invalidateQueries({ queryKey: statisticsKeys.all })
     if (deleted) onDeleted()
   }
   const retry = () => {
@@ -182,16 +187,20 @@ export function CustomerDetailPage({
   if (!validCustomerId || (detailQuery.isError && !customer)) {
     content = (
       <ErrorState
-        description={t(
+        description={
+          validCustomerId
+            ? t('customer.detail.loadErrorDescription')
+            : undefined
+        }
+        onRetry={validCustomerId ? retry : undefined}
+        title={t(
           dynamicI18nKey(
             'customer',
             validCustomerId
-              ? 'customer.detail.loadErrorDescription'
+              ? 'customer.detail.loadError'
               : 'customer.detail.invalidId'
           )
         )}
-        onRetry={validCustomerId ? retry : undefined}
-        title={t('customer.detail.loadError')}
       />
     )
   } else if (detailQuery.isPending || !customer) {
@@ -225,16 +234,22 @@ export function CustomerDetailPage({
               <dt className='text-muted-foreground text-xs'>
                 {t('customer.contractAmount')}
               </dt>
-              <dd className='mt-1 text-sm font-medium break-words'>
-                {customer.contract_amount}
+              <dd
+                className='mt-1 text-sm font-medium break-words'
+                title={customer.contract_amount}
+              >
+                {formatDecimalDisplayValue(customer.contract_amount)}
               </dd>
             </dl>
             <dl>
               <dt className='text-muted-foreground text-xs'>
                 {t('customer.paymentAmount')}
               </dt>
-              <dd className='mt-1 text-sm font-medium break-words'>
-                {customer.payment_amount}
+              <dd
+                className='mt-1 text-sm font-medium break-words'
+                title={customer.payment_amount}
+              >
+                {formatDecimalDisplayValue(customer.payment_amount)}
               </dd>
             </dl>
             <dl>

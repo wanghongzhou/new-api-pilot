@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/big"
 	"strconv"
 	"time"
 
@@ -80,7 +81,11 @@ func (service *CustomerService) Get(ctx context.Context, id int64) (dto.Customer
 	if err != nil {
 		return dto.CustomerDetail{}, customerServiceError(err)
 	}
-	item, err := service.listItemFromModel(ctx, customer)
+	today, err := service.loadCustomerTodayUsage(ctx, []int64{id})
+	if err != nil {
+		return dto.CustomerDetail{}, err
+	}
+	item, err := service.listItemFromModel(ctx, customer, today[id])
 	if err != nil {
 		return dto.CustomerDetail{}, err
 	}
@@ -100,8 +105,16 @@ func (service *CustomerService) List(ctx context.Context, query dto.CustomerList
 		return common.PageData[dto.CustomerListItem]{}, fmt.Errorf("list customers: %w", err)
 	}
 	items := make([]dto.CustomerListItem, 0, len(customers))
+	customerIDs := make([]int64, len(customers))
+	for index := range customers {
+		customerIDs[index] = customers[index].ID
+	}
+	today, err := service.loadCustomerTodayUsage(ctx, customerIDs)
+	if err != nil {
+		return common.PageData[dto.CustomerListItem]{}, err
+	}
 	for _, customer := range customers {
-		item, err := service.listItemFromModel(ctx, customer)
+		item, err := service.listItemFromModel(ctx, customer, today[customer.ID])
 		if err != nil {
 			return common.PageData[dto.CustomerListItem]{}, err
 		}
@@ -260,7 +273,11 @@ type customerAccountCounts struct {
 	SiteCount            int `gorm:"column:site_count"`
 }
 
-func (service *CustomerService) listItemFromModel(ctx context.Context, customer model.Customer) (dto.CustomerListItem, error) {
+func (service *CustomerService) listItemFromModel(
+	ctx context.Context,
+	customer model.Customer,
+	today dto.CustomerUsageSummary,
+) (dto.CustomerListItem, error) {
 	var counts customerAccountCounts
 	err := service.db.WithContext(ctx).Model(&model.Account{}).
 		Select(`COUNT(*) AS account_count,
@@ -281,9 +298,127 @@ func (service *CustomerService) listItemFromModel(ctx context.Context, customer 
 		Status: customer.Status, AccountCount: counts.AccountCount,
 		ActiveAccountCount: counts.ActiveAccountCount, ArchivedAccountCount: counts.ArchivedAccountCount,
 		SiteCount: counts.SiteCount,
-		Today:     dto.CustomerUsageSummary{UsageSummary: missingUsageSummary(), SiteBreakdown: []dto.SiteQuotaBreakdown{}},
+		Today:     today,
 		Backfill:  backfill, UpdatedAt: customer.UpdatedAt,
 	}, nil
+}
+
+func (service *CustomerService) loadCustomerTodayUsage(
+	ctx context.Context,
+	customerIDs []int64,
+) (map[int64]dto.CustomerUsageSummary, error) {
+	result := make(map[int64]dto.CustomerUsageSummary, len(customerIDs))
+	for _, id := range customerIDs {
+		result[id] = dto.CustomerUsageSummary{
+			UsageSummary:  missingUsageSummary(),
+			SiteBreakdown: []dto.SiteQuotaBreakdown{},
+		}
+	}
+	if len(customerIDs) == 0 {
+		return result, nil
+	}
+	var rows []model.CustomerStatDaily
+	now := service.clock.Now()
+	dateKey := beijingDateKey(now)
+	if err := service.db.WithContext(ctx).
+		Where("customer_id IN ? AND date_key = ?", customerIDs, dateKey).
+		Order("customer_id ASC, site_id ASC").Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("read customer today usage: %w", err)
+	}
+	if len(rows) == 0 {
+		return result, nil
+	}
+	siteIDs := make([]int64, 0, len(rows))
+	seenSites := make(map[int64]struct{}, len(rows))
+	for _, row := range rows {
+		if _, exists := seenSites[row.SiteID]; !exists {
+			seenSites[row.SiteID] = struct{}{}
+			siteIDs = append(siteIDs, row.SiteID)
+		}
+	}
+	statisticsRepository := model.NewStatisticsRepository(service.db)
+	sites, err := statisticsRepository.LoadSites(ctx, siteIDs)
+	if err != nil {
+		return nil, fmt.Errorf("read customer today sites: %w", err)
+	}
+	fallback, err := statisticsRepository.LoadFallbackRates(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("read customer today fallback rates: %w", err)
+	}
+	sitesByID := make(map[int64]model.StatisticsSite, len(sites))
+	for _, site := range sites {
+		sitesByID[site.ID] = site
+	}
+	type totals struct {
+		requestCount big.Int
+		quota        big.Int
+		tokenUsed    big.Int
+		activeUsers  big.Int
+		asOf         int64
+		isFinal      bool
+		statuses     []string
+		breakdown    []dto.SiteQuotaBreakdown
+	}
+	byCustomer := make(map[int64]*totals, len(customerIDs))
+	for _, row := range rows {
+		current := byCustomer[row.CustomerID]
+		if current == nil {
+			current = &totals{isFinal: true, breakdown: []dto.SiteQuotaBreakdown{}}
+			byCustomer[row.CustomerID] = current
+		}
+		current.requestCount.Add(&current.requestCount, big.NewInt(row.RequestCount))
+		current.quota.Add(&current.quota, big.NewInt(row.Quota))
+		current.tokenUsed.Add(&current.tokenUsed, big.NewInt(row.TokenUsed))
+		current.activeUsers.Add(&current.activeUsers, big.NewInt(row.ActiveUsers))
+		if row.LastCalculatedAt > current.asOf {
+			current.asOf = row.LastCalculatedAt
+		}
+		current.isFinal = current.isFinal && row.IsFinal
+		current.statuses = append(current.statuses, row.DataStatus)
+		site, exists := sitesByID[row.SiteID]
+		if !exists {
+			return nil, fmt.Errorf("read customer today usage: site %d was not found", row.SiteID)
+		}
+		quota := strconv.FormatInt(row.Quota, 10)
+		rate := statisticsEffectiveRate(site, fallback)
+		current.breakdown = append(current.breakdown, dto.SiteQuotaBreakdown{
+			SiteID: strconv.FormatInt(site.ID, 10), SiteName: site.Name, Quota: &quota,
+			QuotaPerUnit: rate.QuotaPerUnit, USDExchangeRate: rate.USDExchangeRate,
+			RateSource: rate.Source, RateUpdatedAt: rate.UpdatedAt, DataStatus: row.DataStatus,
+		})
+	}
+	for customerID, value := range byCustomer {
+		requestCount := value.requestCount.String()
+		quota := value.quota.String()
+		tokenUsed := value.tokenUsed.String()
+		activeUsers := value.activeUsers.String()
+		asOf := value.asOf
+		result[customerID] = dto.CustomerUsageSummary{
+			UsageSummary: dto.UsageSummary{
+				RequestCount: &requestCount, Quota: &quota, TokenUsed: &tokenUsed,
+				ActiveUsers: &activeUsers,
+				AvgRPM:      todayAverageMetric(&value.requestCount, now),
+				AvgTPM:      todayAverageMetric(&value.tokenUsed, now),
+				AsOf:        &asOf,
+				DataStatus:  customerTodayDataStatus(value.statuses), IsFinal: value.isFinal,
+			},
+			SiteBreakdown: value.breakdown,
+		}
+	}
+	return result, nil
+}
+
+func customerTodayDataStatus(statuses []string) string {
+	if len(statuses) == 0 {
+		return "missing"
+	}
+	status := statuses[0]
+	for _, current := range statuses[1:] {
+		if current != status {
+			return "partial"
+		}
+	}
+	return status
 }
 
 func (service *CustomerService) localBackfillSummary(ctx context.Context, targetType string, targetID int64, status string) (dto.BackfillSummary, error) {

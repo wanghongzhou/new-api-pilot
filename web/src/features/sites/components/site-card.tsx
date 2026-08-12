@@ -21,9 +21,14 @@ import { fromUnixSeconds } from '@/lib/dayjs'
 import { cn } from '@/lib/utils'
 
 import {
+  formatAverageRate,
   formatInstanceAvailability,
-  formatLatencySeconds,
+  formatPerformanceLatency,
+  formatPerformanceSuccessRate,
+  formatPerformanceThroughput,
   formatPercentValue,
+  isSitePerformanceReady,
+  sitePerformanceDashboardSummary,
   siteResourceColor,
 } from '../site-card-metrics'
 import type { SiteListItem } from '../types'
@@ -143,7 +148,7 @@ function UpdatedAtLine({
       <span className='truncate'>
         {exact == null
           ? t('data.noUpdateTime')
-          : t('site.currentUpdatedAt', { time: exact })}
+          : t('site.resourceUpdatedAt', { time: exact })}
       </span>
       {expired && (
         <Badge className='shrink-0' variant='destructive'>
@@ -164,7 +169,12 @@ export function SiteCard({
   site: SiteListItem
 }) {
   const { t } = useTranslation()
-  const performanceAvailable = site.performance.data_status === 'complete'
+  const performanceModels = site.performance.models ?? []
+  const performanceAvailable =
+    isSitePerformanceReady(site.performance.data_status) &&
+    performanceModels.length > 0
+  const unavailableValue = t('data.unavailableValue')
+  const performanceSummary = sitePerformanceDashboardSummary(performanceModels)
   const copyBaseUrl = async () => {
     try {
       if (!navigator.clipboard?.writeText) {
@@ -251,15 +261,8 @@ export function SiteCard({
       </div>
 
       <section className='grid gap-3'>
-        <div className='grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-3'>
-          <MetricCell label={t('site.todayRequests')}>
-            <MetricValue
-              compact
-              nullLabel='0'
-              value={site.today.request_count}
-            />
-          </MetricCell>
-          <MetricCell label={t('site.todayQuota')}>
+        <div className='grid grid-cols-2 gap-x-5 gap-y-4'>
+          <MetricCell label={t('site.dashboard.totalQuota')}>
             <QuotaAmount
               className='justify-center'
               emphasizeAmount
@@ -270,48 +273,72 @@ export function SiteCard({
               showQuota={false}
             />
           </MetricCell>
-          <MetricCell label={t('metric.token')}>
+          <MetricCell label={t('site.dashboard.totalTokens')}>
             <MetricValue compact nullLabel='0' value={site.today.token_used} />
           </MetricCell>
-          <MetricCell label={t('site.activeUsers')}>
+        </div>
+        <div className='grid grid-cols-3 gap-x-5 gap-y-4'>
+          <MetricCell label={t('site.dashboard.totalCount')}>
             <MetricValue
               compact
               nullLabel='0'
-              value={site.today.active_users}
+              value={site.today.request_count}
             />
           </MetricCell>
           <MetricCell label={t('site.averageRpm')}>
-            <MetricValue compact nullLabel='0' value={site.today.avg_rpm} />
+            <span title={site.today.avg_rpm ?? undefined}>
+              {formatAverageRate(site.today.avg_rpm)}
+            </span>
           </MetricCell>
           <MetricCell label={t('site.averageTpm')}>
-            <MetricValue compact nullLabel='0' value={site.today.avg_tpm} />
+            <span title={site.today.avg_tpm ?? undefined}>
+              {formatAverageRate(site.today.avg_tpm)}
+            </span>
           </MetricCell>
         </div>
       </section>
 
       <section className='grid gap-3'>
-        <div className='grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-3'>
-          <MetricCell
-            label={t('site.performance.successRate')}
-            tone={performanceAvailable ? 'success' : 'default'}
-          >
+        <div className='grid grid-cols-3 gap-x-5 gap-y-4'>
+          <MetricCell label={t('site.performance.successRate')}>
             {performanceAvailable
-              ? `${(site.performance.success_rate * 100).toFixed(2)}%`
-              : t('site.performance.unavailable')}
+              ? formatPerformanceSuccessRate(
+                  performanceSummary.successRate,
+                  unavailableValue
+                )
+              : unavailableValue}
           </MetricCell>
           <MetricCell label={t('site.performance.avgLatency')}>
             {performanceAvailable
-              ? t('site.performance.latencyValue', {
-                  value: formatLatencySeconds(site.performance.avg_latency_ms),
-                })
-              : t('site.performance.unavailable')}
+              ? formatPerformanceLatency(
+                  performanceSummary.avgLatencyMs,
+                  unavailableValue
+                )
+              : unavailableValue}
           </MetricCell>
           <MetricCell label={t('site.performance.avgTps')}>
             {performanceAvailable
-              ? site.performance.avg_tps.toFixed(1)
-              : t('site.performance.unavailable')}
+              ? formatPerformanceThroughput(
+                  performanceSummary.throughput,
+                  unavailableValue
+                )
+              : unavailableValue}
           </MetricCell>
         </div>
+        {performanceAvailable && site.performance.sampled_at != null && (
+          <p className='text-muted-foreground text-center text-xs'>
+            {t('site.performance.sampledAt', {
+              time: fromUnixSeconds(site.performance.sampled_at).format(
+                'YYYY-MM-DD HH:mm:ss'
+              ),
+            })}
+          </p>
+        )}
+        {!performanceAvailable && (
+          <p className='text-muted-foreground text-center text-xs'>
+            {t('site.performance.unavailable')}
+          </p>
+        )}
         <CompletenessProgress
           label={t('site.completeness')}
           value={site.completeness_rate}
@@ -319,10 +346,7 @@ export function SiteCard({
       </section>
 
       <footer className='flex items-center justify-between gap-3 pt-0.5'>
-        <UpdatedAtLine
-          expired={site.realtime.expired}
-          timestamp={site.realtime.updated_at}
-        />
+        <UpdatedAtLine expired={false} timestamp={site.resource.updated_at} />
         <div className='flex shrink-0 items-center justify-end gap-1'>
           <Link
             aria-label={t('site.actions.stats')}

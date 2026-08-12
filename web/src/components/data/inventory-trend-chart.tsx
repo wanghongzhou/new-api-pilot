@@ -1,20 +1,15 @@
-import type { ILineChartSpec } from '@visactor/react-vchart'
-import { lazy, Suspense, useMemo } from 'react'
+import { VChart, type ILineChartSpec } from '@visactor/react-vchart'
+import { useMemo } from 'react'
 
 import { useTheme } from '@/context/theme-provider'
 
 import {
   buildInventoryTrendChartValues,
+  hasRenderableInventoryTrendValues,
   shouldShowInventoryTrendPoints,
   type InventoryTrendChartPoint,
   type InventoryTrendSeries,
 } from './inventory-trend-chart-data'
-
-const LazyVChart = lazy(() =>
-  import('@visactor/react-vchart').then((module) => ({
-    default: module.VChart,
-  }))
-)
 
 export function InventoryTrendChart({
   ariaLabel,
@@ -56,7 +51,7 @@ export function InventoryTrendChart({
     [resolvedTheme, showPoints, values]
   )
 
-  if (points.length === 0) {
+  if (!hasRenderableInventoryTrendValues(values)) {
     return (
       <p className='text-muted-foreground py-8 text-center text-sm'>
         {emptyText}
@@ -70,13 +65,7 @@ export function InventoryTrendChart({
         className='h-full min-h-80 w-full min-w-0 overflow-hidden'
         role='img'
       >
-        <Suspense
-          fallback={
-            <div className='bg-muted h-full animate-pulse rounded-md' />
-          }
-        >
-          <LazyVChart spec={spec} />
-        </Suspense>
+        <VChart spec={spec} />
       </div>
       <figcaption className='text-muted-foreground text-xs'>
         {description}

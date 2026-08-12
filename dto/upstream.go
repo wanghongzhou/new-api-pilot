@@ -155,7 +155,6 @@ type UpstreamPerformanceModel struct {
 	AvgLatencyMS float64 `json:"avg_latency_ms"`
 	SuccessRate  float64 `json:"success_rate"`
 	AvgTPS       float64 `json:"avg_tps"`
-	RequestCount int64   `json:"request_count"`
 }
 type UpstreamPerformanceSummary struct {
 	Models []UpstreamPerformanceModel `json:"models"`

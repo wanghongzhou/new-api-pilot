@@ -23,12 +23,16 @@ import { Spinner } from '@/components/ui/spinner'
 import { OperationsViewPurpose } from '@/features/operations-analytics/components/operations-analytics-workspace'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
+import type { IdString } from '@/lib/api-types'
 import { formatBeijingTimestamp } from '@/lib/dayjs'
 import { formatDisplayValue } from '@/lib/display-value'
 import { cn } from '@/lib/utils'
 
 import { createStatisticsExport, getStatistics } from '../api'
-import { buildStatisticsExportRequest } from '../export-request'
+import {
+  buildEntityExportRequest,
+  buildStatisticsExportRequest,
+} from '../export-request'
 import { statisticsKeys } from '../query-keys'
 import { buildScopeStatisticsSearch } from '../search'
 import type {
@@ -73,6 +77,11 @@ const scopeLinks = [
   ['token', '/statistics/tokens'],
   ['node', '/statistics/nodes'],
 ] as const
+
+export interface StatisticsPageDataSource {
+  query: (search: StatisticsSearch) => Promise<StatisticsResponse>
+  queryKey: (search: StatisticsSearch) => readonly unknown[]
+}
 
 function queryParams(search: StatisticsSearch): StatisticsQueryParams {
   return {
@@ -526,21 +535,39 @@ function BreakdownTable({
 }
 
 export function StatisticsPage({
+  dataSource,
+  description,
+  entity,
+  header,
+  hideScopeNavigation = false,
   onSearchChange,
   scope,
   search,
+  title,
 }: {
+  dataSource?: StatisticsPageDataSource
+  description?: string
+  entity?: {
+    id: IdString
+    scope: 'account' | 'customer' | 'site'
+  }
+  header?: ReactNode
+  hideScopeNavigation?: boolean
   onSearchChange: (changes: Partial<StatisticsSearch>) => void
   scope: StatisticsScope
   search: StatisticsSearch
+  title?: string
 }) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const params = useMemo(() => queryParams(search), [search])
   const statisticsQuery = useQuery({
     placeholderData: keepPreviousData,
-    queryFn: () => getStatistics(scope, params),
-    queryKey: statisticsKeys.scope(scope, params),
+    queryFn: () =>
+      dataSource ? dataSource.query(search) : getStatistics(scope, params),
+    queryKey: dataSource
+      ? dataSource.queryKey(search)
+      : statisticsKeys.scope(scope, params),
     staleTime: 5 * 60_000,
   })
   const response = statisticsQuery.data as StatisticsResponse | undefined
@@ -565,9 +592,10 @@ export function StatisticsPage({
     if (!data) return
     setExporting(true)
     try {
-      const job = await createStatisticsExport(
-        buildStatisticsExportRequest(scope, format, search)
-      )
+      const request = entity
+        ? buildEntityExportRequest(entity.scope, entity.id, format, search)
+        : buildStatisticsExportRequest(scope, format, search)
+      const job = await createStatisticsExport(request)
       toast.success(
         job.deduplicated
           ? t('statistics.export.toast.deduplicated')
@@ -698,12 +726,18 @@ export function StatisticsPage({
 
   return (
     <SectionPageLayout
-      description={t('statistics.page.description')}
+      description={description ?? t('statistics.page.description')}
       fixedContent
-      title={t(dynamicI18nKey('statistics', `statistics.page.${scope}.title`))}
+      title={
+        title ??
+        t(dynamicI18nKey('statistics', `statistics.page.${scope}.title`))
+      }
     >
       <div className='flex h-full min-h-0 min-w-0 flex-col gap-4'>
-        <ScopeNavigation scope={scope} search={search} />
+        {header}
+        {!hideScopeNavigation && (
+          <ScopeNavigation scope={scope} search={search} />
+        )}
         <OperationsViewPurpose
           description={t('operationsAnalytics.statistics.purpose.description')}
           icon={Chart01Icon}
@@ -713,11 +747,13 @@ export function StatisticsPage({
         <StatisticsToolbar
           exportDisabled={!data || rangeTransition}
           filterAction={
-            <StatisticsFilters
-              onApply={onSearchChange}
-              scope={scope}
-              search={search}
-            />
+            entity ? undefined : (
+              <StatisticsFilters
+                onApply={onSearchChange}
+                scope={scope}
+                search={search}
+              />
+            )
           }
           onExportOpen={() => data && setExportDraft(true)}
           onSearchChange={onSearchChange}
@@ -730,6 +766,7 @@ export function StatisticsPage({
       {exportDraft && data && (
         <ExportDialog
           completeness={data.completeness}
+          entityId={entity?.id}
           onConfirm={(format) => void createExport(format)}
           onOpenChange={setExportDraft}
           pending={exporting}

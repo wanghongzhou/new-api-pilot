@@ -52,6 +52,15 @@ export function cloneTrendChartValues(
   }))
 }
 
+export function hasRenderableTrendValues(
+  values: readonly Pick<TrendChartDatum, 'chartValue'>[]
+): boolean {
+  return values.some(
+    ({ chartValue }) =>
+      typeof chartValue === 'number' && Number.isFinite(chartValue)
+  )
+}
+
 function crossSiteAmount(
   siteBreakdown: SiteQuotaBreakdown[]
 ): CrossSiteQuotaAmount {

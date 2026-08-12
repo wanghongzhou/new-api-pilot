@@ -6,7 +6,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -15,6 +15,7 @@ import { MetricValue } from '@/components/data/metric-value'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
+import { DataTablePagination } from '@/components/ui/data-table-pagination'
 import { SelectControl as Select } from '@/components/ui/select-control'
 import {
   Sheet,
@@ -37,6 +38,7 @@ import {
   listSiteCollectionRuns,
 } from '../api'
 import {
+  collectionTaskHasWindows,
   collectionTaskCatalog,
   collectionTaskCategories,
   collectionRunStatuses,
@@ -56,7 +58,9 @@ import type {
   CollectionRunWindowListParams,
   CollectionTaskType,
 } from '../types'
-import { FastTaskHistoryPanel } from './fast-task-history-panel'
+
+const collectionRunPageSize = 10
+const collectionWindowPageSize = 10
 
 interface CollectionRunsSearch {
   runId?: string
@@ -119,14 +123,14 @@ function RunCard({
   onOpen,
   run,
 }: {
-  onOpen: () => void
+  onOpen?: () => void
   run: CollectionRunItem
 }) {
   const { t } = useTranslation()
   return (
     <article className='bg-card text-card-foreground ring-foreground/10 rounded-xl p-4 ring-1'>
       <div className='flex items-start justify-between gap-3'>
-        <div>
+        <div className='min-w-0 flex-1'>
           <h3 className='font-medium'>
             {t(dynamicI18nKey('site', `collection.task.${run.task_type}`))}
           </h3>
@@ -172,10 +176,12 @@ function RunCard({
           </dd>
         </dl>
       </div>
-      <Button className='mt-3 w-full' onClick={onOpen} variant='outline'>
-        <HugeiconsIcon icon={ViewIcon} strokeWidth={2} />
-        {t('collection.viewWindows')}
-      </Button>
+      {onOpen && (
+        <Button className='mt-3 w-full' onClick={onOpen} variant='outline'>
+          <HugeiconsIcon icon={ViewIcon} strokeWidth={2} />
+          {t('collection.viewWindows')}
+        </Button>
+      )}
     </article>
   )
 }
@@ -248,16 +254,17 @@ function RunWindowsSheet({
   const run = runQuery.data
   const runContractError = run ? siteRunContractError(run, siteId) : null
   const ownedRun = run != null && runContractError == null
+  const windowedRun = ownedRun && collectionTaskHasWindows(run.task_type)
   const windowParams = useMemo<CollectionRunWindowListParams>(
     () => ({
       p: search.windowPage,
-      page_size: 20,
+      page_size: collectionWindowPageSize,
       status: search.windowStatus,
     }),
     [search.windowPage, search.windowStatus]
   )
   const windowsQuery = useQuery({
-    enabled: validRunId && validSiteId && ownedRun,
+    enabled: validRunId && validSiteId && windowedRun,
     placeholderData: keepPreviousData,
     queryFn: () => listCollectionRunWindows(parseIdString(runId), windowParams),
     queryKey: siteKeys.windows(runId, windowParams),
@@ -275,6 +282,15 @@ function RunWindowsSheet({
   const windowsContractError =
     rawWindows.length > 0 && !windowsBelongToSiteRun(rawWindows, runId, siteId)
   const windows = windowsContractError ? [] : rawWindows
+  const windowTotal = windowsQuery.data?.total ?? 0
+  useEffect(() => {
+    if (!windowsQuery.data || windowTotal === 0) return
+    const lastPage = Math.max(
+      1,
+      Math.ceil(windowTotal / collectionWindowPageSize)
+    )
+    if (search.windowPage > lastPage) onSearchChange({ windowPage: lastPage })
+  }, [onSearchChange, search.windowPage, windowTotal, windowsQuery.data])
 
   const retryFailed = async () => {
     if (!run || !canRetrySiteUsageRun(run, siteId) || !validSiteId) return
@@ -410,66 +426,89 @@ function RunWindowsSheet({
             )}
           </p>
         )}
-        <div className='flex flex-wrap items-center gap-2'>
-          <Select
-            aria-label={t('collection.filterWindowStatus')}
-            onChange={(event) =>
-              onSearchChange({
-                windowPage: 1,
-                windowStatus:
-                  event.target.value === ''
-                    ? undefined
-                    : (event.target.value as CollectionRunWindowItem['status']),
-              })
-            }
-            value={search.windowStatus ?? ''}
-          >
-            <option value=''>{t('common.allStatuses')}</option>
-            {collectionRunWindowStatuses.map((status) => (
-              <option key={status} value={status}>
-                {t(dynamicI18nKey('site', `collection.windowStatus.${status}`))}
-              </option>
-            ))}
-          </Select>
-          {isAdmin && run && canRetrySiteUsageRun(run, siteId) && (
-            <Button
-              disabled={retrying}
-              onClick={() => void retryFailed()}
-              variant='outline'
-            >
-              {retrying ? (
-                <Spinner />
-              ) : (
-                <HugeiconsIcon icon={Refresh01Icon} strokeWidth={2} />
+        {ownedRun && !windowedRun && (
+          <p className='text-muted-foreground text-sm'>
+            {t('collection.windowsUnavailable')}
+          </p>
+        )}
+        {windowedRun && (
+          <>
+            <div className='flex flex-wrap items-center gap-2'>
+              <Select
+                aria-label={t('collection.filterWindowStatus')}
+                onChange={(event) =>
+                  onSearchChange({
+                    windowPage: 1,
+                    windowStatus:
+                      event.target.value === ''
+                        ? undefined
+                        : (event.target
+                            .value as CollectionRunWindowItem['status']),
+                  })
+                }
+                value={search.windowStatus ?? ''}
+              >
+                <option value=''>{t('common.allStatuses')}</option>
+                {collectionRunWindowStatuses.map((status) => (
+                  <option key={status} value={status}>
+                    {t(
+                      dynamicI18nKey(
+                        'site',
+                        `collection.windowStatus.${status}`
+                      )
+                    )}
+                  </option>
+                ))}
+              </Select>
+              {isAdmin && run && canRetrySiteUsageRun(run, siteId) && (
+                <Button
+                  disabled={retrying}
+                  onClick={() => void retryFailed()}
+                  variant='outline'
+                >
+                  {retrying ? (
+                    <Spinner />
+                  ) : (
+                    <HugeiconsIcon icon={Refresh01Icon} strokeWidth={2} />
+                  )}
+                  {t('collection.retryFailedWindows')}
+                </Button>
               )}
-              {t('collection.retryFailedWindows')}
-            </Button>
-          )}
-        </div>
-        <DataTable
-          ariaLabel={t('collection.windowsTable')}
-          columns={columns}
-          data={windows}
-          emptyDescription={t('collection.windowsEmptyDescription')}
-          emptyTitle={t('collection.windowsEmpty')}
-          error={
-            !validRunId ||
-            !validSiteId ||
-            runQuery.isError ||
-            Boolean(runContractError) ||
-            windowsQuery.isError ||
-            windowsContractError
-          }
-          fetching={windowsQuery.isFetching}
-          loading={runQuery.isPending || (ownedRun && windowsQuery.isPending)}
-          onPageChange={(windowPage) => onSearchChange({ windowPage })}
-          onRetry={() => void windowsQuery.refetch()}
-          page={search.windowPage}
-          paginationInFooter={false}
-          pageSize={windowsQuery.data?.page_size ?? 20}
-          renderMobileCard={(window) => <WindowCard window={window} />}
-          total={windowsQuery.data?.total ?? 0}
-        />
+            </div>
+            <DataTablePagination
+              onPageChange={(windowPage) => onSearchChange({ windowPage })}
+              page={search.windowPage}
+              pageSize={collectionWindowPageSize}
+              total={windowTotal}
+            />
+            <DataTable
+              ariaLabel={t('collection.windowsTable')}
+              columns={columns}
+              data={windows}
+              emptyDescription={t('collection.windowsEmptyDescription')}
+              emptyTitle={t('collection.windowsEmpty')}
+              error={
+                !validRunId ||
+                !validSiteId ||
+                runQuery.isError ||
+                Boolean(runContractError) ||
+                windowsQuery.isError ||
+                windowsContractError
+              }
+              fetching={windowsQuery.isFetching}
+              loading={runQuery.isPending || windowsQuery.isPending}
+              onPageChange={(windowPage) => onSearchChange({ windowPage })}
+              onRetry={() => void windowsQuery.refetch()}
+              page={search.windowPage}
+              paginationInFooter={false}
+              pageSize={
+                windowsQuery.data?.page_size ?? collectionWindowPageSize
+              }
+              renderMobileCard={(window) => <WindowCard window={window} />}
+              total={windowsQuery.data?.total ?? 0}
+            />
+          </>
+        )}
       </SheetContent>
     </Sheet>
   )
@@ -486,7 +525,7 @@ export function CollectionRunsPanel({
   const params = useMemo<CollectionRunListParams>(
     () => ({
       p: search.runPage,
-      page_size: 20,
+      page_size: collectionRunPageSize,
       status: search.runStatus,
       task_type: search.runTaskType || undefined,
     }),
@@ -512,6 +551,12 @@ export function CollectionRunsPanel({
     (run) => siteRunContractError(run, siteId) != null
   )
   const runs = listContractError ? [] : rawRuns
+  const runTotal = runsQuery.data?.total ?? 0
+  useEffect(() => {
+    if (!runsQuery.data || runTotal === 0) return
+    const lastPage = Math.max(1, Math.ceil(runTotal / collectionRunPageSize))
+    if (search.runPage > lastPage) onSearchChange({ runPage: lastPage })
+  }, [onSearchChange, runTotal, runsQuery.data, search.runPage])
   const columns = useMemo<ColumnDef<CollectionRunItem, unknown>[]>(
     () => [
       {
@@ -580,20 +625,23 @@ export function CollectionRunsPanel({
         id: 'error',
       },
       {
-        cell: ({ row }) => (
-          <Button
-            aria-label={t('collection.viewWindows')}
-            className='size-10 sm:size-8'
-            onClick={() =>
-              onSearchChange({ runId: row.original.id, windowPage: 1 })
-            }
-            size='icon'
-            title={t('collection.viewWindows')}
-            variant='ghost'
-          >
-            <HugeiconsIcon icon={ViewIcon} strokeWidth={2} />
-          </Button>
-        ),
+        cell: ({ row }) =>
+          collectionTaskHasWindows(row.original.task_type) ? (
+            <Button
+              aria-label={t('collection.viewWindows')}
+              className='size-10 sm:size-8'
+              onClick={() =>
+                onSearchChange({ runId: row.original.id, windowPage: 1 })
+              }
+              size='icon'
+              title={t('collection.viewWindows')}
+              variant='ghost'
+            >
+              <HugeiconsIcon icon={ViewIcon} strokeWidth={2} />
+            </Button>
+          ) : (
+            '-'
+          ),
         header: t('common.actions'),
         id: 'actions',
       },
@@ -610,59 +658,73 @@ export function CollectionRunsPanel({
             {t('collection.description')}
           </p>
         </div>
-        <div className='flex flex-wrap gap-2'>
-          <Select
-            aria-label={t('collection.filterStatus')}
-            onChange={(event) =>
-              onSearchChange({
-                runPage: 1,
-                runStatus:
-                  event.target.value === ''
-                    ? undefined
-                    : (event.target.value as CollectionRunItem['status']),
-              })
-            }
-            value={search.runStatus ?? ''}
-          >
-            <option value=''>{t('common.allStatuses')}</option>
-            {collectionRunStatuses.map((status) => (
-              <option key={status} value={status}>
-                {t(dynamicI18nKey('site', `collection.status.${status}`))}
-              </option>
-            ))}
-          </Select>
-          <Select
-            aria-label={t('collection.filterTaskType')}
-            onChange={(event) =>
-              onSearchChange({
-                runPage: 1,
-                runTaskType:
-                  (event.target.value as CollectionTaskType) || undefined,
-              })
-            }
-            value={search.runTaskType ?? ''}
-          >
-            <option value=''>{t('collection.allTaskTypes')}</option>
-            {collectionTaskCategories.map((category) => (
-              <optgroup
-                key={category}
-                label={t(
-                  dynamicI18nKey('site', `siteTasks.category.${category}`)
-                )}
-              >
-                {collectionTaskTypes
-                  .filter(
-                    (taskType) =>
-                      collectionTaskCatalog[taskType].category === category
-                  )
-                  .map((taskType) => (
-                    <option key={taskType} value={taskType}>
-                      {t(dynamicI18nKey('site', `collection.task.${taskType}`))}
-                    </option>
-                  ))}
-              </optgroup>
-            ))}
-          </Select>
+        <div className='flex shrink-0 flex-wrap items-center justify-end gap-x-4 gap-y-2'>
+          <div className='flex items-center gap-2'>
+            <span className='text-muted-foreground text-sm whitespace-nowrap'>
+              {t('collection.status')}
+            </span>
+            <Select
+              aria-label={t('collection.filterStatus')}
+              className='w-32'
+              onChange={(event) =>
+                onSearchChange({
+                  runPage: 1,
+                  runStatus:
+                    event.target.value === ''
+                      ? undefined
+                      : (event.target.value as CollectionRunItem['status']),
+                })
+              }
+              value={search.runStatus ?? ''}
+            >
+              <option value=''>{t('common.allStatuses')}</option>
+              {collectionRunStatuses.map((status) => (
+                <option key={status} value={status}>
+                  {t(dynamicI18nKey('site', `collection.status.${status}`))}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className='flex items-center gap-2'>
+            <span className='text-muted-foreground text-sm whitespace-nowrap'>
+              {t('collection.taskType')}
+            </span>
+            <Select
+              aria-label={t('collection.filterTaskType')}
+              className='w-48'
+              onChange={(event) =>
+                onSearchChange({
+                  runPage: 1,
+                  runTaskType:
+                    (event.target.value as CollectionTaskType) || undefined,
+                })
+              }
+              value={search.runTaskType ?? ''}
+            >
+              <option value=''>{t('collection.allTaskTypes')}</option>
+              {collectionTaskCategories.map((category) => (
+                <optgroup
+                  key={category}
+                  label={t(
+                    dynamicI18nKey('site', `siteTasks.category.${category}`)
+                  )}
+                >
+                  {collectionTaskTypes
+                    .filter(
+                      (taskType) =>
+                        collectionTaskCatalog[taskType].category === category
+                    )
+                    .map((taskType) => (
+                      <option key={taskType} value={taskType}>
+                        {t(
+                          dynamicI18nKey('site', `collection.task.${taskType}`)
+                        )}
+                      </option>
+                    ))}
+                </optgroup>
+              ))}
+            </Select>
+          </div>
         </div>
       </div>
       {listContractError && (
@@ -678,15 +740,20 @@ export function CollectionRunsPanel({
         emptyTitle={t('collection.empty')}
         error={!validSiteId || runsQuery.isError || listContractError}
         fetching={runsQuery.isFetching}
+        fillAvailableHeight={false}
         loading={runsQuery.isPending}
         onPageChange={(runPage) => onSearchChange({ runPage })}
         onRetry={() => void runsQuery.refetch()}
         page={search.runPage}
-        pageSize={runsQuery.data?.page_size ?? 20}
+        pageSize={runsQuery.data?.page_size ?? collectionRunPageSize}
         paginationInFooter={false}
         renderMobileCard={(run) => (
           <RunCard
-            onOpen={() => onSearchChange({ runId: run.id, windowPage: 1 })}
+            onOpen={
+              collectionTaskHasWindows(run.task_type)
+                ? () => onSearchChange({ runId: run.id, windowPage: 1 })
+                : undefined
+            }
             run={run}
           />
         )}
@@ -702,7 +769,6 @@ export function CollectionRunsPanel({
           siteId={siteId}
         />
       )}
-      <FastTaskHistoryPanel siteId={siteId} />
     </section>
   )
 }

@@ -2,7 +2,11 @@ import { describe, expect, test } from 'bun:test'
 
 import { parseMetricString } from '@/lib/api-types'
 
-import { buildTrendChartModel, cloneTrendChartValues } from './chart-data'
+import {
+  buildTrendChartModel,
+  cloneTrendChartValues,
+  hasRenderableTrendValues,
+} from './chart-data'
 import type { TrendPoint } from './types'
 
 function point(
@@ -43,6 +47,20 @@ function point(
 }
 
 describe('statistics trend chart model', () => {
+  test('renders only when at least one finite chart value exists', () => {
+    expect(hasRenderableTrendValues([])).toBeFalse()
+    expect(
+      hasRenderableTrendValues([
+        { chartValue: null },
+        { chartValue: Number.NaN },
+        { chartValue: Number.POSITIVE_INFINITY },
+      ])
+    ).toBeFalse()
+    expect(
+      hasRenderableTrendValues([{ chartValue: null }, { chartValue: 0 }])
+    ).toBeTrue()
+  })
+
   test('offsets unsafe bigint values without changing exact tooltip values', () => {
     const model = buildTrendChartModel(
       [

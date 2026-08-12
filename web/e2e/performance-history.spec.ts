@@ -198,14 +198,17 @@ test('shows upstream values in seconds with compact filters, server pagination a
             name: '华东生产站点',
             online_status: 'online',
             performance: {
-              avg_latency_ms: 123.456789,
-              avg_tps: 9.87654321,
-              data_status: 'complete',
+              data_status: 'ready',
               hours: 24,
-              models: [],
-              request_count: '1',
+              models: [
+                {
+                  avg_latency_ms: 123.456789,
+                  avg_tps: 9.87654321,
+                  model_name: 'gpt-4o',
+                  success_rate: 99,
+                },
+              ],
               sampled_at: 1_784_266_000,
-              success_rate: 0.99,
             },
             rate: {
               quota_per_unit: '500000',

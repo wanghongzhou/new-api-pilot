@@ -1,13 +1,16 @@
 import {
   Archive03Icon,
+  Chart01Icon,
   Delete02Icon,
   Edit03Icon,
   MoreVerticalIcon,
   Refresh01Icon,
   RotateClockwiseIcon,
+  ViewIcon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Link } from '@tanstack/react-router'
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { DataFreshness } from '@/components/data/data-freshness'
@@ -22,6 +25,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { formatAverageRate } from '@/features/sites/site-card-metrics'
+import { buildStatisticsSearch } from '@/features/statistics/search'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { cn } from '@/lib/utils'
 
@@ -157,7 +162,7 @@ export function AccountCard({
       <div className='flex min-w-0 items-start justify-between gap-2'>
         <div className='min-w-0'>
           <Link
-            className='block truncate font-semibold hover:underline'
+            className='block truncate text-base leading-tight font-semibold hover:underline'
             params={{ accountId: account.id }}
             to='/accounts/$accountId'
           >
@@ -174,33 +179,76 @@ export function AccountCard({
         <ManagedStatusBadge status={account.managed_status} />
         <RemoteStatusBadge status={account.remote_status} />
       </div>
-      <div className='grid grid-cols-2 gap-3 text-sm'>
-        <dl>
+      <div className='grid grid-cols-2 gap-2 text-sm'>
+        <dl className='bg-muted/35 min-w-0 rounded-md px-2.5 py-2'>
           <dt className='text-muted-foreground text-xs'>{t('account.site')}</dt>
-          <dd className='truncate'>{account.site_name}</dd>
+          <dd className='mt-1 truncate font-medium'>{account.site_name}</dd>
         </dl>
-        <dl>
+        <dl className='bg-muted/35 min-w-0 rounded-md px-2.5 py-2'>
           <dt className='text-muted-foreground text-xs'>
             {t('account.customer')}
           </dt>
-          <dd className='truncate'>{account.customer_name}</dd>
+          <dd className='mt-1 truncate font-medium'>{account.customer_name}</dd>
         </dl>
-        <dl>
+        <dl className='bg-muted/35 col-span-2 min-w-0 rounded-md px-2.5 py-2'>
           <dt className='text-muted-foreground text-xs'>
             {t('account.remoteGroup')}
           </dt>
-          <dd>{account.remote_group || '-'}</dd>
+          <dd className='mt-1 truncate font-medium'>
+            {account.remote_group || '-'}
+          </dd>
         </dl>
-        <dl>
+        <dl className='bg-muted/35 min-w-0 rounded-md px-2.5 py-2'>
           <dt className='text-muted-foreground text-xs'>
-            {t('account.todayRequests')}
+            {t('account.currentQuota')}
           </dt>
-          <dd>
-            <MetricValue compact value={account.today.request_count} />
+          <dd className='mt-1 font-medium tabular-nums'>
+            <MetricValue compact nullLabel='0' value={account.quota} />
+          </dd>
+        </dl>
+        <dl className='bg-muted/35 min-w-0 rounded-md px-2.5 py-2'>
+          <dt className='text-muted-foreground text-xs'>
+            {t('account.usedQuota')}
+          </dt>
+          <dd className='mt-1 font-medium tabular-nums'>
+            <MetricValue compact nullLabel='0' value={account.used_quota} />
           </dd>
         </dl>
       </div>
-      <QuotaAmount quota={account.today.quota} rate={account.rate} />
+      <section className='grid gap-3'>
+        <div className='grid grid-cols-2 gap-x-5 gap-y-4'>
+          <MetricCell label={t('site.dashboard.totalQuota')}>
+            <QuotaAmount
+              className='justify-items-center'
+              nullLabel='0'
+              quota={account.today.quota}
+              rate={account.rate}
+            />
+          </MetricCell>
+          <MetricCell label={t('site.dashboard.totalTokens')}>
+            <MetricValue
+              compact
+              nullLabel='0'
+              value={account.today.token_used}
+            />
+          </MetricCell>
+        </div>
+        <div className='grid grid-cols-3 gap-x-5 gap-y-4'>
+          <MetricCell label={t('site.dashboard.totalCount')}>
+            <MetricValue
+              compact
+              nullLabel='0'
+              value={account.today.request_count}
+            />
+          </MetricCell>
+          <MetricCell label={t('site.averageRpm')}>
+            {formatAverageRate(account.today.avg_rpm)}
+          </MetricCell>
+          <MetricCell label={t('site.averageTpm')}>
+            {formatAverageRate(account.today.avg_tpm)}
+          </MetricCell>
+        </div>
+      </section>
       <div className='flex flex-wrap items-center justify-between gap-2'>
         <DataStatusBadge status={account.today.data_status} />
         <DataFreshness
@@ -208,6 +256,42 @@ export function AccountCard({
           timestamp={account.today.as_of}
         />
       </div>
+      <footer className='border-border/70 flex flex-wrap items-center gap-1 border-t pt-2'>
+        <Link
+          className='hover:bg-muted inline-flex min-h-9 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium'
+          params={{ accountId: account.id }}
+          search={buildStatisticsSearch({})}
+          to='/accounts/$accountId/stats'
+        >
+          <HugeiconsIcon icon={Chart01Icon} strokeWidth={2} />
+          {t('account.actions.stats')}
+        </Link>
+        <Link
+          className='hover:bg-muted ml-auto inline-flex min-h-9 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium'
+          params={{ accountId: account.id }}
+          to='/accounts/$accountId'
+        >
+          <HugeiconsIcon icon={ViewIcon} strokeWidth={2} />
+          {t('account.actions.detail')}
+        </Link>
+      </footer>
     </article>
+  )
+}
+
+function MetricCell({
+  children,
+  label,
+}: {
+  children: ReactNode
+  label: string
+}) {
+  return (
+    <div className='min-w-0 text-center'>
+      <p className='text-muted-foreground truncate text-xs'>{label}</p>
+      <div className='text-foreground mt-1 min-w-0 text-base leading-none font-semibold tabular-nums'>
+        {children}
+      </div>
+    </div>
   )
 }

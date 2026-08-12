@@ -112,14 +112,17 @@ function siteFixture(id = '1') {
     name: id === '1' ? '华东站点' : '新建站点',
     online_status: 'online',
     performance: {
-      avg_latency_ms: 120,
-      avg_tps: 18.5,
-      data_status: 'complete',
+      data_status: 'ready',
       hours: 24,
-      models: [],
-      request_count: '128340',
+      models: [
+        {
+          avg_latency_ms: 120,
+          avg_tps: 18.5,
+          model_name: 'gpt-4o',
+          success_rate: 99.8,
+        },
+      ],
       sampled_at: 1_783_872_000,
-      success_rate: 0.998,
     },
     rate: {
       quota_per_unit: '500000',
@@ -443,7 +446,7 @@ async function mockSiteReads(
         json: envelope({
           avg_latency_ms: 0,
           avg_tps: 0,
-          data_status: 'missing',
+          data_status: 'ready',
           hours: 24,
           models: [],
           request_count: '0',
@@ -1402,7 +1405,7 @@ test('deep-links run windows, polls only until terminal, and retries with a new 
     })
   })
 
-  await page.goto('/sites/1?runId=10&runPage=1&windowPage=1')
+  await page.goto('/sites/1/collection-runs?runId=10&runPage=1&windowPage=1')
   const sheet = page.getByRole('dialog', { name: '任务 10 的执行窗口' })
   await expect(sheet).toBeVisible()
   await expect.poll(() => runCalls).toBeGreaterThan(0)

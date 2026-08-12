@@ -265,22 +265,18 @@ type UsageSummary struct {
 	IsFinal      bool    `json:"is_final,omitempty"`
 }
 
-// SitePerformanceSummary is a range aggregate returned by the upstream
-// performance endpoint. Counts are strings because they are bigint values.
+// SitePerformanceSummary preserves the per-model values returned by the
+// upstream performance endpoint. The upstream JSON does not expose weights,
+// so the platform must not invent a site-level aggregate.
 type SitePerformanceSummary struct {
-	Hours        int                    `json:"hours"`
-	SampledAt    *int64                 `json:"sampled_at"`
-	DataStatus   string                 `json:"data_status"`
-	RequestCount string                 `json:"request_count"`
-	SuccessRate  float64                `json:"success_rate"`
-	AvgLatencyMS float64                `json:"avg_latency_ms"`
-	AvgTPS       float64                `json:"avg_tps"`
-	Models       []SitePerformanceModel `json:"models"`
+	Hours      int                    `json:"hours"`
+	SampledAt  *int64                 `json:"sampled_at"`
+	DataStatus string                 `json:"data_status"`
+	Models     []SitePerformanceModel `json:"models"`
 }
 
 type SitePerformanceModel struct {
 	ModelName    string  `json:"model_name"`
-	RequestCount string  `json:"request_count"`
 	SuccessRate  float64 `json:"success_rate"`
 	AvgLatencyMS float64 `json:"avg_latency_ms"`
 	AvgTPS       float64 `json:"avg_tps"`

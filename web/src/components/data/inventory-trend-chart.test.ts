@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import {
   buildInventoryTrendChartValues,
+  hasRenderableInventoryTrendValues,
   shouldShowInventoryTrendPoints,
   type InventoryTrendChartPoint,
 } from './inventory-trend-chart-data'
@@ -62,6 +63,40 @@ describe('inventory trend chart data semantics', () => {
         series
       )[0]
     ).toMatchObject({ rawValue: null, value: null })
+    expect(
+      buildInventoryTrendChartValues(
+        [point('complete', 'Infinity'), point('partial', '1e999')],
+        series
+      ).map((item) => item.value)
+    ).toEqual([null, null])
+  })
+
+  test('reports an empty chart when every snapshot value is null or invalid', () => {
+    const values = buildInventoryTrendChartValues(
+      [
+        { ...point('complete', '1'), values: {} },
+        point('complete', ''),
+        point('partial', 'not-a-number'),
+        point('unavailable', '4'),
+      ],
+      series
+    )
+
+    expect(hasRenderableInventoryTrendValues(values)).toBe(false)
+  })
+
+  test('reports a renderable chart when a complete or partial value is finite', () => {
+    const completeValues = buildInventoryTrendChartValues(
+      [point('complete', '0')],
+      series
+    )
+    const partialValues = buildInventoryTrendChartValues(
+      [point('partial', '3')],
+      series
+    )
+
+    expect(hasRenderableInventoryTrendValues(completeValues)).toBe(true)
+    expect(hasRenderableInventoryTrendValues(partialValues)).toBe(true)
   })
 
   test('only shows point markers for short ranges', () => {

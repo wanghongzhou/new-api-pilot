@@ -249,6 +249,8 @@ export const fastCollectionTaskTypes = [
   'resource_snapshot',
 ] as const satisfies readonly FastCollectionTaskType[]
 
+export const fastTaskHistoryStatuses = ['running', 'success', 'failed'] as const
+
 export function isFastCollectionTaskType(
   value: unknown
 ): value is FastCollectionTaskType {
@@ -263,3 +265,19 @@ export const retryableSiteUsageTaskTypes = [
   'usage_backfill',
   'usage_validation',
 ] as const satisfies readonly CollectionTaskType[]
+
+export const windowedCollectionTaskTypes = [
+  'usage_hour',
+  'usage_backfill',
+  'usage_validation',
+  'account_rebuild',
+  'customer_rebuild',
+] as const satisfies readonly CollectionTaskType[]
+
+export function collectionTaskHasWindows(
+  taskType: CollectionTaskType
+): boolean {
+  return (
+    windowedCollectionTaskTypes as readonly CollectionTaskType[]
+  ).includes(taskType)
+}

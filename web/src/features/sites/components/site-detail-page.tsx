@@ -8,13 +8,9 @@ import {
   ViewIcon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
-import {
-  keepPreviousData,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { useMemo, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { BackfillProgress } from '@/components/data/backfill-progress'
@@ -37,12 +33,7 @@ import { buildModelCatalogSearch } from '@/features/model-catalog/search'
 import { buildPerformanceHistorySearch } from '@/features/performance-history/search'
 import { buildPricingGroupSearch } from '@/features/pricing-groups/search'
 import { buildRankingSearch } from '@/features/rankings/search'
-import { EntityStatistics } from '@/features/statistics/components/entity-statistics'
 import { buildStatisticsSearch } from '@/features/statistics/search'
-import type {
-  EntityStatisticsParams,
-  StatisticsSearch,
-} from '@/features/statistics/types'
 import { buildSubscriptionPlanSearch } from '@/features/subscription-plans/search'
 import { buildSystemTaskSearch } from '@/features/system-tasks/search'
 import { buildUpstreamTaskSearch } from '@/features/upstream-tasks/search'
@@ -56,39 +47,22 @@ import {
 } from '@/lib/display-value'
 import { useAuthStore } from '@/stores/auth-store'
 
-import {
-  getSite,
-  getSitePerformance,
-  getSiteStatistics,
-  listSiteInstances,
-} from '../api'
+import { getSite, getSitePerformance, listSiteCollectionRuns } from '../api'
+import { collectionTaskCatalog } from '../constants'
 import { siteKeys } from '../query-keys'
-import { formatLatencySeconds, formatPercentValue } from '../site-card-metrics'
-import type {
-  CollectionRunItem,
-  CollectionRunWindowItem,
-  CollectionTaskType,
-  SiteDetail,
-  SiteInstanceItem,
-  SitePerformanceSummary,
-} from '../types'
-import { CollectionRunsPanel } from './collection-runs-panel'
+import {
+  formatPerformanceLatency,
+  formatPerformanceSuccessRate,
+  formatPerformanceThroughput,
+  formatPercentValue,
+  sitePerformanceDashboardSummary,
+} from '../site-card-metrics'
+import type { SiteDetail, SitePerformanceSummary } from '../types'
 import { SiteActions, type SiteAction } from './site-actions'
 import { SiteDialogs, type SiteDialogState } from './site-dialogs'
 
-export interface SiteDetailSearch {
-  runId?: string
-  runPage: number
-  runStatus?: CollectionRunItem['status']
-  runTaskType?: CollectionTaskType
-  windowPage: number
-  windowStatus?: CollectionRunWindowItem['status']
-}
-
 interface SiteDetailPageProps {
   onDeleted: () => void
-  onSearchChange: (changes: Partial<SiteDetailSearch>) => void
-  search: SiteDetailSearch
   siteId: string
 }
 
@@ -100,23 +74,6 @@ function TimestampValue({ timestamp }: { timestamp: number | null }) {
 function PercentValue({ value }: { value: number | null }) {
   const { t } = useTranslation()
   return <span>{formatPercentValue(value, t('data.unavailableValue'))}</span>
-}
-
-function InstanceStatusBadge({
-  status,
-}: {
-  status: SiteInstanceItem['current_status']
-}) {
-  let variant: 'destructive' | 'neutral' | 'success' | 'warning' = 'neutral'
-  if (status === 'online') variant = 'success'
-  else if (status === 'offline') variant = 'destructive'
-  else if (status === 'stale') variant = 'warning'
-  const { t } = useTranslation()
-  return (
-    <Badge variant={variant}>
-      {t(dynamicI18nKey('site', `instance.status.${status}`))}
-    </Badge>
-  )
 }
 
 function MetricCell({
@@ -149,27 +106,27 @@ function DetailSummary({ site }: { site: SiteDetail }) {
         />
       </div>
       <dl className='border-border [&>div]:border-border grid overflow-hidden rounded-lg border sm:grid-cols-2 lg:grid-cols-4 [&>div]:border-b sm:[&>div]:border-r lg:[&>div:nth-child(4n)]:border-r-0'>
-        <MetricCell label={t('metric.rpm')}>
-          <MetricValue nullLabel='0' value={site.realtime.rpm} />
-        </MetricCell>
-        <MetricCell label={t('metric.tpm')}>
-          <MetricValue nullLabel='0' value={site.realtime.tpm} />
-        </MetricCell>
-        <MetricCell label={t('site.todayRequests')}>
+        <MetricCell label={t('site.dashboard.totalCount')}>
           <MetricValue nullLabel='0' value={site.today.request_count} />
         </MetricCell>
-        <MetricCell label={t('site.activeUsers')}>
-          <MetricValue nullLabel='0' value={site.today.active_users} />
-        </MetricCell>
-        <MetricCell label={t('site.todayQuota')}>
+        <MetricCell label={t('site.dashboard.totalQuota')}>
           <QuotaAmount
             nullLabel='0'
             quota={site.today.quota}
             rate={site.rate}
           />
         </MetricCell>
-        <MetricCell label={t('metric.token')}>
+        <MetricCell label={t('site.dashboard.totalTokens')}>
           <MetricValue nullLabel='0' value={site.today.token_used} />
+        </MetricCell>
+        <MetricCell label={t('site.averageRpm')}>
+          <MetricValue nullLabel='0' value={site.today.avg_rpm} />
+        </MetricCell>
+        <MetricCell label={t('site.averageTpm')}>
+          <MetricValue nullLabel='0' value={site.today.avg_tpm} />
+        </MetricCell>
+        <MetricCell label={t('site.activeUsers')}>
+          <MetricValue nullLabel='0' value={site.today.active_users} />
         </MetricCell>
         <MetricCell label={t('metric.cpu')}>
           <PercentValue value={site.resource.cpu_max_percent} />
@@ -221,6 +178,9 @@ function PerformanceHealth({
   range: (typeof performanceRanges)[number]
 }) {
   const { t } = useTranslation()
+  const performanceModels = performance?.models ?? []
+  const performanceSummary = sitePerformanceDashboardSummary(performanceModels)
+  const unavailableValue = t('data.unavailableValue')
   let content: ReactNode
   if (pending && !performance) {
     content = (
@@ -238,61 +198,88 @@ function PerformanceHealth({
     )
   } else {
     content = (
-      <>
-        <dl className='border-border grid overflow-hidden rounded-lg border sm:grid-cols-2 lg:grid-cols-4'>
-          <MetricCell label={t('site.performance.requestCount')}>
-            <MetricValue
-              nullLabel='0'
-              value={performance?.request_count ?? null}
-            />
-          </MetricCell>
+      <div className='grid gap-3'>
+        <dl className='grid overflow-hidden rounded-lg border sm:grid-cols-3 sm:divide-x'>
           <MetricCell label={t('site.performance.successRate')}>
-            <PercentValue value={performance?.success_rate ?? null} />
+            {formatPerformanceSuccessRate(
+              performanceSummary.successRate,
+              unavailableValue
+            )}
           </MetricCell>
           <MetricCell label={t('site.performance.avgLatency')}>
-            <span>
-              {performance == null
-                ? t('data.unavailableValue')
-                : t('site.performance.latencyValue', {
-                    value: formatLatencySeconds(performance.avg_latency_ms),
-                  })}
-            </span>
+            {formatPerformanceLatency(
+              performanceSummary.avgLatencyMs,
+              unavailableValue
+            )}
           </MetricCell>
           <MetricCell label={t('site.performance.avgTps')}>
-            <span>
-              {performance == null
-                ? t('data.unavailableValue')
-                : t('site.performance.tpsValue', {
-                    value: performance.avg_tps.toFixed(1),
-                  })}
-            </span>
+            {formatPerformanceThroughput(
+              performanceSummary.throughput,
+              unavailableValue
+            )}
           </MetricCell>
         </dl>
-        <div className='border-t pt-3'>
-          <h3 className='text-sm font-medium'>
-            {t('site.performance.models')}
-          </h3>
-          {(performance?.models.length ?? 0) === 0 ? (
-            <p className='text-muted-foreground mt-2 text-sm'>-</p>
+        <div className='overflow-hidden rounded-lg border'>
+          <div className='bg-muted/40 hidden grid-cols-4 gap-3 border-b px-4 py-2 text-xs font-medium sm:grid'>
+            <span>{t('site.performance.model')}</span>
+            <span className='text-right'>
+              {t('site.performance.successRate')}
+            </span>
+            <span className='text-right'>
+              {t('site.performance.avgLatency')}
+            </span>
+            <span className='text-right'>{t('site.performance.avgTps')}</span>
+          </div>
+          {performanceModels.length === 0 ? (
+            <p className='text-muted-foreground px-4 py-6 text-center text-sm'>
+              {t('site.performance.unavailable')}
+            </p>
           ) : (
-            <dl className='mt-2 grid gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-3'>
-              {performance?.models.map((model) => (
+            <dl className='divide-y'>
+              {performanceModels.map((model) => (
                 <div
-                  className='flex min-w-0 items-center justify-between gap-3'
+                  className='grid grid-cols-2 gap-x-3 gap-y-2 px-4 py-3 sm:grid-cols-4'
                   key={model.model_name}
                 >
-                  <dt className='truncate text-sm' title={model.model_name}>
+                  <dt
+                    className='col-span-2 truncate text-sm font-medium sm:col-span-1'
+                    title={model.model_name}
+                  >
                     {model.model_name}
                   </dt>
-                  <dd className='text-sm font-medium'>
-                    <PercentValue value={model.success_rate} />
+                  <dd className='text-sm sm:text-right'>
+                    <span className='text-muted-foreground sm:hidden'>
+                      {t('site.performance.successRate')}:{' '}
+                    </span>
+                    {formatPerformanceSuccessRate(
+                      model.success_rate,
+                      unavailableValue
+                    )}
+                  </dd>
+                  <dd className='text-sm sm:text-right'>
+                    <span className='text-muted-foreground sm:hidden'>
+                      {t('site.performance.avgLatency')}:{' '}
+                    </span>
+                    {formatPerformanceLatency(
+                      model.avg_latency_ms,
+                      unavailableValue
+                    )}
+                  </dd>
+                  <dd className='text-sm sm:text-right'>
+                    <span className='text-muted-foreground sm:hidden'>
+                      {t('site.performance.avgTps')}:{' '}
+                    </span>
+                    {formatPerformanceThroughput(
+                      model.avg_tps,
+                      unavailableValue
+                    )}
                   </dd>
                 </div>
               ))}
             </dl>
           )}
         </div>
-      </>
+      </div>
     )
   }
 
@@ -452,70 +439,243 @@ function SiteMetadata({ site }: { site: SiteDetail }) {
   )
 }
 
-function InstancePreview({
-  error,
-  instances,
-  pending,
-  siteId,
-}: {
-  error: boolean
-  instances: SiteInstanceItem[]
-  pending: boolean
-  siteId: string
-}) {
+const relatedLinkClass =
+  'border-border hover:bg-muted flex min-h-10 items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium'
+
+function collectionRunBadgeVariant(
+  status: 'failed' | 'pending' | 'running' | 'success'
+): 'destructive' | 'neutral' | 'primary' | 'success' {
+  if (status === 'success') return 'success'
+  if (status === 'failed') return 'destructive'
+  if (status === 'running') return 'primary'
+  return 'neutral'
+}
+
+function SiteRelatedPages({ siteId }: { siteId: string }) {
   const { t } = useTranslation()
-  let content: ReactNode
-  if (pending) {
-    content = (
-      <div
-        aria-label={t('instance.loading')}
-        className='grid gap-2 border-t pt-3 md:grid-cols-2 xl:grid-cols-3'
-        role='status'
-      >
-        {Array.from({ length: 3 }, (_, index) => (
-          <div className='bg-muted h-24 animate-pulse rounded-md' key={index} />
-        ))}
+  return (
+    <section aria-labelledby='site-related-pages-title' className='grid gap-3'>
+      <div>
+        <h2 className='text-lg font-semibold' id='site-related-pages-title'>
+          {t('site.related.title')}
+        </h2>
+        <p className='text-muted-foreground mt-1 text-sm'>
+          {t('site.related.description')}
+        </p>
       </div>
-    )
-  } else if (error) {
+      <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
+        <nav
+          aria-label={t('site.related.operations')}
+          className='border-border grid content-start gap-2 rounded-lg border p-3'
+        >
+          <h3 className='text-sm font-semibold'>
+            {t('site.related.operations')}
+          </h3>
+          <Link
+            className={relatedLinkClass}
+            params={{ siteId }}
+            search={buildFinancialOperationsSearch({})}
+            to='/sites/$siteId/financial-operations'
+          >
+            <HugeiconsIcon icon={FileExportIcon} strokeWidth={2} />
+            {t('site.actions.financialOperations')}
+          </Link>
+          <Link
+            className={relatedLinkClass}
+            params={{ siteId }}
+            search={buildPerformanceHistorySearch({})}
+            to='/sites/$siteId/performance-history'
+          >
+            <HugeiconsIcon icon={Chart01Icon} strokeWidth={2} />
+            {t('site.actions.performanceHistory')}
+          </Link>
+          <Link
+            className={relatedLinkClass}
+            params={{ siteId }}
+            search={buildStatisticsSearch({})}
+            to='/sites/$siteId/stats'
+          >
+            <HugeiconsIcon icon={Chart01Icon} strokeWidth={2} />
+            {t('site.actions.stats')}
+          </Link>
+          <Link
+            className={relatedLinkClass}
+            params={{ siteId }}
+            search={buildRankingSearch({})}
+            to='/sites/$siteId/rankings'
+          >
+            <HugeiconsIcon icon={Chart01Icon} strokeWidth={2} />
+            {t('site.actions.rankings')}
+          </Link>
+        </nav>
+
+        <nav
+          aria-label={t('site.related.resources')}
+          className='border-border grid content-start gap-2 rounded-lg border p-3'
+        >
+          <h3 className='text-sm font-semibold'>
+            {t('site.related.resources')}
+          </h3>
+          <Link
+            className={relatedLinkClass}
+            params={{ siteId }}
+            search={buildUserInventorySearch({})}
+            to='/sites/$siteId/user-inventory'
+          >
+            <HugeiconsIcon icon={UserGroupIcon} strokeWidth={2} />
+            {t('site.actions.userInventory')}
+          </Link>
+          <Link
+            className={relatedLinkClass}
+            params={{ siteId }}
+            search={buildChannelInventorySearch({})}
+            to='/sites/$siteId/channel-inventory'
+          >
+            <HugeiconsIcon icon={ServerStack01Icon} strokeWidth={2} />
+            {t('site.actions.channelInventory')}
+          </Link>
+          <Link
+            className={relatedLinkClass}
+            params={{ siteId }}
+            search={buildModelCatalogSearch({})}
+            to='/sites/$siteId/model-catalog'
+          >
+            <HugeiconsIcon icon={ServerStack01Icon} strokeWidth={2} />
+            {t('site.actions.modelCatalog')}
+          </Link>
+          <Link
+            className={relatedLinkClass}
+            params={{ siteId }}
+            search={buildPricingGroupSearch({})}
+            to='/sites/$siteId/pricing-groups'
+          >
+            <HugeiconsIcon icon={ServerStack01Icon} strokeWidth={2} />
+            {t('site.actions.pricingGroups')}
+          </Link>
+          <Link
+            className={relatedLinkClass}
+            params={{ siteId }}
+            search={buildSubscriptionPlanSearch({})}
+            to='/sites/$siteId/subscription-plans'
+          >
+            <HugeiconsIcon icon={ServerStack01Icon} strokeWidth={2} />
+            {t('site.actions.subscriptionPlans')}
+          </Link>
+        </nav>
+
+        <nav
+          aria-label={t('site.related.records')}
+          className='border-border grid content-start gap-2 rounded-lg border p-3'
+        >
+          <h3 className='text-sm font-semibold'>{t('site.related.records')}</h3>
+          <Link
+            className={relatedLinkClass}
+            params={{ siteId }}
+            search={buildLogSearch({})}
+            to='/sites/$siteId/logs'
+          >
+            <HugeiconsIcon icon={ViewIcon} strokeWidth={2} />
+            {t('site.actions.logs')}
+          </Link>
+          <Link
+            className={relatedLinkClass}
+            params={{ siteId }}
+            search={buildUpstreamTaskSearch({})}
+            to='/sites/$siteId/upstream-tasks'
+          >
+            <HugeiconsIcon icon={FileExportIcon} strokeWidth={2} />
+            {t('site.actions.upstreamTasks')}
+          </Link>
+          <Link
+            className={relatedLinkClass}
+            params={{ siteId }}
+            search={buildSystemTaskSearch({})}
+            to='/sites/$siteId/system-tasks'
+          >
+            <HugeiconsIcon icon={FileExportIcon} strokeWidth={2} />
+            {t('site.actions.systemTasks')}
+          </Link>
+          <Link
+            className={relatedLinkClass}
+            params={{ siteId }}
+            to='/sites/$siteId/collection-runs'
+          >
+            <HugeiconsIcon icon={ViewIcon} strokeWidth={2} />
+            {t('site.actions.collectionRuns')}
+          </Link>
+        </nav>
+
+        <nav
+          aria-label={t('site.related.infrastructure')}
+          className='border-border grid content-start gap-2 rounded-lg border p-3'
+        >
+          <h3 className='text-sm font-semibold'>
+            {t('site.related.infrastructure')}
+          </h3>
+          <Link
+            className={relatedLinkClass}
+            params={{ siteId }}
+            to='/sites/$siteId/status'
+          >
+            <HugeiconsIcon icon={ServerStack01Icon} strokeWidth={2} />
+            {t('site.instanceStatus')}
+          </Link>
+        </nav>
+      </div>
+    </section>
+  )
+}
+
+function RecentCollectionActivity({ siteId }: { siteId: string }) {
+  const { t } = useTranslation()
+  const params = { p: 1, page_size: 3 }
+  const runsQuery = useQuery({
+    queryFn: () => listSiteCollectionRuns(parseIdString(siteId), params),
+    queryKey: siteKeys.runs(siteId, params),
+    staleTime: 5_000,
+  })
+  const runs = runsQuery.data?.items ?? []
+  let content: ReactNode
+  if (runsQuery.isPending) {
+    content = <LoadingState message={t('site.collectionRecent.loading')} />
+  } else if (runsQuery.isError) {
     content = (
-      <p className='text-destructive text-sm'>{t('instance.loadError')}</p>
-    )
-  } else if (instances.length === 0) {
-    content = (
-      <p className='text-muted-foreground border-t py-4 text-sm'>
-        {t('instance.empty')}
+      <p className='text-destructive text-sm' role='alert'>
+        {t('site.collectionRecent.loadError')}
       </p>
+    )
+  } else if (runs.length === 0) {
+    content = (
+      <p className='text-muted-foreground text-sm'>{t('collection.empty')}</p>
     )
   } else {
     content = (
-      <div className='grid gap-2 border-t pt-3 md:grid-cols-2 xl:grid-cols-3'>
-        {instances.slice(0, 6).map((instance) => (
+      <div className='border-border divide-border divide-y rounded-lg border'>
+        {runs.map((run) => (
           <article
-            className='border-border grid min-w-0 gap-2 border-b pb-3'
-            key={instance.node_name}
+            className='flex flex-wrap items-center justify-between gap-3 px-3 py-2.5'
+            key={run.id}
           >
-            <div className='flex items-center justify-between gap-2'>
-              <h3 className='truncate font-medium' title={instance.node_name}>
-                {instance.node_name}
-              </h3>
-              <InstanceStatusBadge status={instance.current_status} />
+            <div className='min-w-0'>
+              <p className='font-medium'>
+                {t(dynamicI18nKey('site', `collection.task.${run.task_type}`))}
+              </p>
+              <p className='text-muted-foreground truncate text-xs'>
+                {t(
+                  dynamicI18nKey(
+                    'site',
+                    collectionTaskCatalog[run.task_type].purposeKey
+                  )
+                )}
+              </p>
             </div>
-            <p className='text-muted-foreground truncate text-xs'>
-              {instance.hostname || '-'}
-            </p>
-            <div className='grid grid-cols-3 gap-2 text-xs'>
-              <span>
-                {t('metric.cpu')} <PercentValue value={instance.cpu_percent} />
+            <div className='flex items-center gap-3'>
+              <span className='text-muted-foreground text-xs'>
+                {fromUnixSeconds(run.created_at).format('MM-DD HH:mm:ss')}
               </span>
-              <span>
-                {t('metric.memory')}{' '}
-                <PercentValue value={instance.memory_percent} />
-              </span>
-              <span>
-                {t('metric.disk')}{' '}
-                <PercentValue value={instance.disk_used_percent} />
-              </span>
+              <Badge variant={collectionRunBadgeVariant(run.status)}>
+                {t(dynamicI18nKey('site', `collection.status.${run.status}`))}
+              </Badge>
             </div>
           </article>
         ))}
@@ -523,23 +683,31 @@ function InstancePreview({
     )
   }
   return (
-    <section aria-labelledby='site-instances-title' className='grid gap-3'>
+    <section
+      aria-labelledby='site-recent-collection-title'
+      className='grid gap-3'
+    >
       <div className='flex flex-wrap items-center justify-between gap-3'>
         <div>
-          <h2 className='text-lg font-semibold' id='site-instances-title'>
-            {t('site.instances')}
+          <h2
+            className='text-lg font-semibold'
+            id='site-recent-collection-title'
+          >
+            {t('site.collectionRecent.title')}
           </h2>
           <p className='text-muted-foreground mt-1 text-sm'>
-            {t('site.detail.instancesDescription')}
+            {t('site.collectionRecent.description', {
+              total: runsQuery.data?.total ?? 0,
+            })}
           </p>
         </div>
         <Link
-          className='border-border hover:bg-muted inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-medium'
+          className={relatedLinkClass}
           params={{ siteId }}
-          to='/sites/$siteId/status'
+          to='/sites/$siteId/collection-runs'
         >
-          <HugeiconsIcon icon={ServerStack01Icon} strokeWidth={2} />
-          {t('site.instanceStatus')}
+          <HugeiconsIcon icon={ViewIcon} strokeWidth={2} />
+          {t('site.actions.collectionRuns')}
         </Link>
       </div>
       {content}
@@ -547,80 +715,7 @@ function InstancePreview({
   )
 }
 
-function SiteDataDashboard({ siteId }: { siteId: string }) {
-  const { t } = useTranslation()
-  const [search, setSearch] = useState<StatisticsSearch>(() =>
-    buildStatisticsSearch({})
-  )
-  const params = useMemo<EntityStatisticsParams>(
-    () => ({
-      end_timestamp: search.end,
-      granularity: search.granularity,
-      p: search.page,
-      page_size: search.pageSize,
-      sort_by: search.sort,
-      sort_order: search.order,
-      start_timestamp: search.start,
-    }),
-    [search]
-  )
-  const statisticsQuery = useQuery({
-    placeholderData: keepPreviousData,
-    queryFn: () => getSiteStatistics(parseIdString(siteId), params),
-    queryKey: siteKeys.statistics(siteId, params),
-    staleTime: 5 * 60_000,
-  })
-  const response = statisticsQuery.data
-  const contractValid =
-    response == null ||
-    (response.scope === 'site' &&
-      response.granularity === search.granularity &&
-      response.range.start_timestamp === search.start &&
-      response.range.end_timestamp === search.end)
-  const rangeTransition = Boolean(
-    response &&
-    !contractValid &&
-    statisticsQuery.isPlaceholderData &&
-    statisticsQuery.isFetching
-  )
-  const data = contractValid || rangeTransition ? response : undefined
-
-  return (
-    <section aria-labelledby='site-data-dashboard-title' className='grid gap-4'>
-      <div>
-        <h2 className='text-lg font-semibold' id='site-data-dashboard-title'>
-          {t('site.actions.stats')}
-        </h2>
-      </div>
-      <EntityStatistics
-        data={data}
-        entityId={parseIdString(siteId)}
-        error={
-          statisticsQuery.isError ||
-          (!contractValid && !rangeTransition && !statisticsQuery.isFetching)
-        }
-        fetching={statisticsQuery.isFetching}
-        loading={statisticsQuery.isPending}
-        onRetry={() => void statisticsQuery.refetch()}
-        onSearchChange={(changes) =>
-          setSearch((current) =>
-            buildStatisticsSearch({ ...current, ...changes })
-          )
-        }
-        rangeTransition={rangeTransition}
-        scope='site'
-        search={search}
-      />
-    </section>
-  )
-}
-
-export function SiteDetailPage({
-  onDeleted,
-  onSearchChange,
-  search,
-  siteId,
-}: SiteDetailPageProps) {
+export function SiteDetailPage({ onDeleted, siteId }: SiteDetailPageProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const currentUser = useAuthStore((state) => state.user)
@@ -637,13 +732,6 @@ export function SiteDetailPage({
       query.state.data?.statistics_status === 'backfilling' ? 5_000 : 60_000,
     staleTime: 30_000,
   })
-  const instancesQuery = useQuery({
-    enabled: validSiteId,
-    queryFn: () => listSiteInstances(parseIdString(siteId)),
-    queryKey: siteKeys.instances(siteId),
-    refetchInterval: 60_000,
-    staleTime: 30_000,
-  })
   const performanceQuery = useQuery({
     enabled: validSiteId,
     queryFn: () => getSitePerformance(parseIdString(siteId), performanceRange),
@@ -654,7 +742,6 @@ export function SiteDetailPage({
 
   const retry = () => {
     void detailQuery.refetch()
-    void instancesQuery.refetch()
     void performanceQuery.refetch()
   }
   const invalidate = (action: SiteAction) => {
@@ -662,134 +749,15 @@ export function SiteDetailPage({
     if (action === 'delete') onDeleted()
   }
 
-  const actions = site ? (
-    <>
-      <Link
-        className='border-border hover:bg-muted inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-medium'
-        params={{ siteId }}
-        search={buildFinancialOperationsSearch({})}
-        to='/sites/$siteId/financial-operations'
-      >
-        <HugeiconsIcon icon={FileExportIcon} strokeWidth={2} />
-        {t('site.actions.financialOperations')}
-      </Link>
-      <Link
-        className='border-border hover:bg-muted inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-medium'
-        params={{ siteId }}
-        search={buildPerformanceHistorySearch({})}
-        to='/sites/$siteId/performance-history'
-      >
-        <HugeiconsIcon icon={Chart01Icon} strokeWidth={2} />
-        {t('site.actions.performanceHistory')}
-      </Link>
-      <Link
-        className='border-border hover:bg-muted inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-medium'
-        params={{ siteId }}
-        search={buildChannelInventorySearch({})}
-        to='/sites/$siteId/channel-inventory'
-      >
-        <HugeiconsIcon icon={ServerStack01Icon} strokeWidth={2} />
-        {t('site.actions.channelInventory')}
-      </Link>
-      <Link
-        className='border-border hover:bg-muted inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-medium'
-        params={{ siteId }}
-        search={buildUserInventorySearch({})}
-        to='/sites/$siteId/user-inventory'
-      >
-        <HugeiconsIcon icon={UserGroupIcon} strokeWidth={2} />
-        {t('site.actions.userInventory')}
-      </Link>
-      <Link
-        className='border-border hover:bg-muted inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-medium'
-        params={{ siteId }}
-        search={buildUpstreamTaskSearch({})}
-        to='/sites/$siteId/upstream-tasks'
-      >
-        <HugeiconsIcon icon={FileExportIcon} strokeWidth={2} />
-        {t('site.actions.upstreamTasks')}
-      </Link>
-      <Link
-        className='border-border hover:bg-muted inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-medium'
-        params={{ siteId }}
-        search={buildModelCatalogSearch({})}
-        to='/sites/$siteId/model-catalog'
-      >
-        <HugeiconsIcon icon={ServerStack01Icon} strokeWidth={2} />
-        {t('site.actions.modelCatalog')}
-      </Link>
-      <Link
-        className='border-border hover:bg-muted inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-medium'
-        params={{ siteId }}
-        search={buildRankingSearch({})}
-        to='/sites/$siteId/rankings'
-      >
-        <HugeiconsIcon icon={Chart01Icon} strokeWidth={2} />
-        {t('site.actions.rankings')}
-      </Link>
-      <Link
-        className='border-border hover:bg-muted inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-medium'
-        params={{ siteId }}
-        search={buildPricingGroupSearch({})}
-        to='/sites/$siteId/pricing-groups'
-      >
-        <HugeiconsIcon icon={ServerStack01Icon} strokeWidth={2} />
-        {t('site.actions.pricingGroups')}
-      </Link>
-      <Link
-        className='border-border hover:bg-muted inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-medium'
-        params={{ siteId }}
-        search={buildSubscriptionPlanSearch({})}
-        to='/sites/$siteId/subscription-plans'
-      >
-        <HugeiconsIcon icon={ServerStack01Icon} strokeWidth={2} />
-        {t('site.actions.subscriptionPlans')}
-      </Link>
-      <Link
-        className='border-border hover:bg-muted inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-medium'
-        params={{ siteId }}
-        search={buildSystemTaskSearch({})}
-        to='/sites/$siteId/system-tasks'
-      >
-        <HugeiconsIcon icon={FileExportIcon} strokeWidth={2} />
-        {t('site.actions.systemTasks')}
-      </Link>
-      <Link
-        className='border-border hover:bg-muted inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-medium'
-        params={{ siteId }}
-        search={buildLogSearch({})}
-        to='/sites/$siteId/logs'
-      >
-        <HugeiconsIcon icon={ViewIcon} strokeWidth={2} />
-        {t('site.actions.logs')}
-      </Link>
-      <Link
-        className='border-border hover:bg-muted inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-medium'
-        params={{ siteId }}
-        search={buildStatisticsSearch({})}
-        to='/sites/$siteId/stats'
-      >
-        <HugeiconsIcon icon={Chart01Icon} strokeWidth={2} />
-        {t('site.actions.stats')}
-      </Link>
-      <Link
-        className='border-border hover:bg-muted inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-medium'
-        params={{ siteId }}
-        to='/sites/$siteId/status'
-      >
-        <HugeiconsIcon icon={ServerStack01Icon} strokeWidth={2} />
-        {t('site.instanceStatus')}
-      </Link>
-      {isAdmin && (
-        <SiteActions
-          onAction={(action, selectedSite) =>
-            setDialogState({ action, site: selectedSite })
-          }
-          site={site}
-        />
-      )}
-    </>
-  ) : undefined
+  const actions =
+    site && isAdmin ? (
+      <SiteActions
+        onAction={(action, selectedSite) =>
+          setDialogState({ action, site: selectedSite })
+        }
+        site={site}
+      />
+    ) : undefined
 
   let detailContent: ReactNode
   if (!validSiteId || (detailQuery.isError && !site)) {
@@ -850,14 +818,9 @@ export function SiteDetailPage({
           <CompletenessAlert completeness={site.completeness} />
           <BackfillProgress backfill={site.backfill} />
         </div>
-        <SiteDataDashboard siteId={siteId} />
+        <SiteRelatedPages siteId={siteId} />
         <SiteMetadata site={site} />
-        <InstancePreview
-          error={instancesQuery.isError && instancesQuery.data == null}
-          instances={instancesQuery.data ?? []}
-          pending={instancesQuery.isPending}
-          siteId={siteId}
-        />
+        <RecentCollectionActivity siteId={siteId} />
       </>
     )
   }
@@ -888,13 +851,6 @@ export function SiteDetailPage({
         </DetailBackLink>
 
         {detailContent}
-
-        <CollectionRunsPanel
-          isAdmin={Boolean(isAdmin)}
-          onSearchChange={onSearchChange}
-          search={search}
-          siteId={siteId}
-        />
       </div>
 
       <SiteDialogs

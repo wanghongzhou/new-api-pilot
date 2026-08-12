@@ -20,6 +20,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { DataTablePagination } from '@/components/ui/data-table-pagination'
 import {
   Drawer,
   DrawerContent,
@@ -34,12 +35,13 @@ import { SelectControl as Select } from '@/components/ui/select-control'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
 import { UnsavedChangesConfirmDialog } from '@/components/unsaved-changes-guard'
-import { listCustomers } from '@/features/customers/api'
+import { listAllCustomers } from '@/features/customers/api'
 import { customerKeys } from '@/features/customers/query-keys'
 import type { CustomerListParams } from '@/features/customers/types'
-import { listSites } from '@/features/sites/api'
+import { listAllSites } from '@/features/sites/api'
 import { siteKeys } from '@/features/sites/query-keys'
 import type { SiteListParams } from '@/features/sites/types'
+import { useLastValidPage } from '@/hooks/use-last-valid-page'
 import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
@@ -49,6 +51,10 @@ import { applyApiFieldErrors } from '@/lib/form-errors'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { createAccount, listRemoteUsers } from '../api'
+import {
+  isEligibleAccountCustomer,
+  isEligibleAccountSite,
+} from '../onboarding-eligibility'
 import { accountKeys } from '../query-keys'
 import { findExactRemoteUser, remoteUserChanged } from '../remote-review'
 import {
@@ -124,6 +130,7 @@ export function AccountOnboardingDrawer({
   const [step, setStep] = useState(0)
   const [keyword, setKeyword] = useState('')
   const [debouncedKeyword, setDebouncedKeyword] = useState('')
+  const [remotePage, setRemotePage] = useState(1)
   const [composing, setComposing] = useState(false)
   const [selectedUser, setSelectedUser] = useState<RemoteUserItem | null>(null)
   const [reviewedUser, setReviewedUser] = useState<RemoteUserItem | null>(null)
@@ -159,6 +166,7 @@ export function AccountOnboardingDrawer({
     setStep(0)
     setKeyword('')
     setDebouncedKeyword('')
+    setRemotePage(1)
     setSelectedUser(null)
     setReviewedUser(null)
     setReviewError(null)
@@ -180,10 +188,8 @@ export function AccountOnboardingDrawer({
     return () => window.clearTimeout(timer)
   }, [composing, keyword])
 
-  const customerParams = useMemo<CustomerListParams>(
+  const customerParams = useMemo<Omit<CustomerListParams, 'p' | 'page_size'>>(
     () => ({
-      p: 1,
-      page_size: 100,
       sort_by: 'name',
       sort_order: 'asc',
       status: ['using'],
@@ -192,16 +198,14 @@ export function AccountOnboardingDrawer({
   )
   const customersQuery = useQuery({
     enabled: open && Boolean(isAdmin),
-    queryFn: () => listCustomers(customerParams),
-    queryKey: customerKeys.list(customerParams),
+    queryFn: () => listAllCustomers(customerParams),
+    queryKey: customerKeys.options(customerParams),
     staleTime: 5 * 60_000,
   })
-  const siteParams = useMemo<SiteListParams>(
+  const siteParams = useMemo<Omit<SiteListParams, 'p' | 'page_size'>>(
     () => ({
       auth_status: ['authorized'],
       management_status: ['active'],
-      p: 1,
-      page_size: 100,
       sort_by: 'name',
       sort_order: 'asc' as const,
     }),
@@ -209,19 +213,16 @@ export function AccountOnboardingDrawer({
   )
   const sitesQuery = useQuery({
     enabled: open && Boolean(isAdmin),
-    queryFn: () => listSites(siteParams),
-    queryKey: siteKeys.list(siteParams),
+    queryFn: () => listAllSites(siteParams),
+    queryKey: siteKeys.options(siteParams),
     staleTime: 5 * 60_000,
   })
-  const eligibleSites = (sitesQuery.data?.items ?? []).filter(
-    (site) =>
-      site.management_status === 'active' &&
-      site.auth_status === 'authorized' &&
-      site.data_export_enabled === true
+  const eligibleSites = (sitesQuery.data?.items ?? []).filter((site) =>
+    isEligibleAccountSite([site], site.id)
   )
   const remoteParams = useMemo(
-    () => ({ keyword: debouncedKeyword, p: 1, page_size: 100 }),
-    [debouncedKeyword]
+    () => ({ keyword: debouncedKeyword, p: remotePage, page_size: 20 }),
+    [debouncedKeyword, remotePage]
   )
   const remoteUsersQuery = useQuery({
     enabled:
@@ -234,6 +235,21 @@ export function AccountOnboardingDrawer({
     queryKey: accountKeys.remoteUsers(siteId, remoteParams),
     staleTime: 0,
   })
+  useLastValidPage({
+    isFetching: remoteUsersQuery.isFetching,
+    isPlaceholderData: remoteUsersQuery.isPlaceholderData,
+    onReplace: setRemotePage,
+    page: remotePage,
+    pageSize: remoteParams.page_size,
+    total: remoteUsersQuery.data?.total,
+  })
+  const changeRemotePage = (page: number) => {
+    setRemotePage(page)
+    setSelectedUser(null)
+    setReviewedUser(null)
+    setValue('remoteUserId', '')
+    setReviewError(null)
+  }
 
   const preciseReview = async (): Promise<RemoteUserItem | null> => {
     if (!selectedUser || !/^[1-9]\d*$/.test(siteId)) return null
@@ -278,6 +294,17 @@ export function AccountOnboardingDrawer({
         await trigger('customerId')
         return
       }
+      if (
+        !isEligibleAccountCustomer(
+          customersQuery.data?.items ?? [],
+          values.data.customerId
+        )
+      ) {
+        setError('customerId', {
+          message: 'account.onboarding.customerUnavailable',
+        })
+        return
+      }
       setStep(1)
       return
     }
@@ -286,6 +313,10 @@ export function AccountOnboardingDrawer({
       if (!values.success || !selectedUser) {
         await trigger(['siteId', 'remoteUserId'])
         if (!selectedUser) setReviewError('account.onboarding.selectRemoteUser')
+        return
+      }
+      if (!isEligibleAccountSite(eligibleSites, values.data.siteId)) {
+        setError('siteId', { message: 'account.onboarding.siteUnavailable' })
         return
       }
       const reviewed = await preciseReview()
@@ -445,10 +476,26 @@ export function AccountOnboardingDrawer({
                 </FormField>
                 {customersQuery.isPending && <Spinner />}
                 {customersQuery.isError && (
-                  <p className='text-destructive text-sm'>
-                    {t('customer.listLoadError')}
-                  </p>
+                  <div className='flex flex-wrap items-center justify-between gap-3'>
+                    <p className='text-destructive text-sm' role='alert'>
+                      {t('customer.listLoadError')}
+                    </p>
+                    <Button
+                      onClick={() => void customersQuery.refetch()}
+                      size='sm'
+                      type='button'
+                      variant='outline'
+                    >
+                      {t('common.retry')}
+                    </Button>
+                  </div>
                 )}
+                {customersQuery.isSuccess &&
+                  customersQuery.data.items.length === 0 && (
+                    <p className='text-muted-foreground text-sm' role='status'>
+                      {t('account.onboarding.noEligibleCustomers')}
+                    </p>
+                  )}
               </div>
             )}
 
@@ -477,6 +524,7 @@ export function AccountOnboardingDrawer({
                       })
                       setSelectedUser(null)
                       setReviewedUser(null)
+                      setRemotePage(1)
                       setValue('remoteUserId', '')
                       setReviewError(null)
                     }}
@@ -493,6 +541,32 @@ export function AccountOnboardingDrawer({
                     ))}
                   </Select>
                 </FormField>
+                {sitesQuery.isPending && (
+                  <div className='flex items-center gap-2 text-sm'>
+                    <Spinner />
+                    {t('account.onboarding.loadingSites')}
+                  </div>
+                )}
+                {sitesQuery.isError && (
+                  <div className='flex flex-wrap items-center justify-between gap-3'>
+                    <p className='text-destructive text-sm' role='alert'>
+                      {t('account.onboarding.siteLoadError')}
+                    </p>
+                    <Button
+                      onClick={() => void sitesQuery.refetch()}
+                      size='sm'
+                      type='button'
+                      variant='outline'
+                    >
+                      {t('common.retry')}
+                    </Button>
+                  </div>
+                )}
+                {sitesQuery.isSuccess && eligibleSites.length === 0 && (
+                  <p className='text-muted-foreground text-sm' role='status'>
+                    {t('account.onboarding.noEligibleSites')}
+                  </p>
+                )}
                 <FormField
                   description={t('account.onboarding.searchDescription')}
                   htmlFor='account-remote-search'
@@ -511,6 +585,7 @@ export function AccountOnboardingDrawer({
                       id='account-remote-search'
                       onChange={(event) => {
                         setKeyword(event.target.value)
+                        setRemotePage(1)
                         setSelectedUser(null)
                         setReviewedUser(null)
                         setValue('remoteUserId', '')
@@ -520,6 +595,7 @@ export function AccountOnboardingDrawer({
                       ) => {
                         setComposing(false)
                         setKeyword(event.currentTarget.value)
+                        setRemotePage(1)
                       }}
                       onCompositionStart={() => setComposing(true)}
                       placeholder={t('account.onboarding.searchPlaceholder')}
@@ -534,10 +610,27 @@ export function AccountOnboardingDrawer({
                   </div>
                 )}
                 {remoteUsersQuery.isError && (
-                  <p className='text-destructive text-sm'>
-                    {t('account.onboarding.searchError')}
-                  </p>
+                  <div className='flex flex-wrap items-center justify-between gap-3'>
+                    <p className='text-destructive text-sm' role='alert'>
+                      {t('account.onboarding.searchError')}
+                    </p>
+                    <Button
+                      onClick={() => void remoteUsersQuery.refetch()}
+                      size='sm'
+                      type='button'
+                      variant='outline'
+                    >
+                      {t('common.retry')}
+                    </Button>
+                  </div>
                 )}
+                {remoteUsersQuery.isSuccess &&
+                  debouncedKeyword.length > 0 &&
+                  remoteUsersQuery.data.items.length === 0 && (
+                    <p className='text-muted-foreground text-sm' role='status'>
+                      {t('account.onboarding.noRemoteUsers')}
+                    </p>
+                  )}
                 <div className='grid gap-2'>
                   {(remoteUsersQuery.data?.items ?? []).map((user) => (
                     <button
@@ -579,6 +672,17 @@ export function AccountOnboardingDrawer({
                     </button>
                   ))}
                 </div>
+                {remoteUsersQuery.data &&
+                  remoteUsersQuery.data.items.length > 0 && (
+                    <div className='border-border border-t pt-3'>
+                      <DataTablePagination
+                        onPageChange={changeRemotePage}
+                        page={remotePage}
+                        pageSize={remoteParams.page_size}
+                        total={remoteUsersQuery.data.total}
+                      />
+                    </div>
+                  )}
                 <input type='hidden' {...register('remoteUserId')} />
                 {errors.remoteUserId?.message && (
                   <p className='text-destructive text-sm'>
@@ -722,7 +826,15 @@ export function AccountOnboardingDrawer({
               </Button>
             )}
             {step < 3 ? (
-              <Button disabled={reviewing} onClick={() => void next()}>
+              <Button
+                disabled={
+                  reviewing ||
+                  (step === 0 &&
+                    (customersQuery.isPending || customersQuery.isError)) ||
+                  (step === 1 && (sitesQuery.isPending || sitesQuery.isError))
+                }
+                onClick={() => void next()}
+              >
                 {reviewing && <Spinner />}
                 {t('common.continue')}
               </Button>

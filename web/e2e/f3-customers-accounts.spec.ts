@@ -54,6 +54,17 @@ async function assertNoHorizontalOverflow(page: Page) {
   expect(sizes.scrollWidth).toBeLessThanOrEqual(sizes.clientWidth)
 }
 
+async function hideDevelopmentTools(page: Page) {
+  await page.addStyleTag({
+    content: `
+      button[aria-label='Open TanStack Router Devtools'],
+      button[aria-label='Open Tanstack query devtools'] {
+        display: none !important;
+      }
+    `,
+  })
+}
+
 function errorEnvelope(
   code: string,
   requestId = 'req_f3_error',
@@ -165,15 +176,19 @@ function customerFixture(status = 'using') {
     backfill: emptyBackfill,
     completeness,
     contact: '张经理 13800000000',
+    contract_amount: '1000000.0000000000',
     created_at: 1_700_000_000,
     id: '7',
     name: '示例客户',
+    payment_amount: '1000.0000000000',
     remark: '重点客户',
     site_count: 1,
     statistics_paused_at: status === 'disabled' ? 1_783_000_000 : null,
     status,
     today: {
       active_users: status === 'disabled' ? null : '1',
+      avg_rpm: status === 'disabled' ? null : '0.50',
+      avg_tpm: status === 'disabled' ? null : '100.00',
       as_of: 1_783_872_000,
       data_status: status === 'disabled' ? 'paused' : 'partial',
       quota: status === 'disabled' ? null : '500000',
@@ -220,6 +235,8 @@ function accountFixture(
     statistics_paused_at: managedStatus === 'archived' ? 1_783_000_000 : null,
     today: {
       active_users: null,
+      avg_rpm: remoteState === 'normal' ? '0.50' : null,
+      avg_tpm: remoteState === 'normal' ? '100.00' : null,
       as_of: 1_783_872_000,
       data_status: remoteState === 'normal' ? 'partial' : 'paused',
       quota: remoteState === 'normal' ? '500000' : null,
@@ -574,6 +591,7 @@ test('uses the refreshed new-api list chrome for account and customer pages', as
   }
 
   await page.goto('/customers')
+  await hideDevelopmentTools(page)
   if (isMobile) {
     await expect(
       page.getByText('尚未创建客户').filter({ visible: true }).first()
@@ -583,6 +601,184 @@ test('uses the refreshed new-api list chrome for account and customer pages', as
     await expectReferenceEmptyTableRow(page)
   }
   await expect(page.getByRole('button', { name: '新建客户' })).toHaveCount(1)
+})
+
+test('keeps the customer list responsive across loading, multi-filter, sorting, pagination, empty, and retry states', async ({
+  isMobile,
+  page,
+}) => {
+  await seedAuth(page, admin)
+  await mockSelf(page, admin)
+  const customers = Array.from({ length: 45 }, (_, index) => ({
+    ...customerFixture(index % 3 === 0 ? 'disabled' : 'using'),
+    id: String(index + 1),
+    name: `生产客户 ${String(index + 1).padStart(2, '0')}`,
+    updated_at: 1_783_872_000 - index,
+  }))
+  const requests: URL[] = []
+  let releaseInitial = () => {}
+  const initialGate = new Promise<void>((resolve) => {
+    releaseInitial = resolve
+  })
+  let firstRequest = true
+  let forceError = true
+  await page.route(/\/api\/customers(?:\?.*)?$/, async (route) => {
+    assertAuthenticatedRequest(route, admin)
+    const url = new URL(route.request().url())
+    requests.push(url)
+    if (firstRequest) {
+      firstRequest = false
+      await initialGate
+    }
+    const keyword = url.searchParams.get('keyword') ?? ''
+    if (keyword === 'force-error' && forceError) {
+      await route.fulfill({
+        json: errorEnvelope('INTERNAL_ERROR', 'req_customer_list_error'),
+        status: 500,
+      })
+      return
+    }
+    const statuses = url.searchParams.getAll('status')
+    let filtered = customers.filter(
+      (customer) =>
+        (!keyword || customer.name.includes(keyword)) &&
+        (statuses.length === 0 || statuses.includes(customer.status))
+    )
+    const sortBy = url.searchParams.get('sort_by')
+    const sortOrder = url.searchParams.get('sort_order')
+    if (sortBy === 'name') {
+      filtered = [...filtered].sort((left, right) =>
+        sortOrder === 'asc'
+          ? left.name.localeCompare(right.name)
+          : right.name.localeCompare(left.name)
+      )
+    }
+    const currentPage = Number(url.searchParams.get('p') ?? 1)
+    const pageSize = Number(url.searchParams.get('page_size') ?? 20)
+    const offset = (currentPage - 1) * pageSize
+    await route.fulfill({
+      json: envelope({
+        items: filtered.slice(offset, offset + pageSize),
+        page: currentPage,
+        page_size: pageSize,
+        total: filtered.length,
+      }),
+    })
+  })
+
+  await page.goto('/customers')
+  await hideDevelopmentTools(page)
+  await expect(page.locator('[aria-hidden="true"].animate-pulse')).toHaveCount(
+    3
+  )
+  releaseInitial()
+  await expect(page.getByRole('link', { name: '生产客户 01' })).toBeVisible()
+  await expect(page.getByText('1,000,000').first()).toBeVisible()
+  await expect(page.getByText('1,000').first()).toBeVisible()
+  await expect(page.getByText('1000000.0000000000')).toHaveCount(0)
+  await expect(page.getByText('2026-07-13 00:00:00').first()).toBeVisible()
+
+  await page.getByRole('button', { name: '客户状态' }).click()
+  await page.getByRole('button', { name: '使用中', exact: true }).click()
+  await page.getByRole('button', { name: '已停用', exact: true }).click()
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: '搜索', exact: true }).click()
+  await expect
+    .poll(() => requests.at(-1)?.searchParams.getAll('status'))
+    .toEqual(['using', 'disabled'])
+
+  await page.getByRole('button', { name: '重置' }).click()
+  await page.getByLabel('搜索客户').fill('不存在')
+  await page.getByRole('button', { name: '搜索', exact: true }).click()
+  await expect(page.getByText('未找到匹配的客户')).toBeVisible()
+  await expect(page.getByText('尚未创建客户')).toHaveCount(0)
+
+  await page.getByLabel('搜索客户').fill('force-error')
+  await page.getByRole('button', { name: '搜索', exact: true }).click()
+  await expect(page.getByText('无法加载数据')).toBeVisible()
+  forceError = false
+  await page.getByRole('button', { name: '重试' }).click()
+  await expect(page.getByText('未找到匹配的客户')).toBeVisible()
+
+  await page.getByRole('button', { name: '重置' }).click()
+  if (!isMobile) {
+    await page.getByRole('button', { name: '表格视图' }).click()
+    await page.getByRole('button', { name: '客户名称' }).click()
+    await page.getByRole('menuitem', { name: '升序' }).click()
+    await expect
+      .poll(() => ({
+        order: requests.at(-1)?.searchParams.get('sort_order'),
+        sort: requests.at(-1)?.searchParams.get('sort_by'),
+      }))
+      .toEqual({ order: 'asc', sort: 'name' })
+  }
+  await page.getByRole('button', { name: '下一页' }).click()
+  await expect.poll(() => requests.at(-1)?.searchParams.get('p')).toBe('2')
+  await expect(page.getByRole('link', { name: '生产客户 21' })).toBeVisible()
+  await assertNoHorizontalOverflow(page)
+})
+
+test('supports customer deep links, account pagination, and cross-feature navigation', async ({
+  page,
+}) => {
+  await seedAuth(page, viewer)
+  await mockSelf(page, viewer)
+  const accountRequests: URL[] = []
+  let invalidCustomerReads = 0
+  await page.route(/\/api\/customers\/7\/accounts(?:\?.*)?$/, async (route) => {
+    assertAuthenticatedRequest(route, viewer)
+    accountRequests.push(new URL(route.request().url()))
+    await route.fulfill({
+      json: envelope({
+        items: [accountFixture()],
+        page: 2,
+        page_size: 10,
+        total: 21,
+      }),
+    })
+  })
+  await page.route('**/api/customers/7', async (route) => {
+    assertAuthenticatedRequest(route, viewer)
+    await route.fulfill({ json: envelope(customerFixture()) })
+  })
+  await page.route(/\/api\/customers\/invalid(?:\?.*)?$/, async (route) => {
+    invalidCustomerReads += 1
+    await route.fulfill({ json: envelope(customerFixture()) })
+  })
+  await page.route(/\/api\/customers(?:\?.*)?$/, async (route) => {
+    assertAuthenticatedRequest(route, viewer)
+    await route.fulfill({ json: envelope(pageData([customerFixture()])) })
+  })
+  await page.route(/\/api\/accounts(?:\?.*)?$/, async (route) => {
+    assertAuthenticatedRequest(route, viewer)
+    await route.fulfill({ json: envelope(pageData([accountFixture()])) })
+  })
+  await page.route(/\/api\/sites(?:\?.*)?$/, async (route) => {
+    assertAuthenticatedRequest(route, viewer)
+    await route.fulfill({ json: envelope(pageData([])) })
+  })
+
+  await page.goto('/customers/7?accountPage=2')
+  await expect(page.getByRole('heading', { name: '客户档案' })).toBeVisible()
+  await expect(page.getByText('1,000,000').first()).toBeVisible()
+  await expect(page.getByText('1,000').first()).toBeVisible()
+  await expect
+    .poll(() => accountRequests.at(-1)?.searchParams.get('p'))
+    .toBe('2')
+  await expect(
+    page.getByRole('link', { name: 'customer_prod' })
+  ).toHaveAttribute('href', '/accounts/88')
+  const allAccountsLink = page.getByRole('link', { name: '查看账户' })
+  await expect(allAccountsLink).toHaveAttribute('href', /customer_id=7/)
+  await allAccountsLink.click()
+  await expect(page).toHaveURL(/\/accounts\?.*customer_id=7/)
+
+  await page.goto('/customers/invalid')
+  await expect(page.locator('[data-slot="empty-title"]')).toHaveText(
+    '客户 ID 无效'
+  )
+  expect(invalidCustomerReads).toBe(0)
+  await assertNoHorizontalOverflow(page)
 })
 
 test('keeps viewer customer and account detail read-only, accessible, and responsive', async ({
@@ -930,7 +1126,7 @@ test('keeps authoritative statistics exact, exportable, accessible, and responsi
     page.getByText('华南站点').filter({ visible: true }).first()
   ).toBeVisible()
   await expect(
-    page.getByText('quota_per_unit').filter({ visible: true }).first()
+    page.getByText('额度单价基数').filter({ visible: true }).first()
   ).toBeVisible()
   await expect(
     page.getByText('美元兑人民币汇率').filter({ visible: true }).first()

@@ -642,19 +642,23 @@ async function expectState(page: Page, state: A50State) {
     }
   }
 
-  await expect(page.getByRole('img', { name: '统计趋势图' })).toBeVisible()
+  const chart = page.getByRole('img', { name: '统计趋势图' })
   const exactValues = page.getByTestId('statistics-chart-exact-values')
-  if (state === 'complete-zero') {
-    await expect(exactValues).toContainText('原始指标值 0')
-    await expect(exactValues).not.toContainText('原始指标值 -')
-  } else if (state === 'partial') {
-    await expect(exactValues).toContainText('原始指标值 42')
-  } else if (state === 'paused') {
-    await expect(exactValues).toContainText('原始指标值 314')
-    await expect(exactValues).toContainText('原始指标值 -')
+  if (state === 'missing' || state === 'unavailable') {
+    await expect(chart).toHaveCount(0)
+    await expect(page.getByText(/没有可展示的趋势点/)).toBeVisible()
+    await expect(exactValues).toHaveCount(0)
   } else {
-    await expect(exactValues).toContainText('原始指标值 -')
-    await expect(exactValues).not.toContainText('原始指标值 0')
+    await expect(chart).toBeVisible()
+    if (state === 'complete-zero') {
+      await expect(exactValues).toContainText('原始指标值 0')
+      await expect(exactValues).not.toContainText('原始指标值 -')
+    } else if (state === 'partial') {
+      await expect(exactValues).toContainText('原始指标值 42')
+    } else {
+      await expect(exactValues).toContainText('原始指标值 314')
+      await expect(exactValues).toContainText('原始指标值 -')
+    }
   }
 
   const completenessHeading = page.getByRole('heading', {

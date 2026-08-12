@@ -59,10 +59,11 @@ func Open(ctx context.Context, options Options) (*Database, error) {
 
 func newParameterizedGORMLogger(writer io.Writer, level logger.LogLevel) logger.Interface {
 	return logger.New(stdlog.New(writer, "\r\n", stdlog.LstdFlags), logger.Config{
-		SlowThreshold:        200 * time.Millisecond,
-		LogLevel:             level,
-		Colorful:             false,
-		ParameterizedQueries: true,
+		SlowThreshold:             200 * time.Millisecond,
+		LogLevel:                  level,
+		Colorful:                  false,
+		IgnoreRecordNotFoundError: true,
+		ParameterizedQueries:      true,
 	})
 }
 

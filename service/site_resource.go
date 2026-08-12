@@ -416,9 +416,6 @@ func validateSiteResourceRow(row model.SiteResourceRow, granularity string) erro
 	if row.DataStatus == "paused" && (row.SampleCount != 0 || row.ExpectedSampleCount != 0) {
 		return errors.New("paused site resource row has inconsistent sample counts")
 	}
-	if granularity == dto.ResourceGranularityDay && row.IsFinal && row.DataStatus != "complete" && row.DataStatus != "paused" {
-		return errors.New("final site resource row is not complete or paused")
-	}
 	for _, value := range []*float64{
 		row.CPUMaxPercent, row.CPUAvgPercent, row.MemoryMaxPercent, row.MemoryAvgPercent,
 		row.DiskMaxUsedPercent, row.DiskLastUsedPercent,

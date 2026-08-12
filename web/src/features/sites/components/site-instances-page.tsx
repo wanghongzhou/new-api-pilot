@@ -29,6 +29,14 @@ import { BEIJING_TIMEZONE, dayjs, fromUnixSeconds } from '@/lib/dayjs'
 import { getSite, getSiteResource, listSiteInstances } from '../api'
 import { siteKeys } from '../query-keys'
 import { formatPercentValue } from '../site-card-metrics'
+import {
+  hasRenderableSiteResourceValues,
+  siteResourceValue,
+} from '../site-resource-chart-data'
+import {
+  alignSiteResourceTimestamp,
+  defaultSiteResourceRange,
+} from '../site-resource-range'
 import type {
   ResourcePoint,
   SiteHealthStatus,
@@ -210,24 +218,6 @@ function InstanceCard({ instance }: { instance: SiteInstanceItem }) {
   )
 }
 
-function resourceValue(
-  point: ResourcePoint,
-  metric: SiteStatusSearch['metric'],
-  aggregation: SiteStatusSearch['aggregation']
-): number | null {
-  if (metric === 'cpu') {
-    return aggregation === 'avg' ? point.cpu_avg_percent : point.cpu_max_percent
-  }
-  if (metric === 'memory') {
-    return aggregation === 'avg'
-      ? point.memory_avg_percent
-      : point.memory_max_percent
-  }
-  return aggregation === 'last'
-    ? point.disk_last_used_percent
-    : point.disk_max_used_percent
-}
-
 function formatBucket(
   timestamp: number,
   granularity: SiteStatusSearch['granularity']
@@ -255,7 +245,7 @@ function ResourceTrend({
       points.map((point) => ({
         health: t(dynamicI18nKey('site', `site.health.${point.health_status}`)),
         time: formatBucket(point.bucket_start, search.granularity),
-        value: resourceValue(point, search.metric, search.aggregation),
+        value: siteResourceValue(point, search.metric, search.aggregation),
       })),
     [points, search.aggregation, search.granularity, search.metric, t]
   )
@@ -266,7 +256,7 @@ function ResourceTrend({
   if (error) {
     return <ErrorState title={t('resource.loadError')} />
   }
-  if (data.length === 0) {
+  if (!hasRenderableSiteResourceValues(data)) {
     return <EmptyState bordered title={t('resource.empty')} />
   }
 
@@ -283,7 +273,7 @@ function ResourceTrend({
         ]}
         data={{ id: 'resource-trend', values: data }}
         height={300}
-        invalidType='break'
+        invalidType='link'
         point={{ state: { hover: { size: 7 } }, style: { size: 4 } }}
         tooltip={{ visible: true }}
         xField='time'
@@ -470,7 +460,9 @@ export function SiteInstancesPage({
   }
   const parseDateTime = (value: string): number | null => {
     const parsed = dayjs.tz(value, 'YYYY-MM-DDTHH:mm', BEIJING_TIMEZONE)
-    return parsed.isValid() ? parsed.unix() : null
+    return parsed.isValid()
+      ? alignSiteResourceTimestamp(parsed.unix(), search.granularity)
+      : null
   }
 
   const detail = detailQuery.data
@@ -622,12 +614,14 @@ export function SiteInstancesPage({
             <label className='grid gap-1 text-sm'>
               <span>{t('resource.granularity')}</span>
               <Select
-                onChange={(event) =>
+                onChange={(event) => {
+                  const granularity = event.target
+                    .value as SiteStatusSearch['granularity']
                   onSearchChange({
-                    granularity: event.target
-                      .value as SiteStatusSearch['granularity'],
+                    ...defaultSiteResourceRange(granularity),
+                    granularity,
                   })
-                }
+                }}
                 value={search.granularity}
               >
                 <option value='minute'>

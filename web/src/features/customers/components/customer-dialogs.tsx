@@ -131,7 +131,7 @@ function CustomerFormDialog({
     <>
       <Drawer
         direction='right'
-        onOpenChange={(open) => !open && requestClose()}
+        onOpenChange={(open) => !open && !pending && requestClose()}
         open
       >
         <DrawerContent className={sideDrawerContentClassName('sm:max-w-xl')}>
@@ -221,6 +221,12 @@ function CustomerFormDialog({
               />
             </FormField>
             <FormField
+              error={
+                errors.status?.type === 'server'
+                  ? errors.status.message
+                  : errors.status?.message &&
+                    t(dynamicI18nKey('customer', errors.status.message))
+              }
               htmlFor='customer-status'
               label={t('customer.statusLabel')}
               required
@@ -274,7 +280,12 @@ function CustomerFormDialog({
             )}
           </form>
           <DrawerFooter className={sideDrawerFooterClassName()}>
-            <Button onClick={requestClose} type='button' variant='outline'>
+            <Button
+              disabled={pending}
+              onClick={requestClose}
+              type='button'
+              variant='outline'
+            >
               {t('common.cancel')}
             </Button>
             <Button disabled={pending} form='customer-form' type='submit'>

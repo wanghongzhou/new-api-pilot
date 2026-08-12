@@ -36,6 +36,12 @@ function AccountsRoute() {
       onOpenAccount={(accountId) =>
         void navigate({ params: { accountId }, to: '/accounts/$accountId' })
       }
+      onPageReplace={(page) =>
+        void navigate({
+          replace: true,
+          search: (current) => ({ ...current, page }),
+        })
+      }
       onSearchChange={(changes) => {
         if (changes.view) {
           window.localStorage.setItem('accounts:view-mode', changes.view)

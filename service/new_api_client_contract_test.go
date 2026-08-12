@@ -128,7 +128,7 @@ func TestPerformanceSummaryContract(t *testing.T) {
 			http.Error(writer, "missing management credentials", http.StatusUnauthorized)
 			return
 		}
-		_, _ = writer.Write([]byte(`{"success":true,"message":"","data":{"models":[{"model_name":"model-a","request_count":10,"success_rate":90,"avg_latency_ms":120,"avg_tps":25},{"model_name":"model-b","request_count":30,"success_rate":100,"avg_latency_ms":80,"avg_tps":45}]}}`))
+		_, _ = writer.Write([]byte(`{"success":true,"message":"","data":{"models":[{"model_name":"model-a","success_rate":90,"avg_latency_ms":120,"avg_tps":25},{"model_name":"model-b","success_rate":100,"avg_latency_ms":80,"avg_tps":45}]}}`))
 	}))
 	defer server.Close()
 	client := testClientForServer(t, server, true, testClientSettings{})
@@ -136,7 +136,7 @@ func TestPerformanceSummaryContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read summary: %v", err)
 	}
-	if len(summary.Models) != 2 || summary.Models[1].RequestCount != 30 || summary.Models[0].SuccessRate != 90 {
+	if len(summary.Models) != 2 || summary.Models[1].AvgTPS != 45 || summary.Models[0].SuccessRate != 90 {
 		t.Fatalf("unexpected performance summary: %#v", summary)
 	}
 }
@@ -180,7 +180,7 @@ func TestPerformanceSummaryOptionalMessageDoesNotRelaxOtherEndpoints(t *testing.
 
 func TestPerformanceSummaryRejectsInvalidMetrics(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
-		_, _ = writer.Write([]byte(`{"success":true,"message":"","data":{"models":[{"model_name":"model-a","request_count":-1,"success_rate":100,"avg_latency_ms":1,"avg_tps":1}]}}`))
+		_, _ = writer.Write([]byte(`{"success":true,"message":"","data":{"models":[{"model_name":"model-a","success_rate":100.01,"avg_latency_ms":1,"avg_tps":1}]}}`))
 	}))
 	defer server.Close()
 	client := testClientForServer(t, server, true, testClientSettings{})
@@ -193,7 +193,7 @@ func TestPerformanceHistoryPreservesOfficialAverageSeriesWithoutInventingCounter
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
 		case "/api/perf-metrics/summary":
-			_, _ = writer.Write([]byte(`{"success":true,"data":{"models":[{"model_name":"gpt-4o","avg_latency_ms":100,"success_rate":0.9,"avg_tps":20,"request_count":10}]}}`))
+			_, _ = writer.Write([]byte(`{"success":true,"data":{"models":[{"model_name":"gpt-4o","avg_latency_ms":100,"success_rate":90,"avg_tps":20}]}}`))
 		case "/api/perf-metrics":
 			if request.URL.Query().Get("model") != "gpt-4o" || request.URL.Query().Get("hours") != "24" {
 				t.Fatalf("performance detail query=%s", request.URL.RawQuery)

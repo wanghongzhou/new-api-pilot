@@ -111,7 +111,7 @@ func TestNewAPIClientF02Scenarios(t *testing.T) {
 			t.Fatalf("log stat: %+v, %v", stat, err)
 		}
 		performance, err := client.PerformanceSummary(context.Background(), "f02-performance", 24)
-		if err != nil || len(performance.Models) != 2 || performance.Models[1].RequestCount != 30 {
+		if err != nil || len(performance.Models) != 2 || performance.Models[1].AvgTPS != 45 {
 			t.Fatalf("performance summary: %+v, %v", performance, err)
 		}
 		fixture.assertAllRoutesHitOnce()

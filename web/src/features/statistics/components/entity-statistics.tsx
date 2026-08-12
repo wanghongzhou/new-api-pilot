@@ -6,8 +6,8 @@ import {
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { ColumnDef, SortingState } from '@tanstack/react-table'
-import type { ILineChartSpec } from '@visactor/react-vchart'
-import { lazy, Suspense, useMemo, useState, type ReactNode } from 'react'
+import { VChart, type ILineChartSpec } from '@visactor/react-vchart'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -33,6 +33,7 @@ import { createStatisticsExport } from '../api'
 import {
   buildTrendChartModel,
   cloneTrendChartValues,
+  hasRenderableTrendValues,
   type TrendChartDatum,
 } from '../chart-data'
 import { buildEntityExportRequest } from '../export-request'
@@ -54,12 +55,6 @@ import type {
 import { ExportDialog } from './export-dialog'
 import { ExportTaskSheet } from './export-task-sheet'
 import { StatisticsTimeRangePicker } from './statistics-time-range-picker'
-
-const LazyVChart = lazy(() =>
-  import('@visactor/react-vchart').then((module) => ({
-    default: module.VChart,
-  }))
-)
 
 export function ActiveUsersValue({
   compact = false,
@@ -398,7 +393,7 @@ export function MetricTrendChart({
     }),
     [model.values, resolvedTheme, t]
   )
-  if (data.length === 0) {
+  if (!hasRenderableTrendValues(model.values)) {
     return (
       <p className='text-muted-foreground border-t py-8 text-center text-sm'>
         {t('statistics.emptyTrend')}
@@ -417,13 +412,7 @@ export function MetricTrendChart({
         className='h-72 min-h-72 w-full min-w-0 overflow-hidden sm:h-80 sm:min-h-80'
         role='img'
       >
-        <Suspense
-          fallback={
-            <div className='bg-muted h-full animate-pulse rounded-md' />
-          }
-        >
-          <LazyVChart spec={spec} />
-        </Suspense>
+        <VChart spec={spec} />
       </div>
       <figcaption className='text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-xs'>
         {hasIncomplete && (
@@ -1163,12 +1152,21 @@ export function EntityStatistics<TBreakdown extends StatisticsBreakdownBase>({
       <>
         {refreshStatus}
         {error && (
-          <p
-            className='border-warning/40 bg-warning/10 rounded-md border p-3 text-sm'
+          <section
+            className='border-warning/40 bg-warning/10 flex flex-wrap items-center justify-between gap-3 rounded-md border p-3'
             role='status'
           >
-            {t('statistics.staleData')}
-          </p>
+            <p className='text-sm'>{t('statistics.staleData')}</p>
+            <Button
+              disabled={fetching}
+              onClick={onRetry}
+              size='sm'
+              variant='outline'
+            >
+              {fetching && <Spinner />}
+              {t('common.retry')}
+            </Button>
+          </section>
         )}
         <StatisticsSummary data={data} search={search} />
         <section

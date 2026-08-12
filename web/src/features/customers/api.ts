@@ -44,6 +44,46 @@ export function listCustomers(
   })
 }
 
+const customerOptionPageSize = 100
+const customerOptionMaximumPages = 100
+const customerOptionConcurrency = 4
+
+export async function listAllCustomers(
+  params: Omit<CustomerListParams, 'p' | 'page_size'> = {}
+): Promise<CustomerPage> {
+  const first = await listCustomers({
+    ...params,
+    p: 1,
+    page_size: customerOptionPageSize,
+  })
+  const pages = Math.ceil(first.total / customerOptionPageSize)
+  if (pages > customerOptionMaximumPages) {
+    throw new Error('customer option result exceeds the supported page limit')
+  }
+  const remaining: CustomerPage[] = []
+  for (let page = 2; page <= pages; page += customerOptionConcurrency) {
+    const batch = await Promise.all(
+      Array.from(
+        {
+          length: Math.min(customerOptionConcurrency, pages - page + 1),
+        },
+        (_, index) =>
+          listCustomers({
+            ...params,
+            p: page + index,
+            page_size: customerOptionPageSize,
+          })
+      )
+    )
+    remaining.push(...batch)
+  }
+  const items = [first, ...remaining].flatMap((page) => page.items)
+  return {
+    ...first,
+    items: [...new Map(items.map((item) => [item.id, item])).values()],
+  }
+}
+
 export function createCustomer(
   request: CustomerCreateRequest
 ): Promise<CustomerDetail> {

@@ -50,6 +50,14 @@ export function buildInventoryTrendChartValues(
   )
 }
 
+export function hasRenderableInventoryTrendValues(
+  values: InventoryTrendChartValue[]
+): boolean {
+  return values.some(
+    (item) => item.value !== null && Number.isFinite(item.value)
+  )
+}
+
 export function shouldShowInventoryTrendPoints(pointCount: number) {
   return pointCount <= 48
 }

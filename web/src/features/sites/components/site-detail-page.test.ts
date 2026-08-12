@@ -2,167 +2,80 @@ import { describe, expect, test } from 'bun:test'
 import { readFile } from 'node:fs/promises'
 
 const detailPagePath = new URL('./site-detail-page.tsx', import.meta.url)
+const collectionPagePath = new URL(
+  './site-collection-runs-page.tsx',
+  import.meta.url
+)
 
-async function detailPageSource() {
-  return readFile(detailPagePath, 'utf8')
-}
-
-describe('SiteDetailPage embedded statistics dashboard', () => {
-  test('links the loaded site detail to the forced financial operations route', async () => {
-    const source = await detailPageSource()
-    const actions = source.slice(
-      source.indexOf('const actions = site ?'),
-      source.indexOf('\n  let detailContent')
+describe('SiteDetailPage information architecture', () => {
+  test('moves detailed destinations into grouped in-page navigation', async () => {
+    const source = await readFile(detailPagePath, 'utf8')
+    const relatedPages = source.slice(
+      source.indexOf('function SiteRelatedPages'),
+      source.indexOf('function RecentCollectionActivity')
     )
 
-    expect(actions).toContain("to='/sites/$siteId/financial-operations'")
-    expect(actions).toContain('buildFinancialOperationsSearch({})')
-    expect(actions).toContain("t('site.actions.financialOperations')")
+    for (const route of [
+      'financial-operations',
+      'performance-history',
+      'channel-inventory',
+      'user-inventory',
+      'upstream-tasks',
+      'model-catalog',
+      'rankings',
+      'pricing-groups',
+      'subscription-plans',
+      'system-tasks',
+      'logs',
+      'stats',
+      'status',
+      'collection-runs',
+    ]) {
+      expect(relatedPages).toContain(route)
+    }
+    expect(relatedPages).toContain("t('site.related.operations')")
+    expect(relatedPages).toContain("t('site.related.resources')")
+    expect(relatedPages).toContain("t('site.related.records')")
+    expect(relatedPages).toContain("t('site.related.infrastructure')")
   })
 
-  test('links the loaded site detail to the forced performance history route', async () => {
-    const source = await detailPageSource()
-    const actions = source.slice(
-      source.indexOf('const actions = site ?'),
-      source.indexOf('\n  let detailContent')
+  test('keeps only the administrator mutation menu in the page header', async () => {
+    const source = await readFile(detailPagePath, 'utf8')
+    const headerActions = source.slice(
+      source.indexOf('const actions ='),
+      source.indexOf('\n\n  let detailContent')
     )
 
-    expect(actions).toContain("to='/sites/$siteId/performance-history'")
-    expect(actions).toContain('buildPerformanceHistorySearch({})')
-    expect(actions).toContain("t('site.actions.performanceHistory')")
+    expect(headerActions).toContain('<SiteActions')
+    expect(headerActions).not.toContain("to='/sites/$siteId/")
   })
 
-  test('links the loaded site detail to the forced channel inventory route', async () => {
-    const source = await detailPageSource()
-    const actions = source.slice(
-      source.indexOf('const actions = site ?'),
-      source.indexOf('\n  let detailContent')
-    )
+  test('does not duplicate the full statistics dashboard or instance list', async () => {
+    const source = await readFile(detailPagePath, 'utf8')
 
-    expect(actions).toContain("to='/sites/$siteId/channel-inventory'")
-    expect(actions).toContain('buildChannelInventorySearch({})')
-    expect(actions).toContain("t('site.actions.channelInventory')")
+    expect(source).not.toContain('SiteDataDashboard')
+    expect(source).not.toContain('InstancePreview')
+    expect(source).not.toContain('listSiteInstances')
+    expect(source).not.toContain('getSiteStatistics')
   })
 
-  test('links the loaded site detail to the forced user inventory route', async () => {
-    const source = await detailPageSource()
-    const actions = source.slice(
-      source.indexOf('const actions = site ?'),
-      source.indexOf('\n  let detailContent')
+  test('loads only three recent durable collection records in the detail', async () => {
+    const source = await readFile(detailPagePath, 'utf8')
+    const recentCollection = source.slice(
+      source.indexOf('function RecentCollectionActivity'),
+      source.indexOf('export function SiteDetailPage')
     )
 
-    expect(actions).toContain("to='/sites/$siteId/user-inventory'")
-    expect(actions).toContain('buildUserInventorySearch({})')
-    expect(actions).toContain("t('site.actions.userInventory')")
+    expect(recentCollection).toContain('page_size: 3')
+    expect(recentCollection).toContain('listSiteCollectionRuns')
+    expect(recentCollection).toContain("to='/sites/$siteId/collection-runs'")
+    expect(recentCollection).not.toContain('FastTaskHistoryPanel')
   })
 
-  test('links the loaded site detail to the forced upstream task route', async () => {
-    const source = await detailPageSource()
-    const actions = source.slice(
-      source.indexOf('const actions = site ?'),
-      source.indexOf('\n  let detailContent')
-    )
+  test('keeps the full collection history on its dedicated page', async () => {
+    const source = await readFile(collectionPagePath, 'utf8')
 
-    expect(actions).toContain("to='/sites/$siteId/upstream-tasks'")
-    expect(actions).toContain('buildUpstreamTaskSearch({})')
-    expect(actions).toContain("t('site.actions.upstreamTasks')")
-  })
-
-  test('links the loaded site detail to the forced model catalog route', async () => {
-    const source = await detailPageSource()
-    const actions = source.slice(
-      source.indexOf('const actions = site ?'),
-      source.indexOf('\n  let detailContent')
-    )
-
-    expect(actions).toContain("to='/sites/$siteId/model-catalog'")
-    expect(actions).toContain('buildModelCatalogSearch({})')
-    expect(actions).toContain("t('site.actions.modelCatalog')")
-  })
-
-  test('links the loaded site detail to the forced local rankings route', async () => {
-    const source = await detailPageSource()
-    const actions = source.slice(
-      source.indexOf('const actions = site ?'),
-      source.indexOf('\n  let detailContent')
-    )
-
-    expect(actions).toContain("to='/sites/$siteId/rankings'")
-    expect(actions).toContain('buildRankingSearch({})')
-    expect(actions).toContain("t('site.actions.rankings')")
-  })
-
-  test('links the loaded site detail to the forced pricing and group catalog', async () => {
-    const source = await detailPageSource()
-    const actions = source.slice(
-      source.indexOf('const actions = site ?'),
-      source.indexOf('\n  let detailContent')
-    )
-
-    expect(actions).toContain("to='/sites/$siteId/pricing-groups'")
-    expect(actions).toContain('buildPricingGroupSearch({})')
-    expect(actions).toContain("t('site.actions.pricingGroups')")
-  })
-
-  test('links the loaded site detail to the forced subscription plan catalog', async () => {
-    const source = await detailPageSource()
-    const actions = source.slice(
-      source.indexOf('const actions = site ?'),
-      source.indexOf('\n  let detailContent')
-    )
-
-    expect(actions).toContain("to='/sites/$siteId/subscription-plans'")
-    expect(actions).toContain('buildSubscriptionPlanSearch({})')
-    expect(actions).toContain("t('site.actions.subscriptionPlans')")
-  })
-
-  test('links the loaded site detail to the forced system task catalog', async () => {
-    const source = await detailPageSource()
-    const actions = source.slice(
-      source.indexOf('const actions = site ?'),
-      source.indexOf('\n  let detailContent')
-    )
-    expect(actions).toContain("to='/sites/$siteId/system-tasks'")
-    expect(actions).toContain('buildSystemTaskSearch({})')
-    expect(actions).toContain("t('site.actions.systemTasks')")
-  })
-
-  test('links the loaded site detail to the forced site log route', async () => {
-    const source = await detailPageSource()
-    const actions = source.slice(
-      source.indexOf('const actions = site ?'),
-      source.indexOf('\n  let detailContent')
-    )
-
-    expect(actions).toContain("to='/sites/$siteId/logs'")
-    expect(actions).toContain('params={{ siteId }}')
-    expect(actions).toContain("t('site.actions.logs')")
-  })
-
-  test('mounts the site-scoped statistics dashboard only after a valid detail loads', async () => {
-    const source = await detailPageSource()
-    const successBranch = source.slice(
-      source.indexOf('} else if (detailQuery.isPending || !site) {'),
-      source.indexOf('\n  return (\n    <SectionPageLayout')
-    )
-
-    expect(successBranch).toContain('} else {')
-    expect(successBranch).toContain('<SiteDataDashboard siteId={siteId} />')
-  })
-
-  test('binds the embedded dashboard to the selected site statistics endpoint and renderer', async () => {
-    const source = await detailPageSource()
-    const dashboard = source.slice(
-      source.indexOf('function SiteDataDashboard'),
-      source.indexOf('\nexport function SiteDetailPage')
-    )
-
-    expect(dashboard).toContain(
-      'queryFn: () => getSiteStatistics(parseIdString(siteId), params)'
-    )
-    expect(dashboard).toContain('queryKey: siteKeys.statistics(siteId, params)')
-    expect(dashboard).toContain('<EntityStatistics')
-    expect(dashboard).toContain("scope='site'")
-    expect(dashboard).toContain('entityId={parseIdString(siteId)}')
+    expect(source).toContain('<CollectionRunsPanel')
+    expect(source).toContain("to='/sites/$siteId'")
   })
 })

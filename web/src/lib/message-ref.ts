@@ -1,7 +1,13 @@
+import Decimal from 'decimal.js'
+
 import i18n from '@/i18n/config'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 
 import type { IdString, Timestamp } from './api-types'
+import {
+  EMPTY_NUMERIC_DISPLAY_VALUE,
+  formatDecimalDisplayValue,
+} from './display-value'
 import { isStableI18nCode, type MessageCode } from './message-codes'
 
 type SiteRangeParams = {
@@ -191,6 +197,63 @@ export interface UnknownMessageRef {
   technical_detail?: unknown
 }
 
+function formatDecimalParam(
+  params: Record<string, unknown>,
+  key: 'threshold' | 'value',
+  maximumFractionDigits?: number
+) {
+  const value = params[key]
+  if (typeof value !== 'string') return
+  const formatted = formatDecimalDisplayValue(value, maximumFractionDigits)
+  if (formatted !== EMPTY_NUMERIC_DISPLAY_VALUE) params[key] = formatted
+}
+
+function formatPercentParam(
+  params: Record<string, unknown>,
+  key: 'threshold' | 'value',
+  ratio: boolean
+) {
+  const value = params[key]
+  if (typeof value !== 'string') return
+  try {
+    const decimal = new Decimal(value)
+    if (!decimal.isFinite()) return
+    const percent = ratio ? decimal.times(100) : decimal
+    const formatted = formatDecimalDisplayValue(percent.toString(), 2)
+    if (formatted !== EMPTY_NUMERIC_DISPLAY_VALUE) params[key] = `${formatted}%`
+  } catch {
+    // Keep the validated backend value when formatting is not possible.
+  }
+}
+
+function displayMessageParams(
+  code: MessageCode,
+  raw: Record<string, unknown>
+): Record<string, unknown> {
+  const params = { ...raw }
+  switch (code) {
+    case 'ALERT_CPU_HIGH':
+    case 'ALERT_MEMORY_HIGH':
+    case 'ALERT_DISK_HIGH':
+      formatPercentParam(params, 'value', false)
+      formatPercentParam(params, 'threshold', false)
+      break
+    case 'ALERT_CHANNEL_BALANCE_LOW':
+      formatDecimalParam(params, 'value')
+      formatDecimalParam(params, 'threshold')
+      break
+    case 'ALERT_CHANNEL_RESPONSE_TIME_HIGH':
+      formatDecimalParam(params, 'value', 2)
+      formatDecimalParam(params, 'threshold', 2)
+      break
+    case 'ALERT_CHANNEL_AVAILABILITY_LOW':
+      formatPercentParam(params, 'value', true)
+      formatPercentParam(params, 'threshold', true)
+      break
+  }
+  return params
+}
+
 export function translateMessageRef(
   ref: AnyMessageRef | UnknownMessageRef | null | undefined,
   fallbackKey = 'Request failed'
@@ -198,9 +261,11 @@ export function translateMessageRef(
   if (!ref || !isStableI18nCode(ref.code)) {
     return i18n.t(dynamicI18nKey('api', fallbackKey))
   }
-  const params =
+  const rawParams =
     ref.params && typeof ref.params === 'object'
       ? (ref.params as Record<string, unknown>)
       : {}
-  return i18n.t(dynamicI18nKey('api', ref.code), params)
+  const code = ref.code as MessageCode
+  const params = displayMessageParams(code, rawParams)
+  return i18n.t(dynamicI18nKey('api', code), params)
 }

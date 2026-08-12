@@ -134,14 +134,16 @@ func (repository *SiteRepository) ListLatestResourceSummaries(
 		return result, nil
 	}
 	var samples []SiteStatusMinutely
-	err := repository.db.WithContext(ctx).Raw(`SELECT s.*
-FROM site_status_minutely s
-WHERE s.site_id IN ?
-  AND s.minute_ts = (
-    SELECT MAX(latest.minute_ts)
-    FROM site_status_minutely latest
-    WHERE latest.site_id = s.site_id
-  )`, siteIDs).Scan(&samples).Error
+	err := repository.db.WithContext(ctx).Raw(`SELECT sample.*
+FROM site_status_minutely sample
+JOIN (
+  SELECT site_id, MAX(minute_ts) AS minute_ts
+  FROM site_status_minutely
+  WHERE site_id IN ?
+  GROUP BY site_id
+) latest
+  ON latest.site_id = sample.site_id
+ AND latest.minute_ts = sample.minute_ts`, siteIDs).Scan(&samples).Error
 	if err != nil {
 		return nil, err
 	}

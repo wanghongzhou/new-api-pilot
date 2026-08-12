@@ -1,14 +1,16 @@
 import {
   Archive03Icon,
+  Chart01Icon,
   Delete02Icon,
   Edit03Icon,
   MoreVerticalIcon,
   Refresh01Icon,
+  UserGroupIcon,
   ViewIcon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Link } from '@tanstack/react-router'
-import { useMemo } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { DataFreshness } from '@/components/data/data-freshness'
@@ -22,8 +24,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { formatAverageRate } from '@/features/sites/site-card-metrics'
+import { buildStatisticsSearch } from '@/features/statistics/search'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { calculateCrossSiteQuotaAmount, formatDecimal } from '@/lib/amount'
+import { formatDecimalDisplayValue } from '@/lib/display-value'
 import { cn } from '@/lib/utils'
 
 import type { CustomerListItem, CustomerStatus } from '../types'
@@ -52,8 +57,10 @@ export function CustomerStatusBadge({ status }: { status: CustomerStatus }) {
 
 export function CustomerQuotaAmount({
   customer,
+  compact = false,
 }: {
   customer: CustomerListItem
+  compact?: boolean
 }) {
   const { t } = useTranslation()
   const amount = useMemo(
@@ -73,9 +80,9 @@ export function CustomerQuotaAmount({
     [customer.today.site_breakdown]
   )
   return (
-    <div className='grid gap-0.5'>
+    <div className={cn('grid gap-0.5', compact && 'justify-items-center')}>
       <span>
-        <MetricValue compact value={customer.today.quota} />
+        <MetricValue compact nullLabel='0' value={customer.today.quota} />
         <span className='text-muted-foreground ml-1 text-xs'>
           {t('metric.quota')}
         </span>
@@ -99,6 +106,23 @@ export function CustomerQuotaAmount({
           )}
         </span>
       )}
+    </div>
+  )
+}
+
+function MetricCell({
+  children,
+  label,
+}: {
+  children: ReactNode
+  label: string
+}) {
+  return (
+    <div className='min-w-0 text-center'>
+      <p className='text-muted-foreground truncate text-xs'>{label}</p>
+      <div className='text-foreground mt-1 min-w-0 text-base leading-none font-semibold tabular-nums'>
+        {children}
+      </div>
     </div>
   )
 }
@@ -171,7 +195,7 @@ export function CustomerCard({
       <div className='flex min-w-0 items-start justify-between gap-2'>
         <div className='min-w-0'>
           <Link
-            className='truncate font-semibold hover:underline'
+            className='block truncate text-base leading-tight font-semibold hover:underline'
             params={{ customerId: customer.id }}
             to='/customers/$customerId'
           >
@@ -185,65 +209,120 @@ export function CustomerCard({
       </div>
       <div className='flex flex-wrap gap-2'>
         <CustomerStatusBadge status={customer.status} />
-        <DataStatusBadge status={customer.today.data_status} />
       </div>
-      <div className='grid grid-cols-2 gap-3 text-sm'>
-        <dl>
+      <div className='grid grid-cols-2 gap-2 text-sm'>
+        <dl className='bg-muted/35 min-w-0 rounded-md px-2.5 py-2'>
           <dt className='text-muted-foreground text-xs'>
             {t('customer.contractAmount')}
           </dt>
-          <dd>{customer.contract_amount}</dd>
+          <dd
+            className='mt-1 truncate font-medium tabular-nums'
+            title={customer.contract_amount}
+          >
+            {formatDecimalDisplayValue(customer.contract_amount)}
+          </dd>
         </dl>
-        <dl>
+        <dl className='bg-muted/35 min-w-0 rounded-md px-2.5 py-2'>
           <dt className='text-muted-foreground text-xs'>
             {t('customer.paymentAmount')}
           </dt>
-          <dd>{customer.payment_amount}</dd>
+          <dd
+            className='mt-1 truncate font-medium tabular-nums'
+            title={customer.payment_amount}
+          >
+            {formatDecimalDisplayValue(customer.payment_amount)}
+          </dd>
         </dl>
-        <dl>
+        <dl className='bg-muted/35 min-w-0 rounded-md px-2.5 py-2'>
           <dt className='text-muted-foreground text-xs'>
             {t('customer.accounts')}
           </dt>
-          <dd>
+          <dd className='mt-1 font-medium tabular-nums'>
             {customer.active_account_count}/{customer.account_count}
           </dd>
         </dl>
-        <dl>
+        <dl className='bg-muted/35 min-w-0 rounded-md px-2.5 py-2'>
           <dt className='text-muted-foreground text-xs'>
             {t('customer.sites')}
           </dt>
-          <dd>{customer.site_count}</dd>
-        </dl>
-        <dl>
-          <dt className='text-muted-foreground text-xs'>
-            {t('customer.todayRequests')}
-          </dt>
-          <dd>
-            <MetricValue compact value={customer.today.request_count} />
-          </dd>
-        </dl>
-        <dl>
-          <dt className='text-muted-foreground text-xs'>
-            {t('customer.activeAccounts')}
-          </dt>
-          <dd>
-            <MetricValue compact value={customer.today.active_users} />
+          <dd className='mt-1 font-medium tabular-nums'>
+            {customer.site_count}
           </dd>
         </dl>
       </div>
-      <CustomerQuotaAmount customer={customer} />
-      <DataFreshness
-        labelKey='customer.asOf'
-        timestamp={customer.today.as_of}
-      />
-      <button
-        className='hover:bg-muted inline-flex min-h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium'
-        onClick={() => onOpenAccounts(customer.id)}
-        type='button'
-      >
-        <HugeiconsIcon icon={ViewIcon} strokeWidth={2} />
-        {t('customer.actions.accounts')}
-      </button>
+      <section className='grid gap-3'>
+        <div className='grid grid-cols-2 gap-x-5 gap-y-4'>
+          <MetricCell label={t('site.dashboard.totalQuota')}>
+            <CustomerQuotaAmount compact customer={customer} />
+          </MetricCell>
+          <MetricCell label={t('site.dashboard.totalTokens')}>
+            <MetricValue
+              compact
+              nullLabel='0'
+              value={customer.today.token_used}
+            />
+          </MetricCell>
+        </div>
+        <div className='grid grid-cols-3 gap-x-5 gap-y-4'>
+          <MetricCell label={t('site.dashboard.totalCount')}>
+            <MetricValue
+              compact
+              nullLabel='0'
+              value={customer.today.request_count}
+            />
+          </MetricCell>
+          <MetricCell label={t('site.averageRpm')}>
+            {formatAverageRate(customer.today.avg_rpm)}
+          </MetricCell>
+          <MetricCell label={t('site.averageTpm')}>
+            {formatAverageRate(customer.today.avg_tpm)}
+          </MetricCell>
+        </div>
+      </section>
+      <div className='flex flex-wrap items-center justify-between gap-2'>
+        <div className='flex items-center gap-2'>
+          <DataStatusBadge status={customer.today.data_status} />
+          <span className='text-muted-foreground text-xs'>
+            {t('customer.activeAccounts')}:{' '}
+            <MetricValue
+              compact
+              nullLabel='0'
+              value={customer.today.active_users}
+            />
+          </span>
+        </div>
+        <DataFreshness
+          labelKey='customer.asOf'
+          timestamp={customer.today.as_of}
+        />
+      </div>
+      <footer className='border-border/70 grid grid-cols-3 gap-1 border-t pt-2'>
+        <Link
+          className='hover:bg-muted inline-flex min-h-9 min-w-0 items-center justify-center gap-1 rounded-md px-1.5 text-xs font-medium'
+          params={{ customerId: customer.id }}
+          search={buildStatisticsSearch({})}
+          to='/customers/$customerId/stats'
+        >
+          <HugeiconsIcon icon={Chart01Icon} strokeWidth={2} />
+          {t('customer.actions.stats')}
+        </Link>
+        <button
+          className='hover:bg-muted inline-flex min-h-9 min-w-0 items-center justify-center gap-1 rounded-md px-1.5 text-xs font-medium'
+          onClick={() => onOpenAccounts(customer.id)}
+          type='button'
+        >
+          <HugeiconsIcon icon={UserGroupIcon} strokeWidth={2} />
+          {t('customer.actions.accounts')}
+        </button>
+        <Link
+          className='hover:bg-muted inline-flex min-h-9 min-w-0 items-center justify-center gap-1 rounded-md px-1.5 text-xs font-medium'
+          params={{ customerId: customer.id }}
+          to='/customers/$customerId'
+        >
+          <HugeiconsIcon icon={ViewIcon} strokeWidth={2} />
+          {t('customer.actions.detail')}
+        </Link>
+      </footer>
     </article>
   )
 }

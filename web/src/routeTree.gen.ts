@@ -57,6 +57,7 @@ import { Route as AuthenticatedSitesSiteIdPerformanceHistoryRouteImport } from '
 import { Route as AuthenticatedSitesSiteIdModelCatalogRouteImport } from './routes/_authenticated/sites/$siteId/model-catalog'
 import { Route as AuthenticatedSitesSiteIdLogsRouteImport } from './routes/_authenticated/sites/$siteId/logs'
 import { Route as AuthenticatedSitesSiteIdFinancialOperationsRouteImport } from './routes/_authenticated/sites/$siteId/financial-operations'
+import { Route as AuthenticatedSitesSiteIdCollectionRunsRouteImport } from './routes/_authenticated/sites/$siteId/collection-runs'
 import { Route as AuthenticatedSitesSiteIdChannelInventoryRouteImport } from './routes/_authenticated/sites/$siteId/channel-inventory'
 import { Route as AuthenticatedCustomersCustomerIdStatsRouteImport } from './routes/_authenticated/customers/$customerId/stats'
 import { Route as AuthenticatedAccountsAccountIdStatsRouteImport } from './routes/_authenticated/accounts/$accountId/stats'
@@ -343,6 +344,12 @@ const AuthenticatedSitesSiteIdFinancialOperationsRoute =
     path: '/sites/$siteId/financial-operations',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedSitesSiteIdCollectionRunsRoute =
+  AuthenticatedSitesSiteIdCollectionRunsRouteImport.update({
+    id: '/sites/$siteId/collection-runs',
+    path: '/sites/$siteId/collection-runs',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSitesSiteIdChannelInventoryRoute =
   AuthenticatedSitesSiteIdChannelInventoryRouteImport.update({
     id: '/sites/$siteId/channel-inventory',
@@ -398,6 +405,7 @@ export interface FileRoutesByFullPath {
   '/accounts/$accountId/stats': typeof AuthenticatedAccountsAccountIdStatsRoute
   '/customers/$customerId/stats': typeof AuthenticatedCustomersCustomerIdStatsRoute
   '/sites/$siteId/channel-inventory': typeof AuthenticatedSitesSiteIdChannelInventoryRoute
+  '/sites/$siteId/collection-runs': typeof AuthenticatedSitesSiteIdCollectionRunsRoute
   '/sites/$siteId/financial-operations': typeof AuthenticatedSitesSiteIdFinancialOperationsRoute
   '/sites/$siteId/logs': typeof AuthenticatedSitesSiteIdLogsRoute
   '/sites/$siteId/model-catalog': typeof AuthenticatedSitesSiteIdModelCatalogRoute
@@ -450,6 +458,7 @@ export interface FileRoutesByTo {
   '/accounts/$accountId/stats': typeof AuthenticatedAccountsAccountIdStatsRoute
   '/customers/$customerId/stats': typeof AuthenticatedCustomersCustomerIdStatsRoute
   '/sites/$siteId/channel-inventory': typeof AuthenticatedSitesSiteIdChannelInventoryRoute
+  '/sites/$siteId/collection-runs': typeof AuthenticatedSitesSiteIdCollectionRunsRoute
   '/sites/$siteId/financial-operations': typeof AuthenticatedSitesSiteIdFinancialOperationsRoute
   '/sites/$siteId/logs': typeof AuthenticatedSitesSiteIdLogsRoute
   '/sites/$siteId/model-catalog': typeof AuthenticatedSitesSiteIdModelCatalogRoute
@@ -504,6 +513,7 @@ export interface FileRoutesById {
   '/_authenticated/accounts/$accountId/stats': typeof AuthenticatedAccountsAccountIdStatsRoute
   '/_authenticated/customers/$customerId/stats': typeof AuthenticatedCustomersCustomerIdStatsRoute
   '/_authenticated/sites/$siteId/channel-inventory': typeof AuthenticatedSitesSiteIdChannelInventoryRoute
+  '/_authenticated/sites/$siteId/collection-runs': typeof AuthenticatedSitesSiteIdCollectionRunsRoute
   '/_authenticated/sites/$siteId/financial-operations': typeof AuthenticatedSitesSiteIdFinancialOperationsRoute
   '/_authenticated/sites/$siteId/logs': typeof AuthenticatedSitesSiteIdLogsRoute
   '/_authenticated/sites/$siteId/model-catalog': typeof AuthenticatedSitesSiteIdModelCatalogRoute
@@ -558,6 +568,7 @@ export interface FileRouteTypes {
     | '/accounts/$accountId/stats'
     | '/customers/$customerId/stats'
     | '/sites/$siteId/channel-inventory'
+    | '/sites/$siteId/collection-runs'
     | '/sites/$siteId/financial-operations'
     | '/sites/$siteId/logs'
     | '/sites/$siteId/model-catalog'
@@ -610,6 +621,7 @@ export interface FileRouteTypes {
     | '/accounts/$accountId/stats'
     | '/customers/$customerId/stats'
     | '/sites/$siteId/channel-inventory'
+    | '/sites/$siteId/collection-runs'
     | '/sites/$siteId/financial-operations'
     | '/sites/$siteId/logs'
     | '/sites/$siteId/model-catalog'
@@ -663,6 +675,7 @@ export interface FileRouteTypes {
     | '/_authenticated/accounts/$accountId/stats'
     | '/_authenticated/customers/$customerId/stats'
     | '/_authenticated/sites/$siteId/channel-inventory'
+    | '/_authenticated/sites/$siteId/collection-runs'
     | '/_authenticated/sites/$siteId/financial-operations'
     | '/_authenticated/sites/$siteId/logs'
     | '/_authenticated/sites/$siteId/model-catalog'
@@ -1024,6 +1037,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSitesSiteIdFinancialOperationsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/sites/$siteId/collection-runs': {
+      id: '/_authenticated/sites/$siteId/collection-runs'
+      path: '/sites/$siteId/collection-runs'
+      fullPath: '/sites/$siteId/collection-runs'
+      preLoaderRoute: typeof AuthenticatedSitesSiteIdCollectionRunsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/sites/$siteId/channel-inventory': {
       id: '/_authenticated/sites/$siteId/channel-inventory'
       path: '/sites/$siteId/channel-inventory'
@@ -1082,6 +1102,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAccountsAccountIdStatsRoute: typeof AuthenticatedAccountsAccountIdStatsRoute
   AuthenticatedCustomersCustomerIdStatsRoute: typeof AuthenticatedCustomersCustomerIdStatsRoute
   AuthenticatedSitesSiteIdChannelInventoryRoute: typeof AuthenticatedSitesSiteIdChannelInventoryRoute
+  AuthenticatedSitesSiteIdCollectionRunsRoute: typeof AuthenticatedSitesSiteIdCollectionRunsRoute
   AuthenticatedSitesSiteIdFinancialOperationsRoute: typeof AuthenticatedSitesSiteIdFinancialOperationsRoute
   AuthenticatedSitesSiteIdLogsRoute: typeof AuthenticatedSitesSiteIdLogsRoute
   AuthenticatedSitesSiteIdModelCatalogRoute: typeof AuthenticatedSitesSiteIdModelCatalogRoute
@@ -1140,6 +1161,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedCustomersCustomerIdStatsRoute,
   AuthenticatedSitesSiteIdChannelInventoryRoute:
     AuthenticatedSitesSiteIdChannelInventoryRoute,
+  AuthenticatedSitesSiteIdCollectionRunsRoute:
+    AuthenticatedSitesSiteIdCollectionRunsRoute,
   AuthenticatedSitesSiteIdFinancialOperationsRoute:
     AuthenticatedSitesSiteIdFinancialOperationsRoute,
   AuthenticatedSitesSiteIdLogsRoute: AuthenticatedSitesSiteIdLogsRoute,

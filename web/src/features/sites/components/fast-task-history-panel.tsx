@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Badge } from '@/components/ui/badge'
@@ -17,7 +17,13 @@ import {
   isFastCollectionTaskType,
 } from '../constants'
 import { siteKeys } from '../query-keys'
-import type { FastTaskHistoryItem } from '../types'
+import type {
+  FastCollectionTaskType,
+  FastTaskHistoryItem,
+  FastTaskHistoryListParams,
+} from '../types'
+
+const fastTaskHistoryPageSize = 10
 
 function StatusBadge({ status }: { status: FastTaskHistoryItem['status'] }) {
   const { t } = useTranslation()
@@ -31,22 +37,91 @@ function StatusBadge({ status }: { status: FastTaskHistoryItem['status'] }) {
   )
 }
 
-export function FastTaskHistoryPanel({ siteId }: { siteId: string }) {
+function FastTaskHistoryCard({ item }: { item: FastTaskHistoryItem }) {
   const { t } = useTranslation()
-  const [page, setPage] = useState(1)
-  const [taskType, setTaskType] =
-    useState<FastTaskHistoryItem['task_type']>('site_probe')
-  const [status, setStatus] = useState<FastTaskHistoryItem['status'] | ''>('')
+  return (
+    <article className='bg-card text-card-foreground ring-foreground/10 rounded-xl p-4 ring-1'>
+      <div className='flex items-start justify-between gap-3'>
+        <div className='min-w-0'>
+          <h3 className='font-medium'>
+            {t(dynamicI18nKey('site', `collection.task.${item.task_type}`))}
+          </h3>
+          <p className='text-muted-foreground mt-1 text-sm'>
+            {t(
+              dynamicI18nKey(
+                'site',
+                collectionTaskCatalog[item.task_type].purposeKey
+              )
+            )}
+          </p>
+        </div>
+        <StatusBadge status={item.status} />
+      </div>
+      <div className='mt-3 grid grid-cols-2 gap-3 text-sm'>
+        <dl>
+          <dt className='text-muted-foreground'>{t('collection.startedAt')}</dt>
+          <dd>
+            {fromUnixSeconds(item.started_at).format('YYYY-MM-DD HH:mm:ss')}
+          </dd>
+        </dl>
+        <dl>
+          <dt className='text-muted-foreground'>
+            {t('collection.finishedAt')}
+          </dt>
+          <dd>
+            {fromUnixSeconds(item.finished_at).format('YYYY-MM-DD HH:mm:ss')}
+          </dd>
+        </dl>
+        <dl>
+          <dt className='text-muted-foreground'>{t('collection.duration')}</dt>
+          <dd>
+            {t('collection.durationSeconds', {
+              value: (item.duration_ms / 1000).toFixed(1),
+            })}
+          </dd>
+        </dl>
+      </div>
+      {item.error && (
+        <p className='text-destructive mt-3 text-sm break-words'>
+          {item.error}
+        </p>
+      )}
+    </article>
+  )
+}
+
+interface FastTaskHistorySearch {
+  fastPage: number
+  fastStatus?: FastTaskHistoryItem['status']
+  fastTaskType: FastCollectionTaskType
+}
+
+export function FastTaskHistoryPanel({
+  onSearchChange,
+  search,
+  siteId,
+}: {
+  onSearchChange: (changes: Partial<FastTaskHistorySearch>) => void
+  search: FastTaskHistorySearch
+  siteId: string
+}) {
+  const { t } = useTranslation()
   const validSiteId = isIdString(siteId)
-  const params = useMemo(
+  const params = useMemo<FastTaskHistoryListParams>(
     () => ({
-      site_id: parseIdString(siteId),
-      task_type: taskType,
-      status,
-      offset: (page - 1) * 50,
-      limit: 50,
+      site_id: parseIdString(validSiteId ? siteId : '1'),
+      task_type: search.fastTaskType,
+      status: search.fastStatus ?? '',
+      offset: (search.fastPage - 1) * fastTaskHistoryPageSize,
+      limit: fastTaskHistoryPageSize,
     }),
-    [page, siteId, status, taskType]
+    [
+      search.fastPage,
+      search.fastStatus,
+      search.fastTaskType,
+      siteId,
+      validSiteId,
+    ]
   )
   const query = useQuery({
     enabled: validSiteId,
@@ -61,6 +136,12 @@ export function FastTaskHistoryPanel({ siteId }: { siteId: string }) {
     (item) => !isFastCollectionTaskType(item.task_type)
   )
   const items = contractError ? [] : rawItems
+  const total = query.data?.total ?? 0
+  useEffect(() => {
+    if (!query.data || total === 0) return
+    const lastPage = Math.max(1, Math.ceil(total / fastTaskHistoryPageSize))
+    if (search.fastPage > lastPage) onSearchChange({ fastPage: lastPage })
+  }, [onSearchChange, query.data, search.fastPage, total])
   const columns = useMemo<ColumnDef<FastTaskHistoryItem, unknown>[]>(
     () => [
       {
@@ -99,7 +180,10 @@ export function FastTaskHistoryPanel({ siteId }: { siteId: string }) {
         id: 'finishedAt',
       },
       {
-        cell: ({ row }) => `${(row.original.duration_ms / 1000).toFixed(1)}s`,
+        cell: ({ row }) =>
+          t('collection.durationSeconds', {
+            value: (row.original.duration_ms / 1000).toFixed(1),
+          }),
         header: t('collection.duration'),
         id: 'duration',
       },
@@ -117,9 +201,9 @@ export function FastTaskHistoryPanel({ siteId }: { siteId: string }) {
     [t]
   )
   return (
-    <section className='grid gap-4 border-t pt-5' id='fast-task-history'>
+    <section className='grid gap-4' id='fast-task-history'>
       <div className='flex flex-wrap items-end justify-between gap-3'>
-        <div>
+        <div className='min-w-0 flex-1'>
           <h2 className='text-lg font-semibold'>
             {t('collection.fastHistoryTitle')}
           </h2>
@@ -127,38 +211,53 @@ export function FastTaskHistoryPanel({ siteId }: { siteId: string }) {
             {t('collection.fastHistoryDescription')}
           </p>
         </div>
-        <div className='flex flex-wrap gap-2'>
-          <Select
-            aria-label={t('collection.filterStatus')}
-            onChange={(event) => {
-              setPage(1)
-              setStatus(
-                event.target.value as FastTaskHistoryItem['status'] | ''
-              )
-            }}
-            value={status}
-          >
-            <option value=''>{t('common.allStatuses')}</option>
-            <option value='running'>{t('collection.status.running')}</option>
-            <option value='success'>{t('collection.status.success')}</option>
-            <option value='failed'>{t('collection.status.failed')}</option>
-          </Select>
-          <Select
-            aria-label={t('collection.filterTaskType')}
-            onChange={(event) => {
-              setPage(1)
-              setTaskType(
-                event.target.value as FastTaskHistoryItem['task_type']
-              )
-            }}
-            value={taskType}
-          >
-            {fastCollectionTaskTypes.map((type) => (
-              <option key={type} value={type}>
-                {t(dynamicI18nKey('site', `collection.task.${type}`))}
-              </option>
-            ))}
-          </Select>
+        <div className='flex shrink-0 flex-wrap items-center justify-end gap-x-4 gap-y-2'>
+          <div className='flex items-center gap-2'>
+            <span className='text-muted-foreground text-sm whitespace-nowrap'>
+              {t('collection.status')}
+            </span>
+            <Select
+              aria-label={t('collection.filterStatus')}
+              className='w-32'
+              onChange={(event) => {
+                onSearchChange({
+                  fastPage: 1,
+                  fastStatus:
+                    event.target.value === ''
+                      ? undefined
+                      : (event.target.value as FastTaskHistoryItem['status']),
+                })
+              }}
+              value={search.fastStatus ?? ''}
+            >
+              <option value=''>{t('common.allStatuses')}</option>
+              <option value='running'>{t('collection.status.running')}</option>
+              <option value='success'>{t('collection.status.success')}</option>
+              <option value='failed'>{t('collection.status.failed')}</option>
+            </Select>
+          </div>
+          <div className='flex items-center gap-2'>
+            <span className='text-muted-foreground text-sm whitespace-nowrap'>
+              {t('collection.taskType')}
+            </span>
+            <Select
+              aria-label={t('collection.filterTaskType')}
+              className='w-48'
+              onChange={(event) => {
+                onSearchChange({
+                  fastPage: 1,
+                  fastTaskType: event.target.value as FastCollectionTaskType,
+                })
+              }}
+              value={search.fastTaskType}
+            >
+              {fastCollectionTaskTypes.map((type) => (
+                <option key={type} value={type}>
+                  {t(dynamicI18nKey('site', `collection.task.${type}`))}
+                </option>
+              ))}
+            </Select>
+          </div>
         </div>
       </div>
       {contractError && (
@@ -174,13 +273,15 @@ export function FastTaskHistoryPanel({ siteId }: { siteId: string }) {
         emptyTitle={t('collection.fastHistoryEmpty')}
         error={!validSiteId || query.isError || contractError}
         fetching={query.isFetching}
+        fillAvailableHeight={false}
         loading={query.isPending}
-        onPageChange={setPage}
+        onPageChange={(fastPage) => onSearchChange({ fastPage })}
         onRetry={() => void query.refetch()}
-        page={page}
-        pageSize={50}
+        page={search.fastPage}
+        pageSize={fastTaskHistoryPageSize}
         paginationInFooter={false}
-        total={query.data?.total ?? 0}
+        renderMobileCard={(item) => <FastTaskHistoryCard item={item} />}
+        total={total}
       />
     </section>
   )

@@ -5,8 +5,7 @@
     "models": [
       {
         "model_name": "model-a",
-        "request_count": -1,
-        "success_rate": 100,
+        "success_rate": 100.01,
         "avg_latency_ms": 1,
         "avg_tps": 1
       }

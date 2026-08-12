@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	sitePerformanceCacheTTL        = time.Hour
-	sitePerformanceFailureCacheTTL = 5 * time.Minute
+	sitePerformanceCacheTTL        = 5 * time.Minute
+	sitePerformanceFailureCacheTTL = time.Minute
 )
 
 type sitePerformanceCacheEntry struct {
@@ -41,6 +41,16 @@ func (cache *sitePerformanceCache) Get(siteID int64, configVersion int, now int6
 	return entry.summary, true
 }
 
+func (cache *sitePerformanceCache) Latest(siteID int64, configVersion int) (dto.SitePerformanceSummary, bool) {
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	entry, exists := cache.entries[siteID]
+	if !exists || entry.configVersion != configVersion {
+		return dto.SitePerformanceSummary{}, false
+	}
+	return entry.summary, true
+}
+
 func (cache *sitePerformanceCache) StartRefresh(siteID int64) bool {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
@@ -56,7 +66,17 @@ func (cache *sitePerformanceCache) Store(siteID int64, configVersion int, summar
 }
 
 func (cache *sitePerformanceCache) StoreFailure(siteID int64, configVersion int, now int64) {
-	cache.store(siteID, configVersion, unavailableSitePerformanceSummary(24), now+int64(sitePerformanceFailureCacheTTL/time.Second))
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	if !cache.refreshing[siteID] {
+		return
+	}
+	cache.entries[siteID] = sitePerformanceCacheEntry{
+		configVersion: configVersion,
+		summary:       unavailableSitePerformanceSummary(24),
+		expiresAt:     now + int64(sitePerformanceFailureCacheTTL/time.Second),
+	}
+	delete(cache.refreshing, siteID)
 }
 
 func (cache *sitePerformanceCache) store(siteID int64, configVersion int, summary dto.SitePerformanceSummary, expiresAt int64) {
@@ -73,7 +93,11 @@ func (service *SiteService) listPerformanceSummaries(sites []model.Site, now int
 			results[site.ID] = summary
 			continue
 		}
-		results[site.ID] = unavailableSitePerformanceSummary(24)
+		if summary, ok := service.performanceCache.Latest(site.ID, site.ConfigVersion); ok {
+			results[site.ID] = summary
+		} else {
+			results[site.ID] = unavailableSitePerformanceSummary(24)
+		}
 		if site.ManagementStatus != constant.SiteManagementActive || site.AuthStatus != constant.SiteAuthAuthorized ||
 			site.RootUserID == nil || site.AccessTokenEncrypted == nil || !service.performanceCache.StartRefresh(site.ID) {
 			continue

@@ -21,6 +21,7 @@ import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { LoadingState } from '@/components/loading-state'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { customerKeys } from '@/features/customers/query-keys'
 import type { CollectionRunItem } from '@/features/sites/types'
 import { buildStatisticsSearch } from '@/features/statistics/search'
@@ -116,13 +117,24 @@ export function AccountDetailPage({
       <>
         {detailQuery.isRefetchError && (
           <section
-            className='border-warning/40 bg-warning/10 rounded-md border p-3'
+            className='border-warning/40 bg-warning/10 flex flex-wrap items-center justify-between gap-3 rounded-md border p-3'
             role='status'
           >
-            <p className='font-medium'>{t('account.detail.refreshError')}</p>
-            <p className='text-muted-foreground mt-1 text-sm'>
-              {t('account.detail.staleData')}
-            </p>
+            <div>
+              <p className='font-medium'>{t('account.detail.refreshError')}</p>
+              <p className='text-muted-foreground mt-1 text-sm'>
+                {t('account.detail.staleData')}
+              </p>
+            </div>
+            <Button
+              disabled={detailQuery.isFetching}
+              onClick={() => void detailQuery.refetch()}
+              size='sm'
+              type='button'
+              variant='outline'
+            >
+              {t('common.retry')}
+            </Button>
           </section>
         )}
         {account.remote_state !== 'normal' && (

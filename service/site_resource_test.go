@@ -102,25 +102,42 @@ func TestSiteResourceBuilderAggregatesOnlyKnownPartialMetrics(t *testing.T) {
 	}
 }
 
-func TestSiteResourceBuilderUsesPersistedDailyFinality(t *testing.T) {
+func TestSiteResourceBuilderPreservesPersistedDailyFinalityAcrossCoverageStatuses(t *testing.T) {
 	start := time.Date(2025, time.July, 12, 0, 0, 0, 0, siteResourceLocation).Unix()
 	asOf := start + 24*60*60 + 60
-	builder := siteResourceBuilder{
-		siteID: 11,
-		query: dto.ResourceQuery{StartTimestamp: start, EndTimestamp: start + 24*60*60,
-			Granularity: dto.ResourceGranularityDay},
-		now: start + 2*24*60*60, lifecycleStart: start,
-		rows: []model.SiteResourceRow{{
-			DateKey: siteResourceDateKey(start), SampleCount: 1440, ExpectedSampleCount: 1440,
-			HealthStatus: constant.SiteHealthOK, DataStatus: "complete", SourceAsOf: &asOf, IsFinal: true,
-		}},
+	tests := []struct {
+		name          string
+		status        string
+		sampleCount   int
+		expectedCount int
+		healthStatus  string
+	}{
+		{name: "complete", status: "complete", sampleCount: 1440, expectedCount: 1440, healthStatus: constant.SiteHealthOK},
+		{name: "partial", status: "partial", sampleCount: 720, expectedCount: 1440, healthStatus: constant.SiteHealthWarning},
+		{name: "missing", status: "missing", sampleCount: 0, expectedCount: 1440, healthStatus: constant.SiteHealthUnavailable},
+		{name: "paused", status: "paused", sampleCount: 0, expectedCount: 0, healthStatus: constant.SiteHealthUnavailable},
 	}
-	trend, err := builder.buildTrend()
-	if err != nil {
-		t.Fatalf("buildTrend() error = %v", err)
-	}
-	if len(trend) != 1 || !trend[0].IsFinal {
-		t.Fatalf("daily trend = %#v", trend)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			builder := siteResourceBuilder{
+				siteID: 11,
+				query: dto.ResourceQuery{StartTimestamp: start, EndTimestamp: start + 24*60*60,
+					Granularity: dto.ResourceGranularityDay},
+				now: start + 2*24*60*60, lifecycleStart: start,
+				rows: []model.SiteResourceRow{{
+					DateKey: siteResourceDateKey(start), SampleCount: test.sampleCount,
+					ExpectedSampleCount: test.expectedCount, HealthStatus: test.healthStatus,
+					DataStatus: test.status, SourceAsOf: &asOf, IsFinal: true,
+				}},
+			}
+			trend, err := builder.buildTrend()
+			if err != nil {
+				t.Fatalf("buildTrend() error = %v", err)
+			}
+			if len(trend) != 1 || !trend[0].IsFinal || trend[0].DataStatus != test.status {
+				t.Fatalf("daily trend = %#v", trend)
+			}
+		})
 	}
 }
 

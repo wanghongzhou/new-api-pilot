@@ -26,10 +26,10 @@ export interface PerformanceHistoryItem extends PerformanceCounters {
   bucket_start: Timestamp
   series_schema: string
   metric_source: PerformanceMetricSource
-  avg_ttft_ms: DecimalString
-  avg_latency_ms: DecimalString
-  success_rate: DecimalString
-  avg_tps: DecimalString
+  avg_ttft_ms: DecimalString | null
+  avg_latency_ms: DecimalString | null
+  success_rate: DecimalString | null
+  avg_tps: DecimalString | null
   collected_at: Timestamp
 }
 export interface PerformanceHistoryPage {

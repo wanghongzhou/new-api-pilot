@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { SiteInstancesPage } from '@/features/sites/components/site-instances-page'
 import { siteStatusSearchSchema } from '@/features/sites/schema'
-import { dayjs } from '@/lib/dayjs'
+import { defaultSiteResourceRange } from '@/features/sites/site-resource-range'
 
 export const Route = createFileRoute('/_authenticated/sites/$siteId/status')({
   component: SiteStatusRoute,
@@ -15,10 +15,7 @@ function SiteStatusRoute() {
   const navigate = Route.useNavigate()
   const granularity = rawSearch.granularity ?? 'minute'
   const metric = rawSearch.metric ?? 'cpu'
-  const defaultEnd = dayjs().startOf('minute').unix()
-  let defaultDuration = 30 * 24 * 60 * 60
-  if (granularity === 'minute') defaultDuration = 24 * 60 * 60
-  else if (granularity === 'hour') defaultDuration = 7 * 24 * 60 * 60
+  const defaultRange = defaultSiteResourceRange(granularity)
   let aggregation = rawSearch.aggregation ?? 'max'
   if (metric === 'disk' && aggregation === 'avg') aggregation = 'last'
   if (metric !== 'disk' && aggregation === 'last') aggregation = 'max'
@@ -32,11 +29,11 @@ function SiteStatusRoute() {
       }
       search={{
         aggregation,
-        end: rawSearch.end ?? defaultEnd,
+        end: rawSearch.end ?? defaultRange.end,
         granularity,
         metric,
         nodeName: rawSearch.nodeName,
-        start: rawSearch.start ?? defaultEnd - defaultDuration,
+        start: rawSearch.start ?? defaultRange.start,
       }}
       siteId={siteId}
     />

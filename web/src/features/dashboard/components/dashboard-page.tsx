@@ -20,9 +20,10 @@ import { ErrorState } from '@/components/error-state'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { SelectControl } from '@/components/ui/select-control'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
+import { BEIJING_TIMEZONE, dayjs } from '@/lib/dayjs'
 import { translateMessageRef } from '@/lib/message-ref'
 import { cn } from '@/lib/utils'
 
@@ -38,6 +39,7 @@ import {
   getDashboardTop,
   getDashboardTrend,
 } from '../api'
+import { isDashboardProblemSite } from '../health'
 import { dashboardKeys } from '../query-keys'
 import type {
   DashboardHealth,
@@ -77,10 +79,15 @@ function DashboardPanel({
   let content: ReactNode
   if (state.loading && !state.data) {
     content = (
-      <div
-        aria-hidden='true'
-        className='bg-muted h-40 animate-pulse rounded-md'
-      />
+      <>
+        <span className='sr-only' role='status'>
+          {t('common.loading')}
+        </span>
+        <div
+          aria-hidden='true'
+          className='bg-muted h-40 animate-pulse rounded-md'
+        />
+      </>
     )
   } else if (state.error && !state.data) {
     content = (
@@ -93,11 +100,18 @@ function DashboardPanel({
     )
   } else if (empty) {
     content = (
-      <EmptyState
-        className='min-h-40'
-        description={t('dashboard.block.emptyDescription')}
-        title={t('dashboard.block.empty')}
-      />
+      <>
+        {state.error && (
+          <p className='border-warning/40 bg-warning/10 rounded-md border p-3 text-sm'>
+            {t('dashboard.block.stale')}
+          </p>
+        )}
+        <EmptyState
+          className='min-h-40'
+          description={t('dashboard.block.emptyDescription')}
+          title={t('dashboard.block.empty')}
+        />
+      </>
     )
   } else {
     content = (
@@ -147,6 +161,24 @@ function MetricCell({ label, value }: { label: string; value: ReactNode }) {
   )
 }
 
+function StaleSiteLinks({ ids, label }: { ids: string[]; label: string }) {
+  return (
+    <div className='text-muted-foreground flex flex-wrap items-center gap-1.5 text-xs'>
+      <span>{label}</span>
+      {ids.map((siteId) => (
+        <Link
+          className='border-border bg-background hover:bg-muted rounded border px-1.5 py-0.5 font-mono transition-colors'
+          key={siteId}
+          params={{ siteId }}
+          to='/sites/$siteId'
+        >
+          {siteId}
+        </Link>
+      ))}
+    </div>
+  )
+}
+
 function OperationalAttention({ data }: { data: DashboardHealth }) {
   const { t } = useTranslation()
   const offlineSites = data.sites.filter(
@@ -171,36 +203,52 @@ function OperationalAttention({ data }: { data: DashboardHealth }) {
     {
       destination: 'alerts',
       label: t('dashboard.health.firing'),
+      search: { ...alertSearch, status: ['firing'] },
       tone: data.firing_alert_count > 0 ? 'warning' : 'neutral',
       value: data.firing_alert_count,
     },
     {
       destination: 'alerts',
       label: t('dashboard.health.critical'),
+      search: { ...alertSearch, level: ['critical'], status: ['firing'] },
       tone: data.critical_alert_count > 0 ? 'critical' : 'neutral',
       value: data.critical_alert_count,
     },
     {
       destination: 'alerts',
       label: t('dashboard.health.warning'),
+      search: { ...alertSearch, level: ['warning'], status: ['firing'] },
       tone: data.warning_alert_count > 0 ? 'warning' : 'neutral',
       value: data.warning_alert_count,
     },
     {
       destination: 'sites',
       label: t('dashboard.attention.offlineSites'),
+      search: { ...siteSearch, management: ['active'], online: ['offline'] },
       tone: offlineSites > 0 ? 'critical' : 'neutral',
       value: offlineSites,
     },
     {
       destination: 'sites',
       label: t('dashboard.health.authExpiredSites'),
+      search: { ...siteSearch, auth: ['expired'], management: ['active'] },
       tone: data.auth_expired_site_ids.length > 0 ? 'warning' : 'neutral',
       value: data.auth_expired_site_ids.length,
     },
     {
       destination: 'sites',
       label: t('dashboard.health.statisticsNotReadySites'),
+      search: {
+        ...siteSearch,
+        management: ['active'],
+        statistics: [
+          'pending_config',
+          'backfilling',
+          'partial',
+          'error',
+          'paused',
+        ],
+      },
       tone:
         data.statistics_not_ready_site_ids.length > 0 ? 'warning' : 'neutral',
       value: data.statistics_not_ready_site_ids.length,
@@ -238,7 +286,7 @@ function OperationalAttention({ data }: { data: DashboardHealth }) {
               <Link
                 className={cn(className, 'hover:bg-muted/70')}
                 key={item.label}
-                search={alertSearch}
+                search={item.search}
                 to='/alerts'
               >
                 {content}
@@ -249,7 +297,7 @@ function OperationalAttention({ data }: { data: DashboardHealth }) {
             <Link
               className={cn(className, 'hover:bg-muted/70')}
               key={item.label}
-              search={siteSearch}
+              search={item.search}
               to='/sites'
             >
               {content}
@@ -485,11 +533,10 @@ function RealtimeThroughput({ data }: { data: DashboardSummary }) {
           </p>
         )}
         {data.resource_stale_site_ids.length > 0 && (
-          <p className='text-muted-foreground text-xs break-all'>
-            {t('dashboard.entities.resourceStaleSites', {
-              ids: data.resource_stale_site_ids.join(', '),
-            })}
-          </p>
+          <StaleSiteLinks
+            ids={data.resource_stale_site_ids}
+            label={t('dashboard.entities.resourceStaleSites', { ids: '' })}
+          />
         )}
       </section>
       {data.realtime_reason && (
@@ -498,11 +545,10 @@ function RealtimeThroughput({ data }: { data: DashboardSummary }) {
         </p>
       )}
       {data.stale_site_ids.length > 0 && (
-        <p className='text-muted-foreground text-xs break-all'>
-          {t('dashboard.realtime.staleSites', {
-            ids: data.stale_site_ids.join(', '),
-          })}
-        </p>
+        <StaleSiteLinks
+          ids={data.stale_site_ids}
+          label={t('dashboard.realtime.staleSites', { ids: '' })}
+        />
       )}
     </div>
   )
@@ -556,9 +602,7 @@ function ThirtyDayTrend({ data }: { data: DashboardTrend }) {
       <MetricTrendChart data={data} search={search} />
       <Button
         className='w-fit'
-        render={
-          <Link search={buildStatisticsSearch({})} to='/statistics/global' />
-        }
+        render={<Link search={search} to='/statistics/global' />}
         variant='ghost'
       >
         {t('dashboard.openStatistics')}
@@ -585,6 +629,95 @@ function RankingValue({
     )
   }
   return <MetricValue compact value={item.value} />
+}
+
+function rankingSearch(
+  item: DashboardRankingItem,
+  metric: DashboardTopMetric
+): StatisticsSearch {
+  const start = dayjs().tz(BEIJING_TIMEZONE).startOf('day')
+  const end = start.add(1, 'day')
+  let siteIds: string[] = []
+  if (item.dimension_type === 'site') {
+    siteIds = [item.dimension_id]
+  } else if (item.site_id) {
+    siteIds = [item.site_id]
+  }
+  return buildStatisticsSearch({
+    channelKeys: item.dimension_type === 'channel' ? [item.dimension_id] : [],
+    customerIds: item.dimension_type === 'customer' ? [item.dimension_id] : [],
+    display: 'quota',
+    end: end.unix(),
+    granularity: 'day',
+    metric,
+    models: item.dimension_type === 'model' ? [item.dimension_id] : [],
+    order: 'desc',
+    page: 1,
+    pageSize: 20,
+    siteIds,
+    sort: metric,
+    start: start.unix(),
+    view: 'table',
+  })
+}
+
+function RankingDetailLink({
+  item,
+  metric,
+}: {
+  item: DashboardRankingItem
+  metric: DashboardTopMetric
+}) {
+  const { t } = useTranslation()
+  const content = (
+    <>
+      <span className='font-medium break-words'>{item.dimension_name}</span>
+      <span className='sr-only'>: {t('dashboard.ranking.openDetail')}</span>
+    </>
+  )
+  const search = rankingSearch(item, metric)
+  switch (item.dimension_type) {
+    case 'site':
+      return (
+        <Link
+          className='hover:underline'
+          search={search}
+          to='/statistics/sites'
+        >
+          {content}
+        </Link>
+      )
+    case 'customer':
+      return (
+        <Link
+          className='hover:underline'
+          search={search}
+          to='/statistics/customers'
+        >
+          {content}
+        </Link>
+      )
+    case 'model':
+      return (
+        <Link
+          className='hover:underline'
+          search={search}
+          to='/statistics/models'
+        >
+          {content}
+        </Link>
+      )
+    case 'channel':
+      return (
+        <Link
+          className='hover:underline'
+          search={search}
+          to='/statistics/channels'
+        >
+          {content}
+        </Link>
+      )
+  }
 }
 
 function Ranking({
@@ -621,7 +754,12 @@ function Ranking({
         >
           <TabsList aria-label={t('dashboard.ranking.dimension')}>
             {types.map((value) => (
-              <TabsTrigger key={value} value={value}>
+              <TabsTrigger
+                aria-controls='dashboard-ranking-panel'
+                id={`dashboard-ranking-tab-${value}`}
+                key={value}
+                value={value}
+              >
                 {typeLabels[value]}
               </TabsTrigger>
             ))}
@@ -652,19 +790,22 @@ function Ranking({
             <span className='text-muted-foreground text-xs'>
               {t('dashboard.ranking.limit')}
             </span>
-            <Input
+            <SelectControl
               className='w-20'
-              max={20}
-              min={1}
-              onChange={(event) => {
-                const value = Number(event.target.value)
-                if (Number.isInteger(value) && value >= 1 && value <= 20) {
-                  onLimitChange(value)
-                }
-              }}
-              type='number'
+              onChange={(event) => onLimitChange(Number(event.target.value))}
+              size='sm'
               value={limit}
-            />
+            >
+              <option value={5}>
+                {t('dashboard.ranking.limitOption', { count: 5 })}
+              </option>
+              <option value={10}>
+                {t('dashboard.ranking.limitOption', { count: 10 })}
+              </option>
+              <option value={20}>
+                {t('dashboard.ranking.limitOption', { count: 20 })}
+              </option>
+            </SelectControl>
           </label>
         </div>
       </div>
@@ -683,7 +824,7 @@ function Ranking({
                 {index + 1}
               </span>
               <div className='min-w-0'>
-                <p className='font-medium break-words'>{item.dimension_name}</p>
+                <RankingDetailLink item={item} metric={metric} />
                 <div className='mt-1 flex flex-wrap items-center gap-2'>
                   <DataStatusBadge status={item.data_status} />
                   {!item.is_final && (
@@ -704,14 +845,7 @@ function Ranking({
 
 function HealthAndCompleteness({ data }: { data: DashboardHealth }) {
   const { t } = useTranslation()
-  const problemSites = data.sites.filter(
-    (site) =>
-      site.management_status !== 'active' ||
-      site.online_status !== 'online' ||
-      site.auth_status !== 'authorized' ||
-      site.statistics_status !== 'complete' ||
-      site.health_status !== 'healthy'
-  )
+  const problemSites = data.sites.filter(isDashboardProblemSite)
   let problemSiteContent: ReactNode
   if (data.sites.length === 0) {
     problemSiteContent = (
@@ -872,24 +1006,28 @@ export function DashboardPage() {
     staleTime: 5 * 60_000,
   })
   const siteTopQuery = useQuery({
+    enabled: topType === 'site',
     placeholderData: keepPreviousData,
     queryFn: () => getDashboardTop('site', topMetric, topLimit),
     queryKey: dashboardKeys.top('site', topMetric, topLimit),
     staleTime: 5 * 60_000,
   })
   const customerTopQuery = useQuery({
+    enabled: topType === 'customer',
     placeholderData: keepPreviousData,
     queryFn: () => getDashboardTop('customer', topMetric, topLimit),
     queryKey: dashboardKeys.top('customer', topMetric, topLimit),
     staleTime: 5 * 60_000,
   })
   const modelTopQuery = useQuery({
+    enabled: topType === 'model',
     placeholderData: keepPreviousData,
     queryFn: () => getDashboardTop('model', topMetric, topLimit),
     queryKey: dashboardKeys.top('model', topMetric, topLimit),
     staleTime: 5 * 60_000,
   })
   const channelTopQuery = useQuery({
+    enabled: topType === 'channel',
     placeholderData: keepPreviousData,
     queryFn: () => getDashboardTop('channel', topMetric, topLimit),
     queryKey: dashboardKeys.top('channel', topMetric, topLimit),
@@ -972,7 +1110,12 @@ export function DashboardPage() {
       fixedContent
       title={t('dashboard.title')}
     >
-      <div className='h-full min-h-0 overflow-y-auto pr-1' tabIndex={0}>
+      <div
+        aria-label={t('dashboard.scrollArea')}
+        className='h-full min-h-0 overflow-y-auto pr-1'
+        role='region'
+        tabIndex={0}
+      >
         <div className='grid min-w-0 gap-4 pb-1 lg:grid-cols-12'>
           <DashboardPanel
             className='lg:col-span-12'

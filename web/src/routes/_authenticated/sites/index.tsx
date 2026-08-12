@@ -21,9 +21,16 @@ function SitesRoute() {
     if (!window.location.search) return
     void navigate({ replace: true, search: (current) => current })
   }, [navigate])
-  const storedView = window.localStorage.getItem('sites:view-mode')
+  const storedView = window.localStorage.getItem('sites:view-mode-v2')
+  const viewportDefault: SiteSearch['view'] = window.matchMedia(
+    '(min-width: 1024px)'
+  ).matches
+    ? 'table'
+    : 'card'
   const preferredView: SiteSearch['view'] =
-    storedView === 'table' || storedView === 'card' ? storedView : 'card'
+    storedView === 'table' || storedView === 'card'
+      ? storedView
+      : viewportDefault
   const search: SiteSearch = {
     auth: rawSearch.auth,
     filter: rawSearch.filter ?? '',
