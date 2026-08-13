@@ -71,7 +71,7 @@ export function QuotaAmount({
       {amount.status !== 'available' &&
         (quota != null || nullLabel == null) && (
           <span className='text-muted-foreground text-xs'>
-            {t('amount.rateUnavailable')}
+            {t('data.unavailableValue')}
           </span>
         )}
     </div>

@@ -1,23 +1,13 @@
 services:
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        BUN_IMAGE: ${BUN_IMAGE:-docker.m.daocloud.io/oven/bun:1.3.13-alpine}
-        GO_IMAGE: ${GO_IMAGE:-docker.m.daocloud.io/library/golang:1.25-alpine}
-        RUNTIME_IMAGE: ${RUNTIME_IMAGE:-docker.m.daocloud.io/library/alpine:3.22}
-        GO_MODULE_PROXY: ${GO_MODULE_PROXY:-https://goproxy.cn,https://mirrors.aliyun.com/goproxy/,direct}
-        GO_SUM_DATABASE: ${GO_SUM_DATABASE:-sum.golang.google.cn}
-        ALPINE_MIRROR: ${ALPINE_MIRROR:-https://mirrors.aliyun.com/alpine}
-    image: ${API_IMAGE:?API_IMAGE must be an immutable repository@sha256 digest}
-    container_name: new-api-pilot-api
+  new-api-pilot:
+    image: registry.cn-hangzhou.aliyuncs.com/howlsky/new-api-pilot:latest
+    pull_policy: always
+    container_name: new-api-pilot
     restart: unless-stopped
     ports:
       - '${API_PORT:-3000}:3000'
     environment:
       APP_ENV: production
-      API_IMAGE: ${API_IMAGE:?API_IMAGE must be an immutable repository@sha256 digest}
       PORT: '3000'
       DATABASE_DSN: ${DATABASE_DSN:?DATABASE_DSN is required}
       REDIS_DSN: ${REDIS_DSN:?REDIS_DSN is required}

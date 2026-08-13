@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -31,9 +30,8 @@ const (
 type LookupFunc func(string) (string, bool)
 
 type Config struct {
-	AppEnv   string
-	Port     string
-	APIImage string
+	AppEnv string
+	Port   string
 
 	DatabaseDSN          string
 	SQLMaxIdleConns      int
@@ -57,8 +55,6 @@ type Config struct {
 	MetricsAllowedCIDRs  []netip.Prefix
 }
 
-var immutableImagePattern = regexp.MustCompile(`^[^@[:space:]]+@sha256:[a-fA-F0-9]{64}$`)
-
 func Load() (Config, error) {
 	_ = godotenv.Load()
 	return LoadFrom(os.LookupEnv)
@@ -72,11 +68,6 @@ func LoadFrom(lookup LookupFunc) (Config, error) {
 	if appEnv != EnvironmentDevelopment && appEnv != EnvironmentTest && appEnv != EnvironmentProduction {
 		return Config{}, fmt.Errorf("APP_ENV must be development, test, or production")
 	}
-	apiImage := value(lookup, "API_IMAGE")
-	if appEnv == EnvironmentProduction && !immutableImagePattern.MatchString(apiImage) {
-		return Config{}, fmt.Errorf("API_IMAGE must be an immutable repository@sha256 digest in production")
-	}
-
 	port, err := parsePort(valueOrDefault(lookup, "PORT", "3000"))
 	if err != nil {
 		return Config{}, err
@@ -187,7 +178,6 @@ func LoadFrom(lookup LookupFunc) (Config, error) {
 	return Config{
 		AppEnv:               appEnv,
 		Port:                 port,
-		APIImage:             apiImage,
 		DatabaseDSN:          dsn,
 		SQLMaxIdleConns:      maxIdle,
 		SQLMaxOpenConns:      maxOpen,

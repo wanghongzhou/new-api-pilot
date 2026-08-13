@@ -444,7 +444,7 @@ test('A100 unavailable collection is diagnosed instead of shown as a real empty 
   await page.goto('/system-tasks')
   await expect(page.getByText('上游系统任务采集失败')).toBeVisible()
   await expect(
-    page.getByText('系统任务采集不可用').filter({ visible: true })
+    page.getByText('系统任务采集失败').filter({ visible: true })
   ).toBeVisible()
   await expect(page.getByText('当前筛选下没有系统任务')).toHaveCount(0)
 })

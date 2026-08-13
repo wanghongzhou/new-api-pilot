@@ -138,7 +138,7 @@ func TestDockerDocsCheckTargetsReadTheRealWorkspace(t *testing.T) {
 	}
 }
 
-func TestDockerBuildSourcesAreConfigurableAndDomesticByDefault(t *testing.T) {
+func TestDockerBuildAndProductionRuntimeAreSeparated(t *testing.T) {
 	dockerfilePayload, err := os.ReadFile("../../Dockerfile")
 	if err != nil {
 		t.Fatal(err)
@@ -172,25 +172,42 @@ func TestDockerBuildSourcesAreConfigurableAndDomesticByDefault(t *testing.T) {
 	}
 	compose := strings.ReplaceAll(string(composePayload), "\r\n", "\n")
 	for _, required := range []string{
-		"image: ${API_IMAGE:?API_IMAGE must be an immutable repository@sha256 digest}",
-		"API_IMAGE: ${API_IMAGE:?API_IMAGE must be an immutable repository@sha256 digest}",
+		"  new-api-pilot:\n",
+		"image: registry.cn-hangzhou.aliyuncs.com/howlsky/new-api-pilot:latest",
+		"pull_policy: always",
+		"container_name: new-api-pilot",
 	} {
 		if !strings.Contains(compose, required) {
-			t.Fatalf("docker-compose.yml is missing immutable API image contract %q", required)
+			t.Fatalf("docker-compose.yml is missing production API image contract %q", required)
 		}
 	}
-	if strings.Contains(compose, "API_IMAGE:-new-api-pilot:local") {
-		t.Fatal("docker-compose.yml still permits a mutable local API image")
+	if strings.Contains(compose, "build:") || strings.Contains(compose, "dockerfile:") {
+		t.Fatal("docker-compose.yml must only pull and run published images")
+	}
+	if strings.Contains(compose, "API_IMAGE") {
+		t.Fatal("docker-compose.yml must not select the production image through environment interpolation")
+	}
+	if strings.Contains(compose, "  api:\n") || strings.Contains(compose, "container_name: new-api-pilot-api") {
+		t.Fatal("docker-compose.yml still uses the legacy production API service name")
 	}
 	for _, required := range []string{
-		"BUN_IMAGE: ${BUN_IMAGE:-docker.m.daocloud.io/oven/bun:1.3.13-alpine}",
-		"GO_IMAGE: ${GO_IMAGE:-docker.m.daocloud.io/library/golang:1.25-alpine}",
-		"RUNTIME_IMAGE: ${RUNTIME_IMAGE:-docker.m.daocloud.io/library/alpine:3.22}",
 		"image: ${MYSQL_IMAGE:-docker.m.daocloud.io/library/mysql:8.4}",
 		"image: ${REDIS_IMAGE:-docker.m.daocloud.io/library/redis:7-alpine}",
 	} {
 		if !strings.Contains(compose, required) {
 			t.Fatalf("docker-compose.yml is missing configurable image source %q", required)
+		}
+	}
+	envPayload, err := os.ReadFile("../../.env.example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	envExample := strings.ReplaceAll(string(envPayload), "\r\n", "\n")
+	for _, buildOnly := range []string{
+		"BUN_IMAGE=", "GO_IMAGE=", "RUNTIME_IMAGE=", "GO_MODULE_PROXY=", "GO_SUM_DATABASE=", "ALPINE_MIRROR=",
+	} {
+		if strings.Contains(envExample, buildOnly) {
+			t.Fatalf(".env.example still exposes build-only setting %q", buildOnly)
 		}
 	}
 }

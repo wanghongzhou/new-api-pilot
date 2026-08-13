@@ -645,7 +645,7 @@ test('keeps Admin exports owner-scoped and safely handles expired and missing 41
     .click()
   sheet = page.getByRole('dialog', { name: '导出任务' })
   await sheet.getByRole('button', { name: '下载文件' }).click()
-  await expect(sheet.getByText('导出文件已不可用')).toHaveCount(1)
+  await expect(sheet.getByText('导出文件已失效')).toHaveCount(1)
   await expect(
     sheet.getByRole('button', { name: '按相同条件重新导出' })
   ).toBeVisible()

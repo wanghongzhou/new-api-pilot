@@ -27,17 +27,19 @@ describe('formatDisplayValue', () => {
 
   test('keeps generic translated placeholders aligned with the contract', () => {
     const translations = resources[appLanguage].translation
-    expect(translations['data.unavailableValue']).toBe(EMPTY_DISPLAY_VALUE)
+    expect(translations['data.unavailableValue']).toBe(
+      EMPTY_NUMERIC_DISPLAY_VALUE
+    )
     expect(translations['alerts.value.unavailable']).toBe(EMPTY_DISPLAY_VALUE)
     expect(translations['statistics.metric.active_users_unavailable']).toBe(
-      EMPTY_DISPLAY_VALUE
+      EMPTY_NUMERIC_DISPLAY_VALUE
     )
-    expect(translations['data.unavailable']).toBe('不可用')
+    expect(translations['data.unavailable']).toBe(EMPTY_DISPLAY_VALUE)
   })
 })
 
 describe('formatNumericDisplayValue', () => {
-  test('uses the shared placeholder for missing numeric values', () => {
+  test('uses zero for missing numeric values', () => {
     expect(formatNumericDisplayValue(null)).toBe(EMPTY_NUMERIC_DISPLAY_VALUE)
     expect(formatNumericDisplayValue(undefined)).toBe(
       EMPTY_NUMERIC_DISPLAY_VALUE
@@ -62,7 +64,7 @@ describe('formatDecimalDisplayValue', () => {
     expect(formatDecimalDisplayValue(value)).toBe(expected)
   })
 
-  test('uses the numeric placeholder for invalid or absent decimals', () => {
+  test('uses zero for invalid or absent decimals', () => {
     expect(formatDecimalDisplayValue(null)).toBe(EMPTY_NUMERIC_DISPLAY_VALUE)
     expect(formatDecimalDisplayValue('not-a-number')).toBe(
       EMPTY_NUMERIC_DISPLAY_VALUE
@@ -83,7 +85,7 @@ describe('formatMetricDisplayValue', () => {
     expect(formatMetricDisplayValue('0')).toBe('0')
   })
 
-  test('keeps invalid input visible and missing input distinct', () => {
+  test('keeps invalid input visible and renders missing input as zero', () => {
     expect(formatMetricDisplayValue('not-a-metric')).toBe('not-a-metric')
     expect(formatMetricDisplayValue(null)).toBe(EMPTY_NUMERIC_DISPLAY_VALUE)
   })

@@ -399,7 +399,7 @@ test('A95 keeps upstream tasks exact, read-only, private, exportable and respons
     page.getByRole('heading', { exact: true, name: '站点任务日志' })
   ).toBeVisible()
   await expect(
-    page.getByText('不可用').filter({ visible: true }).first()
+    page.getByText('-').filter({ visible: true }).first()
   ).toBeVisible()
   expect(
     await page.evaluate(

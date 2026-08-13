@@ -997,13 +997,13 @@ test('blocks minute resource requests while retention is loading and resumes fro
     '/sites/1/status?granularity=minute&metric=cpu&aggregation=max&start=1783872000&end=1783875600'
   )
   await expect(
-    page.getByText('正在读取分钟数据留存配置，分钟趋势查询暂不可用。')
+    page.getByText('正在读取分钟数据留存配置，分钟趋势暂时无法查询。')
   ).toBeVisible()
   expect(statusCalls).toBe(0)
   releaseSettings()
   await expect.poll(() => statusCalls).toBe(1)
   await expect(
-    page.getByText('正在读取分钟数据留存配置，分钟趋势查询暂不可用。')
+    page.getByText('正在读取分钟数据留存配置，分钟趋势暂时无法查询。')
   ).toHaveCount(0)
 })
 

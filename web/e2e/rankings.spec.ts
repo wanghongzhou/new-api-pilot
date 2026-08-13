@@ -249,7 +249,7 @@ test('A97 keeps local rankings exact, bounded, exportable and responsive', async
   ).toBeVisible()
   await expect(page.getByText('0.3333333333')).toHaveCount(0)
   await expect(
-    page.getByText('不可用').filter({ visible: true }).first()
+    page.getByText('0', { exact: true }).filter({ visible: true }).first()
   ).toBeVisible()
   await page.getByRole('button', { name: '下一页' }).click()
   await expect(page).toHaveURL(/page=2/)

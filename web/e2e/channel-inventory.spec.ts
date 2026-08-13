@@ -409,7 +409,7 @@ test('uses forced site channel endpoints and preserves unavailable semantics', a
   await page.getByRole('button', { name: /更多筛选/ }).click()
   await expect(page.getByLabel('分组')).toHaveValue('vip')
   await expect(page.getByRole('button', { name: '返回站点详情' })).toBeVisible()
-  await expect(page.getByText('不可用').first()).toBeVisible()
+  await expect(page.getByText('-').first()).toBeVisible()
   const accessibility = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa'])
     .analyze()

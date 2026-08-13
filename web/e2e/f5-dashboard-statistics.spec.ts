@@ -586,13 +586,13 @@ test('Dashboard renders empty trend, ranking, site and alert states', async ({
   await expectFiveDashboardSections(page)
 
   const today = page.getByRole('region', { name: '今日运营' })
-  await expect(today.getByText('不可用', { exact: true }).first()).toBeVisible()
+  await expect(today.getByText('0', { exact: true }).first()).toBeVisible()
   const realtime = page.getByRole('region', { name: '实时吞吐' })
   const resource = realtime.getByRole('region', { name: '实例资源完整性' })
   await expect(resource.getByText('完整站点 0 / 预期 0')).toBeVisible()
   await expect(resource.getByText('暂无更新时间')).toBeVisible()
 
-  await expect(realtime.getByText('不可用', { exact: true })).toHaveCount(2)
+  await expect(realtime.getByText('0', { exact: true })).toHaveCount(2)
   await expect(realtime.getByText('完整站点 0 / 预期 0')).toHaveCount(2)
 
   const trend = page.getByRole('region', { name: '近 30 天趋势' })
@@ -939,13 +939,13 @@ test('nine statistics scopes preserve URL filters, partial and null contracts', 
   await page.keyboard.press('Escape')
   await expect(
     page.getByText(
-      '当前结果包含未完成或不可用的时间桶，金额与指标仅代表可用数据。'
+      '当前结果包含未完成或采集失败的时间桶，金额与指标仅代表已采集数据。'
     )
   ).toBeVisible()
   await expect(
     page
       .getByRole('region', { name: '范围汇总' })
-      .getByText('不可用', { exact: true })
+      .getByText('0', { exact: true })
   ).toBeVisible()
   await expect(page.getByLabel('金额显示')).toHaveCount(0)
   await expect(page.getByRole('button', { name: '对象筛选' })).toHaveCount(0)

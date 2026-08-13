@@ -58,18 +58,15 @@ func TestLoadFromRejectsUnsafeProduction(t *testing.T) {
 	}
 }
 
-func TestLoadFromRequiresProductionBootstrapSecretAndImmutableImage(t *testing.T) {
+func TestLoadFromRequiresProductionBootstrapSecret(t *testing.T) {
 	values := validProductionEnvironment(t)
 	delete(values, "PLATFORM_BOOTSTRAP_ADMIN_PASSWORD")
 	if _, err := LoadFrom(mapLookup(values)); err == nil || !strings.Contains(err.Error(), "PLATFORM_BOOTSTRAP_ADMIN_PASSWORD") {
 		t.Fatalf("missing production bootstrap password error = %v", err)
 	}
 	values["PLATFORM_BOOTSTRAP_ADMIN_PASSWORD"] = "change-me"
-	for _, image := range []string{"", "new-api-pilot:latest", "registry.example.com/new-api-pilot@sha256:short"} {
-		values["API_IMAGE"] = image
-		if _, err := LoadFrom(mapLookup(values)); err == nil || !strings.Contains(err.Error(), "API_IMAGE") {
-			t.Fatalf("mutable production API_IMAGE %q error = %v", image, err)
-		}
+	if _, err := LoadFrom(mapLookup(values)); err != nil {
+		t.Fatalf("valid production environment error = %v", err)
 	}
 }
 
@@ -254,7 +251,6 @@ func TestValidateRuntimeFilesAllowsDevelopmentSymlinkDirectory(t *testing.T) {
 func validEnvironment() map[string]string {
 	return map[string]string{
 		"APP_ENV":                           EnvironmentDevelopment,
-		"API_IMAGE":                         "registry.example.com/new-api-pilot@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 		"PORT":                              "3000",
 		"DATABASE_DSN":                      "pilot:pilot@tcp(localhost:3306)/pilot?charset=utf8mb4&parseTime=true&loc=Asia%2FShanghai",
 		"SESSION_SECRET":                    base64.StdEncoding.EncodeToString([]byte("01234567890123456789012345678901")),

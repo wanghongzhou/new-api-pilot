@@ -1,7 +1,7 @@
 import Decimal from 'decimal.js'
 
 export const EMPTY_DISPLAY_VALUE = '-'
-export const EMPTY_NUMERIC_DISPLAY_VALUE = EMPTY_DISPLAY_VALUE
+export const EMPTY_NUMERIC_DISPLAY_VALUE = '0'
 
 export function formatDisplayValue(
   value: boolean | number | string | null | undefined

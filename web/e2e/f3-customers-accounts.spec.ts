@@ -1228,10 +1228,10 @@ test('keeps authoritative statistics exact, exportable, accessible, and responsi
   const search = `start=${rangeStart}&end=${rangeEnd}&granularity=hour&metric=quota&display=usd&view=table`
 
   await page.goto(`/customers/7/stats?${search}`)
-  await expect(page.getByText('部分站点汇率不可用').first()).toBeVisible()
+  await expect(page.getByText('0', { exact: true }).first()).toBeVisible()
   await expect(
     page.getByText(
-      '当前结果包含未完成或不可用的时间桶，金额与指标仅代表可用数据。'
+      '当前结果包含未完成或采集失败的时间桶，金额与指标仅代表已采集数据。'
     )
   ).toBeVisible()
   await expect(

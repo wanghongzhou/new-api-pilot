@@ -357,21 +357,11 @@ function TodayOperations({ data }: { data: DashboardSummary }) {
       <dl className='grid gap-2 sm:grid-cols-2 xl:grid-cols-5'>
         <MetricCell
           label={t('dashboard.today.requests')}
-          value={
-            <MetricValue
-              nullLabel={t('data.unavailable')}
-              value={data.today.request_count}
-            />
-          }
+          value={<MetricValue value={data.today.request_count} />}
         />
         <MetricCell
           label={t('dashboard.today.quota')}
-          value={
-            <MetricValue
-              nullLabel={t('data.unavailable')}
-              value={data.today.quota}
-            />
-          }
+          value={<MetricValue value={data.today.quota} />}
         />
         <MetricCell
           label={t('dashboard.today.amount')}
@@ -384,21 +374,11 @@ function TodayOperations({ data }: { data: DashboardSummary }) {
         />
         <MetricCell
           label={t('dashboard.today.tokens')}
-          value={
-            <MetricValue
-              nullLabel={t('data.unavailable')}
-              value={data.today.token_used}
-            />
-          }
+          value={<MetricValue value={data.today.token_used} />}
         />
         <MetricCell
           label={t('dashboard.today.activeAccounts')}
-          value={
-            <MetricValue
-              nullLabel={t('data.unavailable')}
-              value={data.active_accounts_today}
-            />
-          }
+          value={<MetricValue value={data.active_accounts_today} />}
         />
       </dl>
     </div>
@@ -427,15 +407,11 @@ function RealtimeThroughput({ data }: { data: DashboardSummary }) {
       <dl className='grid gap-2 sm:grid-cols-2'>
         <MetricCell
           label={t('dashboard.realtime.rpm')}
-          value={
-            <MetricValue nullLabel={t('data.unavailable')} value={data.rpm} />
-          }
+          value={<MetricValue value={data.rpm} />}
         />
         <MetricCell
           label={t('dashboard.realtime.tpm')}
-          value={
-            <MetricValue nullLabel={t('data.unavailable')} value={data.tpm} />
-          }
+          value={<MetricValue value={data.tpm} />}
         />
       </dl>
       <div className='grid gap-2 sm:grid-cols-2'>

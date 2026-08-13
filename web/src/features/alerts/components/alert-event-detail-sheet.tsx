@@ -90,7 +90,7 @@ function DeliveryRow({ delivery }: { delivery: AlertDeliveryItem }) {
           <dt className='text-muted-foreground text-xs'>
             {t('alerts.delivery.responseCode')}
           </dt>
-          <dd>{delivery.response_code ?? t('alerts.value.unavailable')}</dd>
+          <dd>{delivery.response_code ?? 0}</dd>
         </div>
         <div>
           <dt className='text-muted-foreground text-xs'>

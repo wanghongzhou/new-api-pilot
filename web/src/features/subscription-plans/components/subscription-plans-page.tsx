@@ -313,7 +313,7 @@ function StatisticsGrid({
           <dl>
             <dt className='text-muted-foreground text-xs'>{label}</dt>
             <dd className='mt-0.5 text-2xl font-semibold tracking-tight'>
-              {value == null ? '-' : <MetricValue value={value} />}
+              <MetricValue value={value ?? null} />
             </dd>
           </dl>
         </div>

@@ -389,7 +389,7 @@ test('A96 keeps model catalog exact, icon-text-only, private, exportable and res
   await expect(page.getByText('9007199254740993').first()).toBeVisible()
   await expect(page.getByText('Vendor 0')).toBeVisible()
   await expect(
-    page.getByText('不可用').filter({ visible: true }).first()
+    page.getByText('-').filter({ visible: true }).first()
   ).toBeVisible()
 
   await page.getByRole('tab', { name: '渠道未登记' }).click()

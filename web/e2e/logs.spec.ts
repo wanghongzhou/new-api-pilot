@@ -299,7 +299,7 @@ test('uses the site-scoped endpoint and preserves unavailable as a distinct empt
   ).toBeVisible()
   await expect(
     page
-      .getByText('上游日志暂不可用，当前列表可能不完整。', { exact: true })
+      .getByText('上游日志暂未获取，当前列表可能不完整。', { exact: true })
       .first()
   ).toBeVisible()
   await expect(page.getByLabel('站点 ID')).toHaveCount(0)

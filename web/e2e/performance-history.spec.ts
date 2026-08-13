@@ -352,7 +352,7 @@ test('shows upstream values in seconds with compact filters, server pagination a
   })
   const globalHeading = page.getByRole('heading', { name: '全局性能历史' })
   await expect(globalHeading).toBeVisible()
-  await expect(page.getByText('总值不可用', { exact: true })).toBeVisible()
+  await expect(page.getByText('0', { exact: true }).first()).toBeVisible()
   await expect(
     page.getByText('当前无法安全计算汇总指标', { exact: true })
   ).toBeVisible()

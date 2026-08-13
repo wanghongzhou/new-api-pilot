@@ -316,7 +316,7 @@ test('A98 keeps subscription plan catalog exact, private, bounded and responsive
     page.getByRole('heading', { name: '站点计划情况' })
   ).toBeVisible()
   await expect(
-    page.getByText('不可用').filter({ visible: true }).first()
+    page.getByText('-').filter({ visible: true }).first()
   ).toBeVisible()
 
   const scan = await new AxeBuilder({ page })

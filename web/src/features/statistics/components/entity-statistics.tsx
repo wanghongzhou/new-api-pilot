@@ -58,25 +58,14 @@ import { StatisticsTimeRangePicker } from './statistics-time-range-picker'
 
 export function ActiveUsersValue({
   compact = false,
-  scope,
+  scope: _scope,
   value,
 }: {
   compact?: boolean
   scope: StatisticsScope
   value: StatisticsBreakdownBase['active_users']
 }) {
-  const { t } = useTranslation()
-  return (
-    <MetricValue
-      compact={compact}
-      nullLabel={
-        scope === 'account'
-          ? t('statistics.metric.active_users_unavailable')
-          : undefined
-      }
-      value={value}
-    />
-  )
+  return <MetricValue compact={compact} value={value} />
 }
 
 function crossSiteAmount(siteBreakdown: SiteQuotaBreakdown[]) {
@@ -111,18 +100,7 @@ export function AmountValue({
     )
   }
   if (amount.status !== 'available') {
-    return (
-      <span className='text-warning-foreground'>
-        {t(
-          dynamicI18nKey(
-            'statistics',
-            amount.status === 'partial_rate_unavailable'
-              ? 'amount.partialRateUnavailable'
-              : 'amount.rateUnavailable'
-          )
-        )}
-      </span>
-    )
+    return <span>{t('data.unavailableValue')}</span>
   }
   const value = display === 'usd' ? amount.amountUsd : amount.amountCny
   return (
@@ -498,10 +476,7 @@ export function StatisticsSummary({
             {t('statistics.metric.request_count')}
           </dt>
           <dd className='mt-1 text-xl font-semibold'>
-            <MetricValue
-              nullLabel={t('data.unavailable')}
-              value={data.summary.request_count}
-            />
+            <MetricValue value={data.summary.request_count} />
           </dd>
         </dl>
         <dl className='p-4'>
@@ -509,10 +484,7 @@ export function StatisticsSummary({
             {t('statistics.metric.quota')}
           </dt>
           <dd className='mt-1 text-xl font-semibold'>
-            <MetricValue
-              nullLabel={t('data.unavailable')}
-              value={data.summary.quota}
-            />
+            <MetricValue value={data.summary.quota} />
           </dd>
         </dl>
         {search.display !== 'quota' && (
@@ -538,10 +510,7 @@ export function StatisticsSummary({
             {t('statistics.metric.token_used')}
           </dt>
           <dd className='mt-1 text-xl font-semibold'>
-            <MetricValue
-              nullLabel={t('data.unavailable')}
-              value={data.summary.token_used}
-            />
+            <MetricValue value={data.summary.token_used} />
           </dd>
         </dl>
         <dl className='p-4'>

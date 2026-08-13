@@ -94,7 +94,7 @@ function name(item: RankingItem, vendors: boolean, t: (key: string) => string) {
 function movementText(item: RankingItem, t: (key: string) => string) {
   if (item.movement_type === 'new') return t('rankings.movement.new')
   if (item.movement_type === 'removed') return t('rankings.movement.removed')
-  return ratioToPercent(item.growth) ?? t('data.unavailable')
+  return ratioToPercent(item.growth) ?? t('data.unavailableValue')
 }
 
 function RankingMetric({
@@ -262,7 +262,7 @@ export function RankingsPage({
       },
       {
         cell: ({ row }) =>
-          ratioToPercent(row.original.growth) ?? t('data.unavailable'),
+          ratioToPercent(row.original.growth) ?? t('data.unavailableValue'),
         header: t('rankings.growth'),
         id: 'growth',
       },
@@ -517,7 +517,7 @@ export function RankingsPage({
                     #{item.rank} {name(item, vendors, t)}
                   </span>
                   <span>
-                    {ratioToPercent(item.growth) ?? t('data.unavailable')}
+                    {ratioToPercent(item.growth) ?? t('data.unavailableValue')}
                   </span>
                 </div>
                 <RankingMetric

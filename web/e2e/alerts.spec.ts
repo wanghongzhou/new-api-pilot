@@ -605,7 +605,7 @@ test('isolates summary and missing-detail failures, renders empty state, and kee
   ).toHaveCount(0)
   await detail.getByRole('button', { name: '关闭' }).click()
   await expect(page).not.toHaveURL(/alertId=/)
-  await expect(page.getByText('告警计数暂不可用')).toBeVisible()
+  await expect(page.getByText('告警计数加载失败')).toBeVisible()
   await expect(
     page.getByText(longTargetName).filter({ visible: true }).first()
   ).toBeVisible()

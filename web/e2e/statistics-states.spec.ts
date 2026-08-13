@@ -75,7 +75,7 @@ const stateCopy: Record<
   },
   partial: {
     description:
-      '当前结果包含未完成或不可用的时间桶，金额与指标仅代表可用数据。',
+      '当前结果包含未完成或采集失败的时间桶，金额与指标仅代表已采集数据。',
     reason: '2 个站点中有 1 个数据完整',
     status: '部分完整',
   },
@@ -85,10 +85,10 @@ const stateCopy: Record<
     status: '已暂停',
   },
   unavailable: {
-    description: '上游无法提供当前范围的数据；不可用值不会按 0 展示。',
-    emptyTitle: '当前范围统计不可用',
+    description: '上游未提供当前范围的数据；缺失数值按 0 展示。',
+    emptyTitle: '当前范围统计暂未获取',
     reason: '上游站点无法提供该范围的数据',
-    status: '不可用',
+    status: '-',
   },
 }
 
@@ -636,10 +636,8 @@ async function expectState(page: Page, state: A50State) {
     if (state === 'partial') {
       await expect(requestMetric.getByText('42', { exact: true })).toBeVisible()
     } else {
-      await expect(
-        requestMetric.getByText('不可用', { exact: true })
-      ).toBeVisible()
-      await expect(requestMetric.getByText('0', { exact: true })).toHaveCount(0)
+      await expect(requestMetric.getByText('0', { exact: true })).toBeVisible()
+      await expect(requestMetric.getByText('-', { exact: true })).toHaveCount(0)
     }
   }
 
@@ -851,10 +849,10 @@ test.describe('A50 statistics pages preserve all five data states', () => {
 
         release()
         await expect(
-          page.getByText('上游无法提供当前范围的数据；不可用值不会按 0 展示。')
+          page.getByText('上游未提供当前范围的数据；缺失数值按 0 展示。')
         ).toBeVisible()
         await expect(
-          metric(summary, '请求数').getByText('不可用', { exact: true })
+          metric(summary, '请求数').getByText('0', { exact: true })
         ).toBeVisible()
 
         const beforeReload = new URL(page.url())
