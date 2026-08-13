@@ -49,11 +49,7 @@ RUN if [ -n "${ALPINE_MIRROR}" ]; then \
         sed -i "s|https://dl-cdn.alpinelinux.org/alpine|${ALPINE_MIRROR}|g" /etc/apk/repositories; \
     fi \
     && apk add --no-cache ca-certificates tzdata \
-    && addgroup -S -g 10001 pilot \
-    && adduser -S -D -H -u 10001 -G pilot pilot \
-    && mkdir -p /data/exports \
-    && chown pilot:pilot /data/exports \
-    && chmod 0700 /data/exports
+    && mkdir -p /data/exports
 
 COPY --from=go-builder --chown=0:0 --chmod=0555 /out/new-api-pilot /usr/local/bin/new-api-pilot
 
@@ -62,8 +58,6 @@ ENV PORT=3000 \
     EXPORT_DIR=/data/exports
 
 EXPOSE 3000
-
-USER 10001:10001
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 \
     CMD wget -q -Y off -T 2 --spider "http://127.0.0.1:${PORT}/healthz" || exit 1

@@ -146,7 +146,7 @@ func TestLoadFromIgnoresLegacyTimezoneAndUpstreamEnvironment(t *testing.T) {
 	}
 }
 
-func TestValidateRuntimeFilesCreatesPrivateWritableExportDirectory(t *testing.T) {
+func TestValidateRuntimeFilesCreatesWritableExportDirectory(t *testing.T) {
 	exportDir := filepath.Join(t.TempDir(), "exports")
 	configuration := Config{AppEnv: EnvironmentProduction, ExportDir: exportDir}
 	if err := configuration.ValidateRuntimeFiles(); err != nil {
@@ -155,9 +155,6 @@ func TestValidateRuntimeFilesCreatesPrivateWritableExportDirectory(t *testing.T)
 	info, err := os.Stat(exportDir)
 	if err != nil || !info.IsDir() {
 		t.Fatalf("EXPORT_DIR info = %#v, %v", info, err)
-	}
-	if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
-		t.Fatalf("created EXPORT_DIR mode = %#o, want private", info.Mode().Perm())
 	}
 	entries, err := os.ReadDir(exportDir)
 	if err != nil || len(entries) != 0 {
@@ -211,7 +208,7 @@ func TestValidateRuntimeFilesRejectsExportDirectorySymlinkAncestor(t *testing.T)
 	}
 }
 
-func TestValidateRuntimeFilesRejectsNonPrivateExportDirectoryPermissions(t *testing.T) {
+func TestValidateRuntimeFilesAllowsCommonExportDirectoryPermissions(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows does not expose POSIX group/other mode bits")
 	}
@@ -225,8 +222,8 @@ func TestValidateRuntimeFilesRejectsNonPrivateExportDirectoryPermissions(t *test
 				t.Fatalf("chmod EXPORT_DIR: %v", err)
 			}
 			configuration := Config{AppEnv: EnvironmentProduction, ExportDir: exportDir}
-			if err := configuration.ValidateRuntimeFiles(); err == nil || !strings.Contains(err.Error(), "private mode 0700") {
-				t.Fatalf("ValidateRuntimeFiles() permission error = %v", err)
+			if err := configuration.ValidateRuntimeFiles(); err != nil {
+				t.Fatalf("ValidateRuntimeFiles() mode %#o error = %v", mode, err)
 			}
 		})
 	}

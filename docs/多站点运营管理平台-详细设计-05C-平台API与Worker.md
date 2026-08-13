@@ -1318,7 +1318,7 @@ site disable/enable/manual/schedule/recovery 通过 trigger_type 和 priority �
 - 金额列使用高精度 decimal，显示 6 位小数，原始内部计算至少 10 位；
 - 文件名格式 statistics-{type}-{start}-{end}-{job_id}.{ext}；
 - 文件只写配置的 EXPORT_DIR，下载通过 job ID 映射，禁止接受任意路径；
-- EXPORT_DIR 启动时要求仅服务账户可写；Linux 目录权限建议 0700、文件 0600，不跟随目录内符号链接；
+- EXPORT_DIR 启动时要求运行进程可写；生产镜像以 root 用户运行，目录不强制固定 POSIX 权限模式，导出文件仍以 0600 创建，且不跟随目录内符号链接；
 - 开始生成和每次刷新进度时检查磁盘剩余空间与最大文件大小；低于 min_free_disk_bytes 或超过 max_file_bytes 时终止并删除半成品；
 - 每处理一页更新 progress、heartbeat_at 和 lease_expires_at；启动无条件接管所有 running 导出，运行期只接管 lease_expires_at 已过期的 running。接管先清 claim_token/lease、删除旧临时文件，并按 fresh claim 已预留的 attempt_count 置 pending/failed，不重复递增；
 - 成功后 expires_at=finished_at+export.file_ttl_hours（默认 24h）；每日 03:30 清理过期文件；

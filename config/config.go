@@ -253,7 +253,6 @@ func validateExportDirectory(path string, production bool) error {
 	}
 	absolutePath = filepath.Clean(absolutePath)
 	_, initialStatError := os.Lstat(absolutePath)
-	directoryExisted := initialStatError == nil
 	if initialStatError != nil && !os.IsNotExist(initialStatError) {
 		return fmt.Errorf("inspect EXPORT_DIR before creation: %w", initialStatError)
 	}
@@ -262,13 +261,8 @@ func validateExportDirectory(path string, production bool) error {
 			return fmt.Errorf("validate EXPORT_DIR path: %w", err)
 		}
 	}
-	if err := os.MkdirAll(absolutePath, 0o700); err != nil {
+	if err := os.MkdirAll(absolutePath, 0o755); err != nil {
 		return fmt.Errorf("create EXPORT_DIR: %w", err)
-	}
-	if production && !directoryExisted && runtime.GOOS != "windows" {
-		if err := os.Chmod(absolutePath, 0o700); err != nil {
-			return fmt.Errorf("set private EXPORT_DIR permissions: %w", err)
-		}
 	}
 	if production {
 		if err := rejectSymlinkPath(absolutePath); err != nil {
@@ -281,12 +275,8 @@ func validateExportDirectory(path string, production bool) error {
 		if !sameFilesystemPath(absolutePath, resolvedPath) {
 			return fmt.Errorf("EXPORT_DIR must not contain symlink components: configured=%q resolved=%q", absolutePath, resolvedPath)
 		}
-		info, err := os.Lstat(absolutePath)
-		if err != nil {
+		if _, err := os.Lstat(absolutePath); err != nil {
 			return fmt.Errorf("inspect EXPORT_DIR: %w", err)
-		}
-		if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
-			return fmt.Errorf("EXPORT_DIR must have private mode 0700, mode=%#o", info.Mode().Perm())
 		}
 	}
 	file, err := os.CreateTemp(absolutePath, ".write-check-*")
