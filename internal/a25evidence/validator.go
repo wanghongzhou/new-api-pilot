@@ -181,16 +181,16 @@ type finalReport struct {
 		AppliedAtStable        bool   `json:"applied_at_stable"`
 		IdempotentSchemaStable bool   `json:"idempotent_schema_stable"`
 	} `json:"empty_database"`
-	Upgrade struct {
-		PrefixMigrationCount  int    `json:"prefix_migration_count"`
-		HistoricalRows        int64  `json:"historical_rows"`
-		HistoricalSHA256      string `json:"historical_sha256"`
-		HistoricalPreserved   bool   `json:"historical_preserved"`
-		ForeignKeysPreserved  bool   `json:"foreign_keys_preserved"`
-		BackfillScopeMigrated bool   `json:"backfill_scope_migrated"`
-		SchemaSHA256          string `json:"schema_sha256"`
-		MatchesAuthoritative  bool   `json:"matches_authoritative"`
-	} `json:"upgrade"`
+	InitializedData struct {
+		MigrationCount       int    `json:"migration_count"`
+		DataRows             int64  `json:"data_rows"`
+		DataSHA256           string `json:"data_sha256"`
+		DataPreserved        bool   `json:"data_preserved"`
+		ForeignKeysPreserved bool   `json:"foreign_keys_preserved"`
+		JSONPreserved        bool   `json:"json_preserved"`
+		SchemaSHA256         string `json:"schema_sha256"`
+		MatchesAuthoritative bool   `json:"matches_authoritative"`
+	} `json:"initialized_data"`
 	Tamper struct {
 		DatabaseChecksumRejected bool  `json:"database_checksum_rejected"`
 		RepositorySourceRejected bool  `json:"repository_source_rejected"`
@@ -459,11 +459,11 @@ func validateFinalReport(report finalReport, repository []model.MigrationVersion
 		empty.SchemaSHA256 != report.AuthoritativeSchemaSHA256 || !empty.AppliedAtStable || !empty.IdempotentSchemaStable {
 		return errors.New("A25 empty database and idempotency proof is invalid")
 	}
-	upgrade := report.Upgrade
-	if upgrade.PrefixMigrationCount != 1 || upgrade.HistoricalRows <= 0 || !sha256Pattern.MatchString(upgrade.HistoricalSHA256) ||
-		!upgrade.HistoricalPreserved || !upgrade.ForeignKeysPreserved || !upgrade.BackfillScopeMigrated ||
-		upgrade.SchemaSHA256 != report.AuthoritativeSchemaSHA256 || !upgrade.MatchesAuthoritative {
-		return errors.New("A25 historical upgrade proof is invalid")
+	initialized := report.InitializedData
+	if initialized.MigrationCount != len(repository) || initialized.DataRows <= 0 || !sha256Pattern.MatchString(initialized.DataSHA256) ||
+		!initialized.DataPreserved || !initialized.ForeignKeysPreserved || !initialized.JSONPreserved ||
+		initialized.SchemaSHA256 != report.AuthoritativeSchemaSHA256 || !initialized.MatchesAuthoritative {
+		return errors.New("A25 initialized database idempotency proof is invalid")
 	}
 	tamper := report.Tamper
 	if !tamper.DatabaseChecksumRejected || !tamper.RepositorySourceRejected || !tamper.UnknownVersionRejected ||

@@ -75,15 +75,15 @@ type a25EmptyEvidence struct {
 	IdempotentSchemaStable bool   `json:"idempotent_schema_stable"`
 }
 
-type a25UpgradeEvidence struct {
-	PrefixMigrationCount  int    `json:"prefix_migration_count"`
-	HistoricalRows        int64  `json:"historical_rows"`
-	HistoricalSHA256      string `json:"historical_sha256"`
-	HistoricalPreserved   bool   `json:"historical_preserved"`
-	ForeignKeysPreserved  bool   `json:"foreign_keys_preserved"`
-	BackfillScopeMigrated bool   `json:"backfill_scope_migrated"`
-	SchemaSHA256          string `json:"schema_sha256"`
-	MatchesAuthoritative  bool   `json:"matches_authoritative"`
+type a25InitializedDataEvidence struct {
+	MigrationCount       int    `json:"migration_count"`
+	DataRows             int64  `json:"data_rows"`
+	DataSHA256           string `json:"data_sha256"`
+	DataPreserved        bool   `json:"data_preserved"`
+	ForeignKeysPreserved bool   `json:"foreign_keys_preserved"`
+	JSONPreserved        bool   `json:"json_preserved"`
+	SchemaSHA256         string `json:"schema_sha256"`
+	MatchesAuthoritative bool   `json:"matches_authoritative"`
 }
 
 type a25TamperEvidence struct {
@@ -112,20 +112,20 @@ type a25DDLRecoveryCase struct {
 }
 
 type a25Report struct {
-	SchemaVersion             int                    `json:"schema_version"`
-	AcceptanceID              string                 `json:"acceptance_id"`
-	Status                    string                 `json:"status"`
-	FixturePath               string                 `json:"fixture_path"`
-	FixtureSHA256             string                 `json:"fixture_sha256"`
-	FixedNowUnix              int64                  `json:"fixed_now_unix"`
-	RepositoryMigrations      []a25MigrationEvidence `json:"repository_migrations"`
-	AuthoritativeSchemaSHA256 string                 `json:"authoritative_schema_sha256"`
-	VersionGate               a25VersionGateEvidence `json:"version_gate"`
-	EmptyDatabase             a25EmptyEvidence       `json:"empty_database"`
-	Upgrade                   a25UpgradeEvidence     `json:"upgrade"`
-	Tamper                    a25TamperEvidence      `json:"tamper"`
-	DMLFailure                a25DMLFailureEvidence  `json:"dml_failure"`
-	DDLRecovery               a25DDLRecoveryCase     `json:"ddl_recovery"`
+	SchemaVersion             int                        `json:"schema_version"`
+	AcceptanceID              string                     `json:"acceptance_id"`
+	Status                    string                     `json:"status"`
+	FixturePath               string                     `json:"fixture_path"`
+	FixtureSHA256             string                     `json:"fixture_sha256"`
+	FixedNowUnix              int64                      `json:"fixed_now_unix"`
+	RepositoryMigrations      []a25MigrationEvidence     `json:"repository_migrations"`
+	AuthoritativeSchemaSHA256 string                     `json:"authoritative_schema_sha256"`
+	VersionGate               a25VersionGateEvidence     `json:"version_gate"`
+	EmptyDatabase             a25EmptyEvidence           `json:"empty_database"`
+	InitializedData           a25InitializedDataEvidence `json:"initialized_data"`
+	Tamper                    a25TamperEvidence          `json:"tamper"`
+	DMLFailure                a25DMLFailureEvidence      `json:"dml_failure"`
+	DDLRecovery               a25DDLRecoveryCase         `json:"ddl_recovery"`
 }
 
 type a25NegativeServerProbe struct {
@@ -174,7 +174,7 @@ func TestA25MigrationAcceptance(t *testing.T) {
 	mariaProbe := probeA25UnsupportedServer(t, ctx, mariaDBDSN, true)
 
 	repository, err := model.LoadMigrationVersions(migrations.Files)
-	if err != nil || len(repository) != 9 {
+	if err != nil || len(repository) != 1 {
 		t.Fatalf("load A25 repository migrations count=%d err=%v", len(repository), err)
 	}
 	now := time.Unix(fixture.Clock.NowUnix, 0)
@@ -192,13 +192,13 @@ func TestA25MigrationAcceptance(t *testing.T) {
 	appliedAfter := readA25AppliedTimes(t, ctx, empty.SQL)
 	emptySchemaAfter := hashA25Schema(t, ctx, empty.SQL)
 
-	upgrade := createA25ScenarioDatabase(t, ctx, admin.SQL, currentDSN, "pilot_a25_upgrade")
-	runA25Migrations(t, ctx, upgrade.SQL, migrations.Files, now)
-	historicalRows, historicalSHA := seedA25HistoricalRows(t, ctx, upgrade.SQL, fixture.Clock.NowUnix)
-	runA25Migrations(t, ctx, upgrade.SQL, migrations.Files, now.Add(time.Minute))
-	assertA25CurrentMigrationState(t, ctx, upgrade.SQL, repository)
-	upgradeHistoricalRows, upgradeHistoricalSHA, foreignKeysPreserved, scopeMigrated := verifyA25HistoricalRows(t, ctx, upgrade.SQL)
-	upgradeSchema := hashA25Schema(t, ctx, upgrade.SQL)
+	initialized := createA25ScenarioDatabase(t, ctx, admin.SQL, currentDSN, "pilot_a25_initialized")
+	runA25Migrations(t, ctx, initialized.SQL, migrations.Files, now)
+	dataRows, dataSHA := seedA25InitializedRows(t, ctx, initialized.SQL, fixture.Clock.NowUnix)
+	runA25Migrations(t, ctx, initialized.SQL, migrations.Files, now.Add(time.Minute))
+	assertA25CurrentMigrationState(t, ctx, initialized.SQL, repository)
+	initializedRows, initializedSHA, foreignKeysPreserved, jsonPreserved := verifyA25InitializedRows(t, ctx, initialized.SQL)
+	initializedSchema := hashA25Schema(t, ctx, initialized.SQL)
 
 	tamper := createA25ScenarioDatabase(t, ctx, admin.SQL, currentDSN, "pilot_a25_tamper")
 	runA25Migrations(t, ctx, tamper.SQL, migrations.Files, now)
@@ -251,15 +251,14 @@ id BIGINT NOT NULL PRIMARY KEY, marker VARCHAR(32) NOT NULL
 	dirtyProgress := countA25Rows(t, ctx, dirtyCommitted.SQL, "schema_migration_progress") +
 		countA25Rows(t, ctx, dirtyReplay.SQL, "schema_migration_progress")
 
-	if authoritativeSchema != emptySchemaAfter || authoritativeSchema != upgradeSchema ||
+	if authoritativeSchema != emptySchemaAfter || authoritativeSchema != initializedSchema ||
 		authoritativeSchema != dirtyReplaySchema || authoritativeSchema != dirtyCommittedSchema {
-		t.Fatalf("A25 schema hashes differ authoritative=%s empty=%s upgrade=%s replay=%s committed=%s",
-			authoritativeSchema, emptySchemaAfter, upgradeSchema, dirtyReplaySchema, dirtyCommittedSchema)
+		t.Fatalf("A25 schema hashes differ authoritative=%s empty=%s initialized=%s replay=%s committed=%s",
+			authoritativeSchema, emptySchemaAfter, initializedSchema, dirtyReplaySchema, dirtyCommittedSchema)
 	}
-	if historicalRows != upgradeHistoricalRows || historicalSHA != upgradeHistoricalSHA ||
-		!foreignKeysPreserved || !scopeMigrated {
-		t.Fatalf("A25 historical upgrade rows=%d/%d sha=%s/%s fk=%t scope=%t",
-			historicalRows, upgradeHistoricalRows, historicalSHA, upgradeHistoricalSHA, foreignKeysPreserved, scopeMigrated)
+	if dataRows != initializedRows || dataSHA != initializedSHA || !foreignKeysPreserved || !jsonPreserved {
+		t.Fatalf("A25 initialized data rerun rows=%d/%d sha=%s/%s fk=%t json=%t",
+			dataRows, initializedRows, dataSHA, initializedSHA, foreignKeysPreserved, jsonPreserved)
 	}
 	if !legacyProbe.Rejected || !mariaProbe.Rejected || legacyProbe.TablesBefore != 0 || legacyProbe.TablesAfter != 0 ||
 		mariaProbe.TablesBefore != 0 || mariaProbe.TablesAfter != 0 || !legacyProbe.LockBeforeEmpty ||
@@ -289,11 +288,11 @@ id BIGINT NOT NULL PRIMARY KEY, marker VARCHAR(32) NOT NULL
 			AppliedAtStable:        equalA25AppliedTimes(appliedBefore, appliedAfter),
 			IdempotentSchemaStable: authoritativeSchema == emptySchemaAfter,
 		},
-		Upgrade: a25UpgradeEvidence{
-			PrefixMigrationCount: 1, HistoricalRows: upgradeHistoricalRows, HistoricalSHA256: upgradeHistoricalSHA,
-			HistoricalPreserved:  historicalRows == upgradeHistoricalRows && historicalSHA == upgradeHistoricalSHA,
-			ForeignKeysPreserved: foreignKeysPreserved, BackfillScopeMigrated: scopeMigrated,
-			SchemaSHA256: upgradeSchema, MatchesAuthoritative: upgradeSchema == authoritativeSchema,
+		InitializedData: a25InitializedDataEvidence{
+			MigrationCount: len(repository), DataRows: initializedRows, DataSHA256: initializedSHA,
+			DataPreserved:        dataRows == initializedRows && dataSHA == initializedSHA,
+			ForeignKeysPreserved: foreignKeysPreserved, JSONPreserved: jsonPreserved,
+			SchemaSHA256: initializedSchema, MatchesAuthoritative: initializedSchema == authoritativeSchema,
 		},
 		Tamper: a25TamperEvidence{
 			DatabaseChecksumRejected: databaseChecksumRejected, RepositorySourceRejected: repositorySourceRejected,
@@ -430,7 +429,7 @@ func a25DMLFailureFS(t *testing.T, repository []model.MigrationVersion) (fs.FS, 
 	return result, version
 }
 
-func seedA25HistoricalRows(t *testing.T, ctx context.Context, database *sql.DB, now int64) (int64, string) {
+func seedA25InitializedRows(t *testing.T, ctx context.Context, database *sql.DB, now int64) (int64, string) {
 	t.Helper()
 	execA25(t, ctx, database, `INSERT INTO platform_user
 (username, password_hash, display_name, role, status, must_change_password, session_version, created_at, updated_at)
@@ -448,12 +447,12 @@ VALUES (1, 1, 9007199254740993, ?, 'a25-user', 123456789, 456, 7, 'active', ?, ?
  scope, status, next_attempt_at, windows_initialized_at, created_request_id, last_request_id, created_at, updated_at)
 VALUES (1, 1, 'usage_backfill', 'site', 1, 'manual', ?, ?, JSON_OBJECT('only_missing', TRUE), 'success', ?, ?, 'a25-create', 'a25-last', ?, ?)`,
 		now-7200, now-3600, now, now, now, now)
-	return hashA25HistoricalRows(t, ctx, database)
+	return hashA25InitializedRows(t, ctx, database)
 }
 
-func verifyA25HistoricalRows(t *testing.T, ctx context.Context, database *sql.DB) (int64, string, bool, bool) {
+func verifyA25InitializedRows(t *testing.T, ctx context.Context, database *sql.DB) (int64, string, bool, bool) {
 	t.Helper()
-	rows, digest := hashA25HistoricalRows(t, ctx, database)
+	rows, digest := hashA25InitializedRows(t, ctx, database)
 	var joined int64
 	if err := database.QueryRowContext(ctx, `SELECT COUNT(*) FROM account a
 JOIN site s ON s.id = a.site_id JOIN customer c ON c.id = a.customer_id
@@ -468,7 +467,7 @@ FROM collection_run WHERE task_type = 'usage_backfill' LIMIT 1`).Scan(&scope); e
 	return rows, digest, joined == 1, scope
 }
 
-func hashA25HistoricalRows(t *testing.T, ctx context.Context, database *sql.DB) (int64, string) {
+func hashA25InitializedRows(t *testing.T, ctx context.Context, database *sql.DB) (int64, string) {
 	t.Helper()
 	queries := []string{
 		`SELECT CONCAT_WS('#', id, username, display_name, role, status, session_version, created_at, updated_at)

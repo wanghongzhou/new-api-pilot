@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"reflect"
 	"strings"
 	"time"
 
@@ -420,113 +419,9 @@ func verifyMigrationDDLPostcondition(ctx context.Context, connection *sql.Conn, 
 			return false, fmt.Errorf("no postcondition for DDL statement %d", index+1)
 		}
 		return verifyMigrationTable(ctx, connection, initialMigrationTableOrder[index])
-	case "0002_alert_threshold_precision":
-		tables := []string{"alert_rule", "alert_event"}
-		if index < 0 || index >= len(tables) {
-			return false, fmt.Errorf("no postcondition for DDL statement %d", index+1)
-		}
-		return verifyMigrationDecimalColumn(ctx, connection, tables[index], "threshold_value", 30, 2)
-	case "0004_pricing_group_configuration":
-		switch index {
-		case 0:
-			return verifyMigrationColumns(ctx, connection, "site_group_catalog", []string{"topup_ratio_decimal", "user_selectable", "default_use_auto_group", "auto_priority", "outgoing_overrides_json", "incoming_overrides_json", "visible_to_groups_json", "hidden_from_groups_json"}, false)
-		case 2:
-			return verifyMigrationColumns(ctx, connection, "site_group_catalog", []string{"outgoing_overrides_json", "incoming_overrides_json", "visible_to_groups_json", "hidden_from_groups_json"}, true)
-		case 3:
-			return verifyMigrationColumns(ctx, connection, "site_pricing_catalog", []string{"billing_mode", "billing_expr", "pricing_source", "ability_available"}, false)
-		case 5:
-			return verifyMigrationColumns(ctx, connection, "site_pricing_catalog", []string{"billing_expr"}, true)
-		case 7:
-			return verifyMigrationIndexColumns(ctx, connection, "site_pricing_catalog", "uk_site_pricing_catalog_identity", []string{"site_id", "model_name"})
-		default:
-			return false, fmt.Errorf("no postcondition for DDL statement %d", index+1)
-		}
-	case "0005_history_backfill_state":
-		switch index {
-		case 0:
-			return verifyMigrationColumns(ctx, connection, "site_performance_collection_state", []string{"backfill_completed_at"}, false)
-		case 1:
-			return verifyMigrationColumns(ctx, connection, "upstream_log_collection_state", []string{"history_start_at", "backfill_completed_at"}, false)
-		case 2:
-			return verifyMigrationColumns(ctx, connection, "site_upstream_task_collection_state", []string{"backfill_completed_at"}, false)
-		default:
-			return false, fmt.Errorf("no postcondition for DDL statement %d", index+1)
-		}
-	case "0006_channel_inventory_hourly_dimensions":
-		if index != 0 {
-			return false, fmt.Errorf("no postcondition for DDL statement %d", index+1)
-		}
-		columnsReady, err := verifyMigrationColumns(ctx, connection, "site_channel_inventory_hourly", []string{"remote_type", "remote_status", "remote_group", "tag", "dimensions_available"}, true)
-		if err != nil || !columnsReady {
-			return columnsReady, err
-		}
-		return verifyMigrationIndexColumns(ctx, connection, "site_channel_inventory_hourly", "uk_site_channel_inventory_hourly", []string{"site_id", "remote_type", "remote_status", "remote_group", "tag", "hour_ts"})
-	case "0007_log_timing_diagnostics":
-		if index != 0 {
-			return false, fmt.Errorf("no postcondition for DDL statement %d", index+1)
-		}
-		return verifyMigrationColumns(ctx, connection, "upstream_log_fact", []string{"first_response_time_ms", "stream_status", "stream_end_reason", "stream_error_count"}, false)
-	case "0008_log_cache_tokens":
-		if index != 0 {
-			return false, fmt.Errorf("no postcondition for DDL statement %d", index+1)
-		}
-		return verifyMigrationColumns(ctx, connection, "upstream_log_fact", []string{"cache_read_tokens", "cache_creation_tokens", "cache_creation_tokens_5m", "cache_creation_tokens_1h"}, true)
 	default:
 		return false, fmt.Errorf("migration %s has no registered DDL postconditions", version)
 	}
-}
-
-func verifyMigrationColumns(ctx context.Context, connection *sql.Conn, table string, columns []string, requireNotNull bool) (bool, error) {
-	for _, column := range columns {
-		var nullable string
-		err := connection.QueryRowContext(ctx, `SELECT is_nullable FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=? AND column_name=?`, table, column).Scan(&nullable)
-		if errors.Is(err, sql.ErrNoRows) {
-			return false, nil
-		}
-		if err != nil {
-			return false, err
-		}
-		if requireNotNull && nullable != "NO" {
-			return false, nil
-		}
-	}
-	return true, nil
-}
-
-func verifyMigrationIndexColumns(ctx context.Context, connection *sql.Conn, table, index string, expected []string) (bool, error) {
-	rows, err := connection.QueryContext(ctx, `SELECT column_name FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name=? AND index_name=? ORDER BY seq_in_index`, table, index)
-	if err != nil {
-		return false, err
-	}
-	defer rows.Close()
-	actual := make([]string, 0, len(expected))
-	for rows.Next() {
-		var column string
-		if err := rows.Scan(&column); err != nil {
-			return false, err
-		}
-		actual = append(actual, column)
-	}
-	if err := rows.Err(); err != nil {
-		return false, err
-	}
-	return reflect.DeepEqual(actual, expected), nil
-}
-
-func verifyMigrationDecimalColumn(
-	ctx context.Context,
-	connection *sql.Conn,
-	table string,
-	column string,
-	precision int,
-	scale int,
-) (bool, error) {
-	var count int
-	err := connection.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.columns
-WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?
-  AND data_type = 'decimal' AND numeric_precision = ? AND numeric_scale = ?`,
-		table, column, precision, scale).Scan(&count)
-	return count == 1, err
 }
 
 func verifyMigrationTable(ctx context.Context, connection *sql.Conn, table string) (bool, error) {

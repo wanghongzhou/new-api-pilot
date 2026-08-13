@@ -78,174 +78,7 @@ func AuthoritativeSchemaContracts() (map[string]TableContract, error) {
 	if err != nil {
 		return nil, err
 	}
-	contracts, err := parseCreateTableContracts(statements)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := readMigrationStatements("0002_alert_threshold_precision.sql"); err != nil {
-		return nil, err
-	}
-	for _, table := range []string{"alert_rule", "alert_event"} {
-		if err := replaceSchemaColumnType(contracts, table, "threshold_value", "decimal(30,2)"); err != nil {
-			return nil, err
-		}
-	}
-	if _, err := readMigrationStatements("0004_pricing_group_configuration.sql"); err != nil {
-		return nil, err
-	}
-	groupColumns := []struct {
-		after  string
-		column ColumnContract
-	}{
-		{"ratio_decimal", ColumnContract{Name: "topup_ratio_decimal", ColumnType: "decimal(38,18)", IsNullable: "YES"}},
-		{"description", ColumnContract{Name: "user_selectable", ColumnType: "tinyint(1)", IsNullable: "NO", Default: sql.NullString{String: "0", Valid: true}}},
-		{"user_selectable", ColumnContract{Name: "default_use_auto_group", ColumnType: "tinyint(1)", IsNullable: "NO", Default: sql.NullString{String: "0", Valid: true}}},
-		{"default_use_auto_group", ColumnContract{Name: "auto_priority", ColumnType: "int", IsNullable: "YES"}},
-		{"auto_priority", ColumnContract{Name: "outgoing_overrides_json", ColumnType: "json", IsNullable: "NO"}},
-		{"outgoing_overrides_json", ColumnContract{Name: "incoming_overrides_json", ColumnType: "json", IsNullable: "NO"}},
-		{"incoming_overrides_json", ColumnContract{Name: "visible_to_groups_json", ColumnType: "json", IsNullable: "NO"}},
-		{"visible_to_groups_json", ColumnContract{Name: "hidden_from_groups_json", ColumnType: "json", IsNullable: "NO"}},
-	}
-	for _, addition := range groupColumns {
-		if err := insertSchemaColumnAfter(contracts, "site_group_catalog", addition.after, addition.column); err != nil {
-			return nil, err
-		}
-	}
-	pricingColumns := []struct {
-		after  string
-		column ColumnContract
-	}{
-		{"pricing_version", ColumnContract{Name: "billing_mode", ColumnType: "varchar(16)", IsNullable: "NO", Default: sql.NullString{String: "token", Valid: true}, CharacterSet: sql.NullString{String: "ascii", Valid: true}, Collation: sql.NullString{String: "ascii_bin", Valid: true}}},
-		{"billing_mode", ColumnContract{Name: "billing_expr", ColumnType: "mediumtext", IsNullable: "NO", CharacterSet: sql.NullString{String: "utf8mb4", Valid: true}, Collation: sql.NullString{String: "utf8mb4_bin", Valid: true}}},
-		{"billing_expr", ColumnContract{Name: "pricing_source", ColumnType: "varchar(32)", IsNullable: "NO", Default: sql.NullString{String: "token_default", Valid: true}, CharacterSet: sql.NullString{String: "ascii", Valid: true}, Collation: sql.NullString{String: "ascii_bin", Valid: true}}},
-		{"pricing_source", ColumnContract{Name: "ability_available", ColumnType: "tinyint(1)", IsNullable: "NO", Default: sql.NullString{String: "0", Valid: true}}},
-	}
-	for _, addition := range pricingColumns {
-		if err := insertSchemaColumnAfter(contracts, "site_pricing_catalog", addition.after, addition.column); err != nil {
-			return nil, err
-		}
-	}
-	pricing := contracts["site_pricing_catalog"]
-	pricing.Indexes["uk_site_pricing_catalog_identity"] = IndexContract{Unique: true, Columns: []string{"site_id", "model_name"}}
-	contracts["site_pricing_catalog"] = pricing
-	if _, err := readMigrationStatements("0005_history_backfill_state.sql"); err != nil {
-		return nil, err
-	}
-	backfillColumns := []struct {
-		table  string
-		after  string
-		column ColumnContract
-	}{
-		{"site_performance_collection_state", "last_success_at", ColumnContract{Name: "backfill_completed_at", ColumnType: "bigint", IsNullable: "YES"}},
-		{"upstream_log_collection_state", "window_end", ColumnContract{Name: "history_start_at", ColumnType: "bigint", IsNullable: "YES"}},
-		{"upstream_log_collection_state", "last_success_at", ColumnContract{Name: "backfill_completed_at", ColumnType: "bigint", IsNullable: "YES"}},
-		{"site_upstream_task_collection_state", "last_success_at", ColumnContract{Name: "backfill_completed_at", ColumnType: "bigint", IsNullable: "YES"}},
-	}
-	for _, addition := range backfillColumns {
-		if err := insertSchemaColumnAfter(contracts, addition.table, addition.after, addition.column); err != nil {
-			return nil, err
-		}
-	}
-	if _, err := readMigrationStatements("0006_channel_inventory_hourly_dimensions.sql"); err != nil {
-		return nil, err
-	}
-	channelHourlyColumns := []struct {
-		after  string
-		column ColumnContract
-	}{
-		{"site_id", ColumnContract{Name: "remote_type", ColumnType: "int", IsNullable: "NO", Default: sql.NullString{String: "-1", Valid: true}}},
-		{"remote_type", ColumnContract{Name: "remote_status", ColumnType: "int", IsNullable: "NO", Default: sql.NullString{String: "-1", Valid: true}}},
-		{"remote_status", ColumnContract{Name: "remote_group", ColumnType: "varchar(128)", IsNullable: "NO", Default: sql.NullString{String: "", Valid: true}, CharacterSet: sql.NullString{String: "utf8mb4", Valid: true}, Collation: sql.NullString{String: "utf8mb4_bin", Valid: true}}},
-		{"remote_group", ColumnContract{Name: "tag", ColumnType: "varchar(255)", IsNullable: "NO", Default: sql.NullString{String: "", Valid: true}, CharacterSet: sql.NullString{String: "utf8mb4", Valid: true}, Collation: sql.NullString{String: "utf8mb4_bin", Valid: true}}},
-		{"tag", ColumnContract{Name: "dimensions_available", ColumnType: "tinyint", IsNullable: "NO", Default: sql.NullString{String: "0", Valid: true}}},
-	}
-	for _, addition := range channelHourlyColumns {
-		if err := insertSchemaColumnAfter(contracts, "site_channel_inventory_hourly", addition.after, addition.column); err != nil {
-			return nil, err
-		}
-	}
-	channelHourly := contracts["site_channel_inventory_hourly"]
-	channelHourly.Indexes["uk_site_channel_inventory_hourly"] = IndexContract{Unique: true, Columns: []string{"site_id", "remote_type", "remote_status", "remote_group", "tag", "hour_ts"}}
-	channelHourly.Indexes["idx_site_channel_inventory_hourly_filters"] = IndexContract{Columns: []string{"site_id", "hour_ts", "dimensions_available", "remote_type", "remote_status"}}
-	contracts["site_channel_inventory_hourly"] = channelHourly
-	if _, err := readMigrationStatements("0007_log_timing_diagnostics.sql"); err != nil {
-		return nil, err
-	}
-	logColumns := []struct {
-		after  string
-		column ColumnContract
-	}{
-		{"is_stream", ColumnContract{Name: "first_response_time_ms", ColumnType: "bigint", IsNullable: "YES"}},
-		{"first_response_time_ms", ColumnContract{Name: "stream_status", ColumnType: "varchar(16)", IsNullable: "NO", Default: sql.NullString{String: "", Valid: true}, CharacterSet: sql.NullString{String: "ascii", Valid: true}, Collation: sql.NullString{String: "ascii_bin", Valid: true}}},
-		{"stream_status", ColumnContract{Name: "stream_end_reason", ColumnType: "varchar(64)", IsNullable: "NO", Default: sql.NullString{String: "", Valid: true}, CharacterSet: sql.NullString{String: "utf8mb4", Valid: true}, Collation: sql.NullString{String: "utf8mb4_bin", Valid: true}}},
-		{"stream_end_reason", ColumnContract{Name: "stream_error_count", ColumnType: "bigint", IsNullable: "NO", Default: sql.NullString{String: "0", Valid: true}}},
-	}
-	for _, addition := range logColumns {
-		if err := insertSchemaColumnAfter(contracts, "upstream_log_fact", addition.after, addition.column); err != nil {
-			return nil, err
-		}
-	}
-	if _, err := readMigrationStatements("0008_log_cache_tokens.sql"); err != nil {
-		return nil, err
-	}
-	cacheColumns := []struct {
-		after  string
-		column ColumnContract
-	}{
-		{"completion_tokens", ColumnContract{Name: "cache_read_tokens", ColumnType: "bigint", IsNullable: "NO", Default: sql.NullString{String: "0", Valid: true}}},
-		{"cache_read_tokens", ColumnContract{Name: "cache_creation_tokens", ColumnType: "bigint", IsNullable: "NO", Default: sql.NullString{String: "0", Valid: true}}},
-		{"cache_creation_tokens", ColumnContract{Name: "cache_creation_tokens_5m", ColumnType: "bigint", IsNullable: "NO", Default: sql.NullString{String: "0", Valid: true}}},
-		{"cache_creation_tokens_5m", ColumnContract{Name: "cache_creation_tokens_1h", ColumnType: "bigint", IsNullable: "NO", Default: sql.NullString{String: "0", Valid: true}}},
-	}
-	for _, addition := range cacheColumns {
-		if err := insertSchemaColumnAfter(contracts, "upstream_log_fact", addition.after, addition.column); err != nil {
-			return nil, err
-		}
-	}
-	if _, err := readMigrationStatements("0009_system_task_list_order.sql"); err != nil {
-		return nil, err
-	}
-	systemTasks := contracts["site_system_task"]
-	systemTasks.Indexes["idx_site_system_task_list_order"] = IndexContract{Columns: []string{"site_id", "remote_id"}}
-	contracts["site_system_task"] = systemTasks
-	return contracts, nil
-}
-
-func insertSchemaColumnAfter(contracts map[string]TableContract, table, after string, column ColumnContract) error {
-	contract, exists := contracts[table]
-	if !exists {
-		return fmt.Errorf("schema contract table %s is missing", table)
-	}
-	for index, existing := range contract.Columns {
-		if existing.Name == after {
-			contract.Columns = append(contract.Columns, ColumnContract{})
-			copy(contract.Columns[index+2:], contract.Columns[index+1:])
-			contract.Columns[index+1] = column
-			contracts[table] = contract
-			return nil
-		}
-	}
-	return fmt.Errorf("schema contract column %s.%s is missing", table, after)
-}
-
-func replaceSchemaColumnType(
-	contracts map[string]TableContract,
-	table string,
-	column string,
-	columnType string,
-) error {
-	contract, exists := contracts[table]
-	if !exists {
-		return fmt.Errorf("schema contract table %s is missing", table)
-	}
-	for index := range contract.Columns {
-		if contract.Columns[index].Name == column {
-			contract.Columns[index].ColumnType = columnType
-			contracts[table] = contract
-			return nil
-		}
-	}
-	return fmt.Errorf("schema contract column %s.%s is missing", table, column)
+	return parseCreateTableContracts(statements)
 }
 
 func VerifyAuthoritativeSchema(
@@ -513,7 +346,11 @@ func parseSchemaContractColumns(value string) []string {
 	parts := strings.Split(value, ",")
 	result := make([]string, 0, len(parts))
 	for _, part := range parts {
-		result = append(result, strings.Trim(strings.TrimSpace(part), "`"))
+		fields := strings.Fields(strings.TrimSpace(part))
+		if len(fields) == 0 {
+			continue
+		}
+		result = append(result, strings.Trim(fields[0], "`"))
 	}
 	return result
 }

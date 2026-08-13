@@ -138,9 +138,9 @@ function Assert-A25Report {
         [int64]$report.version_gate.mariadb_tables_after -ne 0 -or
         -not [bool]$report.empty_database.applied_at_stable -or
         -not [bool]$report.empty_database.idempotent_schema_stable -or
-        -not [bool]$report.upgrade.historical_preserved -or
-        -not [bool]$report.upgrade.foreign_keys_preserved -or
-        -not [bool]$report.upgrade.backfill_scope_migrated -or
+        -not [bool]$report.initialized_data.data_preserved -or
+        -not [bool]$report.initialized_data.foreign_keys_preserved -or
+        -not [bool]$report.initialized_data.json_preserved -or
         -not [bool]$report.tamper.database_checksum_rejected -or
         -not [bool]$report.tamper.repository_source_rejected -or
         -not [bool]$report.tamper.unknown_version_rejected -or
