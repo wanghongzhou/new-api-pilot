@@ -39,6 +39,26 @@ func TestOperationalEndpointsAndAPIEnvelope(t *testing.T) {
 	if response.Code != http.StatusOK || response.Header().Get("X-Frame-Options") != "DENY" {
 		t.Fatalf("health response = %d headers=%v", response.Code, response.Header())
 	}
+	statusResponse := performRequest(engine, http.MethodGet, "/api/status", "127.0.0.1:1000")
+	if statusResponse.Code != response.Code || statusResponse.Body.String() != response.Body.String() {
+		t.Fatalf(
+			"status compatibility response = %d body=%q, health = %d body=%q",
+			statusResponse.Code,
+			statusResponse.Body.String(),
+			response.Code,
+			response.Body.String(),
+		)
+	}
+	for _, header := range []string{"Content-Type", "Cache-Control", "X-Content-Type-Options", "X-Frame-Options"} {
+		if statusResponse.Header().Get(header) != response.Header().Get(header) {
+			t.Fatalf(
+				"status compatibility header %s=%q, health=%q",
+				header,
+				statusResponse.Header().Get(header),
+				response.Header().Get(header),
+			)
+		}
+	}
 	response = performRequest(engine, http.MethodGet, "/readyz", "127.0.0.1:1000")
 	if response.Code != http.StatusServiceUnavailable {
 		t.Fatalf("not-ready status = %d", response.Code)

@@ -101,9 +101,11 @@ func New(options Options) (*gin.Engine, error) {
 		)
 	}
 
-	engine.GET("/healthz", func(c *gin.Context) {
+	livenessHandler := func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
-	})
+	}
+	engine.GET("/healthz", livenessHandler)
+	engine.GET("/api/status", livenessHandler)
 	engine.GET("/readyz", readinessHandler(options.Readiness, options.Metrics))
 	if options.Metrics != nil {
 		metricsHandlers := []gin.HandlerFunc{middleware.AllowCIDRs(options.Config.MetricsAllowedCIDRs)}

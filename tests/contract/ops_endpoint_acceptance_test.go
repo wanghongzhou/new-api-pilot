@@ -128,12 +128,14 @@ func testA48LiveReadiness(t *testing.T) {
 	engine := newA48Engine(t, readiness, metrics, nil, "127.0.0.1/32")
 
 	assertA48Status(t, engine, "/healthz", "127.0.0.1:1000", http.StatusOK, nil)
+	assertA48LivenessCompatibility(t, engine, "127.0.0.1:1000")
 	assertA48Status(t, engine, "/readyz", "127.0.0.1:1000", http.StatusOK, nil)
 	body := assertA48Status(t, engine, "/metrics", "127.0.0.1:1000", http.StatusOK, nil)
 	assertA48ReadyMetric(t, body, "1")
 
 	databaseUp.Store(false)
 	assertA48Status(t, engine, "/healthz", "127.0.0.1:1000", http.StatusOK, nil)
+	assertA48Status(t, engine, "/api/status", "127.0.0.1:1000", http.StatusOK, nil)
 	body = assertA48Status(t, engine, "/metrics", "127.0.0.1:1000", http.StatusOK, nil)
 	assertA48ReadyMetric(t, body, "0")
 	notReady := assertA48Status(t, engine, "/readyz", "127.0.0.1:1000", http.StatusServiceUnavailable, nil)
@@ -325,6 +327,31 @@ func assertA48Status(
 		t.Fatalf("GET %s from %s status=%d want=%d body=%s", target, remote, response.Code, want, response.Body.String())
 	}
 	return response.Body.String()
+}
+
+func assertA48LivenessCompatibility(t *testing.T, handler http.Handler, remote string) {
+	t.Helper()
+	responses := make([]*httptest.ResponseRecorder, 0, 2)
+	for _, target := range []string{"/healthz", "/api/status"} {
+		request := httptest.NewRequest(http.MethodGet, target, nil)
+		request.RemoteAddr = remote
+		request.Header.Set("X-Request-ID", "a48-liveness-compatibility")
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		responses = append(responses, response)
+	}
+	health, status := responses[0], responses[1]
+	if status.Code != health.Code || status.Body.String() != health.Body.String() || !reflect.DeepEqual(status.Header(), health.Header()) {
+		t.Fatalf(
+			"api/status response differs from healthz: status=(%d,%q,%v) health=(%d,%q,%v)",
+			status.Code,
+			status.Body.String(),
+			status.Header(),
+			health.Code,
+			health.Body.String(),
+			health.Header(),
+		)
+	}
 }
 
 func assertA48ReadyMetric(t *testing.T, body, want string) {
