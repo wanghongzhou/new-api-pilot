@@ -145,3 +145,24 @@ report it explicitly while still running every safe in-scope validation.
   execute the equivalent Docker commands from the Makefile; tests must still
   use the isolated `new_api_pilot_test_*` databases and never the development
   database.
+
+## Formal release image workflow
+
+- When the user explicitly asks to "publish a formal/production release"
+  (including the Chinese phrase “发布正式版本”), that request authorizes a
+  registry write for the production image. After all required in-scope
+  validation succeeds, build locally from the repository root with:
+  `docker build -t registry.cn-hangzhou.aliyuncs.com/howlsky/new-api-pilot:latest .`.
+- After the local production build succeeds, push exactly that image with:
+  `docker push registry.cn-hangzhou.aliyuncs.com/howlsky/new-api-pilot:latest`.
+  Verify that the push succeeded and report the registry digest. Do not call
+  the release complete based only on the local image ID.
+- A request to build, validate, commit, push Git changes, or refresh the
+  development stack does not authorize pushing the production image. Push it
+  only for an explicit formal/production release request.
+- Publishing the image must not start, rebuild, or recreate production
+  `docker-compose.yml`. Production deployment remains a separate operation;
+  the development refresh rules above still use only `docker-compose.dev.yml`.
+- Do not read production image selection from `.env`: the repository and tag
+  are fixed as
+  `registry.cn-hangzhou.aliyuncs.com/howlsky/new-api-pilot:latest`.
