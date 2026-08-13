@@ -138,7 +138,7 @@ export function AlertRuleFormDialog({
     <>
       <Drawer
         direction='right'
-        onOpenChange={(open) => !open && requestClose()}
+        onOpenChange={(open) => !open && !mutation.isPending && requestClose()}
         open
       >
         <DrawerContent className={sideDrawerContentClassName('sm:max-w-xl')}>
@@ -298,7 +298,12 @@ export function AlertRuleFormDialog({
             )}
           </form>
           <DrawerFooter className={sideDrawerFooterClassName()}>
-            <Button onClick={requestClose} type='button' variant='outline'>
+            <Button
+              disabled={mutation.isPending}
+              onClick={requestClose}
+              type='button'
+              variant='outline'
+            >
               {t('common.cancel')}
             </Button>
             <Button

@@ -51,6 +51,96 @@ const envelope = <T>(data: T, requestId = 'req_system_task_e2e') => ({
   request_id: requestId,
   success: true,
 })
+
+test('A100 bigint pagination requests the exact next page', async ({
+  page,
+}, testInfo) => {
+  await seedAuth(page, testInfo)
+  const requestedPages: string[] = []
+  await page.route(/\/api\/system-tasks\/statistics(?:\?.*)?$/, (route) =>
+    route.fulfill({ json: envelope(statistics) })
+  )
+  await page.route(/\/api\/system-tasks(?:\?.*)?$/, async (route) => {
+    const url = new URL(route.request().url())
+    const requestedPage = url.searchParams.get('p') ?? '1'
+    requestedPages.push(requestedPage)
+    await route.fulfill({
+      json: envelope({
+        ...pageData,
+        items: requestedPage === '2' ? items.slice(0, 1) : items,
+        page: Number(requestedPage),
+      }),
+    })
+  })
+
+  await page.goto('/system-tasks')
+  await expect(page.getByText('9007199254740995').first()).toBeVisible()
+  await expect(page).toHaveURL(/(?:\?|&)page=1(?:&|$)/)
+  const nextPage = page.getByRole('button', { name: '下一页' })
+  await expect(nextPage).toBeEnabled()
+  await nextPage.focus()
+  await page.keyboard.press('Enter')
+  await expect(page).toHaveURL(/(?:\?|&)page=2(?:&|$)/)
+  await expect.poll(() => requestedPages).toContain('2')
+  await expect(
+    page.getByText(items[0].task_id).filter({ visible: true }).first()
+  ).toBeVisible()
+  expect(
+    await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth >
+        document.documentElement.clientWidth
+    )
+  ).toBe(false)
+})
+
+test('A100 list distinguishes loading, genuine empty and initial failure states', async ({
+  page,
+}, testInfo) => {
+  await seedAuth(page, testInfo)
+  let releaseList: (() => void) | undefined
+  const listGate = new Promise<void>((resolve) => {
+    releaseList = resolve
+  })
+  await page.route(/\/api\/system-tasks\/statistics(?:\?.*)?$/, (route) =>
+    route.fulfill({ json: envelope(statistics) })
+  )
+  await page.route(/\/api\/system-tasks(?:\?.*)?$/, async (route) => {
+    await listGate
+    await route.fulfill({
+      json: envelope({ ...pageData, items: [], total: '0' }),
+    })
+  })
+
+  await page.goto('/system-tasks')
+  await expect(
+    page.locator('[aria-hidden="true"].animate-pulse:visible').first()
+  ).toBeVisible()
+  releaseList?.()
+  await expect(
+    page.getByText('当前筛选下没有系统任务').filter({ visible: true }).first()
+  ).toBeVisible()
+
+  await page.unroute(/\/api\/system-tasks(?:\?.*)?$/)
+  await page.route(/\/api\/system-tasks(?:\?.*)?$/, (route) =>
+    route.fulfill({
+      status: 503,
+      json: {
+        code: 'UPSTREAM_UNAVAILABLE',
+        data: null,
+        message: 'temporary failure',
+        request_id: 'req_system_task_initial_failure',
+        success: false,
+      },
+    })
+  )
+  await page.goto('/system-tasks?statuses=failed')
+  await expect(
+    page.getByRole('heading', { name: '无法加载数据' }).first()
+  ).toBeVisible()
+  await expect(page.getByText('当前筛选下没有系统任务')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '重试' })).toBeVisible()
+})
 async function seedAuth(page: Page, testInfo: TestInfo) {
   await mockAuthenticatedShell(page)
   if (testInfo.project.name === 'chromium-mobile') {
@@ -357,4 +447,53 @@ test('A100 unavailable collection is diagnosed instead of shown as a real empty 
     page.getByText('系统任务采集不可用').filter({ visible: true })
   ).toBeVisible()
   await expect(page.getByText('当前筛选下没有系统任务')).toHaveCount(0)
+})
+
+test('A100 retains the last successful task list when a filtered refresh fails', async ({
+  page,
+}, testInfo) => {
+  await seedAuth(page, testInfo)
+  let listCalls = 0
+  await page.route(/\/api\/system-tasks\/statistics(?:\?.*)?$/, (route) =>
+    route.fulfill({ json: envelope(statistics) })
+  )
+  await page.route(/\/api\/system-tasks(?:\?.*)?$/, async (route) => {
+    listCalls += 1
+    if (listCalls === 1) {
+      await route.fulfill({ json: envelope(pageData) })
+      return
+    }
+    await route.fulfill({
+      status: 503,
+      json: {
+        code: 'UPSTREAM_UNAVAILABLE',
+        data: null,
+        message: 'temporary failure',
+        request_id: 'req_system_task_retained_failure',
+        success: false,
+      },
+    })
+  })
+
+  await page.goto('/system-tasks')
+  await expect(
+    page.getByText(items[0].task_id).filter({ visible: true }).first()
+  ).toBeVisible()
+  await page.getByRole('button', { name: '任务状态', exact: true }).click()
+  await page.getByRole('button', { name: '已失败', exact: true }).click()
+  await expect.poll(() => listCalls).toBe(2)
+  await expect(page.getByText('数据刷新失败', { exact: false })).toBeVisible()
+  await expect(
+    page.getByText(items[0].task_id).filter({ visible: true }).first()
+  ).toBeVisible()
+  await page.goBack()
+  await expect(page).not.toHaveURL(/statuses=/)
+  await page.goForward()
+  await expect(page).toHaveURL(/statuses=/)
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth
+    )
+  ).toBe(true)
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])
 })

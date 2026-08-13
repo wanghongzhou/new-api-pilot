@@ -20,6 +20,24 @@ export function formatNumericDisplayValue(
   return String(value)
 }
 
+export function formatMetricDisplayValue(
+  value: string | null | undefined,
+  compact = false
+): string {
+  if (value == null || value === '') return EMPTY_NUMERIC_DISPLAY_VALUE
+  try {
+    const metric = BigInt(value)
+    return compact
+      ? Intl.NumberFormat('zh-CN', {
+          maximumFractionDigits: 1,
+          notation: 'compact',
+        }).format(metric)
+      : metric.toLocaleString('zh-CN')
+  } catch {
+    return value
+  }
+}
+
 export function formatDecimalDisplayValue(
   value: string | null | undefined,
   maximumFractionDigits?: number

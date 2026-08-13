@@ -30,6 +30,16 @@ function envelope<T>(data: T, requestId = 'req_task_e2e') {
   return { code: '', data, message: '', request_id: requestId, success: true }
 }
 
+function failureEnvelope() {
+  return {
+    code: 'INTERNAL_ERROR',
+    data: null,
+    message: 'INTERNAL_ERROR',
+    request_id: 'req_task_failure',
+    success: false,
+  }
+}
+
 function assertAuthenticated(route: Route) {
   const headers = route.request().headers()
   expect(headers['new-api-user']).toBe(viewer.id)
@@ -286,7 +296,7 @@ test('A95 keeps upstream tasks exact, read-only, private, exportable and respons
 
   await page.getByRole('tab', { name: /平台分析/ }).click()
   await expect(page).toHaveURL(/tab=platforms/)
-  await expect(page.getByText('平台分析')).toBeVisible()
+  await expect(page.getByRole('heading', { name: '平台分析' })).toBeVisible()
   await page.getByRole('tab', { name: /任务列表/ }).click()
 
   await page.getByRole('button', { name: '站点' }).click()
@@ -396,4 +406,62 @@ test('A95 keeps upstream tasks exact, read-only, private, exportable and respons
       () => document.documentElement.scrollWidth <= window.innerWidth
     )
   ).toBe(true)
+})
+
+test('separates initial task failure from retained filtered rows', async ({
+  page,
+}, testInfo) => {
+  await seedAuth(page, testInfo)
+  let reads = 0
+  await page.route(/\/api\/upstream-tasks(?:\?.*)?$/, async (route) => {
+    reads += 1
+    if (reads === 1) {
+      await route.fulfill({
+        json: envelope({
+          as_of: 1_784_348_700,
+          data_status: 'complete',
+          items: tasks,
+          page: 1,
+          page_size: 20,
+          total: '9007199254740993',
+        }),
+      })
+      return
+    }
+    await route.fulfill({ json: failureEnvelope(), status: 503 })
+  })
+  await page.route(
+    /\/api\/upstream-tasks\/statistics(?:\?.*)?$/,
+    async (route) => route.fulfill({ json: envelope(statistics()) })
+  )
+  await page.goto('/upstream-tasks')
+  await expect(
+    page.getByText('task-safe-0').filter({ visible: true }).first()
+  ).toBeVisible()
+  await page
+    .getByRole('textbox', { exact: true, name: 'Task ID（精确）' })
+    .fill('refresh-failure')
+  await expect.poll(() => reads).toBeGreaterThan(1)
+  await expect(page.getByRole('alert')).toContainText('数据刷新失败')
+  await expect(
+    page.getByText('task-safe-0').filter({ visible: true }).first()
+  ).toBeVisible()
+})
+
+test('blocks tasks on an initial list and statistics failure', async ({
+  page,
+}, testInfo) => {
+  await seedAuth(page, testInfo)
+  await page.route(/\/api\/upstream-tasks(?:\?.*)?$/, async (route) => {
+    await route.fulfill({ json: failureEnvelope(), status: 503 })
+  })
+  await page.route(
+    /\/api\/upstream-tasks\/statistics(?:\?.*)?$/,
+    async (route) => route.fulfill({ json: failureEnvelope(), status: 503 })
+  )
+  await page.goto('/upstream-tasks?taskId=initial-failure')
+  await expect(
+    page.getByRole('heading', { name: '无法加载数据' }).first()
+  ).toBeVisible()
+  await expect(page.getByText('task-safe-0')).toHaveCount(0)
 })

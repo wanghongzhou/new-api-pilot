@@ -269,14 +269,8 @@ func collectionRunItemFromModel(run model.CollectionRun, deduplicated bool) dto.
 		item.Progress = 1
 	}
 	if run.ErrorCode != "" {
-		params := map[string]any{}
-		if len(run.ErrorParams) > 0 {
-			_ = common.Unmarshal(run.ErrorParams, &params)
-		}
-		message, err := dto.NewMessageRef(constant.MessageCode(run.ErrorCode), params, "")
-		if err == nil {
-			item.Error = &message
-		}
+		message := collectionTaskMessageRef(run.ErrorCode, run.ErrorParams)
+		item.Error = &message
 	}
 	return item
 }
@@ -291,16 +285,62 @@ func collectionRunWindowItemFromModel(window model.CollectionRunWindowSnapshot) 
 		FinishedAt: window.FinishedAt, UpdatedAt: window.UpdatedAt,
 	}
 	if window.ErrorCode != "" {
-		params := map[string]any{}
-		if len(window.ErrorParams) > 0 {
-			_ = common.Unmarshal(window.ErrorParams, &params)
-		}
-		message, err := dto.NewMessageRef(constant.MessageCode(window.ErrorCode), params, "")
-		if err == nil {
-			item.Error = &message
-		}
+		message := collectionTaskMessageRef(window.ErrorCode, window.ErrorParams)
+		item.Error = &message
 	}
 	return item
+}
+
+func collectionTaskMessageRef(errorCode string, rawParams []byte) dto.MessageRef {
+	code := constant.MessageCode(errorCode)
+	if !isCollectionTaskMessageCode(code) {
+		return dto.MustMessageRef(constant.MessageCollectionExecutionFailed, map[string]any{}, "")
+	}
+	schema, exists := constant.MessageRegistry[code]
+	if !exists {
+		return dto.MustMessageRef(constant.MessageCollectionExecutionFailed, map[string]any{}, "")
+	}
+	params := map[string]any{}
+	if len(rawParams) > 0 {
+		var persisted map[string]any
+		if common.Unmarshal(rawParams, &persisted) != nil {
+			return dto.MustMessageRef(constant.MessageCollectionExecutionFailed, map[string]any{}, "")
+		}
+		for key := range schema.Required {
+			if value, present := persisted[key]; present {
+				params[key] = value
+			}
+		}
+		for key := range schema.Optional {
+			if value, present := persisted[key]; present {
+				params[key] = value
+			}
+		}
+	}
+	message, err := dto.NewMessageRef(code, params, "")
+	if err != nil {
+		return dto.MustMessageRef(constant.MessageCollectionExecutionFailed, map[string]any{}, "")
+	}
+	return message
+}
+
+func isCollectionTaskMessageCode(code constant.MessageCode) bool {
+	switch code {
+	case constant.MessageCollectionRetryExhausted,
+		constant.MessageCollectionExecutionFailed,
+		constant.MessageDataValidationMismatch,
+		constant.MessageUpstreamResponseInvalid,
+		constant.MessageUpstreamResponseTooLarge,
+		constant.MessageSiteConfigChanged,
+		constant.MessageDependencyWindowsMissing,
+		constant.MessageWorkerLeaseLost,
+		constant.MessageDataWindowMissing,
+		constant.MessageDataUpstreamUnavailable,
+		constant.MessageDataValidationFailed:
+		return true
+	default:
+		return false
+	}
 }
 
 func requiredCapabilitiesReady(ctx context.Context, repository *model.SiteRepository, siteID int64) (bool, error) {

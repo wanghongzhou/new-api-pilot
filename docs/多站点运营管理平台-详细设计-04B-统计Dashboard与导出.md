@@ -87,6 +87,7 @@ P0-A 增加分组、Token、节点三个 flow parity breakdown，并提供与现
 - 独立路由固定为 `/statistics/groups`、`/statistics/tokens`、`/statistics/nodes`；URL 保存时间范围、粒度、指标、图表/表格视图、站点及本维度筛选，刷新和前进后退必须恢复。
 - group/token/node 页面复用统一统计布局、逐桶 `site_breakdown` 金额换算、partial/missing/unavailable/paused 状态和导出入口；375px 下不得横向溢出并满足键盘与无障碍名称要求。
 - `use_group`、`node_name` 保留上游原值，空字符串只在展示层分别显示“未知分组”“未知节点”；`token_id` 始终为十进制字符串，0 显示“未知/已删除 Token”，不得经 JavaScript number 转换。
+- group/node 对象筛选是原始值级筛选，作用于当前选中的全部站点；选项列表必须按原始值去重，不得用“站点 / 值”的标签暗示可以只筛某一站点。若要限定站点，必须同时使用站点筛选。空字符串身份必须可以从选项中选择、稳定写入 URL、刷新/前进后退后恢复，并在调用统计 API 与创建导出任务时还原为空字符串；不得因 URL 或请求参数序列化丢失而退化为“全部值”。
 
 ### 18.4 导出
 
@@ -150,6 +151,10 @@ P0-A 增加分组、Token、节点三个 flow parity breakdown，并提供与现
 | data_snapshot_at | bigint nullable | 本次成功文件的一致性读快照开始时间 |
 | status | varchar(16) | pending/running/success/failed/expired |
 | progress | int | 0～100 |
+
+`progress` 表示任务整体完成百分比，不得使用当前页码、批次号或已扫描游标直接冒充百分比。运行中进度按已处理记录数或已完成工作量相对预计总工作量计算，并限制在 `0～95`；只有成功终态可写入 `100`。任务重新领取执行时必须重置旧尝试的运行中进度，避免把上一次失败尝试的百分比显示为本次进度。
+
+导出任务详情是独立的可审查界面状态，不随导出列表页自动判定通过。详情必须分组展示任务身份与状态、执行生命周期、输出文件和冻结筛选范围；文件大小同时给出可读单位和精确字节数；首次加载失败与后台刷新失败必须区分，后台刷新失败时保留最近成功详情并明确标记为陈旧数据。详情抽屉在手机、平板和桌面均须可纵向滚动，底部主要操作始终可达，长文件名和安全技术详情不得造成页面级横向溢出。
 | attempt_count | int | 已执行尝试次数 |
 | next_attempt_at | bigint | 下次可领取时间 |
 | heartbeat_at | bigint nullable | Worker 心跳 |
@@ -250,12 +255,14 @@ Dashboard 是登录后的默认首页，只展示最重要的汇总信息，不�
 ---
 # P0-B 日志查询与导出
 
-新增只读接口：`GET /api/logs`（全局）和 `GET /api/sites/:id/logs`（站点），viewer/admin 均可访问已授权站点范围；响应包含 `items,total,page,page_size,data_status`。筛选参数为 `type,start_timestamp,end_timestamp,username,model_name,token_name,channel_id,group,request_id,upstream_request_id`，分页上限 100，时间范围和总桶/总行数在 SQL 前校验。
+新增只读接口：`GET /api/logs`（全局）和 `GET /api/sites/:id/logs`（站点），viewer/admin 均可访问已授权站点范围；响应包含 `items,total,page,page_size,data_status`，其中列表总数 `total` 是 bigint 十进制字符串，不得以 JSON number 暴露给前端。筛选参数为 `type,start_timestamp,end_timestamp,username,model_name,token_name,channel_id,group,request_id,upstream_request_id`，分页上限 100，时间范围和总桶/总行数在 SQL 前校验。
 
 日志导出复用 `export_job`，导出行必须保留 site_id、created_at、type、用户、模型、token、channel、group、request_id 和 upstream_request_id；content 只能输出脱敏摘要。导出不改变统计汇总，也不暴露上游展示 ID、站点 Token 或密码。
 # P0-C 用户库存统计与导出
 
 新增 `GET /api/user-inventory`、`GET /api/user-inventory/statistics`、`GET /api/sites/:id/user-inventory`、`GET /api/sites/:id/user-inventory/statistics`。列表返回当前用户；统计返回 summary、trend、role/status/group breakdown、site_breakdown 和 completeness。列表的 `total/items/completeness` 与统计的全部汇总、趋势、breakdown、完整性必须分别在同一 repeatable-read 快照读取；完整性只采用 active 站点当前 config_version 的库存与最近 `user_sync`，旧配置版本的成功 run 不得把新配置误报为 complete。trend 是所选左闭右开时间范围内按小时连续排序的完整序列；前端曲线视图读取完整序列，表格视图对同一响应做确定性分页，不以分页拆断或重算趋势。quota、used_quota、balance、request_count、用户计数全部为 JSON string。
+
+库存筛选的上游权威枚举固定为 role=`0|1|10|100`、status=`1|2`；其他整数不得进入数据库查询或被展示为可筛选的未知分类，必须返回稳定 `VALIDATION_ERROR`。
 
 导出 scope `user_inventory` 复用 export_job，CSV/XLSX 只包含允许落库的库存字段和 site 身份；严禁 email、OAuth、token、密码和 setting。导出 snapshot 与查询使用同一筛选和 repeatable-read 边界。
 # P0-D 渠道运营统计与导出
@@ -265,11 +272,15 @@ Dashboard 是登录后的默认首页，只展示最重要的汇总信息，不�
 `statistics_type=channel_inventory` 复用 export_job 生成 CSV/XLSX，冻结站点、关键字、type、status、group、tag、remote_state 和余额/响应范围筛选。导出只包含安全运营字段，bigint 保持字符串、balance 保持规范十进制文本，并沿用公式注入防护。任何导出列都不得包含 `key`、多 Key 状态或上游私密配置。
 # P0-E 性能历史统计与导出
 
+性能历史列表的 `total` 必须作为 bigint 十进制字符串返回，不得暴露为 JSON number。
+
 提供全局与站点性能历史 API，支持整点左闭右开范围、model、group、site 筛选，返回 trend、model/group breakdown、site_breakdown、完整性和 `aggregation_status`。`trend` 与 `site_breakdown` 始终保留逐站、逐模型、逐分组的原始时间桶身份；跨站只有所有参与行均为 counter_ready 时才返回加权 summary 以及 model/group breakdown：success=`Σsuccess/Σrequest`，latency=`Σlatency/Σrequest`，TTFT=`Σttft_sum/Σttft_count`，TPS=`Σoutput_tokens*1000/Σgeneration_ms`。model/group breakdown 使用独立的 `dimension + weighted metrics` DTO，不得伪造原始记录 ID、site_id 或 collected_at。缺少任一分母时不得平均各站平均值，总值置空并标记 unavailable，trend 与 site_breakdown 仍保留原值。
 
 `statistics_type=performance_history` 使用 export_job 导出单站/逐站 model+group bucket 原值和 source/completeness；只有 counter_ready 才附带 counters。CSV/XLSX 继续防公式注入，bigint 为字符串、decimal 为规范文本。
 
 # F1 充值与兑换码统计、导出
+
+充值与兑换列表的 `total` 必须作为 bigint 十进制字符串返回，不得暴露为 JSON number。
 
 充值统计返回 order_count、按 status/provider/site breakdown，以及每个 `site_id+provider` 独立的 amount/money 原值汇总；全局 summary 不含 money/amount 总额。前端统一称为“上游金额原值”和“支付渠道”，并明确其无统一币种、不可跨站求和。兑换码统计返回 code_count、enabled/disabled/used/expired 数量、quota 名义合计和 status/site breakdown；expired 按查询 `as_of` 派生。complete/partial/pending/missing/unavailable 完整性与逐站 as_of 均保留。
 
@@ -282,6 +293,7 @@ Dashboard 是登录后的默认首页，只展示最重要的汇总信息，不�
 ### D136 本地模型与供应商排行
 
 模型与供应商排行只从 `usage_fact_hourly`/既有聚合事实和 M1 exact 模型元数据重算，不访问任何官方 rankings endpoint。today/week/month/year 使用 Asia/Shanghai 的自然日、周一、月初和年初边界；token、份额和增长使用整数/Decimal 精确计算，零历史分母的增长为 null。跨站同名模型按站点事实守恒后再展示；供应商仅由同站点 `name_rule=exact` 元数据映射，缺失映射归 `unknown`。响应包含当前 totals/share、前期增长、`movement_type=new|up|down|stable|removed`、history、movers/droppers、data_status、site_breakdown 与 as_of，不复制官方 Top20 截断、float、`time.Now` 缓存。当前窗口有值而前期为零时必须进入 movers 并标记 `new`；当前为零而前期有值时必须进入 droppers 并标记 `removed`。这两类仍保持 `growth=null`，不得伪造无限百分比，也不得因为零分母而把整个升降变化视图过滤为空。
+排行榜页面不得把 bigint 字符串转换为 JavaScript `number`。请求数、Token 和 quota 等权威原值使用基于 `BigInt` 的千分位分组提升扫读性，同时通过元素完整值提示保留 API 返回的十进制字符串，复制、辅助技术读取和核对时不得丢失精度；前端只格式化展示，不重新计算排名、份额、增长或聚合值。
 `subscription_plans` CSV/XLSX 仅导出安全计划核心和 missing 状态，不包含 provider product ID、支付 payload 或策略配置。
 # D138 定价与分组目录统计和导出
 

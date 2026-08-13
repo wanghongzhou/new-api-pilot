@@ -31,6 +31,7 @@ import { DataTable } from '@/components/ui/data-table'
 import { DataTablePagination } from '@/components/ui/data-table-pagination'
 import { Spinner } from '@/components/ui/spinner'
 import { buildStatisticsSearch } from '@/features/statistics/search'
+import { useRetainedQueryData } from '@/hooks/use-retained-query-data'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import { fromUnixSeconds } from '@/lib/dayjs'
@@ -293,9 +294,14 @@ export function SitesPage({
     refetchInterval: 60_000,
     staleTime: 30_000,
   })
-  const pageData = sitesQuery.data
+  const pageData = useRetainedQueryData(
+    sitesQuery.data,
+    sitesQuery.isError,
+    'sites-list'
+  )
   const items = pageData?.items ?? []
   const total = pageData?.total ?? 0
+  const listStale = sitesQuery.isError && pageData != null
 
   const invalidateSites = () => {
     void queryClient.invalidateQueries({ queryKey: siteKeys.all })
@@ -396,7 +402,7 @@ export function SitesPage({
           return (
             <div className='grid min-w-64 gap-3'>
               <div className='grid grid-cols-2 gap-x-5'>
-                <ListMetric label={t('site.dashboard.totalQuota')}>
+                <ListMetric label={t('site.dashboard.todayQuota')}>
                   <QuotaAmount
                     emphasizeAmount
                     inline
@@ -406,12 +412,12 @@ export function SitesPage({
                     showQuota={false}
                   />
                 </ListMetric>
-                <ListMetric label={t('site.dashboard.totalTokens')}>
+                <ListMetric label={t('site.dashboard.todayTokens')}>
                   <MetricValue compact nullLabel='0' value={today.token_used} />
                 </ListMetric>
               </div>
               <div className='grid grid-cols-3 gap-x-5'>
-                <ListMetric label={t('site.dashboard.totalCount')}>
+                <ListMetric label={t('site.dashboard.todayCount')}>
                   <MetricValue
                     compact
                     nullLabel='0'
@@ -550,6 +556,28 @@ export function SitesPage({
       title={t('sites.title')}
     >
       <div className='flex h-full min-h-0 min-w-0 flex-col gap-5'>
+        {listStale && (
+          <section
+            className='border-warning/40 bg-warning/10 flex flex-wrap items-center justify-between gap-3 rounded-md border p-3'
+            role='status'
+          >
+            <div>
+              <p className='font-medium'>{t('sites.refreshError')}</p>
+              <p className='text-muted-foreground mt-1 text-sm'>
+                {t('sites.staleData')}
+              </p>
+            </div>
+            <Button
+              disabled={sitesQuery.isFetching}
+              onClick={() => void sitesQuery.refetch()}
+              size='sm'
+              variant='outline'
+            >
+              {sitesQuery.isFetching && <Spinner />}
+              {t('common.retry')}
+            </Button>
+          </section>
+        )}
         <SiteFilters
           actions={
             <DataViewModeToggle
@@ -567,7 +595,7 @@ export function SitesPage({
         {search.view === 'card' ? (
           <div className='min-h-0 flex-1 overflow-y-auto' tabIndex={0}>
             <CardGridState
-              error={sitesQuery.isError}
+              error={sitesQuery.isError && !listStale}
               fetching={sitesQuery.isFetching}
               isAdmin={isAdmin}
               items={items}
@@ -584,7 +612,7 @@ export function SitesPage({
               data={items}
               emptyDescription={t('sites.emptyDescription')}
               emptyTitle={t('sites.empty')}
-              error={sitesQuery.isError}
+              error={sitesQuery.isError && !listStale}
               fetching={sitesQuery.isFetching}
               fillAvailableHeight
               loading={sitesQuery.isPending}

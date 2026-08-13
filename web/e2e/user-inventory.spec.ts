@@ -30,6 +30,16 @@ function envelope<T>(data: T, requestId = 'req_inventory_e2e') {
   }
 }
 
+function failureEnvelope() {
+  return {
+    code: 'INTERNAL_ERROR',
+    data: null,
+    message: 'INTERNAL_ERROR',
+    request_id: 'req_inventory_failure',
+    success: false,
+  }
+}
+
 function assertAuthenticated(route: Route) {
   const headers = route.request().headers()
   expect(headers['new-api-user']).toBe(viewer.id)
@@ -382,4 +392,64 @@ test('uses forced site inventory endpoints and keeps unavailable distinct from z
     .withTags(['wcag2a', 'wcag2aa'])
     .analyze()
   expect(accessibility.violations).toEqual([])
+})
+
+test('separates initial inventory failure from retained refresh data', async ({
+  page,
+}) => {
+  await seedAuth(page)
+  let listReads = 0
+  await page.route(/\/api\/user-inventory(?:\?.*)?$/, async (route) => {
+    listReads += 1
+    if (listReads === 1) {
+      await route.fulfill({
+        json: envelope({
+          data_status: 'complete',
+          items: [inventoryItem('normal', '9007199254740993', '88')],
+          page: 1,
+          page_size: 20,
+          total: '9007199254740993',
+        }),
+      })
+      return
+    }
+    await route.fulfill({ json: failureEnvelope(), status: 503 })
+  })
+  await page.route(
+    /\/api\/user-inventory\/statistics(?:\?.*)?$/,
+    async (route) => {
+      const url = new URL(route.request().url())
+      await route.fulfill({
+        json: envelope(statisticsResponse(url, 'complete')),
+      })
+    }
+  )
+  await page.goto('/user-inventory')
+  await expect(
+    page.getByText('user_normal').filter({ visible: true }).first()
+  ).toBeVisible()
+  await page.getByLabel('用户名或显示名').fill('refresh-failure')
+  await expect.poll(() => listReads).toBeGreaterThan(1)
+  await expect(page.getByRole('alert')).toContainText('数据刷新失败')
+  await expect(
+    page.getByText('user_normal').filter({ visible: true }).first()
+  ).toBeVisible()
+})
+
+test('blocks the inventory table on an initial failure', async ({ page }) => {
+  await seedAuth(page)
+  await page.route(/\/api\/user-inventory(?:\?.*)?$/, async (route) => {
+    await route.fulfill({ json: failureEnvelope(), status: 503 })
+  })
+  await page.route(
+    /\/api\/user-inventory\/statistics(?:\?.*)?$/,
+    async (route) => {
+      await route.fulfill({ json: failureEnvelope(), status: 503 })
+    }
+  )
+  await page.goto('/user-inventory?keyword=initial-failure')
+  await expect(
+    page.getByRole('heading', { name: '无法加载数据' }).first()
+  ).toBeVisible()
+  await expect(page.getByText('user_normal')).toHaveCount(0)
 })

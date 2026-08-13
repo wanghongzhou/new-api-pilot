@@ -52,7 +52,7 @@ func (s *PerformanceHistoryService) List(ctx context.Context, q dto.PerformanceH
 	}
 	items := performanceHistoryItems(rows)
 	complete := performanceCompleteness(coverage)
-	return dto.PerformanceHistoryPage{Items: items, Total: total, Page: q.Page, PageSize: q.PageSize, DataStatus: complete.DataStatus, AsOf: coverage.AsOf, Completeness: complete}, nil
+	return dto.PerformanceHistoryPage{Items: items, Total: strconv.FormatInt(total, 10), Page: q.Page, PageSize: q.PageSize, DataStatus: complete.DataStatus, AsOf: coverage.AsOf, Completeness: complete}, nil
 }
 func (s *PerformanceHistoryService) Statistics(ctx context.Context, q dto.PerformanceHistoryQuery) (dto.PerformanceHistoryStatisticsResponse, error) {
 	q.Normalize()

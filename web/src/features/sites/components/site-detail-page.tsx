@@ -27,6 +27,7 @@ import { LoadingState } from '@/components/loading-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { buildChannelInventorySearch } from '@/features/channel-inventory/search'
+import { entityDetailFailure } from '@/features/entity-detail-query-state'
 import { buildFinancialOperationsSearch } from '@/features/financial-operations/search'
 import { buildLogSearch } from '@/features/logs/search'
 import { buildModelCatalogSearch } from '@/features/model-catalog/search'
@@ -38,12 +39,14 @@ import { buildSubscriptionPlanSearch } from '@/features/subscription-plans/searc
 import { buildSystemTaskSearch } from '@/features/system-tasks/search'
 import { buildUpstreamTaskSearch } from '@/features/upstream-tasks/search'
 import { buildUserInventorySearch } from '@/features/user-inventory/search'
+import { useRetainedQueryData } from '@/hooks/use-retained-query-data'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
+import { isRetryableApiError } from '@/lib/api'
 import { isIdString, parseIdString } from '@/lib/api-types'
 import { fromUnixSeconds } from '@/lib/dayjs'
 import {
+  formatDecimalDisplayValue,
   formatDisplayValue,
-  formatNumericDisplayValue,
 } from '@/lib/display-value'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -106,17 +109,17 @@ function DetailSummary({ site }: { site: SiteDetail }) {
         />
       </div>
       <dl className='border-border [&>div]:border-border grid overflow-hidden rounded-lg border sm:grid-cols-2 lg:grid-cols-4 [&>div]:border-b sm:[&>div]:border-r lg:[&>div:nth-child(4n)]:border-r-0'>
-        <MetricCell label={t('site.dashboard.totalCount')}>
+        <MetricCell label={t('site.dashboard.todayCount')}>
           <MetricValue nullLabel='0' value={site.today.request_count} />
         </MetricCell>
-        <MetricCell label={t('site.dashboard.totalQuota')}>
+        <MetricCell label={t('site.dashboard.todayQuota')}>
           <QuotaAmount
             nullLabel='0'
             quota={site.today.quota}
             rate={site.rate}
           />
         </MetricCell>
-        <MetricCell label={t('site.dashboard.totalTokens')}>
+        <MetricCell label={t('site.dashboard.todayTokens')}>
           <MetricValue nullLabel='0' value={site.today.token_used} />
         </MetricCell>
         <MetricCell label={t('site.averageRpm')}>
@@ -415,7 +418,7 @@ function SiteMetadata({ site }: { site: SiteDetail }) {
             {t('site.rate.quotaPerUnit')}
           </p>
           <p className='mt-1 font-medium'>
-            {formatNumericDisplayValue(site.rate.quota_per_unit)}
+            {formatDecimalDisplayValue(site.rate.quota_per_unit)}
           </p>
         </div>
         <div>
@@ -423,7 +426,7 @@ function SiteMetadata({ site }: { site: SiteDetail }) {
             {t('site.rate.usdExchangeRate')}
           </p>
           <p className='mt-1 font-medium'>
-            {formatNumericDisplayValue(site.rate.usd_exchange_rate)}
+            {formatDecimalDisplayValue(site.rate.usd_exchange_rate)}
           </p>
         </div>
         <div>
@@ -728,6 +731,8 @@ export function SiteDetailPage({ onDeleted, siteId }: SiteDetailPageProps) {
     enabled: validSiteId,
     queryFn: () => getSite(parseIdString(siteId)),
     queryKey: siteKeys.detail(siteId),
+    retry: (failureCount, error) =>
+      failureCount < 2 && isRetryableApiError(error),
     refetchInterval: (query) =>
       query.state.data?.statistics_status === 'backfilling' ? 5_000 : 60_000,
     staleTime: 30_000,
@@ -738,7 +743,11 @@ export function SiteDetailPage({ onDeleted, siteId }: SiteDetailPageProps) {
     queryKey: siteKeys.performance(siteId, performanceRange),
     staleTime: 60_000,
   })
-  const site = detailQuery.data
+  const site = useRetainedQueryData(
+    detailQuery.data,
+    detailQuery.isError,
+    `site-detail:${siteId}`
+  )
 
   const retry = () => {
     void detailQuery.refetch()
@@ -761,18 +770,21 @@ export function SiteDetailPage({ onDeleted, siteId }: SiteDetailPageProps) {
 
   let detailContent: ReactNode
   if (!validSiteId || (detailQuery.isError && !site)) {
+    const failure = entityDetailFailure(
+      validSiteId,
+      detailQuery.error,
+      'site.detail.loadErrorDescription',
+      'site.detail.invalidId'
+    )
     detailContent = (
       <ErrorState
-        description={t(
-          dynamicI18nKey(
-            'site',
-            validSiteId
-              ? 'site.detail.loadErrorDescription'
-              : 'site.detail.invalidId'
-          )
-        )}
-        onRetry={validSiteId ? retry : undefined}
-        title={t('site.detail.loadError')}
+        description={t(dynamicI18nKey('site', failure.descriptionKey))}
+        onRetry={failure.retryable ? retry : undefined}
+        title={
+          failure.kind === 'invalid-id'
+            ? t('site.detail.invalidId')
+            : t('site.detail.loadError')
+        }
       />
     )
   } else if (detailQuery.isPending || !site) {

@@ -23,9 +23,11 @@ import { LoadingState } from '@/components/loading-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { customerKeys } from '@/features/customers/query-keys'
+import { entityDetailFailure } from '@/features/entity-detail-query-state'
 import type { CollectionRunItem } from '@/features/sites/types'
 import { buildStatisticsSearch } from '@/features/statistics/search'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
+import { isRetryableApiError } from '@/lib/api'
 import { isIdString, parseIdString } from '@/lib/api-types'
 import { fromUnixSeconds } from '@/lib/dayjs'
 import { formatDisplayValue } from '@/lib/display-value'
@@ -79,6 +81,8 @@ export function AccountDetailPage({
     enabled: validAccountId,
     queryFn: () => getAccount(parseIdString(accountId)),
     queryKey: accountKeys.detail(accountId),
+    retry: (failureCount, error) =>
+      failureCount < 2 && isRetryableApiError(error),
     refetchInterval: (query) =>
       query.state.data?.backfill.status === 'pending' ||
       query.state.data?.backfill.status === 'running'
@@ -96,18 +100,23 @@ export function AccountDetailPage({
 
   let content: ReactNode
   if (!validAccountId || (detailQuery.isError && !account)) {
+    const failure = entityDetailFailure(
+      validAccountId,
+      detailQuery.error,
+      'account.detail.loadErrorDescription',
+      'account.detail.invalidId'
+    )
     content = (
       <ErrorState
-        description={t(
-          dynamicI18nKey(
-            'account',
-            validAccountId
-              ? 'account.detail.loadErrorDescription'
-              : 'account.detail.invalidId'
-          )
-        )}
-        onRetry={validAccountId ? () => void detailQuery.refetch() : undefined}
-        title={t('account.detail.loadError')}
+        description={t(dynamicI18nKey('account', failure.descriptionKey))}
+        onRetry={
+          failure.retryable ? () => void detailQuery.refetch() : undefined
+        }
+        title={
+          failure.kind === 'invalid-id'
+            ? t('account.detail.invalidId')
+            : t('account.detail.loadError')
+        }
       />
     )
   } else if (detailQuery.isPending || !account) {

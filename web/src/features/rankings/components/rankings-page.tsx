@@ -15,6 +15,7 @@ import { toast } from 'sonner'
 import { DataStatusBadge } from '@/components/data/data-status'
 import { FacetedFilter } from '@/components/data/faceted-filter'
 import { FilterPanel } from '@/components/data/filter-panel'
+import { MetricValue } from '@/components/data/metric-value'
 import { QueryStateAlert } from '@/components/data/query-state-alert'
 import { ErrorState } from '@/components/error-state'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
@@ -35,6 +36,7 @@ import type {
   StatisticsExportFormat,
   StatisticsExportJobItem,
 } from '@/features/statistics/types'
+import { useRetainedQueryData } from '@/hooks/use-retained-query-data'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import {
@@ -95,6 +97,20 @@ function movementText(item: RankingItem, t: (key: string) => string) {
   return ratioToPercent(item.growth) ?? t('data.unavailable')
 }
 
+function RankingMetric({
+  label,
+  value,
+}: {
+  label: string
+  value: RankingItem['token_used']
+}) {
+  return (
+    <span>
+      {label}：<MetricValue value={value} />
+    </span>
+  )
+}
+
 function RankingList({
   items,
   title,
@@ -126,10 +142,11 @@ function RankingList({
             <span>{movementText(item, t)}</span>
           </div>
           <span className='text-muted-foreground text-xs'>
-            {t('rankings.itemValues', {
-              share: ratioToPercent(item.share),
-              tokens: item.token_used,
-            })}
+            <RankingMetric
+              label={t('rankings.tokens')}
+              value={item.token_used}
+            />
+            ；{t('rankings.shareValue', { value: ratioToPercent(item.share) })}
           </span>
         </article>
       ))}
@@ -195,7 +212,11 @@ export function RankingsPage({
       onSearchChange({ exportId: job.id })
     },
   })
-  const data = rankingQuery.data
+  const data = useRetainedQueryData(
+    rankingQuery.data,
+    rankingQuery.isError,
+    `${siteId ? `site:${siteId}` : 'global'}:${search.tab}`
+  )
   const vendors = search.tab === 'vendors'
   const columns = useMemo<ColumnDef<RankingItem, unknown>[]>(
     () => [
@@ -217,17 +238,18 @@ export function RankingsPage({
       {
         cell: ({ row }) => (
           <div className='grid gap-1 text-xs'>
-            <span>
-              {t('rankings.tokensValue', { value: row.original.token_used })}
-            </span>
-            <span>
-              {t('rankings.requestsValue', {
-                value: row.original.request_count,
-              })}
-            </span>
-            <span>
-              {t('rankings.quotaValue', { value: row.original.quota })}
-            </span>
+            <RankingMetric
+              label={t('rankings.tokens')}
+              value={row.original.token_used}
+            />
+            <RankingMetric
+              label={t('rankings.requests')}
+              value={row.original.request_count}
+            />
+            <RankingMetric
+              label={t('rankings.quota')}
+              value={row.original.quota}
+            />
           </div>
         ),
         header: t('rankings.totals'),
@@ -498,15 +520,15 @@ export function RankingsPage({
                     {ratioToPercent(item.growth) ?? t('data.unavailable')}
                   </span>
                 </div>
-                <span>
-                  {t('rankings.tokensValue', { value: item.token_used })}
-                </span>
-                <span>
-                  {t('rankings.requestsValue', {
-                    value: item.request_count,
-                  })}
-                </span>
-                <span>{t('rankings.quotaValue', { value: item.quota })}</span>
+                <RankingMetric
+                  label={t('rankings.tokens')}
+                  value={item.token_used}
+                />
+                <RankingMetric
+                  label={t('rankings.requests')}
+                  value={item.request_count}
+                />
+                <RankingMetric label={t('rankings.quota')} value={item.quota} />
                 <span>
                   {t('rankings.shareValue', {
                     value: ratioToPercent(item.share),
@@ -560,9 +582,10 @@ export function RankingsPage({
                 <code className='text-muted-foreground text-xs break-all'>
                   {point.dimension_id}
                 </code>
-                <span>
-                  {t('rankings.tokensValue', { value: point.token_used })}
-                </span>
+                <RankingMetric
+                  label={t('rankings.tokens')}
+                  value={point.token_used}
+                />
               </article>
             )}
             total={data.history.length}
@@ -587,9 +610,10 @@ export function RankingsPage({
                   {item.site_id}
                 </code>
                 <span>{item.dimension_id}</span>
-                <span>
-                  {t('rankings.tokensValue', { value: item.token_used })}
-                </span>
+                <RankingMetric
+                  label={t('rankings.tokens')}
+                  value={item.token_used}
+                />
                 <div className='flex flex-wrap items-center justify-between gap-2'>
                   <DataStatusBadge status={item.data_status} />
                   <span className='text-muted-foreground text-xs'>

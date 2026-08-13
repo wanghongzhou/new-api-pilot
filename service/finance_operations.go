@@ -66,7 +66,7 @@ func (s *FinanceOperationsService) Topups(ctx context.Context, q dto.FinanceInve
 		return dto.FinanceInventoryPage[dto.TopupInventoryItem]{}, model.ErrStatisticsReadContract
 	}
 	status, asOf, complete := financeCoverage(coverage)
-	return dto.FinanceInventoryPage[dto.TopupInventoryItem]{Items: items, Total: total, Page: q.Page, PageSize: q.PageSize, DataStatus: status, AsOf: asOf, Completeness: complete}, nil
+	return dto.FinanceInventoryPage[dto.TopupInventoryItem]{Items: items, Total: strconv.FormatInt(total, 10), Page: q.Page, PageSize: q.PageSize, DataStatus: status, AsOf: asOf, Completeness: complete}, nil
 }
 
 func (s *FinanceOperationsService) Redemptions(ctx context.Context, q dto.FinanceInventoryQuery) (dto.FinanceInventoryPage[dto.RedemptionInventoryItem], error) {
@@ -110,7 +110,7 @@ func (s *FinanceOperationsService) Redemptions(ctx context.Context, q dto.Financ
 		return dto.FinanceInventoryPage[dto.RedemptionInventoryItem]{}, model.ErrStatisticsReadContract
 	}
 	status, asOf, complete := financeCoverage(coverage)
-	return dto.FinanceInventoryPage[dto.RedemptionInventoryItem]{Items: items, Total: total, Page: q.Page, PageSize: q.PageSize, DataStatus: status, AsOf: asOf, Completeness: complete}, nil
+	return dto.FinanceInventoryPage[dto.RedemptionInventoryItem]{Items: items, Total: strconv.FormatInt(total, 10), Page: q.Page, PageSize: q.PageSize, DataStatus: status, AsOf: asOf, Completeness: complete}, nil
 }
 
 func financeMetric(r model.FinanceMetricRow, topup bool) dto.FinanceMetric {

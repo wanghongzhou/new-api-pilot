@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useRouter } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -38,6 +38,12 @@ export function ChangePasswordPage() {
     resolver: zodResolver(changePasswordSchema),
   })
 
+  useEffect(() => {
+    if (user?.must_change_password === false) {
+      router.history.replace('/dashboard')
+    }
+  }, [router, user?.must_change_password])
+
   const submit = handleSubmit(async (values) => {
     setSubmitting(true)
     try {
@@ -47,7 +53,7 @@ export function ChangePasswordPage() {
       })
       if (user) markSessionVerified({ ...user, must_change_password: false })
       toast.success(t('Password changed'))
-      void router.navigate({ to: '/dashboard' })
+      router.history.replace('/dashboard')
     } catch (error) {
       const apiError = normalizeApiError(error)
       if (apiError.fieldErrors?.original_password) {

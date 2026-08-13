@@ -311,6 +311,37 @@ test('debounces keyword navigation into one query and one history entry', async 
     .toBe(initialHistoryLength + 1)
 })
 
+test('keeps an unsafe bigint total exact and uses sequential pagination at every supported viewport', async ({
+  page,
+}) => {
+  await seed(page)
+  const requestedPages: string[] = []
+  await page.route(/\/api\/user-inventory(?:\?.*)?$/, async (route) => {
+    const url = new URL(route.request().url())
+    requestedPages.push(url.searchParams.get('p') ?? '1')
+    await fulfill(route, {
+      ...pageResponse(route),
+      items: [userItem],
+      total: '9007199254740993',
+    })
+  })
+
+  await page.goto('/user-inventory')
+  await expect(page.getByText('9,007,199,254,740,993')).toBeVisible()
+  await expect(page.getByRole('button', { name: '转到最后一页' })).toHaveCount(
+    0
+  )
+  await page.getByRole('button', { name: '下一页' }).focus()
+  await page.keyboard.press('Enter')
+  await expect(page).toHaveURL(/(?:\?|&)page=2(?:&|$)/)
+  await expect.poll(() => requestedPages.at(-1)).toBe('2')
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth
+    )
+  ).toBe(true)
+})
+
 test('shows critical user fields on a 375px mobile card without overflow', async ({
   page,
 }, testInfo) => {

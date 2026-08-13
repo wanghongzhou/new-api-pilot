@@ -48,7 +48,7 @@ describe('site API', () => {
             ],
             page,
             page_size: 100,
-            total: 201,
+            total: '201',
           },
           message: '',
           request_id: `req_sites_${page}`,
@@ -75,7 +75,7 @@ describe('site API', () => {
         config,
         data: {
           code: '',
-          data: { items: [], page: 1, page_size: 20, total: 0 },
+          data: { items: [], page: 1, page_size: 20, total: '0' },
           message: '',
           request_id: 'req_sites',
           success: true,
@@ -171,7 +171,7 @@ describe('site API', () => {
         config,
         data: {
           code: '',
-          data: { items: [], page: 1, page_size: 20, total: 0 },
+          data: { items: [], page: 1, page_size: 20, total: '0' },
           message: '',
           request_id: 'req_sites',
           success: true,

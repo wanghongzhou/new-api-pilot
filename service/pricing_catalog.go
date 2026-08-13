@@ -157,7 +157,7 @@ func (s *PricingCatalogService) List(ctx context.Context, q dto.PricingCatalogQu
 		for _, row := range rows {
 			items = append(items, pricingItem(row, bySite[row.SiteID]))
 		}
-		out = dto.PricingCatalogPageResponse{Items: items, Total: total, Page: q.Page, PageSize: q.PageSize, DataStatus: pricingOverall(metrics, "pricing"), AsOf: asOf, SiteBreakdown: breakdown}
+		out = dto.PricingCatalogPageResponse{Items: items, Total: strconv.FormatInt(total, 10), Page: q.Page, PageSize: q.PageSize, DataStatus: pricingOverall(metrics, "pricing"), AsOf: asOf, SiteBreakdown: breakdown}
 		return nil
 	}, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	return out, err
@@ -218,7 +218,7 @@ func (s *PricingCatalogService) ListGroups(ctx context.Context, q dto.PricingCat
 			}
 			items = append(items, pricingGroupItem(row, bySite[row.SiteID], association))
 		}
-		out = dto.PricingGroupPageResponse{Items: items, Total: total, Page: q.Page, PageSize: q.PageSize, DataStatus: pricingOverall(metrics, "group"), AsOf: asOf, SiteBreakdown: breakdown}
+		out = dto.PricingGroupPageResponse{Items: items, Total: strconv.FormatInt(total, 10), Page: q.Page, PageSize: q.PageSize, DataStatus: pricingOverall(metrics, "group"), AsOf: asOf, SiteBreakdown: breakdown}
 		return nil
 	}, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	return out, err

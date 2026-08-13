@@ -1,10 +1,19 @@
 package service
 
 import (
+	"encoding/json"
 	"new-api-pilot/dto"
 	"new-api-pilot/model"
+	"strings"
 	"testing"
 )
+
+func TestPerformanceHistoryPageTotalIsJSONString(t *testing.T) {
+	payload, err := json.Marshal(dto.PerformanceHistoryPage{Total: "9007199254740993", Items: []dto.PerformanceHistoryItem{}})
+	if err != nil || !strings.Contains(string(payload), `"total":"9007199254740993"`) {
+		t.Fatalf("payload=%s err=%v", payload, err)
+	}
+}
 
 func performanceInt64(value int64) *int64 { return &value }
 

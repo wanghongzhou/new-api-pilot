@@ -33,10 +33,13 @@ import {
 } from '@/features/accounts/components/account-ui'
 import { accountKeys } from '@/features/accounts/query-keys'
 import type { AccountListItem } from '@/features/accounts/types'
+import { entityDetailFailure } from '@/features/entity-detail-query-state'
 import type { CollectionRunItem } from '@/features/sites/types'
 import { statisticsKeys } from '@/features/statistics/query-keys'
 import { buildStatisticsSearch } from '@/features/statistics/search'
+import { useRetainedQueryData } from '@/hooks/use-retained-query-data'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
+import { isRetryableApiError } from '@/lib/api'
 import { isIdString, parseIdString } from '@/lib/api-types'
 import { fromUnixSeconds } from '@/lib/dayjs'
 import {
@@ -99,6 +102,8 @@ export function CustomerDetailPage({
     enabled: validCustomerId,
     queryFn: () => getCustomer(parseIdString(customerId)),
     queryKey: customerKeys.detail(customerId),
+    retry: (failureCount, error) =>
+      failureCount < 2 && isRetryableApiError(error),
     refetchInterval: (query) =>
       query.state.data?.backfill.status === 'pending' ||
       query.state.data?.backfill.status === 'running'
@@ -117,7 +122,11 @@ export function CustomerDetailPage({
     queryKey: customerKeys.accounts(customerId, accountPage),
     staleTime: 30_000,
   })
-  const customer = detailQuery.data
+  const customer = useRetainedQueryData(
+    detailQuery.data,
+    detailQuery.isError,
+    `customer-detail:${customerId}`
+  )
   const columns = useMemo<ColumnDef<AccountListItem, unknown>[]>(
     () => [
       {
@@ -185,22 +194,21 @@ export function CustomerDetailPage({
 
   let content: ReactNode
   if (!validCustomerId || (detailQuery.isError && !customer)) {
+    const failure = entityDetailFailure(
+      validCustomerId,
+      detailQuery.error,
+      'customer.detail.loadErrorDescription',
+      'customer.detail.invalidId'
+    )
     content = (
       <ErrorState
-        description={
-          validCustomerId
-            ? t('customer.detail.loadErrorDescription')
-            : undefined
+        description={t(dynamicI18nKey('customer', failure.descriptionKey))}
+        onRetry={failure.retryable ? retry : undefined}
+        title={
+          failure.kind === 'invalid-id'
+            ? t('customer.detail.invalidId')
+            : t('customer.detail.loadError')
         }
-        onRetry={validCustomerId ? retry : undefined}
-        title={t(
-          dynamicI18nKey(
-            'customer',
-            validCustomerId
-              ? 'customer.detail.loadError'
-              : 'customer.detail.invalidId'
-          )
-        )}
       />
     )
   } else if (detailQuery.isPending || !customer) {

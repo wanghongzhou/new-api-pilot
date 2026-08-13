@@ -10,7 +10,7 @@ import {
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Link } from '@tanstack/react-router'
-import type { ReactNode } from 'react'
+import { useRef, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { DataFreshness } from '@/components/data/data-freshness'
@@ -97,9 +97,14 @@ export function AccountActions({
   onAction,
 }: {
   account: AccountListItem
-  onAction: (action: AccountAction, account: AccountListItem) => void
+  onAction: (
+    action: AccountAction,
+    account: AccountListItem,
+    trigger: HTMLButtonElement | null
+  ) => void
 }) {
   const { t } = useTranslation()
+  const triggerRef = useRef<HTMLButtonElement>(null)
   const actions: AccountAction[] = [
     'edit',
     'refresh',
@@ -112,6 +117,7 @@ export function AccountActions({
         render={
           <Button
             aria-label={t('account.actions.open')}
+            ref={triggerRef}
             className='size-10 sm:size-8'
             size='icon'
             title={t('account.actions.open')}
@@ -125,7 +131,7 @@ export function AccountActions({
         {actions.map((action) => (
           <DropdownMenuItem
             key={action}
-            onClick={() => onAction(action, account)}
+            onClick={() => onAction(action, account, triggerRef.current)}
             variant={
               action === 'archive' || action === 'delete'
                 ? 'destructive'
@@ -148,7 +154,11 @@ export function AccountCard({
 }: {
   account: AccountListItem
   isAdmin: boolean
-  onAction: (action: AccountAction, account: AccountListItem) => void
+  onAction: (
+    action: AccountAction,
+    account: AccountListItem,
+    trigger: HTMLButtonElement | null
+  ) => void
 }) {
   const { t } = useTranslation()
   return (
@@ -217,7 +227,7 @@ export function AccountCard({
       </div>
       <section className='grid gap-3'>
         <div className='grid grid-cols-2 gap-x-5 gap-y-4'>
-          <MetricCell label={t('site.dashboard.totalQuota')}>
+          <MetricCell label={t('site.dashboard.todayQuota')}>
             <QuotaAmount
               className='justify-items-center'
               nullLabel='0'
@@ -225,7 +235,7 @@ export function AccountCard({
               rate={account.rate}
             />
           </MetricCell>
-          <MetricCell label={t('site.dashboard.totalTokens')}>
+          <MetricCell label={t('site.dashboard.todayTokens')}>
             <MetricValue
               compact
               nullLabel='0'
@@ -234,7 +244,7 @@ export function AccountCard({
           </MetricCell>
         </div>
         <div className='grid grid-cols-3 gap-x-5 gap-y-4'>
-          <MetricCell label={t('site.dashboard.totalCount')}>
+          <MetricCell label={t('site.dashboard.todayCount')}>
             <MetricValue
               compact
               nullLabel='0'

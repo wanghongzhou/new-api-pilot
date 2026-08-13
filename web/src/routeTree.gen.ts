@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedModelCatalogRouteImport } from './routes/_authenticated/model-catalog'
 import { Route as AuthenticatedChangePasswordRouteImport } from './routes/_authenticated/change-password'
 import { Route as authSignInRouteImport } from './routes/(auth)/sign-in'
 import { Route as AuthenticatedUserInventoryIndexRouteImport } from './routes/_authenticated/user-inventory/index'
@@ -22,7 +23,6 @@ import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authen
 import { Route as AuthenticatedRankingsIndexRouteImport } from './routes/_authenticated/rankings/index'
 import { Route as AuthenticatedPricingGroupsIndexRouteImport } from './routes/_authenticated/pricing-groups/index'
 import { Route as AuthenticatedPerformanceHistoryIndexRouteImport } from './routes/_authenticated/performance-history/index'
-import { Route as AuthenticatedModelCatalogIndexRouteImport } from './routes/_authenticated/model-catalog/index'
 import { Route as AuthenticatedLogsIndexRouteImport } from './routes/_authenticated/logs/index'
 import { Route as AuthenticatedFinancialOperationsIndexRouteImport } from './routes/_authenticated/financial-operations/index'
 import { Route as AuthenticatedExportsIndexRouteImport } from './routes/_authenticated/exports/index'
@@ -71,6 +71,12 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedModelCatalogRoute =
+  AuthenticatedModelCatalogRouteImport.update({
+    id: '/model-catalog',
+    path: '/model-catalog',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedChangePasswordRoute =
   AuthenticatedChangePasswordRouteImport.update({
     id: '/change-password',
@@ -133,12 +139,6 @@ const AuthenticatedPerformanceHistoryIndexRoute =
   AuthenticatedPerformanceHistoryIndexRouteImport.update({
     id: '/performance-history/',
     path: '/performance-history/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedModelCatalogIndexRoute =
-  AuthenticatedModelCatalogIndexRouteImport.update({
-    id: '/model-catalog/',
-    path: '/model-catalog/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedLogsIndexRoute = AuthenticatedLogsIndexRouteImport.update({
@@ -373,6 +373,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/sign-in': typeof authSignInRoute
   '/change-password': typeof AuthenticatedChangePasswordRoute
+  '/model-catalog': typeof AuthenticatedModelCatalogRoute
   '/settings/system': typeof AuthenticatedSettingsSystemRoute
   '/settings/users': typeof AuthenticatedSettingsUsersRoute
   '/statistics/accounts': typeof AuthenticatedStatisticsAccountsRoute
@@ -392,7 +393,6 @@ export interface FileRoutesByFullPath {
   '/exports/': typeof AuthenticatedExportsIndexRoute
   '/financial-operations/': typeof AuthenticatedFinancialOperationsIndexRoute
   '/logs/': typeof AuthenticatedLogsIndexRoute
-  '/model-catalog/': typeof AuthenticatedModelCatalogIndexRoute
   '/performance-history/': typeof AuthenticatedPerformanceHistoryIndexRoute
   '/pricing-groups/': typeof AuthenticatedPricingGroupsIndexRoute
   '/rankings/': typeof AuthenticatedRankingsIndexRoute
@@ -426,6 +426,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/sign-in': typeof authSignInRoute
   '/change-password': typeof AuthenticatedChangePasswordRoute
+  '/model-catalog': typeof AuthenticatedModelCatalogRoute
   '/settings/system': typeof AuthenticatedSettingsSystemRoute
   '/settings/users': typeof AuthenticatedSettingsUsersRoute
   '/statistics/accounts': typeof AuthenticatedStatisticsAccountsRoute
@@ -445,7 +446,6 @@ export interface FileRoutesByTo {
   '/exports': typeof AuthenticatedExportsIndexRoute
   '/financial-operations': typeof AuthenticatedFinancialOperationsIndexRoute
   '/logs': typeof AuthenticatedLogsIndexRoute
-  '/model-catalog': typeof AuthenticatedModelCatalogIndexRoute
   '/performance-history': typeof AuthenticatedPerformanceHistoryIndexRoute
   '/pricing-groups': typeof AuthenticatedPricingGroupsIndexRoute
   '/rankings': typeof AuthenticatedRankingsIndexRoute
@@ -481,6 +481,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/(auth)/sign-in': typeof authSignInRoute
   '/_authenticated/change-password': typeof AuthenticatedChangePasswordRoute
+  '/_authenticated/model-catalog': typeof AuthenticatedModelCatalogRoute
   '/_authenticated/settings/system': typeof AuthenticatedSettingsSystemRoute
   '/_authenticated/settings/users': typeof AuthenticatedSettingsUsersRoute
   '/_authenticated/statistics/accounts': typeof AuthenticatedStatisticsAccountsRoute
@@ -500,7 +501,6 @@ export interface FileRoutesById {
   '/_authenticated/exports/': typeof AuthenticatedExportsIndexRoute
   '/_authenticated/financial-operations/': typeof AuthenticatedFinancialOperationsIndexRoute
   '/_authenticated/logs/': typeof AuthenticatedLogsIndexRoute
-  '/_authenticated/model-catalog/': typeof AuthenticatedModelCatalogIndexRoute
   '/_authenticated/performance-history/': typeof AuthenticatedPerformanceHistoryIndexRoute
   '/_authenticated/pricing-groups/': typeof AuthenticatedPricingGroupsIndexRoute
   '/_authenticated/rankings/': typeof AuthenticatedRankingsIndexRoute
@@ -536,6 +536,7 @@ export interface FileRouteTypes {
     | '/'
     | '/sign-in'
     | '/change-password'
+    | '/model-catalog'
     | '/settings/system'
     | '/settings/users'
     | '/statistics/accounts'
@@ -555,7 +556,6 @@ export interface FileRouteTypes {
     | '/exports/'
     | '/financial-operations/'
     | '/logs/'
-    | '/model-catalog/'
     | '/performance-history/'
     | '/pricing-groups/'
     | '/rankings/'
@@ -589,6 +589,7 @@ export interface FileRouteTypes {
     | '/'
     | '/sign-in'
     | '/change-password'
+    | '/model-catalog'
     | '/settings/system'
     | '/settings/users'
     | '/statistics/accounts'
@@ -608,7 +609,6 @@ export interface FileRouteTypes {
     | '/exports'
     | '/financial-operations'
     | '/logs'
-    | '/model-catalog'
     | '/performance-history'
     | '/pricing-groups'
     | '/rankings'
@@ -643,6 +643,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/(auth)/sign-in'
     | '/_authenticated/change-password'
+    | '/_authenticated/model-catalog'
     | '/_authenticated/settings/system'
     | '/_authenticated/settings/users'
     | '/_authenticated/statistics/accounts'
@@ -662,7 +663,6 @@ export interface FileRouteTypes {
     | '/_authenticated/exports/'
     | '/_authenticated/financial-operations/'
     | '/_authenticated/logs/'
-    | '/_authenticated/model-catalog/'
     | '/_authenticated/performance-history/'
     | '/_authenticated/pricing-groups/'
     | '/_authenticated/rankings/'
@@ -714,6 +714,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/model-catalog': {
+      id: '/_authenticated/model-catalog'
+      path: '/model-catalog'
+      fullPath: '/model-catalog'
+      preLoaderRoute: typeof AuthenticatedModelCatalogRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/change-password': {
       id: '/_authenticated/change-password'
@@ -790,13 +797,6 @@ declare module '@tanstack/react-router' {
       path: '/performance-history'
       fullPath: '/performance-history/'
       preLoaderRoute: typeof AuthenticatedPerformanceHistoryIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/model-catalog/': {
-      id: '/_authenticated/model-catalog/'
-      path: '/model-catalog'
-      fullPath: '/model-catalog/'
-      preLoaderRoute: typeof AuthenticatedModelCatalogIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/logs/': {
@@ -1070,6 +1070,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedChangePasswordRoute: typeof AuthenticatedChangePasswordRoute
+  AuthenticatedModelCatalogRoute: typeof AuthenticatedModelCatalogRoute
   AuthenticatedSettingsSystemRoute: typeof AuthenticatedSettingsSystemRoute
   AuthenticatedSettingsUsersRoute: typeof AuthenticatedSettingsUsersRoute
   AuthenticatedStatisticsAccountsRoute: typeof AuthenticatedStatisticsAccountsRoute
@@ -1089,7 +1090,6 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedExportsIndexRoute: typeof AuthenticatedExportsIndexRoute
   AuthenticatedFinancialOperationsIndexRoute: typeof AuthenticatedFinancialOperationsIndexRoute
   AuthenticatedLogsIndexRoute: typeof AuthenticatedLogsIndexRoute
-  AuthenticatedModelCatalogIndexRoute: typeof AuthenticatedModelCatalogIndexRoute
   AuthenticatedPerformanceHistoryIndexRoute: typeof AuthenticatedPerformanceHistoryIndexRoute
   AuthenticatedPricingGroupsIndexRoute: typeof AuthenticatedPricingGroupsIndexRoute
   AuthenticatedRankingsIndexRoute: typeof AuthenticatedRankingsIndexRoute
@@ -1122,6 +1122,7 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedChangePasswordRoute: AuthenticatedChangePasswordRoute,
+  AuthenticatedModelCatalogRoute: AuthenticatedModelCatalogRoute,
   AuthenticatedSettingsSystemRoute: AuthenticatedSettingsSystemRoute,
   AuthenticatedSettingsUsersRoute: AuthenticatedSettingsUsersRoute,
   AuthenticatedStatisticsAccountsRoute: AuthenticatedStatisticsAccountsRoute,
@@ -1143,7 +1144,6 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedFinancialOperationsIndexRoute:
     AuthenticatedFinancialOperationsIndexRoute,
   AuthenticatedLogsIndexRoute: AuthenticatedLogsIndexRoute,
-  AuthenticatedModelCatalogIndexRoute: AuthenticatedModelCatalogIndexRoute,
   AuthenticatedPerformanceHistoryIndexRoute:
     AuthenticatedPerformanceHistoryIndexRoute,
   AuthenticatedPricingGroupsIndexRoute: AuthenticatedPricingGroupsIndexRoute,

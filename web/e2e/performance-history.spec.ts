@@ -277,6 +277,9 @@ test('shows upstream values in seconds with compact filters, server pagination a
     /\/api\/sites\/9007199254740995\/performance-history(?:\?.*)?$/,
     async (route) => {
       assertAuthenticated(route)
+      expect(new URL(route.request().url()).searchParams.has('site_ids')).toBe(
+        false
+      )
       await route.fulfill({ json: envelope(listResponse(true)) })
     }
   )
@@ -284,6 +287,9 @@ test('shows upstream values in seconds with compact filters, server pagination a
     /\/api\/sites\/9007199254740995\/performance-history\/statistics(?:\?.*)?$/,
     async (route) => {
       assertAuthenticated(route)
+      expect(new URL(route.request().url()).searchParams.has('site_ids')).toBe(
+        false
+      )
       await route.fulfill({ json: envelope(statisticsResponse(true)) })
     }
   )
@@ -445,6 +451,9 @@ test('shows upstream values in seconds with compact filters, server pagination a
   await expect(
     page.getByRole('heading', { name: '站点性能历史' })
   ).toBeVisible()
+  await expect(
+    page.getByRole('button', { exact: true, name: '站点' })
+  ).toHaveCount(0)
   await expect(page.getByText('计数器加权值可用')).toBeVisible()
   await expect(page.getByText('9,007,199,254,740,993')).toBeVisible()
   await expect(page.getByText('99%')).toBeVisible()

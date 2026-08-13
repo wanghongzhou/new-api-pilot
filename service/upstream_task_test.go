@@ -17,13 +17,13 @@ func TestTaskMetricUsesNullWithoutDenominator(t *testing.T) {
 	if metric.SuccessRate != nil || metric.AvgQueueSeconds != nil || metric.AvgRunSeconds != nil || metric.AvgTotalSeconds != nil {
 		t.Fatalf("undefined metrics must be null: %#v", metric)
 	}
-	page := dto.UpstreamTaskPageResponse{Items: []dto.UpstreamTaskItem{}, Total: 0, Page: 2, PageSize: 20, DataStatus: "pending"}
+	page := dto.UpstreamTaskPageResponse{Items: []dto.UpstreamTaskItem{}, Total: "9007199254740993", Page: 2, PageSize: 20, DataStatus: "pending"}
 	raw, err := json.Marshal(page)
 	if err != nil {
 		t.Fatal(err)
 	}
 	text := string(raw)
-	if !strings.Contains(text, `"page":2`) || !strings.Contains(text, `"page_size":20`) || strings.Contains(text, `"Page"`) || strings.Contains(text, `"PageSize"`) {
+	if !strings.Contains(text, `"total":"9007199254740993"`) || !strings.Contains(text, `"page":2`) || !strings.Contains(text, `"page_size":20`) || strings.Contains(text, `"Page"`) || strings.Contains(text, `"PageSize"`) {
 		t.Fatalf("pagination JSON contract mismatch: %s", text)
 	}
 }

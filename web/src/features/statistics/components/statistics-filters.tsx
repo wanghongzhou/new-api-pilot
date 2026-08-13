@@ -36,6 +36,7 @@ import {
   listTokenOptions,
 } from '../api'
 import { statisticsKeys } from '../query-keys'
+import { encodeStatisticsDimensionFilter } from '../search'
 import type { StatisticsScope, StatisticsSearch } from '../types'
 
 const filterSchema = z.object({
@@ -319,11 +320,8 @@ export function StatisticsFilters({
   )
   const groupOptions = uniqueOptions(
     (groupQuery.data?.items ?? []).map((group) => ({
-      label: t('statistics.filter.groupOption', {
-        group: group.use_group || t('statistics.group.unknown'),
-        site: group.site_name,
-      }),
-      value: group.use_group,
+      label: group.use_group || t('statistics.group.unknown'),
+      value: encodeStatisticsDimensionFilter(group.use_group),
     })),
     useGroups
   )
@@ -344,11 +342,8 @@ export function StatisticsFilters({
   )
   const nodeOptions = uniqueOptions(
     (nodeQuery.data?.items ?? []).map((node) => ({
-      label: t('statistics.filter.nodeOption', {
-        node: node.node_name || t('statistics.node.unknown'),
-        site: node.site_name,
-      }),
-      value: node.node_name,
+      label: node.node_name || t('statistics.node.unknown'),
+      value: encodeStatisticsDimensionFilter(node.node_name),
     })),
     nodeNames
   )

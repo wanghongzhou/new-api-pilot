@@ -86,11 +86,10 @@ export function ThemeSettingsDrawer() {
       <SheetTrigger
         render={
           <Button
+            aria-label={t('Open theme settings')}
+            className='size-10 sm:size-8'
             size='icon'
             variant='ghost'
-            aria-label={t('Open theme settings')}
-            aria-describedby='config-drawer-description'
-            className='max-md:hidden'
           />
         }
       >

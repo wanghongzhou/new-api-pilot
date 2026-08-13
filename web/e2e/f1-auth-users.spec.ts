@@ -249,6 +249,24 @@ test('signs in, enforces password change, and keeps passwords out of storage', a
   await page.getByRole('button', { name: '登录', exact: true }).click()
 
   await expect(page).toHaveURL(/\/change-password$/)
+  await page.getByRole('button', { name: '修改密码', exact: true }).click()
+  for (const input of [
+    page.locator('#original-password'),
+    page.locator('#new-password'),
+    page.locator('#confirm-password'),
+  ]) {
+    await expect(input).toHaveAttribute('aria-invalid', 'true')
+    const errorId = await input.getAttribute('aria-errormessage')
+    expect(errorId).toBeTruthy()
+    await expect(input).toHaveAttribute(
+      'aria-describedby',
+      new RegExp(errorId ?? '$^')
+    )
+  }
+  expect(
+    (await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze())
+      .violations
+  ).toEqual([])
   await page
     .getByRole('textbox', { name: '当前密码', exact: true })
     .fill('Bootstrap123!')
@@ -264,9 +282,56 @@ test('signs in, enforces password change, and keeps passwords out of storage', a
   const storedValues = await page.evaluate(() =>
     Object.values(window.localStorage).join(' ')
   )
+  await page.goBack()
+  await expect(page).not.toHaveURL(/\/(?:sign-in|change-password)(?:\?|$)/)
+  await expect(page.locator('#original-password')).toHaveCount(0)
   expect(storedValues).not.toContain('Bootstrap123!')
   expect(storedValues).not.toContain('Changed123!')
 })
+
+for (const width of [390, 768, 1024, 1440]) {
+  test(`keeps login keyboard recovery usable after a network failure at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ height: width === 390 ? 844 : 900, width })
+    await mockAuthenticatedShell(page)
+    await mockDashboard(page)
+    let loginCalls = 0
+    await page.route('**/api/user/login', async (route) => {
+      loginCalls += 1
+      if (loginCalls === 1) {
+        await route.abort('connectionfailed')
+        return
+      }
+      await route.fulfill({ json: envelope(admin, 'req_login_retry') })
+    })
+
+    await page.goto('/sign-in')
+    const username = page.getByLabel('用户名')
+    const password = page.getByRole('textbox', { name: '密码', exact: true })
+    await expect(username).toBeFocused()
+    await username.fill('admin')
+    await page.keyboard.press('Tab')
+    await expect(password).toBeFocused()
+    await password.fill('RetryPassword123!')
+    await page.keyboard.press('Enter')
+
+    await expect(page.getByRole('alert')).toHaveText('无法连接服务器')
+    await expect(password).toHaveValue('RetryPassword123!')
+    await expect(page.getByRole('button', { name: '登录' })).toBeEnabled()
+    await page.keyboard.press('Enter')
+    await expect(page).toHaveURL(/\/dashboard\/?$/)
+    expect(loginCalls).toBe(2)
+    expect(
+      await page.evaluate(() => Object.values(window.localStorage).join(' '))
+    ).not.toContain('RetryPassword123!')
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth
+      )
+    ).toBe(true)
+  })
+}
 
 test('restores a deep link, verifies the session once, and shows viewer read-only UI', async ({
   page,
@@ -512,6 +577,60 @@ test('edits, resets, disables, and re-enables a platform user', async ({
     viewerSurface().getByRole('button', { name: '禁用用户', exact: true })
   ).toBeVisible()
 })
+
+for (const width of [390, 1440]) {
+  test(`keeps platform-user enable open during a pending request at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ height: width === 390 ? 844 : 900, width })
+    await seedAuth(page, admin)
+    await mockSelf(page, admin)
+    let viewerStatus: 1 | 2 = 2
+    await mockUserList(page, () => viewerStatus)
+    let enableCalls = 0
+    let releaseEnable = () => {}
+    const enableGate = new Promise<void>((resolve) => {
+      releaseEnable = resolve
+    })
+    await page.route(`**/api/user/${viewer.id}/enable`, async (route) => {
+      enableCalls += 1
+      await enableGate
+      viewerStatus = 1
+      await fulfillMutation(route)
+    })
+
+    await page.goto('/settings/users')
+    const viewerSurface = page
+      .locator('tr, article')
+      .filter({ hasText: 'viewer' })
+      .filter({ visible: true })
+    const trigger = viewerSurface.getByRole('button', {
+      name: '启用用户',
+      exact: true,
+    })
+    await trigger.click()
+    const dialog = page.getByRole('dialog', { name: '启用平台用户' })
+    const confirm = dialog.getByRole('button', {
+      name: '启用用户',
+      exact: true,
+    })
+    await confirm.click()
+    await page.keyboard.press('Enter')
+    await page.keyboard.press('Escape')
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByRole('button', { name: '取消' })).toBeDisabled()
+    await expect.poll(() => enableCalls).toBe(1)
+
+    releaseEnable()
+    await expect(dialog).toHaveCount(0)
+    await expect(
+      viewerSurface.getByRole('button', { name: '禁用用户', exact: true })
+    ).toBeVisible()
+    await expect(
+      viewerSurface.getByRole('button', { name: '禁用用户', exact: true })
+    ).toBeFocused()
+  })
+}
 
 test('keeps the current user identity in sync after editing it', async ({
   page,

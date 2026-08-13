@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/badge'
 import { DataTable } from '@/components/ui/data-table'
 import { Spinner } from '@/components/ui/spinner'
 import { OperationsViewPurpose } from '@/features/operations-analytics/components/operations-analytics-workspace'
+import { useRetainedQueryData } from '@/hooks/use-retained-query-data'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import type { IdString } from '@/lib/api-types'
@@ -34,7 +35,10 @@ import {
   buildStatisticsExportRequest,
 } from '../export-request'
 import { statisticsKeys } from '../query-keys'
-import { buildScopeStatisticsSearch } from '../search'
+import {
+  buildScopeStatisticsSearch,
+  decodeStatisticsDimensionFilters,
+} from '../search'
 import type {
   AccountStatisticsBreakdown,
   ChannelStatisticsBreakdown,
@@ -91,7 +95,7 @@ function queryParams(search: StatisticsSearch): StatisticsQueryParams {
     end_timestamp: search.end,
     granularity: search.granularity,
     model_names: search.models,
-    node_names: search.nodeNames,
+    node_names: decodeStatisticsDimensionFilters(search.nodeNames),
     p: search.page,
     page_size: search.pageSize,
     site_ids: search.siteIds,
@@ -99,7 +103,7 @@ function queryParams(search: StatisticsSearch): StatisticsQueryParams {
     sort_order: search.order,
     start_timestamp: search.start,
     token_keys: search.tokenKeys,
-    use_groups: search.useGroups,
+    use_groups: decodeStatisticsDimensionFilters(search.useGroups),
   }
 }
 
@@ -446,18 +450,25 @@ function BreakdownTable({
         header: t('statistics.metric.quota'),
         id: 'quota',
       },
-      {
-        cell: ({ row }) => (
-          <AmountValue
-            display={search.display}
-            siteBreakdown={row.original.site_breakdown}
-          />
-        ),
-        header: t(
-          dynamicI18nKey('statistics', `statistics.display.${search.display}`)
-        ),
-        id: 'amount',
-      },
+      ...(search.display === 'quota'
+        ? []
+        : [
+            {
+              cell: ({ row }) => (
+                <AmountValue
+                  display={search.display}
+                  siteBreakdown={row.original.site_breakdown}
+                />
+              ),
+              header: t(
+                dynamicI18nKey(
+                  'statistics',
+                  `statistics.display.${search.display}`
+                )
+              ),
+              id: 'amount',
+            } satisfies ColumnDef<StatisticsBreakdownBase, unknown>,
+          ]),
       {
         cell: ({ row }) => (
           <MetricValue compact value={row.original.token_used} />
@@ -583,7 +594,16 @@ export function StatisticsPage({
     statisticsQuery.isPlaceholderData &&
     statisticsQuery.isFetching
   )
-  const data = contractValid || rangeTransition ? response : undefined
+  const retainedScope = entity
+    ? `${entity.scope}:${entity.id}`
+    : `scope:${scope}`
+  const currentData = contractValid ? response : undefined
+  const retainedData = useRetainedQueryData(
+    currentData,
+    statisticsQuery.isError,
+    retainedScope
+  )
+  const data = rangeTransition ? response : retainedData
   const [exportDraft, setExportDraft] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [recreating, setRecreating] = useState(false)
@@ -657,7 +677,7 @@ export function StatisticsPage({
   } else if (!data) {
     body = null
   } else {
-    const empty = data.trend.length === 0 && data.breakdown.total === 0
+    const empty = data.trend.length === 0 && data.breakdown.total === '0'
     let resultContent: ReactNode
     if (empty && data.summary.data_status === 'complete') {
       resultContent = (

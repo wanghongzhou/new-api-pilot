@@ -43,6 +43,7 @@ type StatisticsExportRowCursor struct {
 }
 
 type StatisticsExportRow struct {
+	TotalRows       int64  `gorm:"column:total_rows"`
 	EntityID        int64  `gorm:"column:entity_id"`
 	DimensionSiteID int64  `gorm:"column:dimension_site_id"`
 	DimensionValue  string `gorm:"column:dimension_value"`
@@ -509,7 +510,8 @@ final_rows AS (
          (` + sortText + `) AS sort_text
   FROM windowed_rows AS w
 )
-SELECT entity_id, dimension_site_id, dimension_value,
+SELECT COUNT(*) OVER() AS total_rows,
+       entity_id, dimension_site_id, dimension_value,
        dimension_key, dimension_id, dimension_name,
        breakdown_site_id, breakdown_site_name,
        bucket_start, bucket_end,

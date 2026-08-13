@@ -267,3 +267,5 @@ value_type=int 按 Go int64 解析和范围校验，不使用平台相关的 Go 
 本平台不采集渠道 Key，因此不得提供 `key_count`、多 Key 健康、Key 级余额或 Key 级禁用原因等虚构指标。原有任何“不得展示渠道健康和余额”的限制由本节替代：允许展示渠道级状态、余额和响应时间，但绝不读取、存储或展示 Key 及 Key 派生状态。
 
 内置规则固定为 `channel_balance_low`（`channel.balance_total`，`<=`）、`channel_response_time_high`（`channel.response_time_avg_ms`，`>=`）和 `channel_availability_low`（`channel.availability_rate`，`<=`）。三者 target_type 均为 `site`、canonical target 为 site_id，使用现有 global 基础规则与 site override 继承模型。Warning/Critical 默认阈值与连续次数以 §20.3 为准；低方向规则的 Critical 阈值必须小于 Warning，高方向规则相反。恢复使用同一阈值且必须来自后续 complete 快照，不引入迟滞。每个 complete 小时快照只形成一个 canonical sample identity；重放、五分钟兜底扫描与 post-commit hook 共享 cursor，因此不能重复累计或重复投递。
+
+告警用户文案必须与比较运算符一致：`<=` 使用“达到或低于阈值”，`>=` 使用“达到或超过阈值”，不得在当前值恰等于阈值时显示数学上不成立的“低于”或“超过”。

@@ -16,7 +16,7 @@ type ModelCatalogExportOptions struct {
 	Format, TemporaryPath                                  string
 	DataSnapshotAt, ExportedAt, MaxFileBytes, MinFreeBytes int64
 	DiskFree                                               ExportDiskFreeFunc
-	OnPage                                                 func(context.Context, int, int64) error
+	OnPage                                                 func(context.Context, int64, int64) error
 }
 
 func GenerateModelCatalogExport(ctx context.Context, o ModelCatalogExportOptions) (ExportGenerateResult, error) {
@@ -68,7 +68,7 @@ func GenerateModelCatalogExport(ctx context.Context, o ModelCatalogExportOptions
 			count++
 		}
 		if o.OnPage != nil {
-			if e = o.OnPage(ctx, page, count); e != nil {
+			if e = o.OnPage(ctx, count, total); e != nil {
 				return ExportGenerateResult{}, e
 			}
 		}

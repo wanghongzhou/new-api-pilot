@@ -1,5 +1,7 @@
-import type { DecimalString, MetricString } from '@/lib/api-types'
-import { formatNumericDisplayValue } from '@/lib/display-value'
+import {
+  formatMetricDisplayValue,
+  formatNumericDisplayValue,
+} from '@/lib/display-value'
 
 export function MetricValue({
   value,
@@ -8,24 +10,11 @@ export function MetricValue({
 }: {
   compact?: boolean
   nullLabel?: string
-  value: DecimalString | MetricString | null
+  value: string | null
 }) {
   if (value == null) {
     return <span>{nullLabel ?? formatNumericDisplayValue(value)}</span>
   }
 
-  let display: string = value
-  try {
-    const amount = BigInt(value)
-    display = compact
-      ? Intl.NumberFormat('zh-CN', {
-          maximumFractionDigits: 1,
-          notation: 'compact',
-        }).format(amount)
-      : amount.toLocaleString('zh-CN')
-  } catch {
-    display = value
-  }
-
-  return <span title={value}>{display}</span>
+  return <span title={value}>{formatMetricDisplayValue(value, compact)}</span>
 }

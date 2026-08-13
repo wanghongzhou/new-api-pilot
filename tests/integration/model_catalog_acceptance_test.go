@@ -77,7 +77,7 @@ func TestA96ModelCatalogCoverageMissingAndPrivacy(t *testing.T) {
 	}
 	q := dto.ModelCatalogQuery{Page: 1, PageSize: 20, SiteIDs: []int64{site1.ID, site2.ID, site3.ID}}
 	page, err := svc.List(context.Background(), q)
-	if err != nil || page.Total != 3 || page.DataStatus != "complete" {
+	if err != nil || page.Total != "3" || page.DataStatus != "complete" {
 		t.Fatalf("page=%#v err=%v", page, err)
 	}
 	coverage, err := svc.Coverage(context.Background(), q)
@@ -85,7 +85,7 @@ func TestA96ModelCatalogCoverageMissingAndPrivacy(t *testing.T) {
 		t.Fatalf("coverage=%#v err=%v", coverage, err)
 	}
 	missing, err := svc.Missing(context.Background(), q)
-	if err != nil || missing.Total != 3 || missing.Items[0].ModelName != fixture.ExpectedExactMissing[0] {
+	if err != nil || missing.Total != "3" || missing.Items[0].ModelName != fixture.ExpectedExactMissing[0] {
 		t.Fatalf("missing=%#v err=%v", missing, err)
 	}
 	filtered := q

@@ -412,11 +412,8 @@ func (runtime *ExportRuntime) execute(parent context.Context, claim model.Export
 		_ = stopHeartbeat()
 		return runtime.lostClaim(err)
 	}
-	progressPage := func(ctx context.Context, page int, _ int64) error {
-		value := int64(page)
-		if value > 95 {
-			value = 95
-		}
+	progressPage := func(ctx context.Context, processed, total int64) error {
+		value := exportProgress(processed, total)
 		progress.Store(value)
 		now := runtime.clock.Now().Unix()
 		return runtime.repository.Heartbeat(ctx, claim.Job.ID, token, now,
@@ -505,6 +502,20 @@ func (runtime *ExportRuntime) execute(parent context.Context, claim model.Export
 	metricResult, metricSize = "success", generated.FileSize
 	recordWorkerMetric(func() { runtime.metrics.IncrementExportEvent("completion", "success") })
 	return nil
+}
+
+func exportProgress(processed, total int64) int64 {
+	if processed <= 0 || total <= 0 {
+		return 0
+	}
+	if processed >= total {
+		return 95
+	}
+	value := processed * 95 / total
+	if value < 1 {
+		return 1
+	}
+	return value
 }
 
 func (runtime *ExportRuntime) heartbeat(

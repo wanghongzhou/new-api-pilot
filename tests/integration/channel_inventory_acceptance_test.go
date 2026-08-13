@@ -30,7 +30,7 @@ func TestChannelInventorySnapshotStatisticsAndPrivacyAcceptance(t *testing.T) {
 		t.Fatal(err)
 	}
 	page, err := svc.List(context.Background(), dto.ChannelInventoryQuery{Page: 1, PageSize: 20, SiteIDs: []int64{site.ID}})
-	if err != nil || page.Total != 2 || page.Items[0].Balance != "12.3456789012" || page.Items[0].UsedQuota != "9007199254740993" {
+	if err != nil || page.Total != "2" || page.Items[0].Balance != "12.3456789012" || page.Items[0].UsedQuota != "9007199254740993" {
 		t.Fatalf("channel page=%#v err=%v", page, err)
 	}
 	stats, err := svc.Statistics(context.Background(), dto.ChannelInventoryStatisticsQuery{StartTimestamp: hour, EndTimestamp: hour + 3600, SiteIDs: []int64{site.ID}})

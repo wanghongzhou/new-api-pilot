@@ -27,7 +27,7 @@ PageData<T>：
 |---|---|
 | page | number |
 | page_size | number |
-| total | number |
+| total | string |
 | items | T[] |
 
 ListQuery：
@@ -40,7 +40,7 @@ ListQuery：
 | sort_by | string | 每个接口使用白名单 |
 | sort_order | string | asc/desc，默认 desc |
 
-所有时间范围使用 start_timestamp、end_timestamp，左闭右开，必须为 Unix 秒并与 granularity 对应的北京时间桶边界对齐。ID path 参数是十进制字符串，解析后必须在 int64 正整数范围内。数据库 BIGINT 字段以及 quota、token_used、request_count 等用量指标 DTO 一律使用字符串；受容量约束的小型实体计数、Unix 秒时间戳、百分比、进度、页码和分页 total 使用 JSON number。
+所有时间范围使用 start_timestamp、end_timestamp，左闭右开，必须为 Unix 秒并与 granularity 对应的北京时间桶边界对齐。ID path 参数是十进制字符串，解析后必须在 int64 正整数范围内。数据库 BIGINT 字段以及 quota、token_used、request_count、所有 `PageData.total` 等累计计数 DTO 一律使用十进制字符串；受容量约束的小型实体计数、Unix 秒时间戳、百分比、进度、页码和 page_size 使用 JSON number。服务端内部仍可用 int64 统计 `PageData.total`，但 JSON 契约必须序列化为字符串，禁止前端先解析成 JavaScript number。
 
 平台不接收文件上传。JSON 请求体默认上限 1 MiB，登录/密码接口上限 16 KiB；超过返回 HTTP 413、code=PAYLOAD_TOO_LARGE。Controller 使用严格 JSON 解码，未知字段、重复字段和尾随 JSON 均返回 VALIDATION_ERROR。
 
@@ -462,6 +462,7 @@ minute 只能查询最近 retention_days；hour 最大 1 年；day 最大 5 年�
 | collection | SITE_CONFIG_CHANGED | 任务冻结版本失效；按新配置重新排队 |
 | collection | DEPENDENCY_WINDOWS_MISSING | 本地账户/客户重建等待站点窗口 |
 | collection | WORKER_LEASE_LOST | Worker 租约丢失；按当前 run-window 已用预算恢复或终止 |
+| collection | COLLECTION_EXECUTION_FAILED | 历史或内部采集任务失败，但持久错误码或参数不符合当前稳定消息契约；仅提供中性排障提示 |
 | export | EXPORT_DISK_LOW | 剩余空间低于阈值；清理空间后重新导出 |
 | export | EXPORT_FILE_TOO_LARGE | 文件超过配置上限；缩小范围 |
 | export | EXPORT_SNAPSHOT_FAILED | 一致性快照或查询失败；可重试 |
@@ -497,6 +498,7 @@ params 的 key 由 code 固定并进入 OpenAPI fixture。下表是 `MessagePara
 | SITE_CONFIG_CHANGED | site_id、expected_config_version:number、actual_config_version:number | - |
 | DEPENDENCY_WINDOWS_MISSING | site_id、run_id、start_timestamp、end_timestamp | - |
 | WORKER_LEASE_LOST | site_id、run_id、hour_ts | - |
+| COLLECTION_EXECUTION_FAILED | - | - |
 | EXPORT_DISK_LOW | export_id、free_bytes:string、threshold_bytes:string | - |
 | EXPORT_FILE_TOO_LARGE | export_id、file_bytes:string、limit_bytes:string | - |
 | EXPORT_SNAPSHOT_FAILED、EXPORT_WRITE_FAILED、EXPORT_EXPIRED、EXPORT_FILE_MISSING | export_id | - |
@@ -521,6 +523,8 @@ params 的 key 由 code 固定并进入 OpenAPI fixture。下表是 `MessagePara
 | INTERNAL_CONTRACT_ERROR | component:string | value:string |
 
 投递参数中的 null 仅用于测试消息或 delivery 尚未创建前的同步配置失败：测试 delivery 的 alert_event_id 固定 null，配置预检失败时 delivery_id 也为 null；测试发送成功使用 `NOTIFICATION_TEST_SUCCEEDED` 和非空 delivery_id；真实告警投递两个 ID 均非空。`INTERNAL_CONTRACT_ERROR.value` 只能携带不含秘密的安全枚举值，无法安全回显时省略。`make docs-check` 必须证明 registry 中每个稳定 code 在本表恰好出现一次，OpenAPI 生成 `code` 判别联合，`zh-CN` 文案和 fixture 覆盖该联合；不得放 Token、URL query、密码或 Webhook。
+
+采集任务和窗口从持久层恢复错误时必须先按本表白名单裁剪 params，再执行严格校验；已登记 code 的额外诊断字段不得进入 DTO。未知 code、缺少必填参数或参数类型非法时统一降级为无参数 `COLLECTION_EXECUTION_FAILED`。该降级不得复制原始错误码、`error_message`、URL/endpoint、请求方法、凭据或任意诊断参数，`technical_detail` 固定为空；页面以中性本地化文案和已有 request_id 提供排障入口。
 
 前端以 code + params 通过 i18next 生成简体中文主文案，本表之外的 error_message/technical_detail 只进入“技术详情”并可复制 request_id，不作为流程分支或已本地化主文案。新增稳定码必须同时修改本 registry、`zh-CN` 文案、契约 fixture 和验收用例。
 
@@ -1420,7 +1424,7 @@ resource `scope_revision` 按 03 §14.3 的规范元组计算。每个 item 提�
 
 Worker 新增 `log_sync` 任务类型，按跨整点的 hourly cadence 使用 site/config_version fence、有限重叠时间窗口和稳定去重；进程在小时中途启动时等待下一整点，任务失败遵循现有 retry/lease 规则。采集契约除上游日志顶层字段外，只允许从 `other` 白名单解析 `frt`、`stream_status.status/end_reason/error_count`、`cache_tokens`、`cache_creation_tokens`、`cache_creation_tokens_5m` 与 `cache_creation_tokens_1h`；非法、负数、超限或无法解析的可选诊断值按未知处理，不能因单条非核心扩展字段阻断整页日志采集，完整 `other` 和流式错误正文不得透传。重叠窗口命中既有稳定日志键时幂等更新这些诊断字段，以便升级后在上游仍保留日志时补全历史记录。
 
-API 新增 `GET /api/logs` 与 `GET /api/sites/:id/logs`，筛选字段与 `/api/log/` 对齐但采用平台 snake_case DTO，权限沿用站点范围授权。`LogItem` 除既有字段外返回 nullable bigint string `first_response_time_ms`、`stream_status`、`stream_end_reason`、bigint string `stream_error_count`、四个缓存 Token bigint string，以及按站点当前费率或平台兜底费率解析的 `rate`；未知首字时间必须为 `null`，不得伪造为 0。新增 `GET /api/logs/stat` 与 `GET /api/sites/:id/logs/stat`，接收与列表相同的维度筛选：`site_breakdown` 按完整时间范围汇总消费日志 quota 并携带各站费率，`rpm/tpm` 按最近 60 秒的消费日志计算且应用相同站点、用户、模型、Token、Channel 与 Group 维度。新增日志导出 scope `logs`，复用 `export_job` 生命周期和文件 TTL。
+API 新增 `GET /api/logs` 与 `GET /api/sites/:id/logs`，筛选字段与 `/api/log/` 对齐但采用平台 snake_case DTO，权限沿用站点范围授权。列表 `total` 与 `LogItem` 的 ID、quota、Token、耗时和其他计数统一为 bigint 十进制字符串，禁止以 JSON number 暴露而造成浏览器安全整数精度损失。`LogItem` 除既有字段外返回 nullable bigint string `first_response_time_ms`、`stream_status`、`stream_end_reason`、bigint string `stream_error_count`、四个缓存 Token bigint string，以及按站点当前费率或平台兜底费率解析的 `rate`；未知首字时间必须为 `null`，不得伪造为 0。新增 `GET /api/logs/stat` 与 `GET /api/sites/:id/logs/stat`，接收与列表相同的维度筛选：`site_breakdown` 按完整时间范围汇总消费日志 quota 并携带各站费率，`rpm/tpm` 按最近 60 秒的消费日志计算且应用相同站点、用户、模型、Token、Channel 与 Group 维度。新增日志导出 scope `logs`，复用 `export_job` 生命周期和文件 TTL。
 # P0-C 用户库存 API 与 Worker
 
 `user_sync` 保持 metadata 队列、小时 cadence、active_key、config fence 和重试预算；handler 的 fetched_rows 为完整远端用户数，written_rows 包含库存/汇总/account 受影响行。API 统一使用 UserAuth，viewer 可读、写接口不存在；列表 page_size 最大 100、查询跨度最大 1 年，排序列白名单固定。
@@ -1428,7 +1432,7 @@ API 新增 `GET /api/logs` 与 `GET /api/sites/:id/logs`，筛选字段与 `/api
 export_job 新增 `user_inventory`，与日志/统计导出共享 owner、claim、heartbeat、lease、文件 TTL、大小和磁盘门槛。
 # P0-D 渠道运营 API 与 Worker
 
-P0-C 补充：用户库存列表支持 `remote_user_id` 规范正 bigint 字符串精确筛选。该参数与 keyword（仅 username/display_name 模糊匹配）相互独立，适用于全局和站点列表接口；`statistics_type=user_inventory` 导出必须冻结并透传同一 `remote_user_id`，不得退化为未筛选导出。
+P0-C 补充：用户库存列表支持 `remote_user_id` 规范正 bigint 字符串精确筛选。该参数与 keyword（仅 username/display_name 模糊匹配）相互独立，适用于全局和站点列表接口；`statistics_type=user_inventory` 导出必须冻结并透传同一 `remote_user_id`，不得退化为未筛选导出。role 只接受 `0/1/10/100`，status 只接受 `1/2`；不在权威上游枚举内的整数必须在数据库访问前拒绝。
 
 只读接口：`GET /api/channel-inventory`、`GET /api/channel-inventory/statistics`、`GET /api/sites/:id/channel-inventory`、`GET /api/sites/:id/channel-inventory/statistics`。列表支持分页及 site/type/status/group/tag/state/keyword/balance/response_time 筛选；统计支持左闭右开整点范围和站点/type/status/group/tag 筛选。两类接口均拒绝未知参数、重复 scalar 参数、非空请求体、非法整数和超限数组；site/type/group/tag 分别最多 100 项、status 最多 20 项，group/tag 单值分别最多 128/255 个 UTF-8 字符；强制站点接口拒绝 `site_ids`。用户库存接口采用相同的未知参数、重复 scalar、非空请求体与强制站点 `site_ids` 拒绝边界。所有接口使用统一响应 envelope、viewer 可读、强制改密期间禁止，并返回稳定完整性状态。
 
@@ -1449,13 +1453,15 @@ API：`GET /api/performance-history`、`GET /api/performance-history/statistics`
 
 # T1 任务 API 与 Worker
 
-新增 `upstream_task_sync` required task、metadata queue、resource concurrency、独立 lease/active_key/max attempts=3。API：`GET /api/upstream-tasks`、`/statistics` 及对应站点四接口；支持 site/task/platform/user/group/channel/action/status/model/submit time 筛选。export runtime 接受 `upstream_tasks`。所有 bigint 为字符串，统一 envelope，viewer 可读。
+新增 `upstream_task_sync` required task、metadata queue、resource concurrency、独立 lease/active_key/max attempts=3。API：`GET /api/upstream-tasks`、`/statistics` 及对应站点四接口；支持 site/task/platform/user/group/channel/action/status/model/submit time 筛选。export runtime 接受 `upstream_tasks`。所有 bigint（包括列表 `total`）为十进制字符串，统一 envelope，viewer 可读。四个 GET 接口执行严格查询契约：未知参数、重复 scalar 参数、非规范整数或时间戳均在数据库访问前返回 `VALIDATION_ERROR`；`start_timestamp/end_timestamp` 若提供，必须是无符号、无前导零的正 Unix 秒十进制文本；强制站点接口以 path site 为唯一边界并拒绝 `site_ids`，不得静默忽略或允许覆盖。
 平台新增 `/api/model-catalog`、`/api/model-catalog/coverage`、`/api/model-catalog/missing` 及对应 `/api/sites/:id/...` 只读接口；导出类型 `model_catalog` 复用异步导出运行时。目录类 GET 接口执行严格查询契约：未知参数、重复 scalar、非空请求体、超长或非法 UTF-8 关键词/分组、超过 100 个站点、重复枚举归一化后仍超出枚举基数，以及视图不支持的筛选均返回 `VALIDATION_ERROR`；强制站点接口拒绝 `site_ids`。`model-catalog` 仅接受目录筛选，`missing` 仅接受站点与关键词，`coverage` 不接受列表筛选或分页参数。参数校验在数据库访问前完成，数据库或未分类服务错误返回内部错误，不得伪装成客户端参数错误。
 本地排行提供 `/api/rankings/models`、`/api/rankings/vendors` 与 `/api/sites/:id/rankings/...`，支持 `period=today|week|month|year`；`statistics_type=model_rankings|vendor_rankings` 支持 CSV/XLSX。
 新增 `/api/subscription-plans`、`/api/subscription-plans/statistics` 与对应站点接口；无用户订阅/订单全局聚合端点。订阅计划列表查询最多接受 100 个站点、2 个库存状态和 128 UTF-8 字节关键词；statistics 固定读取完整 scope，只允许全局端点用 `site_ids` 缩小站点范围，不接受分页、状态、启用状态或关键词。定价与分组查询最多接受 100 个站点、2 个库存状态、255 UTF-8 字节关键词和 128 UTF-8 字节精确分组。两类接口均拒绝未知参数、重复 scalar 和非空请求体，并在进入数据库前完成校验。
 # D138 定价与分组目录 API/Worker
 
 提供 `GET /api/pricing-catalog`、`GET /api/pricing-catalog/statistics`、`GET /api/group-catalog`，以及三个对应的 `/api/sites/:id/...` 强制站点端点。全局端点可接收 `site_ids`，站点端点拒绝 `site_ids`；列表统一服务端分页。statistics 固定读取完整 scope，不接受分页，也不接受或继承列表关键词、状态、分组与 billing-mode 筛选。pricing item 的身份是 `(site_id,model_name)`，包含模型厂商元数据、固定价格或 Token 各价格维度、`billing_mode/billing_expr`、可用分组、supported endpoints、remote state 与采集元数据；禁止把 vendor 当作价格身份或提供“供应商定价”聚合。
+
+模型目录（含渠道未登记）、模型定价、分组配置、用户库存、渠道库存与订阅计划的所有列表分页响应，`total` 统一返回非负 bigint 十进制字符串；Go 内部计数仍使用 `int64`，只在 DTO 映射边界格式化。禁止把数据库计数直接编码为 JSON number，避免浏览器在超过 `Number.MAX_SAFE_INTEGER` 时丢失总数和分页边界精度。`page/page_size` 仍是受校验的安全整数。
 
 Worker 除 `/api/group/` 与 `/api/pricing` 外，使用 RootAuth 调用 `/api/option/`，只接受 D138 固定 option allowlist：`ModelPrice`、`ModelRatio`、`CompletionRatio`、`CacheRatio`、`CreateCacheRatio`、`ImageRatio`、`AudioRatio`、`AudioCompletionRatio`、`billing_setting.billing_mode`、`billing_setting.billing_expr`、`GroupRatio`、`TopupGroupRatio`、`UserUsableGroups`、`GroupGroupRatio`、`AutoGroups`、`DefaultUseAutoGroup`、`group_ratio_setting.group_special_usable_group`。未知 option 一律忽略；allowlist 值执行严格 JSON、长度、数量和 decimal 校验。group item 返回基础倍率、充值倍率、用户可选状态与说明、自动顺序、默认自动分组开关、入向/出向覆盖倍率、特殊可见/隐藏规则及当前/历史模型名。
 

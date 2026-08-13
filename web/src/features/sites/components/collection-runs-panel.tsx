@@ -284,12 +284,12 @@ function RunWindowsSheet({
   const windows = windowsContractError ? [] : rawWindows
   const windowTotal = windowsQuery.data?.total ?? 0
   useEffect(() => {
-    if (!windowsQuery.data || windowTotal === 0) return
-    const lastPage = Math.max(
-      1,
-      Math.ceil(windowTotal / collectionWindowPageSize)
-    )
-    if (search.windowPage > lastPage) onSearchChange({ windowPage: lastPage })
+    if (!windowsQuery.data || windowTotal === '0') return
+    const firstOffset =
+      BigInt(search.windowPage - 1) * BigInt(collectionWindowPageSize)
+    if (search.windowPage > 1 && firstOffset >= BigInt(windowTotal)) {
+      onSearchChange({ windowPage: search.windowPage - 1 })
+    }
   }, [onSearchChange, search.windowPage, windowTotal, windowsQuery.data])
 
   const retryFailed = async () => {
@@ -404,14 +404,18 @@ function RunWindowsSheet({
                 <p className='text-destructive'>
                   {translateMessageRef(run.error)}
                 </p>
-                <code className='text-muted-foreground mt-1 block text-xs break-all'>
-                  {run.error.technical_detail}
-                </code>
-                <p className='text-muted-foreground mt-1 text-xs'>
-                  {t('collection.requestId', {
-                    requestId: run.last_request_id,
-                  })}
-                </p>
+                {run.error.technical_detail && (
+                  <code className='text-muted-foreground mt-1 block text-xs break-all'>
+                    {run.error.technical_detail}
+                  </code>
+                )}
+                {run.last_request_id && (
+                  <p className='text-muted-foreground mt-1 text-xs'>
+                    {t('collection.requestId', {
+                      requestId: run.last_request_id,
+                    })}
+                  </p>
+                )}
               </div>
             )}
           </section>
@@ -553,9 +557,12 @@ export function CollectionRunsPanel({
   const runs = listContractError ? [] : rawRuns
   const runTotal = runsQuery.data?.total ?? 0
   useEffect(() => {
-    if (!runsQuery.data || runTotal === 0) return
-    const lastPage = Math.max(1, Math.ceil(runTotal / collectionRunPageSize))
-    if (search.runPage > lastPage) onSearchChange({ runPage: lastPage })
+    if (!runsQuery.data || runTotal === '0') return
+    const firstOffset =
+      BigInt(search.runPage - 1) * BigInt(collectionRunPageSize)
+    if (search.runPage > 1 && firstOffset >= BigInt(runTotal)) {
+      onSearchChange({ runPage: search.runPage - 1 })
+    }
   }, [onSearchChange, runTotal, runsQuery.data, search.runPage])
   const columns = useMemo<ColumnDef<CollectionRunItem, unknown>[]>(
     () => [

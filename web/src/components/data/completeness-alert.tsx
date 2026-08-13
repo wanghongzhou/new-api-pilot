@@ -15,6 +15,7 @@ export function CompletenessAlert({
   completeness: Completeness
 }) {
   const { t } = useTranslation()
+  const evaluable = completeness.expected_unit_count > 0
   const complete = completeness.data_status === 'complete'
   const percentage = Math.round(completeness.completeness_rate * 1000) / 10
   return (
@@ -33,14 +34,19 @@ export function CompletenessAlert({
           />
           {t('completeness.title')}
         </h2>
-        <DataStatusBadge status={completeness.data_status} />
+        {evaluable && <DataStatusBadge status={completeness.data_status} />}
       </div>
+      <p className='text-muted-foreground mt-2 text-xs'>
+        {t('completeness.scopeDescription')}
+      </p>
       <p className='mt-2 text-sm'>
-        {t('completeness.units', {
-          complete: completeness.complete_unit_count,
-          expected: completeness.expected_unit_count,
-          rate: percentage,
-        })}
+        {evaluable
+          ? t('completeness.units', {
+              complete: completeness.complete_unit_count,
+              expected: completeness.expected_unit_count,
+              rate: percentage,
+            })
+          : t('completeness.notEvaluable')}
       </p>
       <dl className='mt-3 grid gap-2 text-sm sm:grid-cols-2'>
         <div>
@@ -56,19 +62,21 @@ export function CompletenessAlert({
             )}
           </dd>
         </div>
-        <div>
-          <dt className='text-muted-foreground text-xs'>
-            {t('completeness.siteCoverageLabel')}
-          </dt>
-          <dd>
-            {t('completeness.siteCoverage', {
-              complete: completeness.complete_site_count,
-              expected: completeness.expected_site_count,
-            })}
-          </dd>
-        </div>
+        {evaluable && (
+          <div>
+            <dt className='text-muted-foreground text-xs'>
+              {t('completeness.siteCoverageLabel')}
+            </dt>
+            <dd>
+              {t('completeness.siteCoverage', {
+                complete: completeness.complete_site_count,
+                expected: completeness.expected_site_count,
+              })}
+            </dd>
+          </div>
+        )}
       </dl>
-      {completeness.missing_site_ids.length > 0 && (
+      {evaluable && completeness.missing_site_ids.length > 0 && (
         <p className='text-muted-foreground mt-2 text-xs'>
           {t('completeness.missingSiteIds', {
             ids: completeness.missing_site_ids.join(', '),
@@ -84,7 +92,7 @@ export function CompletenessAlert({
           })}
         </p>
       )}
-      {completeness.missing_ranges.length > 0 && (
+      {evaluable && completeness.missing_ranges.length > 0 && (
         <ul className='mt-3 grid gap-2 text-sm'>
           {completeness.missing_ranges.slice(0, 3).map((range) => (
             <li
@@ -107,7 +115,7 @@ export function CompletenessAlert({
           ))}
         </ul>
       )}
-      {completeness.missing_ranges_truncated && (
+      {evaluable && completeness.missing_ranges_truncated && (
         <p className='text-muted-foreground mt-2 text-xs'>
           {t('completeness.truncated', {
             total: completeness.missing_range_total,

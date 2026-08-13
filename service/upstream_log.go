@@ -364,7 +364,7 @@ func (service *UpstreamLogService) Query(ctx context.Context, query dto.LogQuery
 		return dto.LogResponse{}, err
 	}
 	status, asOf := summarizeLogStates(states)
-	return dto.LogResponse{Items: items, Total: total, Page: query.Page, PageSize: query.PageSize, DataStatus: status, AsOf: asOf}, nil
+	return dto.LogResponse{Items: items, Total: dto.Int64String(total), Page: query.Page, PageSize: query.PageSize, DataStatus: status, AsOf: asOf}, nil
 }
 
 func (service *UpstreamLogService) Stats(ctx context.Context, query dto.LogQuery) (dto.LogStatResponse, error) {

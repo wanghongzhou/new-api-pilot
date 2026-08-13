@@ -12,7 +12,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import type { ColumnDef, SortingState } from '@tanstack/react-table'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { PageFooterPortal } from '@/components/layout/page-footer'
@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
 import { DataTablePagination } from '@/components/ui/data-table-pagination'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
+import type { MetricString } from '@/lib/api-types'
 import { fromUnixSeconds } from '@/lib/dayjs'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -82,6 +83,7 @@ export function PlatformUsersPage({
     action: 'enable' | 'disable'
     user: PlatformUserItem
   } | null>(null)
+  const toggleTriggerRef = useRef<HTMLButtonElement | null>(null)
 
   const params = useMemo<PlatformUserListParams>(
     () => ({
@@ -130,14 +132,16 @@ export function PlatformUsersPage({
   useEffect(() => {
     if (
       !pageData ||
-      pageData.total <= 0 ||
+      pageData.total === '0' ||
       usersQuery.isFetching ||
       usersQuery.isPlaceholderData
     ) {
       return
     }
-    const lastPage = Math.max(1, Math.ceil(pageData.total / pageData.page_size))
-    if (search.page > lastPage) onPageReplace(lastPage)
+    const firstOffset = BigInt(search.page - 1) * BigInt(pageData.page_size)
+    if (search.page > 1 && firstOffset >= BigInt(pageData.total)) {
+      onPageReplace(search.page - 1)
+    }
   }, [
     onPageReplace,
     pageData,
@@ -231,9 +235,10 @@ export function PlatformUsersPage({
                   isAdmin={isAdmin}
                   onEdit={setEditUser}
                   onReset={setResetUser}
-                  onToggle={(target, action) =>
+                  onToggle={(target, action, trigger) => {
+                    toggleTriggerRef.current = trigger
                     setToggleState({ action, user: target })
-                  }
+                  }}
                   user={row.original}
                 />
               ),
@@ -329,9 +334,10 @@ export function PlatformUsersPage({
                 isAdmin={isAdmin}
                 onEdit={setEditUser}
                 onReset={setResetUser}
-                onToggle={(target, action) =>
+                onToggle={(target, action, trigger) => {
+                  toggleTriggerRef.current = trigger
                   setToggleState({ action, user: target })
-                }
+                }}
                 user={user}
               />
             )}
@@ -367,7 +373,7 @@ export function PlatformUsersPage({
           editUser?.role === 'admin' &&
           editUser.status === 1 &&
           enabledAdminTotal != null &&
-          enabledAdminTotal <= 1
+          BigInt(enabledAdminTotal) <= 1n
         }
         onOpenChange={(open) => !open && setEditUser(null)}
         onSaved={invalidateUsers}
@@ -384,7 +390,12 @@ export function PlatformUsersPage({
       <ToggleUserDialog
         action={toggleState?.action ?? 'disable'}
         disabledReason={actionsDisabledReason}
-        onOpenChange={(open) => !open && setToggleState(null)}
+        onOpenChange={(open) => {
+          if (open) return
+          const trigger = toggleTriggerRef.current
+          setToggleState(null)
+          requestAnimationFrame(() => trigger?.focus())
+        }}
         onSaved={invalidateUsers}
         open={toggleState != null}
         user={toggleState?.user ?? null}
@@ -396,11 +407,15 @@ export function PlatformUsersPage({
 interface UserActionsProps {
   currentUserId: string | undefined
   disabledReason?: string
-  enabledAdminTotal: number | null
+  enabledAdminTotal: MetricString | null
   isAdmin: boolean
   onEdit: (user: PlatformUserItem) => void
   onReset: (user: PlatformUserItem) => void
-  onToggle: (user: PlatformUserItem, action: 'enable' | 'disable') => void
+  onToggle: (
+    user: PlatformUserItem,
+    action: 'enable' | 'disable',
+    trigger: HTMLButtonElement
+  ) => void
   user: PlatformUserItem
 }
 
@@ -422,7 +437,7 @@ function UserActions({
     user.role === 'admin' &&
     user.status === 1 &&
     enabledAdminTotal != null &&
-    enabledAdminTotal <= 1
+    BigInt(enabledAdminTotal) <= 1n
   const adminSafeguardUnknown =
     user.role === 'admin' && user.status === 1 && enabledAdminTotal == null
   const toggleDisabled =
@@ -478,7 +493,13 @@ function UserActions({
       <Button
         aria-label={t(dynamicI18nKey('platformUser', toggleLabel))}
         disabled={toggleDisabled}
-        onClick={() => onToggle(user, user.status === 1 ? 'disable' : 'enable')}
+        onClick={(event) =>
+          onToggle(
+            user,
+            user.status === 1 ? 'disable' : 'enable',
+            event.currentTarget
+          )
+        }
         className='min-h-10 min-w-10'
         size='icon'
         title={toggleTitle}

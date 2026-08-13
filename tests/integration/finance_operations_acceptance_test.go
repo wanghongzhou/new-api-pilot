@@ -82,7 +82,7 @@ func TestA93A94FinanceOperationsExactPrivacyAndAggregationBoundaries(t *testing.
 	}
 	q := dto.FinanceInventoryQuery{Page: 1, PageSize: 20, SiteIDs: []int64{sites[0].ID, sites[1].ID}}
 	topupPage, err := svc.Topups(context.Background(), q)
-	if err != nil || topupPage.Total != 2 || topupPage.Items[0].Amount != topupFixture.Amount || topupPage.Items[0].Money != "10.1234567890" {
+	if err != nil || topupPage.Total != "2" || topupPage.Items[0].Amount != topupFixture.Amount || topupPage.Items[0].Money != "10.1234567890" {
 		t.Fatalf("topup page=%#v err=%v", topupPage, err)
 	}
 	topupStats, err := svc.TopupStatistics(context.Background(), q)
@@ -90,7 +90,7 @@ func TestA93A94FinanceOperationsExactPrivacyAndAggregationBoundaries(t *testing.
 		t.Fatalf("topup stats=%#v err=%v", topupStats, err)
 	}
 	redemptionPage, err := svc.Redemptions(context.Background(), q)
-	if err != nil || redemptionPage.Total != 2 || redemptionPage.Items[0].DerivedStatus != "expired" || redemptionPage.Items[0].Quota != redemptionFixture.Quota {
+	if err != nil || redemptionPage.Total != "2" || redemptionPage.Items[0].DerivedStatus != "expired" || redemptionPage.Items[0].Quota != redemptionFixture.Quota {
 		t.Fatalf("redemption page=%#v err=%v", redemptionPage, err)
 	}
 	encoded, _ := json.Marshal(struct {

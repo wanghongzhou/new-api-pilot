@@ -289,11 +289,16 @@ func applySystemTaskFilters(db *gorm.DB, q dto.SystemTaskQuery, a string) *gorm.
 	return db
 }
 func (r *SystemTaskRepository) List(ctx context.Context, q dto.SystemTaskQuery) ([]SystemTaskReadRow, int64, error) {
-	db := applySystemTaskFilters(r.db.WithContext(ctx).Table("site_system_task t").Joins("JOIN site s ON s.id=t.site_id"), q, "t")
+	countDB := applySystemTaskFilters(r.db.WithContext(ctx).Table("site_system_task t"), q, "t")
 	var total int64
-	if err := db.Count(&total).Error; err != nil {
+	if err := countDB.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
+	// Keep the task table as the driving table and traverse the mixed-direction
+	// display-order index before joining the site name and applying LIMIT.
+	db := applySystemTaskFilters(r.db.WithContext(ctx).
+		Table("site_system_task t FORCE INDEX (idx_site_system_task_list_order)").
+		Joins("STRAIGHT_JOIN site s ON s.id=t.site_id"), q, "t")
 	var rows []SystemTaskReadRow
 	err := db.Select("t.*,s.name site_name").Order("t.site_id,t.remote_id DESC").Limit(q.PageSize).Offset(q.Offset()).Scan(&rows).Error
 	return rows, total, err

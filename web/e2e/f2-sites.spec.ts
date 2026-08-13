@@ -882,7 +882,7 @@ test('completes four-step onboarding without persisting site secrets', async ({
     .getByRole('button', { name: '进入站点详情', exact: true })
     .click()
 
-  await expect(page).toHaveURL(/\/sites\/2\?.*runId=10(?:&|$)/)
+  await expect(page).toHaveURL(/\/sites\/2\/collection-runs\?.*runId=10(?:&|$)/)
   await expect(
     page.getByRole('dialog', { name: '任务 10 的执行窗口' })
   ).toBeVisible()
@@ -1465,7 +1465,55 @@ test('keeps the last successful site detail when a background refresh fails', as
   await expect.poll(() => detailCalls).toBeGreaterThanOrEqual(4)
   await expect(page.getByText('后台刷新失败')).toBeVisible()
   await expect(page.getByRole('heading', { name: '当前概览' })).toBeVisible()
-  await expect(page.getByText('210', { exact: true }).first()).toBeVisible()
+  await expect(page.getByText('128,340', { exact: true }).first()).toBeVisible()
+  await expect(
+    page.getByText('84,000,000', { exact: true }).first()
+  ).toBeVisible()
+})
+
+test('keeps the last successful site list and labels it stale after refresh failure', async ({
+  page,
+}) => {
+  await page.clock.install()
+  await seedAuth(page, admin)
+  await mockSelf(page, admin)
+  let listCalls = 0
+  await page.route(/\/api\/sites(?:\?.*)?$/, async (route) => {
+    assertAuthenticatedRequest(route, admin)
+    listCalls += 1
+    if (listCalls === 1) {
+      await route.fulfill({
+        json: envelope({
+          items: [siteFixture('1')],
+          page: 1,
+          page_size: 20,
+          total: 1,
+        }),
+      })
+      return
+    }
+    await route.fulfill({
+      json: errorEnvelope('INTERNAL_ERROR', 'req_site_list_refresh_failed'),
+      status: 500,
+    })
+  })
+
+  await page.goto('/sites')
+  await expect(page.getByText('华东站点').first()).toBeVisible()
+  await page.clock.fastForward(60_100)
+  await expect.poll(() => listCalls).toBeGreaterThanOrEqual(2)
+  await page.clock.fastForward(1_100)
+  await expect.poll(() => listCalls).toBeGreaterThanOrEqual(3)
+  await page.clock.fastForward(2_100)
+  await expect.poll(() => listCalls).toBeGreaterThanOrEqual(4)
+  await expect(page.getByText('站点列表后台刷新失败')).toBeVisible()
+  await expect(page.getByText('华东站点').first()).toBeVisible()
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth
+    )
+  ).toBe(true)
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])
 })
 
 test('clears authentication when a site endpoint returns 401', async ({

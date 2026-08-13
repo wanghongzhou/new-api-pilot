@@ -371,7 +371,9 @@ test('creates CSV and XLSX from the complete current filters and surfaces active
   let sheet = page.getByRole('dialog', { name: '导出任务' })
   await expect(sheet.getByText('已有相同条件的活跃任务')).toBeVisible()
   await expect(page.getByText('已打开相同条件的现有导出任务')).toBeVisible()
-  await sheet.getByRole('button', { name: '关闭' }).click()
+  await sheet
+    .getByRole('button', { name: '关闭' })
+    .evaluate((button: HTMLButtonElement) => button.click())
 
   await page.getByRole('button', { name: '导出', exact: true }).click()
   dialog = page.getByRole('dialog', { name: '确认导出统计' })
@@ -382,7 +384,9 @@ test('creates CSV and XLSX from the complete current filters and surfaces active
   await dialog.getByRole('button', { name: '创建导出任务' }).click()
   sheet = page.getByRole('dialog', { name: '导出任务' })
   await expect(sheet.getByText('等待中')).toBeVisible()
-  await sheet.getByRole('button', { name: '关闭' }).click()
+  await sheet
+    .getByRole('button', { name: '关闭' })
+    .evaluate((button: HTMLButtonElement) => button.click())
 
   expect(createRequests).toHaveLength(2)
   expect(createRequests.map((request) => request.format)).toEqual([
@@ -410,6 +414,7 @@ test('polls active jobs, preserves URL list controls, shows two failures, recrea
   let listCalls = 0
   const listUrls: URL[] = []
   const recreateRequests: ExportRequest[] = []
+  let downloadCalls = 0
   const firstFailure = exportJob('601', 'failed')
   const active = exportJob('602', 'pending')
   const detailJobs = new Map<string, ReturnType<typeof exportJob>>([
@@ -456,6 +461,7 @@ test('polls active jobs, preserves URL list controls, shows two failures, recrea
     /\/api\/statistics\/exports\/\d+\/download(?:\?.*)?$/,
     async (route) => {
       assertAuthenticatedRequest(route, viewer)
+      downloadCalls += 1
       await route.fulfill({
         body: '模型,请求数\n超长模型,9007199254740993',
         contentType: 'text/csv; charset=utf-8',
@@ -488,13 +494,9 @@ test('polls active jobs, preserves URL list controls, shows two failures, recrea
     page.getByText('已完成').filter({ visible: true }).first()
   ).toBeVisible()
 
-  const statusFilters = page.getByRole('group', { name: '状态' })
-  await statusFilters
-    .getByRole('checkbox', { name: '失败', exact: true })
-    .click()
-  await statusFilters
-    .getByRole('checkbox', { name: '已过期', exact: true })
-    .click()
+  await page.getByRole('button', { name: '状态', exact: true }).click()
+  await page.getByRole('button', { name: '失败', exact: true }).click()
+  await page.getByRole('button', { name: '已过期', exact: true }).click()
   await expect
     .poll(() =>
       JSON.parse(new URL(page.url()).searchParams.get('status') ?? '[]')
@@ -530,17 +532,29 @@ test('polls active jobs, preserves URL list controls, shows two failures, recrea
   await openFirstVisibleTask(page)
   const sheet = page.getByRole('dialog', { name: '导出任务' })
   await expect(sheet.getByText('无法写入导出文件')).toBeVisible()
-  await sheet.getByRole('button', { name: '按相同条件重新导出' }).click()
+  await sheet
+    .getByRole('button', { name: '按相同条件重新导出' })
+    .evaluate((button: HTMLButtonElement) => {
+      button.click()
+      button.click()
+    })
   await expect(sheet.getByText('无法创建导出数据快照')).toBeVisible()
+  expect(recreateRequests).toHaveLength(1)
   await sheet.getByRole('button', { name: '按相同条件重新导出' }).click()
   await expect(sheet.getByText('已完成')).toBeVisible()
   await expect(sheet).toContainText(longFileName)
   expect(recreateRequests).toHaveLength(2)
   expect(recreateRequests[0]).toEqual(recreateRequests[1])
   const downloadPromise = page.waitForEvent('download')
-  await sheet.getByRole('button', { name: '下载文件' }).click()
+  await sheet
+    .getByRole('button', { name: '下载文件' })
+    .evaluate((button: HTMLButtonElement) => {
+      button.click()
+      button.click()
+    })
   const download = await downloadPromise
   expect(download.suggestedFilename()).toBe(longFileName)
+  expect(downloadCalls).toBe(1)
   await hideDeveloperOverlays(page)
   await assertNoHorizontalOverflow(page)
   const accessibility = await new AxeBuilder({ page }).analyze()
@@ -652,4 +666,180 @@ test('keeps Admin exports owner-scoped and safely handles expired and missing 41
     fullPage: true,
     path: testInfo.outputPath('exports-download-410.png'),
   })
+})
+
+test('recovers an initial detail failure and retains a clicked task when its background refresh fails at 390x700', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 700 })
+  await setup(page, viewer)
+  const retainedJob = exportJob('911', 'success')
+  const recoveredJob = exportJob('910', 'success', {
+    file_name: 'recovered-export.csv',
+  })
+  let initialDetailMode: 'error' | 'success' = 'error'
+  let initialDetailCalls = 0
+  let retainedDetailCalls = 0
+  let retainedDetailMode: 'error' | 'success' = 'error'
+
+  await page.route(/\/api\/statistics\/exports(?:\?.*)?$/, async (route) => {
+    assertAuthenticatedRequest(route, viewer)
+    await route.fulfill({
+      json: envelope({
+        items: [retainedJob],
+        page: 1,
+        page_size: 20,
+        total: 1,
+      }),
+    })
+  })
+  await page.route(
+    /\/api\/statistics\/exports\/\d+(?:\?.*)?$/,
+    async (route) => {
+      assertAuthenticatedRequest(route, viewer)
+      const id = new URL(route.request().url()).pathname.split('/').at(-1)
+      if (id === '910') {
+        initialDetailCalls += 1
+        if (initialDetailMode === 'error') {
+          await route.fulfill({
+            json: errorEnvelope('INTERNAL_ERROR', '910'),
+            status: 503,
+          })
+          return
+        }
+        await route.fulfill({ json: envelope(recoveredJob) })
+        return
+      }
+      retainedDetailCalls += 1
+      if (retainedDetailMode === 'error') {
+        await route.fulfill({
+          json: errorEnvelope('INTERNAL_ERROR', '911'),
+          status: 503,
+        })
+        return
+      }
+      await route.fulfill({ json: envelope(retainedJob) })
+    }
+  )
+
+  await page.goto('/exports?exportId=910')
+  let sheet = page.getByRole('dialog', { name: '导出任务' })
+  await expect(sheet.getByText('无法读取导出任务，请重试。')).toBeVisible()
+  await expect(sheet.getByText('recovered-export.csv')).toHaveCount(0)
+  const callsBeforeInitialRetry = initialDetailCalls
+  initialDetailMode = 'success'
+  await sheet.getByRole('button', { name: '重试' }).click()
+  await expect(sheet.getByText('recovered-export.csv')).toBeVisible()
+  expect(initialDetailCalls).toBeGreaterThan(callsBeforeInitialRetry)
+  await sheet.getByRole('button', { name: '关闭' }).click()
+
+  await openFirstVisibleTask(page)
+  sheet = page.getByRole('dialog', { name: '导出任务' })
+  await expect(sheet.getByText('911', { exact: true })).toBeVisible()
+  await expect(sheet.getByText(longFileName)).toBeVisible()
+  await sheet.getByRole('button', { name: '关闭' }).click()
+  await page.waitForTimeout(2_100)
+  await openFirstVisibleTask(page)
+  sheet = page.getByRole('dialog', { name: '导出任务' })
+  await expect(sheet.getByRole('alert')).toContainText(
+    '导出任务详情后台刷新失败，当前显示最近一次成功读取的数据。'
+  )
+  const callsBeforeRetainedRetry = retainedDetailCalls
+
+  const detailScrollRegion = sheet.locator('[aria-label="导出任务详情内容"]')
+  await expect(detailScrollRegion).toContainText(siteId)
+  await expect(detailScrollRegion).toContainText(longModelName)
+  await expect(detailScrollRegion).toContainText('小时')
+  const dateTimes = await detailScrollRegion
+    .locator('time')
+    .evaluateAll((times) => times.map((time) => time.getAttribute('datetime')))
+  expect(dateTimes).toEqual(
+    expect.arrayContaining([
+      new Date((rangeEnd - 120) * 1_000).toISOString(),
+      new Date((rangeEnd - 90) * 1_000).toISOString(),
+      new Date(rangeEnd * 1_000).toISOString(),
+      new Date((rangeEnd - 60) * 1_000).toISOString(),
+      new Date((rangeEnd + 86_400) * 1_000).toISOString(),
+    ])
+  )
+  await expect
+    .poll(() =>
+      detailScrollRegion.evaluate(
+        (element) => element.scrollHeight > element.clientHeight
+      )
+    )
+    .toBe(true)
+  await detailScrollRegion.evaluate((element) => {
+    element.scrollTop = element.scrollHeight
+  })
+  await expect
+    .poll(() => detailScrollRegion.evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(0)
+  await expect(sheet.getByRole('button', { name: '下载文件' })).toBeVisible()
+  await expect(sheet.getByRole('button', { name: '关闭' })).toBeVisible()
+  await assertNoHorizontalOverflow(page)
+  const accessibility = await new AxeBuilder({ page }).analyze()
+  expect(accessibility.violations).toEqual([])
+
+  retainedDetailMode = 'success'
+  await sheet.getByRole('alert').getByRole('button', { name: '重试' }).click()
+  await expect(sheet.getByRole('alert')).toHaveCount(0)
+  expect(retainedDetailCalls).toBeGreaterThan(callsBeforeRetainedRetry)
+})
+
+test('separates an initial export-list failure from retained refresh data', async ({
+  page,
+}) => {
+  await setup(page, viewer)
+  let mode: 'initial-error' | 'success' | 'refresh-error' = 'initial-error'
+  const retainedJob = exportJob('901', 'expired', {
+    file_name: 'retained-expired-export.xlsx',
+    format: 'xlsx',
+  })
+  await page.route(/\/api\/statistics\/exports(?:\?.*)?$/, async (route) => {
+    assertAuthenticatedRequest(route, viewer)
+    if (mode !== 'success') {
+      await route.fulfill({
+        json: errorEnvelope('INTERNAL_ERROR', '901'),
+        status: 503,
+      })
+      return
+    }
+    await route.fulfill({
+      json: envelope({
+        items: [retainedJob],
+        page: 1,
+        page_size: 20,
+        total: 1,
+      }),
+    })
+  })
+
+  await page.goto('/exports')
+  await expect(
+    page.getByRole('heading', { name: '无法加载数据' }).first()
+  ).toBeVisible()
+  await expect(page.getByText('retained-expired-export.xlsx')).toHaveCount(0)
+
+  mode = 'success'
+  await page.getByRole('button', { name: '重试' }).first().click()
+  await expect(
+    page
+      .getByText('retained-expired-export.xlsx')
+      .filter({ visible: true })
+      .first()
+  ).toBeVisible()
+
+  mode = 'refresh-error'
+  await page.getByRole('button', { name: '文件格式', exact: true }).click()
+  await page.getByRole('button', { name: 'XLSX', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('数据刷新失败', {
+    timeout: 15_000,
+  })
+  await expect(
+    page
+      .getByText('retained-expired-export.xlsx')
+      .filter({ visible: true })
+      .first()
+  ).toBeVisible()
 })

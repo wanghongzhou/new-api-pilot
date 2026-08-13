@@ -40,7 +40,7 @@ export function SignInPage({ redirect }: { redirect?: string }) {
       const destination = user.must_change_password
         ? '/change-password'
         : safeRedirect(redirect)
-      router.history.push(destination)
+      router.history.replace(destination)
     } catch (error) {
       const apiError = normalizeApiError(error)
       let message: string
@@ -82,9 +82,6 @@ export function SignInPage({ redirect }: { redirect?: string }) {
             required
           >
             <Input
-              aria-describedby={
-                errors.username?.message ? 'username-error' : undefined
-              }
               aria-invalid={Boolean(errors.username)}
               autoCapitalize='none'
               autoComplete='username'
@@ -103,9 +100,6 @@ export function SignInPage({ redirect }: { redirect?: string }) {
             required
           >
             <PasswordInput
-              aria-describedby={
-                errors.password?.message ? 'password-error' : undefined
-              }
               aria-invalid={Boolean(errors.password)}
               autoComplete='current-password'
               id='password'

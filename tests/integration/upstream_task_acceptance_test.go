@@ -77,7 +77,7 @@ func TestA95UpstreamTaskTransitionStatisticsRetentionAndPrivacy(t *testing.T) {
 	}
 	q := dto.UpstreamTaskQuery{Page: 1, PageSize: 20, SiteIDs: []int64{site.ID}}
 	page, err := svc.List(context.Background(), q)
-	if err != nil || page.Total != 1 || page.Items[0].Status != "SUCCESS" || page.Items[0].Quota != task.Quota {
+	if err != nil || page.Total != "1" || page.Items[0].Status != "SUCCESS" || page.Items[0].Quota != task.Quota {
 		t.Fatalf("page=%#v err=%v", page, err)
 	}
 	stats, err := svc.Statistics(context.Background(), q)

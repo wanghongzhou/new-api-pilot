@@ -441,6 +441,62 @@ func TestCollectionRunItemProgressIncludesUnavailableWindows(t *testing.T) {
 	}
 }
 
+func TestCollectionTaskMessageRefKeepsOnlyStableSafeParams(t *testing.T) {
+	raw := []byte(`{
+  "site_id":"1",
+  "start_timestamp":1785574800,
+  "end_timestamp":1785578400,
+  "endpoint":"/api/data/flow?access_token=secret",
+  "authorization":"Bearer secret",
+  "password":"secret"
+}`)
+	message := collectionTaskMessageRef(string(constant.MessageDataUpstreamUnavailable), raw)
+	if message.Code != constant.MessageDataUpstreamUnavailable || message.TechnicalDetail != "" {
+		t.Fatalf("stable collection message = %#v", message)
+	}
+	if len(message.Params) != 3 || message.Params["site_id"] != "1" {
+		t.Fatalf("stable collection params = %#v", message.Params)
+	}
+	encoded, err := common.Marshal(message)
+	if err != nil {
+		t.Fatalf("marshal stable collection message: %v", err)
+	}
+	for _, secret := range []string{"endpoint", "access_token", "authorization", "password", "Bearer", "secret"} {
+		if strings.Contains(string(encoded), secret) {
+			t.Fatalf("stable collection message leaked %q: %s", secret, encoded)
+		}
+	}
+}
+
+func TestCollectionTaskMessageRefUsesSafeFallbackForInvalidPersistedErrors(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		code string
+		raw  []byte
+	}{
+		{name: "unknown internal code", code: "WORKER_EXECUTION_FAILED", raw: []byte(`{"password":"secret"}`)},
+		{name: "stable but foreign domain code", code: string(constant.MessageExportWriteFailed), raw: []byte(`{"export_id":"1"}`)},
+		{name: "missing stable parameters", code: string(constant.MessageDataUpstreamUnavailable), raw: []byte(`{"endpoint":"https://user:secret@example.test"}`)},
+		{name: "malformed json", code: string(constant.MessageDataUpstreamUnavailable), raw: []byte(`{"site_id":`)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			message := collectionTaskMessageRef(test.code, test.raw)
+			if message.Code != constant.MessageCollectionExecutionFailed || len(message.Params) != 0 || message.TechnicalDetail != "" {
+				t.Fatalf("fallback collection message = %#v", message)
+			}
+			encoded, err := common.Marshal(message)
+			if err != nil {
+				t.Fatalf("marshal fallback collection message: %v", err)
+			}
+			for _, secret := range []string{test.code, "WORKER_EXECUTION_FAILED", "DATA_UPSTREAM_UNAVAILABLE", "endpoint", "password", "secret", "example.test"} {
+				if strings.Contains(string(encoded), secret) {
+					t.Fatalf("fallback collection message leaked %q: %s", secret, encoded)
+				}
+			}
+		})
+	}
+}
+
 func TestManualBackfillLimitReadsCurrentSetting(t *testing.T) {
 	tx := openSiteTestTransaction(t)
 	clock := testsupport.NewFakeClock(time.Unix(1_752_400_800, 0))

@@ -55,7 +55,7 @@ func TestA99PricingAndGroupCatalog(t *testing.T) {
 	q := dto.PricingCatalogQuery{Page: 1, PageSize: 20, SiteIDs: []int64{site.ID}}
 	page, err := svc.List(context.Background(), q)
 	wantRatio := strings.TrimRight(strings.TrimRight(fixture.Pricing[0].InputPrice, "0"), ".")
-	if err != nil || page.Total != 1 || page.Items[0].ModelRatio != wantRatio {
+	if err != nil || page.Total != "1" || page.Items[0].ModelRatio != wantRatio {
 		t.Fatalf("page=%#v err=%v", page, err)
 	}
 	changedVendor := item
@@ -64,11 +64,11 @@ func TestA99PricingAndGroupCatalog(t *testing.T) {
 		t.Fatalf("vendor metadata update written=%d err=%v", written, err)
 	}
 	page, err = svc.List(context.Background(), q)
-	if err != nil || page.Total != 1 || page.Items[0].VendorName != "updated-metadata-vendor" || page.Items[0].RemoteState != "normal" {
+	if err != nil || page.Total != "1" || page.Items[0].VendorName != "updated-metadata-vendor" || page.Items[0].RemoteState != "normal" {
 		t.Fatalf("vendor metadata page=%#v err=%v", page, err)
 	}
 	groupPage, err := svc.ListGroups(context.Background(), q)
-	if err != nil || groupPage.Total != 2 || groupPage.Items[1].Name != "vip-zero-usage" || !groupPage.Items[1].UserSelectable || len(groupPage.Items[1].ModelNames) != 1 || groupPage.Items[1].ModelNames[0] != item.ModelName || groupPage.Items[1].OutgoingOverrides["default"] != "0.9" {
+	if err != nil || groupPage.Total != "2" || groupPage.Items[1].Name != "vip-zero-usage" || !groupPage.Items[1].UserSelectable || len(groupPage.Items[1].ModelNames) != 1 || groupPage.Items[1].ModelNames[0] != item.ModelName || groupPage.Items[1].OutgoingOverrides["default"] != "0.9" {
 		t.Fatalf("groups=%#v err=%v", groupPage, err)
 	}
 	if written, err := repo.SyncPricingCatalog(context.Background(), site, now+2, dto.UpstreamPricingSnapshot{PricingVersion: "pinned", Items: nil, Groups: groups[:1]}); err != nil || written != 2 {

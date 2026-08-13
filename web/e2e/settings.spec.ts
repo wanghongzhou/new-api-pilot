@@ -305,6 +305,7 @@ function applyPatch(
 }
 
 type SettingsMock = {
+  failGets: boolean
   failNextPut: boolean
   groups: SettingGroupFixture[]
   putBodies: Array<{
@@ -318,6 +319,7 @@ async function mockSettings(
   options: { decryptSecret?: boolean; retentionDays?: number } = {}
 ): Promise<SettingsMock> {
   const state: SettingsMock = {
+    failGets: false,
     failNextPut: false,
     groups: settingsFixture(options),
     putBodies: [],
@@ -343,10 +345,143 @@ async function mockSettings(
       await route.fulfill({ json: envelope(state.groups, 'req_settings_put') })
       return
     }
+    if (state.failGets) {
+      await route.fulfill({
+        json: errorEnvelope('INTERNAL_ERROR'),
+        status: 503,
+      })
+      return
+    }
     await route.fulfill({ json: envelope(state.groups, 'req_settings_get') })
   })
   return state
 }
+
+test('shows a blocking error when settings fail before any successful load', async ({
+  page,
+}) => {
+  await seedAuth(page, admin)
+  await mockSelf(page, admin)
+  await page.route('**/api/settings', async (route) => {
+    assertAuthenticatedRequest(route, admin)
+    await route.fulfill({
+      json: errorEnvelope('INTERNAL_ERROR'),
+      status: 503,
+    })
+  })
+
+  await page.goto('/settings/system')
+  await expect(page.getByText('无法加载系统设置')).toBeVisible()
+  await expect(page.getByRole('button', { name: '重试' })).toBeVisible()
+  await expect(page.locator('#settings-form')).toHaveCount(0)
+  await expect(
+    page.getByRole('button', { name: '保存', exact: true })
+  ).toHaveCount(0)
+})
+
+test('clears the session and replaces settings with sign-in after an API 401', async ({
+  page,
+}) => {
+  await seedAuth(page, admin)
+  await mockSelf(page, admin)
+  await page.route('**/api/settings', async (route) => {
+    assertAuthenticatedRequest(route, admin)
+    await route.fulfill({
+      json: errorEnvelope('AUTH_INVALID'),
+      status: 401,
+    })
+  })
+
+  await page.goto('/settings/system')
+  await expect(page).toHaveURL(/\/sign-in\?redirect=/)
+  await expect(page.getByText('会话已过期，请重新登录')).toBeVisible()
+  expect(
+    await page.evaluate(
+      ({ authKey, uidKey }) => ({
+        auth: localStorage.getItem(authKey),
+        uid: localStorage.getItem(uidKey),
+      }),
+      { authKey: authStorageKey, uidKey: uidStorageKey }
+    )
+  ).toEqual({ auth: null, uid: null })
+  await page.goForward()
+  await expect(page).toHaveURL(/\/sign-in\?redirect=/)
+  await expect(page.locator('#settings-form')).toHaveCount(0)
+})
+
+test('retains cached settings as read-only after a background refresh failure', async ({
+  page,
+}) => {
+  await seedAuth(page, admin)
+  await mockSelf(page, admin)
+  await page.route(/\/api\/user\/(?:\?.*)?$/, async (route) => {
+    await route.fulfill({
+      json: envelope({ items: [admin], page: 1, page_size: 20, total: '1' }),
+    })
+  })
+  const settings = await mockSettings(page, admin)
+  await page.goto('/settings/system')
+
+  await expect(page.getByLabel('站点状态检查周期（分钟）')).toHaveValue('1')
+  settings.failGets = true
+  await page.clock.install()
+  await page.clock.fastForward(31_000)
+  const openMobileNavigation = async () => {
+    if ((page.viewportSize()?.width ?? 0) < 1024) {
+      await page.getByRole('button', { name: '打开导航' }).click()
+    }
+  }
+  await openMobileNavigation()
+  await page
+    .getByRole(
+      (page.viewportSize()?.width ?? 0) < 1024 ? 'dialog' : 'navigation',
+      {
+        name: '主导航',
+      }
+    )
+    .getByRole('link', { name: '平台用户' })
+    .click()
+  await openMobileNavigation()
+  await page
+    .getByRole(
+      (page.viewportSize()?.width ?? 0) < 1024 ? 'dialog' : 'navigation',
+      {
+        name: '主导航',
+      }
+    )
+    .getByRole('link', { name: '系统设置' })
+    .click()
+  await page.clock.fastForward(10_000)
+
+  await expect(
+    page.getByText(
+      '无法刷新系统设置。当前显示上次成功加载的内容；为避免覆盖较新的配置，恢复连接前不可修改或保存。'
+    )
+  ).toBeVisible()
+  await expect(
+    page.locator('[data-setting-key="collector.probe_interval_seconds"] input')
+  ).toHaveCount(0)
+  await expect(
+    page.locator('[data-setting-key="collector.probe_interval_seconds"] output')
+  ).toHaveText('1')
+  await expect(
+    page.getByRole('button', { name: '保存', exact: true })
+  ).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '测试发送' })).toHaveCount(0)
+  expect(settings.putBodies).toEqual([])
+
+  settings.failGets = false
+  await page.getByRole('button', { name: '重试' }).click()
+  await expect(page.getByLabel('站点状态检查周期（分钟）')).toHaveValue('1')
+  await expect(
+    page.getByText(
+      '无法刷新系统设置。当前显示上次成功加载的内容；为避免覆盖较新的配置，恢复连接前不可修改或保存。'
+    )
+  ).toHaveCount(0)
+  await expect(
+    page.getByRole('button', { name: '保存', exact: true })
+  ).toBeVisible()
+})
 
 async function assertNoHorizontalOverflow(page: Page) {
   await expect
@@ -464,6 +599,9 @@ test('renders the complete settings surface for admin without overflow or axe vi
     name: '平台与通知',
   })
   await expect(notificationHeading).toBeVisible()
+  await expect(
+    page.getByRole('checkbox', { name: '启用钉钉通知' })
+  ).toHaveCount(1)
   await expect(
     page.getByText(
       '用于校验浏览器写操作是否来自本平台，并生成钉钉告警中的详情链接；来自运行环境配置，只读。'

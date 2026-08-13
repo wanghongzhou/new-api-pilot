@@ -16,5 +16,11 @@ describe('upstream task production-ready responsive contract', () => {
     expect(page).toContain("t('upstreamTasks.seenValue'")
     expect(page).toContain('common.retainedDataRefreshFailed')
     expect(page).toContain('common.siteOptionsRefreshFailed')
+    expect(page).toContain('BigInt(list.total)')
+    expect(page).toContain('paginationHasKnownLastPage={false}')
+    expect(page).toContain(
+      "<MetricValue value={list?.total ?? parseMetricString('0')} />"
+    )
+    expect(page).toContain("total={list?.total ?? '0'}")
   })
 })

@@ -262,7 +262,7 @@ export function SiteCard({
 
       <section className='grid gap-3'>
         <div className='grid grid-cols-2 gap-x-5 gap-y-4'>
-          <MetricCell label={t('site.dashboard.totalQuota')}>
+          <MetricCell label={t('site.dashboard.todayQuota')}>
             <QuotaAmount
               className='justify-center'
               emphasizeAmount
@@ -273,12 +273,12 @@ export function SiteCard({
               showQuota={false}
             />
           </MetricCell>
-          <MetricCell label={t('site.dashboard.totalTokens')}>
+          <MetricCell label={t('site.dashboard.todayTokens')}>
             <MetricValue compact nullLabel='0' value={site.today.token_used} />
           </MetricCell>
         </div>
         <div className='grid grid-cols-3 gap-x-5 gap-y-4'>
-          <MetricCell label={t('site.dashboard.totalCount')}>
+          <MetricCell label={t('site.dashboard.todayCount')}>
             <MetricValue
               compact
               nullLabel='0'

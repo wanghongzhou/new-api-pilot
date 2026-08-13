@@ -46,8 +46,10 @@ describe('customer management production states', () => {
 
     expect(pageSource).toContain('queryKey: statisticsKeys.all')
     expect(detailSource).toContain('queryKey: statisticsKeys.all')
+    expect(detailSource).toContain('entityDetailFailure(')
+    expect(detailSource).toContain("failure.kind === 'invalid-id'")
     expect(detailSource).toContain(
-      "validCustomerId\n            ? t('customer.detail.loadErrorDescription')\n            : undefined"
+      'onRetry={failure.retryable ? retry : undefined}'
     )
     expect(pageSource).not.toContain("header: t('common.updatedAt')")
     expect(cardSource).not.toContain("t('common.updatedAt')")
@@ -80,6 +82,11 @@ describe('customer management production states', () => {
     expect(pageSource).toContain("t('customer.list.identity')")
     expect(pageSource).toContain("t('customer.list.business')")
     expect(pageSource).toContain("t('customer.list.todayUsage')")
+    expect(pageSource).toContain("t('site.dashboard.todayQuota')")
+    expect(pageSource).toContain("t('site.dashboard.todayTokens')")
+    expect(pageSource).toContain("t('site.dashboard.todayCount')")
+    expect(cardSource).toContain("t('site.dashboard.todayQuota')")
+    expect(cardSource).not.toContain("t('site.dashboard.totalQuota')")
     expect(pageSource).toContain('useLastValidPage({')
     expect(pageSource).toContain('const listStale =')
   })
@@ -95,7 +102,8 @@ describe('customer management production states', () => {
   test('gives customer empty and error states semantic headings', async () => {
     const source = await readFile(emptyStatePath, 'utf8')
 
-    expect(source).toContain("React.ComponentProps<'h3'>")
-    expect(source).toContain('<h3')
+    expect(source).toContain("React.ComponentProps<'h2'>")
+    expect(source).toContain('<h2')
+    expect(source).not.toContain('<h3')
   })
 })

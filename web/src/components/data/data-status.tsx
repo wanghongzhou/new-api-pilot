@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import type { DataStatus } from '@/lib/api-types'
+import { cn } from '@/lib/utils'
 
 const statusConfig = {
   backfilling: { icon: Loading03Icon, variant: 'primary' },
@@ -24,11 +25,17 @@ const statusConfig = {
   unavailable: { icon: HelpCircleIcon, variant: 'neutral' },
 } as const
 
-export function DataStatusBadge({ status }: { status: DataStatus }) {
+export function DataStatusBadge({
+  className,
+  status,
+}: {
+  className?: string
+  status: DataStatus
+}) {
   const { t } = useTranslation()
   const config = statusConfig[status]
   return (
-    <Badge variant={config.variant}>
+    <Badge className={cn(className)} variant={config.variant}>
       <HugeiconsIcon icon={config.icon} size={14} strokeWidth={2} />
       {t(dynamicI18nKey('data', `data.${status}`))}
     </Badge>

@@ -50,7 +50,7 @@ func (s *ModelCatalogService) List(ctx context.Context, q dto.ModelCatalogQuery)
 		st := statuses[r.SiteID]
 		items = append(items, dto.ModelCatalogItem{ID: strconv.FormatInt(r.ID, 10), SiteID: strconv.FormatInt(r.SiteID, 10), RemoteID: strconv.FormatInt(r.RemoteID, 10), SiteName: r.SiteName, ModelName: r.ModelName, Description: r.Description, Icon: r.Icon, Tags: r.Tags, VendorID: strconv.FormatInt(r.VendorID, 10), Status: r.RemoteStatus, SyncOfficial: r.SyncOfficial, NameRule: r.NameRule, CreatedTime: r.RemoteCreatedTime, UpdatedTime: r.RemoteUpdatedTime, CoveredChannels: strconv.FormatInt(r.CoveredChannels, 10), CoveredGroups: strconv.FormatInt(r.CoveredGroups, 10), DataStatus: st.DataStatus})
 	}
-	return dto.ModelCatalogPageResponse{Items: items, Total: total, Page: q.Page, PageSize: q.PageSize, DataStatus: overall}, nil
+	return dto.ModelCatalogPageResponse{Items: items, Total: strconv.FormatInt(total, 10), Page: q.Page, PageSize: q.PageSize, DataStatus: overall}, nil
 }
 func (s *ModelCatalogService) Missing(ctx context.Context, q dto.ModelCatalogQuery) (dto.MissingModelPageResponse, error) {
 	q.Normalize()
@@ -78,7 +78,7 @@ func (s *ModelCatalogService) Missing(ctx context.Context, q dto.ModelCatalogQue
 		st := statuses[r.SiteID]
 		items = append(items, dto.MissingModelItem{SiteID: strconv.FormatInt(r.SiteID, 10), SiteName: r.SiteName, RemoteChannelID: strconv.FormatInt(r.RemoteChannelID, 10), ChannelName: r.ChannelName, ModelName: r.ModelName, Group: r.RemoteGroup, DataStatus: st.DataStatus, AsOf: st.AsOf})
 	}
-	return dto.MissingModelPageResponse{Items: items, Total: total, Page: q.Page, PageSize: q.PageSize, DataStatus: overall, AsOf: asOf}, nil
+	return dto.MissingModelPageResponse{Items: items, Total: strconv.FormatInt(total, 10), Page: q.Page, PageSize: q.PageSize, DataStatus: overall, AsOf: asOf}, nil
 }
 func breakdown(rows []model.ModelCoverageRow, statuses map[int64]model.ModelCatalogStatus, overall string) []dto.ModelCoverageBreakdown {
 	out := make([]dto.ModelCoverageBreakdown, 0, len(rows))

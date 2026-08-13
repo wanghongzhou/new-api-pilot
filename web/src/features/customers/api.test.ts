@@ -126,7 +126,7 @@ describe('customer API', () => {
             items: [{ id }],
             p: Number(page),
             page_size: 100,
-            total: 501,
+            total: '501',
           },
           message: '',
           request_id: 'req_customer_options',
@@ -143,7 +143,7 @@ describe('customer API', () => {
       sort_order: 'asc',
     })
     expect(requestedPages.sort()).toEqual(['1', '2', '3', '4', '5', '6'])
-    expect(maximumActive).toBe(4)
+    expect(maximumActive).toBe(1)
     expect(result.items.map((item) => String(item.id))).toEqual([
       '1',
       '2',

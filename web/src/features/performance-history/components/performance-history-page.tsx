@@ -38,9 +38,10 @@ import type {
   StatisticsExportFormat,
   StatisticsExportJobItem,
 } from '@/features/statistics/types'
+import { useRetainedQueryData } from '@/hooks/use-retained-query-data'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey, normalizeApiError } from '@/lib/api'
-import { isIdString, parseIdString } from '@/lib/api-types'
+import { isIdString, parseIdString, parseMetricString } from '@/lib/api-types'
 import { fromUnixSeconds } from '@/lib/dayjs'
 import { hasFilterChanges } from '@/lib/filter-state'
 
@@ -543,8 +544,17 @@ export function PerformanceHistoryPage({
       onSearchChange({ exportId: job.id })
     },
   })
-  const list = listQuery.data
-  const statistics = statisticsQuery.data
+  const retainedScope = siteId ? `site:${siteId}` : 'global'
+  const list = useRetainedQueryData(
+    listQuery.data,
+    listQuery.isError,
+    retainedScope
+  )
+  const statistics = useRetainedQueryData(
+    statisticsQuery.data,
+    statisticsQuery.isError,
+    retainedScope
+  )
   const completeness =
     search.view === 'list' ? list?.completeness : statistics?.completeness
   const summary = statistics ? trustedWeightedSummary(statistics) : undefined
@@ -870,7 +880,16 @@ export function PerformanceHistoryPage({
                 </dl>
               </article>
             )}
-            total={list?.total ?? 0}
+            paginationHasKnownLastPage={false}
+            paginationHasNextPage={
+              list
+                ? BigInt(list.total) >
+                  BigInt(search.page) * BigInt(search.pageSize)
+                : false
+            }
+            paginationTotalDisplay={
+              <MetricValue value={list?.total ?? parseMetricString('0')} />
+            }
           />
         )}
         {statisticsQuery.isError && !statistics && (

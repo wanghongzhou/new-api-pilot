@@ -12,7 +12,7 @@ import {
 } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import type { ColumnDef, SortingState } from '@tanstack/react-table'
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -93,7 +93,11 @@ function AccountCardGridState({
   isAdmin: boolean
   items: AccountListItem[]
   loading: boolean
-  onAction: (action: AccountAction, account: AccountListItem) => void
+  onAction: (
+    action: AccountAction,
+    account: AccountListItem,
+    trigger: HTMLButtonElement | null
+  ) => void
   onRetry: () => void
 }) {
   const { t } = useTranslation()
@@ -166,6 +170,7 @@ export function AccountsPage({
   const isAdmin = useAuthStore((state) => state.user?.role === 'admin')
   const [onboardingOpen, setOnboardingOpen] = useState(false)
   const [dialogState, setDialogState] = useState<AccountDialogState>(null)
+  const dialogTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [recovery, setRecovery] = useState<{
     account: AccountListItem
@@ -255,8 +260,19 @@ export function AccountsPage({
       setRefreshing(false)
     }
   }
-  const onAction = (action: AccountAction, account: AccountListItem) =>
+  const onAction = (
+    action: AccountAction,
+    account: AccountListItem,
+    trigger: HTMLButtonElement | null
+  ) => {
+    dialogTriggerRef.current = trigger
     setDialogState({ action, account })
+  }
+  const closeDialog = () => {
+    const trigger = dialogTriggerRef.current
+    setDialogState(null)
+    requestAnimationFrame(() => trigger?.focus())
+  }
   const updateSorting = (
     updater: SortingState | ((old: SortingState) => SortingState)
   ) => {
@@ -320,14 +336,14 @@ export function AccountsPage({
         cell: ({ row }) => (
           <div className='grid min-w-72 gap-3'>
             <div className='grid grid-cols-2 gap-x-4'>
-              <ListMetric label={t('site.dashboard.totalQuota')}>
+              <ListMetric label={t('site.dashboard.todayQuota')}>
                 <QuotaAmount
                   nullLabel='0'
                   quota={row.original.today.quota}
                   rate={row.original.rate}
                 />
               </ListMetric>
-              <ListMetric label={t('site.dashboard.totalTokens')}>
+              <ListMetric label={t('site.dashboard.todayTokens')}>
                 <MetricValue
                   compact
                   nullLabel='0'
@@ -336,7 +352,7 @@ export function AccountsPage({
               </ListMetric>
             </div>
             <div className='grid grid-cols-3 gap-x-4'>
-              <ListMetric label={t('site.dashboard.totalCount')}>
+              <ListMetric label={t('site.dashboard.todayCount')}>
                 <MetricValue
                   compact
                   nullLabel='0'
@@ -577,7 +593,7 @@ export function AccountsPage({
         open={onboardingOpen}
       />
       <AccountDialogs
-        onClose={() => setDialogState(null)}
+        onClose={closeDialog}
         onRecovery={(run, account) => setRecovery({ account, run })}
         onSaved={invalidate}
         state={dialogState}

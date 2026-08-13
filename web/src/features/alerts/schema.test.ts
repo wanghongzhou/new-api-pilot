@@ -215,6 +215,35 @@ describe('alert schemas', () => {
     ).toBeFalse()
   })
 
+  test('reverses paired threshold ordering for less-than comparisons', () => {
+    const warning = ruleFixture('warning', '0.90', {
+      compare_operator: '<=',
+    })
+    const critical = ruleFixture('critical', '0.80', {
+      compare_operator: '<=',
+    })
+    const values = { enabled: true, forTimes: '1' }
+
+    expect(
+      createAlertRuleFormSchema(warning, critical).safeParse({
+        ...values,
+        thresholdValue: '0.90',
+      }).success
+    ).toBeTrue()
+    expect(
+      createAlertRuleFormSchema(warning, critical).safeParse({
+        ...values,
+        thresholdValue: '0.80',
+      }).success
+    ).toBeFalse()
+    expect(
+      createAlertRuleFormSchema(critical, warning).safeParse({
+        ...values,
+        thresholdValue: '0.90',
+      }).success
+    ).toBeFalse()
+  })
+
   test('ignores fixed fields while still validating editable fields', () => {
     const fixed = ruleFixture('info', '0', {
       constraints: {

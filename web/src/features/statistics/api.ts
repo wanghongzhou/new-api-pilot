@@ -24,7 +24,9 @@ type SearchValue = number | string | readonly string[] | null | undefined
 function statisticsSearchParams(values: Record<string, SearchValue>) {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(values)) {
-    if (value == null || value === '') continue
+    if (value == null || (value === '' && !allowsEmptyStatisticsValue(key))) {
+      continue
+    }
     if (Array.isArray(value)) {
       if (value.length === 0) continue
       if (
@@ -35,7 +37,11 @@ function statisticsSearchParams(values: Record<string, SearchValue>) {
         key === 'node_names' ||
         key === 'status'
       ) {
-        for (const item of value) params.append(key, item)
+        for (const item of value) {
+          if (item !== '' || allowsEmptyStatisticsValue(key)) {
+            params.append(key, item)
+          }
+        }
       } else {
         params.set(key, value.join(','))
       }
@@ -44,6 +50,10 @@ function statisticsSearchParams(values: Record<string, SearchValue>) {
     params.set(key, String(value))
   }
   return params
+}
+
+function allowsEmptyStatisticsValue(key: string) {
+  return key === 'use_groups' || key === 'node_names'
 }
 
 const statisticsPath: Record<StatisticsScope, string> = {

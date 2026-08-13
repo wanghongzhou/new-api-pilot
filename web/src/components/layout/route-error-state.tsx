@@ -64,6 +64,7 @@ export function RouteErrorState({ error, reset }: ErrorComponentProps) {
 
 export function RouteNotFoundState() {
   const { t } = useTranslation()
+  const router = useRouter()
 
   return (
     <main className='flex min-h-svh items-center justify-center p-6'>
@@ -76,12 +77,24 @@ export function RouteNotFoundState() {
               strokeWidth={2}
             />
           </EmptyMedia>
-          <EmptyTitle>{t('Page not found')}</EmptyTitle>
+          <h1
+            className='text-sm font-medium tracking-tight'
+            data-slot='empty-title'
+          >
+            {t('Page not found')}
+          </h1>
           <EmptyDescription>
             {t('The page you requested does not exist or has been moved.')}
           </EmptyDescription>
         </EmptyHeader>
-        <EmptyContent>
+        <EmptyContent className='flex-row flex-wrap justify-center'>
+          <Button
+            onClick={() => router.history.back()}
+            size='sm'
+            variant='outline'
+          >
+            {t('Go back')}
+          </Button>
           <Button render={<Link to='/dashboard' />} size='sm'>
             {t('Back to dashboard')}
           </Button>

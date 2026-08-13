@@ -35,7 +35,7 @@ func TestA81CompleteUserInventorySnapshotStatisticsAndPrivacyAcceptance(t *testi
 		t.Fatal(err)
 	}
 	page, err := inventory.List(context.Background(), dto.UserInventoryQuery{Page: 1, PageSize: 20, SiteIDs: []int64{site.ID}})
-	if err != nil || page.Total != 2 || page.DataStatus != "complete" || page.Items[0].Quota == "" || page.Items[0].RemoteUserID == "" {
+	if err != nil || page.Total != "2" || page.DataStatus != "complete" || page.Items[0].Quota == "" || page.Items[0].RemoteUserID == "" {
 		t.Fatalf("A81 inventory page=%#v err=%v", page, err)
 	}
 	statistics, err := inventory.Statistics(context.Background(), dto.UserInventoryStatisticsQuery{StartTimestamp: hour, EndTimestamp: hour + 3600, SiteIDs: []int64{site.ID}})
@@ -48,7 +48,7 @@ func TestA81CompleteUserInventorySnapshotStatisticsAndPrivacyAcceptance(t *testi
 	partialPage, err := inventory.List(context.Background(), dto.UserInventoryQuery{
 		Page: 1, PageSize: 20, SiteIDs: []int64{site.ID, pendingSite.ID},
 	})
-	if err != nil || partialPage.DataStatus != "partial" || partialPage.Total != 2 {
+	if err != nil || partialPage.DataStatus != "partial" || partialPage.Total != "2" {
 		t.Fatalf("A81 partial inventory page=%#v err=%v", partialPage, err)
 	}
 	partialStatistics, err := inventory.Statistics(context.Background(), dto.UserInventoryStatisticsQuery{

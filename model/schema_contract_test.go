@@ -60,6 +60,20 @@ func TestAuthoritativeSchemaContractsLoadFlattenedInitialSchema(t *testing.T) {
 	}
 }
 
+func TestAuthoritativeSchemaContractsIncludeSystemTaskListOrderIndex(t *testing.T) {
+	contracts, err := AuthoritativeSchemaContracts()
+	if err != nil {
+		t.Fatalf("AuthoritativeSchemaContracts() error = %v", err)
+	}
+	index, ok := contracts["site_system_task"].Indexes["idx_site_system_task_list_order"]
+	if !ok {
+		t.Fatal("system task list-order index is missing from the authoritative schema")
+	}
+	if index.Unique || !reflect.DeepEqual(index.Columns, []string{"site_id", "remote_id"}) {
+		t.Fatalf("system task list-order index = %#v", index)
+	}
+}
+
 func TestPricingGroupCatalogSchemaContract(t *testing.T) {
 	contracts, err := AuthoritativeSchemaContracts()
 	if err != nil {

@@ -251,11 +251,11 @@ test('A98 keeps subscription plan catalog exact, private, bounded and responsive
   expect(listRead?.searchParams.getAll('states')).toEqual(['missing'])
   expect(statisticsRead?.search).toBe('')
   await expect(
-    page.getByText('USD 19.990000').filter({ visible: true }).first()
+    page.getByText('USD 19.99').filter({ visible: true }).first()
   ).toBeVisible()
   await expect(
     page
-      .getByText('额度：900719925474099312345')
+      .getByText('额度：900,719,925,474,099,312,345')
       .filter({ visible: true })
       .first()
   ).toBeVisible()
@@ -267,13 +267,13 @@ test('A98 keeps subscription plan catalog exact, private, bounded and responsive
   ).toBeVisible()
   await expect(
     page
-      .getByText('自定义有效期 9007199254740993 秒')
+      .getByText('自定义有效期 9,007,199,254,740,993 秒')
       .filter({ visible: true })
       .first()
   ).toBeVisible()
   await expect(
     page
-      .getByText('每 9007199254740995 秒重置额度')
+      .getByText('每 9,007,199,254,740,995 秒重置额度')
       .filter({ visible: true })
       .first()
   ).toBeVisible()
@@ -365,6 +365,68 @@ test('A98 keeps subscription plan catalog exact, private, bounded and responsive
       )
     )
   ).toBe(true)
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth
+    )
+  ).toBe(true)
+})
+
+test('separates subscription plan empty, first-error, stale and forced-site scopes', async ({
+  page,
+}, testInfo) => {
+  await seedAuth(page, testInfo)
+  let mode: 'empty' | 'error' | 'success' = 'empty'
+  let globalReads = 0
+  await page.route(/\/api\/subscription-plans(?:\?.*)?$/, async (route) => {
+    globalReads += 1
+    if (mode === 'error') {
+      await route.fulfill({ status: 503, json: envelope(null) })
+      return
+    }
+    await route.fulfill({
+      json: envelope({
+        ...listResponse(),
+        items: mode === 'empty' ? [] : [plans[0]],
+        total: mode === 'empty' ? '0' : '1',
+      }),
+    })
+  })
+  await page.route(/\/api\/subscription-plans\/statistics(?:\?.*)?$/, (route) =>
+    route.fulfill({ json: envelope(statistics()) })
+  )
+  await page.route(
+    /\/api\/sites\/9007199254740997\/subscription-plans(?:\?.*)?$/,
+    (route) => route.fulfill({ status: 503, json: envelope(null) })
+  )
+  await page.route(
+    /\/api\/sites\/9007199254740997\/subscription-plans\/statistics(?:\?.*)?$/,
+    (route) => route.fulfill({ status: 503, json: envelope(null) })
+  )
+
+  await page.goto('/subscription-plans')
+  await expect(
+    page.getByRole('heading', { name: '当前筛选下没有订阅计划' })
+  ).toBeVisible()
+  mode = 'success'
+  await page.getByRole('textbox', { name: '标题或副标题' }).fill('成功')
+  await expect.poll(() => globalReads).toBe(2)
+  await expect(
+    page.getByText(plans[0].title).filter({ visible: true }).first()
+  ).toBeVisible()
+  mode = 'error'
+  await page.getByRole('textbox', { name: '标题或副标题' }).fill('刷新失败')
+  await expect.poll(() => globalReads).toBe(3)
+  await expect(page.getByRole('alert')).toContainText('数据刷新失败')
+  await expect(
+    page.getByText(plans[0].title).filter({ visible: true }).first()
+  ).toBeVisible()
+
+  await page.goto('/sites/9007199254740997/subscription-plans')
+  await expect(
+    page.getByText('无法加载数据', { exact: true }).filter({ visible: true })
+  ).toBeVisible()
+  await expect(page.getByText(plans[0].title)).toHaveCount(0)
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth

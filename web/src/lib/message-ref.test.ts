@@ -3,6 +3,16 @@ import { describe, expect, test } from 'bun:test'
 import { translateMessageRef } from './message-ref'
 
 describe('translateMessageRef metric presentation', () => {
+  test('renders the safe collection execution fallback without raw diagnostics', () => {
+    expect(
+      translateMessageRef({
+        code: 'COLLECTION_EXECUTION_FAILED',
+        params: {},
+        technical_detail: '',
+      })
+    ).toBe('采集任务执行失败，详细原因不可安全展示')
+  })
+
   test.each([
     [
       'ALERT_CHANNEL_RESPONSE_TIME_HIGH',
@@ -12,7 +22,7 @@ describe('translateMessageRef metric presentation', () => {
         threshold: '3000.0000000000',
         value: '3042.7500000000',
       },
-      '站点 生产站 的渠道平均响应时间为 3,042.75 毫秒，超过阈值 3,000 毫秒',
+      '站点 生产站 的渠道平均响应时间为 3,042.75 毫秒，达到或超过阈值 3,000 毫秒',
     ],
     [
       'ALERT_CHANNEL_BALANCE_LOW',
@@ -22,7 +32,7 @@ describe('translateMessageRef metric presentation', () => {
         threshold: '10.5000000000',
         value: '0.0000000000',
       },
-      '站点 生产站 的渠道余额总和为 0，低于阈值 10.5',
+      '站点 生产站 的渠道余额总和为 0，达到或低于阈值 10.5',
     ],
     [
       'ALERT_CHANNEL_AVAILABILITY_LOW',
@@ -32,7 +42,7 @@ describe('translateMessageRef metric presentation', () => {
         threshold: '0.8000000000',
         value: '0.7500000000',
       },
-      '站点 生产站 的渠道可用率为 75%，低于阈值 80%',
+      '站点 生产站 的渠道可用率为 75%，达到或低于阈值 80%',
     ],
     [
       'ALERT_CPU_HIGH',

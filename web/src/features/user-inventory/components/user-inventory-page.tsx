@@ -810,10 +810,16 @@ export function UserInventoryPage({
       onSearchChange({ exportId: job.id })
     },
   })
-  const list = useRetainedQueryData(listQuery.data, listQuery.isError)
+  const retainedScope = siteId ? `site:${siteId}` : 'global'
+  const list = useRetainedQueryData(
+    listQuery.data,
+    listQuery.isError,
+    retainedScope
+  )
   const statistics = useRetainedQueryData(
     statisticsQuery.data,
-    statisticsQuery.isError
+    statisticsQuery.isError,
+    retainedScope
   )
   useLastValidPage({
     isFetching: listQuery.isFetching,
@@ -999,7 +1005,10 @@ export function UserInventoryPage({
           }
           value={search.tab}
         >
-          <TabsList aria-label={t('userInventory.tabs.label')}>
+          <TabsList
+            aria-label={t('userInventory.tabs.label')}
+            className='max-w-full flex-wrap justify-start group-data-horizontal/tabs:h-auto'
+          >
             <TabsTrigger value='list'>
               {t('userInventory.tabs.list')}
             </TabsTrigger>

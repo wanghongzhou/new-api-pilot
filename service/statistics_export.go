@@ -42,6 +42,7 @@ type StatisticsExportIterator struct {
 	snapshotService   *StatisticsService
 	snapshotItems     []dto.StatisticsBreakdownItem
 	snapshotOffset    int
+	totalRows         int64
 }
 
 func NewStatisticsExportIterator(options StatisticsExportIteratorOptions) (*StatisticsExportIterator, error) {
@@ -103,6 +104,9 @@ func (iterator *StatisticsExportIterator) Next(ctx context.Context) (dto.Statist
 		iterator.done = true
 		return dto.StatisticsResponse{}, true, nil
 	}
+	if !iterator.cursor.Initialized {
+		iterator.totalRows = rows[0].TotalRows
+	}
 	hasMore := len(rows) > iterator.pageSize
 	if hasMore {
 		rows = rows[:iterator.pageSize]
@@ -119,7 +123,7 @@ func (iterator *StatisticsExportIterator) Next(ctx context.Context) (dto.Statist
 	iterator.done = !hasMore
 	return dto.StatisticsResponse{
 		Scope: iterator.scope, Granularity: iterator.query.Granularity,
-		Breakdown: common.NewPageData(1, len(items), int64(len(items)), items),
+		Breakdown: common.NewPageData(1, len(items), iterator.totalRows, items),
 	}, false, nil
 }
 
@@ -130,6 +134,7 @@ func (iterator *StatisticsExportIterator) nextFlowDimensionSnapshot(ctx context.
 			return dto.StatisticsResponse{}, false, err
 		}
 		iterator.snapshotItems = append([]dto.StatisticsBreakdownItem(nil), response.Breakdown.Items...)
+		iterator.totalRows = int64(len(iterator.snapshotItems))
 	}
 	if iterator.snapshotOffset >= len(iterator.snapshotItems) {
 		iterator.done = true
@@ -142,7 +147,7 @@ func (iterator *StatisticsExportIterator) nextFlowDimensionSnapshot(ctx context.
 	items := append([]dto.StatisticsBreakdownItem(nil), iterator.snapshotItems[iterator.snapshotOffset:end]...)
 	iterator.snapshotOffset = end
 	iterator.done = end == len(iterator.snapshotItems)
-	return dto.StatisticsResponse{Scope: iterator.scope, Granularity: iterator.query.Granularity, Breakdown: common.NewPageData(1, len(items), int64(len(items)), items)}, false, nil
+	return dto.StatisticsResponse{Scope: iterator.scope, Granularity: iterator.query.Granularity, Breakdown: common.NewPageData(1, len(items), iterator.totalRows, items)}, false, nil
 }
 
 func statisticsExportBreakdownItem(scope string, row model.StatisticsExportRow) (dto.StatisticsBreakdownItem, error) {

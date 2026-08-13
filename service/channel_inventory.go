@@ -71,7 +71,7 @@ func (s *ChannelInventoryService) List(ctx context.Context, q dto.ChannelInvento
 			asOf = &value
 		}
 	}
-	return dto.ChannelInventoryPage{Items: items, Total: total, Page: q.Page, PageSize: q.PageSize, DataStatus: channelOverallStatus(completeness), AsOf: asOf}, nil
+	return dto.ChannelInventoryPage{Items: items, Total: strconv.FormatInt(total, 10), Page: q.Page, PageSize: q.PageSize, DataStatus: channelOverallStatus(completeness), AsOf: asOf}, nil
 }
 func (s *ChannelInventoryService) Statistics(ctx context.Context, q dto.ChannelInventoryStatisticsQuery) (dto.ChannelInventoryStatisticsResponse, error) {
 	q.Normalize()

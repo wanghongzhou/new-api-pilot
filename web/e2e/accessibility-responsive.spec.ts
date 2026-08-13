@@ -242,11 +242,6 @@ test('discovers the authenticated file-route surface', async ({
 for (const route of authenticatedRoutes) {
   test(`audits authenticated route ${route}`, async ({ page }, testInfo) => {
     await installAuthenticatedFailureBoundary(page)
-    if (testInfo.project.name === 'chromium-mobile') {
-      await page.setViewportSize({ height: 844, width: 375 })
-    } else {
-      await page.setViewportSize({ height: 900, width: 1440 })
-    }
     await assertRouteSurface(page, route, testInfo)
   })
 }
@@ -254,10 +249,5 @@ for (const route of authenticatedRoutes) {
 test('keeps the unauthenticated sign-in file route accessible and responsive', async ({
   page,
 }, testInfo) => {
-  if (testInfo.project.name === 'chromium-mobile') {
-    await page.setViewportSize({ height: 844, width: 375 })
-  } else {
-    await page.setViewportSize({ height: 900, width: 1440 })
-  }
   await assertRouteSurface(page, '/sign-in', testInfo)
 })

@@ -55,7 +55,41 @@ describe('route error boundaries', () => {
     expect(routeBoundary).toContain("t('Back to dashboard')")
     expect(routeBoundary).toContain("t('Retry')")
     expect(routeBoundary).toContain("t('Page not found')")
+    expect(routeBoundary).toContain("t('Go back')")
+    expect(routeBoundary).toContain('router.history.back()')
     expect(routeBoundary).toContain("to='/dashboard'")
+  })
+
+  test('uses an h1 for the page-level not-found title without changing generic errors', () => {
+    expect(routeBoundary).toMatch(
+      /<h1[\s\S]*?t\('Page not found'\)[\s\S]*?<\/h1>/
+    )
+    expect(routeBoundary).toMatch(
+      /<EmptyTitle>\{t\('Page failed to load'\)\}<\/EmptyTitle>/
+    )
+    expect(routeBoundary).not.toMatch(
+      /<EmptyTitle>\{t\('Page not found'\)\}<\/EmptyTitle>/
+    )
+  })
+
+  test('uses replace for canonical root and settings redirects', () => {
+    const rootRedirect = readFileSync(
+      new URL('../../routes/index.tsx', import.meta.url),
+      'utf8'
+    )
+    const settingsRedirect = readFileSync(
+      new URL(
+        '../../routes/_authenticated/settings/index.tsx',
+        import.meta.url
+      ),
+      'utf8'
+    )
+    expect(rootRedirect).toContain(
+      "redirect({ replace: true, to: '/dashboard' })"
+    )
+    expect(settingsRedirect).toContain(
+      "redirect({ replace: true, to: '/settings/system' })"
+    )
   })
 
   test('ships concise Chinese copy for generic errors and unknown routes', () => {

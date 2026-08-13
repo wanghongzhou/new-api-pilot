@@ -60,7 +60,7 @@ export interface RedemptionInventoryItem extends FinanceInventoryBase {
 
 export interface FinanceInventoryPage<TItem> {
   items: TItem[]
-  total: number
+  total: MetricString
   page: number
   page_size: number
   data_status: DataStatus

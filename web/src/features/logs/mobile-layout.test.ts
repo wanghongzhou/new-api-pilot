@@ -31,7 +31,7 @@ describe('logs mobile layout contract', () => {
     expect(source).toContain('value={quickRange}')
     const mobileCard = source.slice(
       source.indexOf('renderMobileCard={(item) => ('),
-      source.indexOf('total={data?.total ?? 0}')
+      source.indexOf('total={0}')
     )
     expect(mobileCard).toContain('isConsumptionLogType(item.type)')
     expect(mobileCard).toContain("t('logs.fields.mode')")
@@ -57,6 +57,11 @@ describe('logs mobile layout contract', () => {
     expect(source).toContain("t('logs.stats.tpm')")
     expect(source).toContain('onSearch={() => void logsQuery.refetch()}')
     expect(source).toContain("{t('common.search')}")
+    expect(source).toContain('BigInt(data.total)')
+    expect(source).toContain('paginationHasKnownLastPage={false}')
+    expect(source).toContain(
+      "<MetricValue value={data?.total ?? parseMetricString('0')} />"
+    )
     const username = source.indexOf("aria-label={t('logs.fields.username')}")
     const model = source.indexOf("aria-label={t('logs.fields.model')}")
     const channel = source.indexOf("aria-label={t('logs.fields.channelId')}")

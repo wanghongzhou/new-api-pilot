@@ -38,8 +38,8 @@ describe('site detail collection pagination', () => {
     expect(collectionRunsSource).toContain("className='w-32'")
     expect(collectionRunsSource).toContain("className='w-48'")
     expect(collectionRunsSource).toContain("className='min-w-0 flex-1'")
-    expect(collectionRunsSource).toContain('search.runPage > lastPage')
-    expect(collectionRunsSource).toContain('search.windowPage > lastPage')
+    expect(collectionRunsSource).toContain('firstOffset >= BigInt(runTotal)')
+    expect(collectionRunsSource).toContain('firstOffset >= BigInt(windowTotal)')
   })
 
   test('limits fast task history and recovers from an out-of-range page', () => {
@@ -85,5 +85,10 @@ describe('site detail collection pagination', () => {
     expect(collectionRunsSource).toContain(
       'enabled: validRunId && validSiteId && windowedRun'
     )
+  })
+
+  test('does not render an empty technical-detail block for safe task failures', () => {
+    expect(collectionRunsSource).toContain('run.error.technical_detail && (')
+    expect(collectionRunsSource).toContain('run.last_request_id && (')
   })
 })

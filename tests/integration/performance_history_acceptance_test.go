@@ -79,7 +79,7 @@ func TestPerformanceHistorySuccessfulEmptySnapshotIsComplete(t *testing.T) {
 		Page: 1, PageSize: 100, StartTimestamp: queryEnd - 24*3600, EndTimestamp: queryEnd, SiteIDs: []int64{site.ID},
 	}
 	page, err := svc.List(context.Background(), query)
-	if err != nil || page.Total != 0 || page.DataStatus != "complete" || page.AsOf == nil || *page.AsOf != now {
+	if err != nil || page.Total != "0" || page.DataStatus != "complete" || page.AsOf == nil || *page.AsOf != now {
 		t.Fatalf("empty performance page=%#v err=%v", page, err)
 	}
 	statistics, err := svc.Statistics(context.Background(), query)

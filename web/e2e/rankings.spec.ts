@@ -230,10 +230,19 @@ test('A97 keeps local rankings exact, bounded, exportable and responsive', async
     page.getByRole('heading', { exact: true, name: '本地排行榜' })
   ).toBeVisible()
   await expect(
-    page.getByText('900719925474099312345678').filter({ visible: true }).first()
+    page
+      .getByText('900,719,925,474,099,312,345,678')
+      .filter({ visible: true })
+      .first()
   ).toBeVisible()
   await expect(
-    page.getByText('9007199254740994').filter({ visible: true }).first()
+    page
+      .locator('[title="900719925474099312345678"]')
+      .filter({ visible: true })
+      .first()
+  ).toBeVisible()
+  await expect(
+    page.getByText('9,007,199,254,740,994').filter({ visible: true }).first()
   ).toBeVisible()
   await expect(
     page.getByText('33.33%').filter({ visible: true }).first()
@@ -327,6 +336,9 @@ test('A97 keeps local rankings exact, bounded, exportable and responsive', async
   await expect(
     page.getByRole('heading', { exact: true, name: '站点本地排行榜' })
   ).toBeVisible()
+  await expect(
+    page.getByRole('button', { exact: true, name: '站点' })
+  ).toHaveCount(0)
   await page.getByRole('button', { name: '导出 XLSX' }).click()
   await expect
     .poll(() => exports.at(-1)?.statistics_type)

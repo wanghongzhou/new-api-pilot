@@ -8,6 +8,7 @@ import {
   formatDisplayValue,
   formatDecimalDisplayValue,
   formatNumericDisplayValue,
+  formatMetricDisplayValue,
 } from './display-value'
 
 describe('formatDisplayValue', () => {
@@ -71,5 +72,19 @@ describe('formatDecimalDisplayValue', () => {
   test('rounds display-only decimals without retaining storage scale', () => {
     expect(formatDecimalDisplayValue('3042.7560000000', 2)).toBe('3,042.76')
     expect(formatDecimalDisplayValue('0.0000000000', 4)).toBe('0')
+  })
+})
+
+describe('formatMetricDisplayValue', () => {
+  test('groups bigint strings without converting through number', () => {
+    expect(formatMetricDisplayValue('9007199254740993')).toBe(
+      '9,007,199,254,740,993'
+    )
+    expect(formatMetricDisplayValue('0')).toBe('0')
+  })
+
+  test('keeps invalid input visible and missing input distinct', () => {
+    expect(formatMetricDisplayValue('not-a-metric')).toBe('not-a-metric')
+    expect(formatMetricDisplayValue(null)).toBe(EMPTY_NUMERIC_DISPLAY_VALUE)
   })
 })

@@ -492,7 +492,7 @@ export function StatisticsSummary({
           <DataStatusBadge status={data.summary.data_status} />
         </div>
       )}
-      <div className='border-border grid overflow-hidden rounded-lg border sm:grid-cols-2 lg:grid-cols-5 [&_dd]:leading-tight [&_dd]:break-all [&_dd]:tabular-nums [&>dl]:min-w-0 [&>dl]:border-r [&>dl]:border-b'>
+      <div className='border-border grid overflow-hidden rounded-lg border sm:grid-cols-2 lg:grid-cols-4 [&_dd]:leading-tight [&_dd]:break-all [&_dd]:tabular-nums [&>dl]:min-w-0 [&>dl]:border-r [&>dl]:border-b'>
         <dl className='p-4'>
           <dt className='text-muted-foreground text-xs'>
             {t('statistics.metric.request_count')}
@@ -515,22 +515,24 @@ export function StatisticsSummary({
             />
           </dd>
         </dl>
-        <dl className='p-4'>
-          <dt className='text-muted-foreground text-xs'>
-            {t(
-              dynamicI18nKey(
-                'statistics',
-                `statistics.display.${search.display}`
-              )
-            )}
-          </dt>
-          <dd className='mt-1 text-lg font-semibold'>
-            <AmountValue
-              display={search.display}
-              siteBreakdown={data.site_breakdown}
-            />
-          </dd>
-        </dl>
+        {search.display !== 'quota' && (
+          <dl className='p-4'>
+            <dt className='text-muted-foreground text-xs'>
+              {t(
+                dynamicI18nKey(
+                  'statistics',
+                  `statistics.display.${search.display}`
+                )
+              )}
+            </dt>
+            <dd className='mt-1 text-lg font-semibold'>
+              <AmountValue
+                display={search.display}
+                siteBreakdown={data.site_breakdown}
+              />
+            </dd>
+          </dl>
+        )}
         <dl className='p-4'>
           <dt className='text-muted-foreground text-xs'>
             {t('statistics.metric.token_used')}
@@ -930,18 +932,25 @@ function BreakdownTable<TBreakdown extends StatisticsBreakdownBase>({
         header: t('statistics.metric.quota'),
         id: 'quota',
       },
-      {
-        cell: ({ row }) => (
-          <AmountValue
-            display={search.display}
-            siteBreakdown={row.original.site_breakdown}
-          />
-        ),
-        header: t(
-          dynamicI18nKey('statistics', `statistics.display.${search.display}`)
-        ),
-        id: 'amount',
-      },
+      ...(search.display === 'quota'
+        ? []
+        : [
+            {
+              cell: ({ row }) => (
+                <AmountValue
+                  display={search.display}
+                  siteBreakdown={row.original.site_breakdown}
+                />
+              ),
+              header: t(
+                dynamicI18nKey(
+                  'statistics',
+                  `statistics.display.${search.display}`
+                )
+              ),
+              id: 'amount',
+            } satisfies ColumnDef<TBreakdown, unknown>,
+          ]),
       {
         cell: ({ row }) => (
           <MetricValue compact value={row.original.token_used} />

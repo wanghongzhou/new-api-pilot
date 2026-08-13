@@ -30,6 +30,16 @@ function envelope<T>(data: T, requestId = 'req_logs_e2e') {
   }
 }
 
+function failureEnvelope(code = 'INTERNAL_ERROR') {
+  return {
+    code,
+    data: null,
+    message: code,
+    request_id: 'req_logs_failure',
+    success: false,
+  }
+}
+
 async function seedAuth(page: Page) {
   await mockAuthenticatedShell(page)
   await page.addInitScript(
@@ -63,10 +73,15 @@ function assertAuthenticated(route: Route) {
 }
 
 const logItem = {
+  cache_creation_tokens: '0',
+  cache_creation_tokens_1h: '0',
+  cache_creation_tokens_5m: '0',
+  cache_read_tokens: '0',
   channel_id: '9007199254740997',
   completion_tokens: '9223372036854775807',
   content: '[redacted]',
   created_at: 1_784_262_300,
+  first_response_time_ms: '250',
   group: 'vip',
   id: '9007199254740999',
   ip: '',
@@ -74,10 +89,19 @@ const logItem = {
   model_name: 'gpt-4.1',
   prompt_tokens: '9007199254740995',
   quota: '9223372036854775806',
+  rate: {
+    quota_per_unit: null,
+    source: 'unavailable',
+    updated_at: null,
+    usd_exchange_rate: null,
+  },
   remote_user_id: '9007199254740993',
   request_id: 'req-local-safe',
   site_id: '9007199254740993',
   site_name: '华东生产站点',
+  stream_end_reason: 'stop',
+  stream_error_count: '0',
+  stream_status: 'completed',
   token_id: '9007199254740995',
   token_name: 'production-token',
   type: 5,
@@ -93,6 +117,17 @@ test('queries, inspects and exports global redacted logs without treating them a
   await seedAuth(page)
   const reads: URL[] = []
   let exportBody: ExportBody | undefined
+  await page.route(/\/api\/logs\/stat(?:\?.*)?$/, async (route) => {
+    assertAuthenticated(route)
+    await route.fulfill({
+      json: envelope({
+        quota: logItem.quota,
+        rpm: '1',
+        site_breakdown: [],
+        tpm: '2',
+      }),
+    })
+  })
   await page.route(/\/api\/logs(?:\?.*)?$/, async (route) => {
     assertAuthenticated(route)
     reads.push(new URL(route.request().url()))
@@ -160,7 +195,7 @@ test('queries, inspects and exports global redacted logs without treating them a
     page.getByRole('heading', { name: '全局使用日志' })
   ).toBeVisible()
   await expect(page.getByText('使用日志不是财务事实')).toBeVisible()
-  await expect(page.getByText('当前查询日志数')).toBeVisible()
+  await expect(page.getByText('请求数')).toBeVisible()
   await expect(page.getByText('部分站点或时间窗口未完整采集')).toBeVisible()
   await expect(
     page
@@ -178,14 +213,13 @@ test('queries, inspects and exports global redacted logs without treating them a
   await page.getByLabel('用户名').fill('alice')
   await page.getByRole('button', { name: '日志类型' }).click()
   await page.getByRole('button', { name: '错误' }).click()
-  await expect(page.getByLabel('Channel ID')).not.toBeVisible()
-  await page.getByRole('button', { name: /更多筛选/ }).click()
   await page.getByLabel('Channel ID').fill('9007199254740997')
+  await page.getByRole('button', { name: /更多筛选/ }).click()
   await page.getByLabel('分组').fill('vip')
   await page.getByLabel('Request ID', { exact: true }).fill('req-local-safe')
   await page.getByLabel('上游 Request ID').fill('req-upstream-safe')
   await page.keyboard.press('Escape')
-  await expect(page.getByRole('button', { name: /更多筛选 4/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /更多筛选 3/ })).toBeVisible()
   await expect
     .poll(() => reads.at(-1)?.searchParams.get('username'))
     .toBe('alice')
@@ -203,7 +237,7 @@ test('queries, inspects and exports global redacted logs without treating them a
   const detail = page.getByRole('dialog', { name: '日志详情' })
   await expect(detail.getByText('[redacted]')).toBeVisible()
   await expect(detail.getByText('未记录')).toBeVisible()
-  await expect(detail.getByText('9223372036854775807')).toBeVisible()
+  await expect(detail.getByText('9007199254740999')).toBeVisible()
   await expect(detail).not.toContainText('Bearer secret-token')
   await detail.getByRole('button', { name: '关闭' }).last().click()
 
@@ -238,6 +272,12 @@ test('uses the site-scoped endpoint and preserves unavailable as a distinct empt
 }) => {
   await seedAuth(page)
   const reads: URL[] = []
+  await page.route(/\/api\/sites\/1\/logs\/stat(?:\?.*)?$/, async (route) => {
+    assertAuthenticated(route)
+    await route.fulfill({
+      json: envelope({ quota: '0', rpm: '0', site_breakdown: [], tpm: '0' }),
+    })
+  })
   await page.route(/\/api\/sites\/1\/logs(?:\?.*)?$/, async (route) => {
     assertAuthenticated(route)
     reads.push(new URL(route.request().url()))
@@ -275,4 +315,71 @@ test('uses the site-scoped endpoint and preserves unavailable as a distinct empt
     .withTags(['wcag2a', 'wcag2aa'])
     .analyze()
   expect(accessibility.violations).toEqual([])
+})
+
+test('retains safe rows and bigint totals when a filtered refresh fails', async ({
+  page,
+}) => {
+  await seedAuth(page)
+  let reads = 0
+  await page.route(/\/api\/logs\/stat(?:\?.*)?$/, async (route) => {
+    await route.fulfill({
+      json: envelope({
+        quota: '9223372036854775806',
+        rpm: '0',
+        site_breakdown: [],
+        tpm: '0',
+      }),
+    })
+  })
+  await page.route(/\/api\/logs(?:\?.*)?$/, async (route) => {
+    reads += 1
+    if (reads === 1) {
+      await route.fulfill({
+        json: envelope({
+          as_of: 1_784_262_400,
+          data_status: 'complete',
+          items: [logItem],
+          page: 1,
+          page_size: 20,
+          total: '9007199254740993',
+        }),
+      })
+      return
+    }
+    await route.fulfill({ json: failureEnvelope(), status: 503 })
+  })
+
+  await page.goto('/logs')
+  await expect(page.getByText('9,007,199,254,740,993').first()).toBeVisible()
+  await expect(
+    page.getByText('alice').filter({ visible: true }).first()
+  ).toBeVisible()
+  await page.getByLabel('用户名').fill('refresh-failure')
+  await page.getByRole('button', { name: '搜索' }).click()
+  await expect.poll(() => reads).toBeGreaterThan(1)
+  await expect(page.getByRole('alert')).toContainText('数据刷新失败')
+  await expect(
+    page.getByText('alice').filter({ visible: true }).first()
+  ).toBeVisible()
+  await expect(page.getByText('9,007,199,254,740,993').first()).toBeVisible()
+})
+
+test('shows a blocking state when the initial logs request fails', async ({
+  page,
+}) => {
+  await seedAuth(page)
+  await page.route(/\/api\/logs\/stat(?:\?.*)?$/, async (route) => {
+    await route.fulfill({ json: failureEnvelope(), status: 503 })
+  })
+  await page.route(/\/api\/logs(?:\?.*)?$/, async (route) => {
+    await route.fulfill({ json: failureEnvelope(), status: 503 })
+  })
+  await page.goto('/logs?username=initial-failure')
+  await expect(
+    page
+      .getByRole('region', { name: '使用日志列表' })
+      .getByRole('heading', { name: '无法加载数据' })
+  ).toBeVisible()
+  await expect(page.getByText('alice').filter({ visible: true })).toHaveCount(0)
 })

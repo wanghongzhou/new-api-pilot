@@ -87,6 +87,16 @@ function groupsFixture(retentionValue: unknown = 90): SettingGroup[] {
 }
 
 describe('settings frontend contract', () => {
+  test('gives the DingTalk toggle a stable field name instead of naming it by its current state', async () => {
+    const source = await Bun.file(
+      new URL('./components/settings-page.tsx', import.meta.url)
+    ).text()
+
+    expect(source).toContain(
+      "aria-label={t(dynamicI18nKey('settings', definition.labelKey))}"
+    )
+  })
+
   test('maps editable fields and secret actions to their visible section', () => {
     expect(settingSectionForField('probeIntervalMinutes')).toBe('collection')
     expect(settingSectionForField('maxFileMegabytes')).toBe('export')

@@ -36,7 +36,7 @@ export interface UserInventoryItem {
 
 export interface UserInventoryPage {
   items: UserInventoryItem[]
-  total: number
+  total: MetricString
   page: number
   page_size: number
   data_status: DataStatus

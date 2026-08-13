@@ -74,7 +74,7 @@ describe('platform user API', () => {
         config,
         data: {
           code: '',
-          data: { items: [], page: 1, page_size: 20, total: 0 },
+          data: { items: [], page: 1, page_size: 20, total: '0' },
           message: '',
           request_id: 'req_users',
           success: true,
@@ -122,7 +122,7 @@ describe('platform user API', () => {
             items: [{ username: userId }],
             page: 1,
             page_size: 20,
-            total: 1,
+            total: '1',
           },
           message: '',
           request_id: `req_${userId}`,

@@ -22,7 +22,7 @@ type FinanceOperationsExportOptions struct {
 	Kind, Format, TemporaryPath                            string
 	DataSnapshotAt, ExportedAt, MaxFileBytes, MinFreeBytes int64
 	DiskFree                                               ExportDiskFreeFunc
-	OnPage                                                 func(context.Context, int, int64) error
+	OnPage                                                 func(context.Context, int64, int64) error
 	Now                                                    int64
 }
 
@@ -77,11 +77,13 @@ func GenerateFinanceOperationsExport(ctx context.Context, o FinanceOperationsExp
 			q.Page, q.PageSize = page, 100
 			q.SnapshotAt = o.DataSnapshotAt
 			q.StatusAt = o.Now
+			var total int64
 			if o.Kind == "topup" {
-				rows, total, e := repo.ListTopups(ctx, q)
+				rows, rowTotal, e := repo.ListTopups(ctx, q)
 				if e != nil {
 					return e
 				}
+				total = rowTotal
 				for _, r := range rows {
 					last := ""
 					if r.LastSeenAt != nil {
@@ -100,10 +102,11 @@ func GenerateFinanceOperationsExport(ctx context.Context, o FinanceOperationsExp
 					return ErrExportContract
 				}
 			} else {
-				rows, total, e := repo.ListRedemptions(ctx, q)
+				rows, rowTotal, e := repo.ListRedemptions(ctx, q)
 				if e != nil {
 					return e
 				}
+				total = rowTotal
 				for _, r := range rows {
 					last := ""
 					if r.LastSeenAt != nil {
@@ -127,7 +130,7 @@ func GenerateFinanceOperationsExport(ctx context.Context, o FinanceOperationsExp
 				}
 			}
 			if o.OnPage != nil {
-				if err = o.OnPage(ctx, page, count); err != nil {
+				if err = o.OnPage(ctx, count, total); err != nil {
 					return err
 				}
 			}

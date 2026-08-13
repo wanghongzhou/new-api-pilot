@@ -15,9 +15,10 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import type { ColumnDef, SortingState } from '@tanstack/react-table'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { QueryStateAlert } from '@/components/data/query-state-alert'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -27,6 +28,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { dashboardKeys } from '@/features/dashboard/query-keys'
 import { listSites } from '@/features/sites/api'
 import { siteKeys } from '@/features/sites/query-keys'
+import { useRetainedQueryData } from '@/hooks/use-retained-query-data'
 import { fromUnixSeconds } from '@/lib/dayjs'
 import { translateMessageRef } from '@/lib/message-ref'
 import { useAuthStore } from '@/stores/auth-store'
@@ -214,14 +216,18 @@ function RuleActions({
   onRestore,
   rule,
 }: {
-  onEdit: (rule: AlertRuleItem) => void
-  onRestore: (rule: AlertRuleItem) => void
+  onEdit: (rule: AlertRuleItem, trigger: HTMLButtonElement) => void
+  onRestore: (rule: AlertRuleItem, trigger: HTMLButtonElement) => void
   rule: AlertRuleItem
 }) {
   const { t } = useTranslation()
   return (
     <div className='flex flex-wrap gap-2'>
-      <Button onClick={() => onEdit(rule)} size='sm' variant='outline'>
+      <Button
+        onClick={(event) => onEdit(rule, event.currentTarget)}
+        size='sm'
+        variant='outline'
+      >
         <HugeiconsIcon
           icon={rule.inherited ? Add01Icon : Edit03Icon}
           strokeWidth={2}
@@ -231,7 +237,11 @@ function RuleActions({
           : t('alerts.rules.edit')}
       </Button>
       {rule.override_rule_id && (
-        <Button onClick={() => onRestore(rule)} size='sm' variant='ghost'>
+        <Button
+          onClick={(event) => onRestore(rule, event.currentTarget)}
+          size='sm'
+          variant='ghost'
+        >
           <HugeiconsIcon icon={Undo02Icon} strokeWidth={2} />
           {t('alerts.rules.restoreGlobal')}
         </Button>
@@ -247,8 +257,8 @@ function AlertRuleCard({
   rule,
 }: {
   isAdmin: boolean
-  onEdit: (rule: AlertRuleItem) => void
-  onRestore: (rule: AlertRuleItem) => void
+  onEdit: (rule: AlertRuleItem, trigger: HTMLButtonElement) => void
+  onRestore: (rule: AlertRuleItem, trigger: HTMLButtonElement) => void
   rule: AlertRuleItem
 }) {
   const { t } = useTranslation()
@@ -325,6 +335,12 @@ export function AlertsPage({
   const queryClient = useQueryClient()
   const isAdmin = useAuthStore((state) => state.user?.role === 'admin')
   const [ruleDialog, setRuleDialog] = useState<RuleDialogState>(null)
+  const ruleDialogTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const closeRuleDialog = () => {
+    const trigger = ruleDialogTriggerRef.current
+    setRuleDialog(null)
+    requestAnimationFrame(() => trigger?.focus())
+  }
   const params = useMemo(() => alertListParams(search), [search])
   const ruleParams = useMemo(() => alertRuleListParams(search), [search])
   const sitesParams = useMemo(
@@ -369,9 +385,24 @@ export function AlertsPage({
     queryKey: alertKeys.rules(ruleParams),
     staleTime: 30_000,
   })
-  const alerts = alertsQuery.data?.items ?? []
-  const rules = rulesQuery.data?.items ?? []
-  const sites = sitesQuery.data?.items ?? []
+  const alertsData = useRetainedQueryData(
+    alertsQuery.data,
+    alertsQuery.isError,
+    'events'
+  )
+  const rulesData = useRetainedQueryData(
+    rulesQuery.data,
+    rulesQuery.isError,
+    `${search.scope}:${search.ruleSiteId ?? ''}`
+  )
+  const sitesData = useRetainedQueryData(
+    sitesQuery.data,
+    sitesQuery.isError,
+    'sites'
+  )
+  const alerts = alertsData?.items ?? []
+  const rules = rulesData?.items ?? []
+  const sites = sitesData?.items ?? []
   const openAlert = useCallback(
     (alertId: AlertEventItem['id']) => onSearchChange({ alertId }),
     [onSearchChange]
@@ -593,10 +624,14 @@ export function AlertsPage({
             {
               cell: ({ row }) => (
                 <RuleActions
-                  onEdit={(rule) => setRuleDialog({ action: 'edit', rule })}
-                  onRestore={(rule) =>
+                  onEdit={(rule, trigger) => {
+                    ruleDialogTriggerRef.current = trigger
+                    setRuleDialog({ action: 'edit', rule })
+                  }}
+                  onRestore={(rule, trigger) => {
+                    ruleDialogTriggerRef.current = trigger
                     setRuleDialog({ action: 'restore', rule })
-                  }
+                  }}
                   rule={row.original}
                 />
               ),
@@ -684,13 +719,19 @@ export function AlertsPage({
                 targetType: search.targetType,
               }}
             />
+            {alertsQuery.isError && alertsData && (
+              <QueryStateAlert
+                message={t('common.retainedDataRefreshFailed')}
+                onRetry={() => void alertsQuery.refetch()}
+              />
+            )}
             <DataTable
               ariaLabel={t('alerts.table.label')}
               columns={eventColumns}
               data={alerts}
               emptyDescription={t('alerts.empty.description')}
               emptyTitle={t('alerts.empty.title')}
-              error={alertsQuery.isError}
+              error={alertsQuery.isError && !alertsData}
               fetching={alertsQuery.isFetching}
               loading={alertsQuery.isPending}
               onPageChange={(page) => onSearchChange({ page })}
@@ -710,7 +751,7 @@ export function AlertsPage({
                   id: search.sort ?? 'last_fired_at',
                 },
               ]}
-              total={alertsQuery.data?.total ?? 0}
+              total={alertsData?.total ?? 0}
             />
           </div>
         ) : (
@@ -731,6 +772,12 @@ export function AlertsPage({
                 scope: search.scope,
               }}
             />
+            {rulesQuery.isError && rulesData && (
+              <QueryStateAlert
+                message={t('common.retainedDataRefreshFailed')}
+                onRetry={() => void rulesQuery.refetch()}
+              />
+            )}
             {search.scope === 'site' && !search.ruleSiteId ? (
               <section className='border-border border-y py-10 text-center'>
                 <h2 className='font-medium'>
@@ -747,7 +794,7 @@ export function AlertsPage({
                 data={rules}
                 emptyDescription={t('alerts.rules.emptyDescription')}
                 emptyTitle={t('alerts.rules.empty')}
-                error={rulesQuery.isError}
+                error={rulesQuery.isError && !rulesData}
                 fetching={rulesQuery.isFetching}
                 loading={rulesQuery.isPending}
                 onPageChange={(rulePage) => onSearchChange({ rulePage })}
@@ -761,12 +808,14 @@ export function AlertsPage({
                 renderMobileCard={(rule) => (
                   <AlertRuleCard
                     isAdmin={Boolean(isAdmin)}
-                    onEdit={(selected) =>
+                    onEdit={(selected, trigger) => {
+                      ruleDialogTriggerRef.current = trigger
                       setRuleDialog({ action: 'edit', rule: selected })
-                    }
-                    onRestore={(selected) =>
+                    }}
+                    onRestore={(selected, trigger) => {
+                      ruleDialogTriggerRef.current = trigger
                       setRuleDialog({ action: 'restore', rule: selected })
-                    }
+                    }}
                     rule={rule}
                   />
                 )}
@@ -780,7 +829,7 @@ export function AlertsPage({
                       ]
                     : []
                 }
-                total={rulesQuery.data?.total ?? 0}
+                total={rulesData?.total ?? 0}
               />
             )}
           </div>
@@ -793,7 +842,7 @@ export function AlertsPage({
       />
       {ruleDialog?.action === 'edit' && (
         <AlertRuleFormDialog
-          onClose={() => setRuleDialog(null)}
+          onClose={closeRuleDialog}
           onSaved={invalidateRules}
           rule={ruleDialog.rule}
           rules={rules}
@@ -802,7 +851,7 @@ export function AlertsPage({
       )}
       {ruleDialog?.action === 'restore' && (
         <AlertRuleResetDialog
-          onClose={() => setRuleDialog(null)}
+          onClose={closeRuleDialog}
           onSaved={invalidateRules}
           rule={ruleDialog.rule}
         />

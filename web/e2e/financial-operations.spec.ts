@@ -39,7 +39,7 @@ function assertAuthenticated(route: Route) {
 async function seedAuth(page: Page, testInfo: TestInfo) {
   await mockAuthenticatedShell(page)
   if (testInfo.project.name === 'chromium-mobile') {
-    await page.setViewportSize({ height: 812, width: 375 })
+    await page.setViewportSize({ height: 844, width: 390 })
   }
   await page.addInitScript(
     ({ authKey, authUser, uidKey }) => {
@@ -253,6 +253,9 @@ test('keeps finance operations exact, non-reconciling, secret-free, exportable a
     /\/api\/sites\/9007199254740997\/redemptions\/statistics(?:\?.*)?$/,
     async (route) => {
       assertAuthenticated(route)
+      expect(new URL(route.request().url()).searchParams.has('site_ids')).toBe(
+        false
+      )
       await route.fulfill({ json: envelope(redemptionStatistics()) })
     }
   )
@@ -311,7 +314,13 @@ test('keeps finance operations exact, non-reconciling, secret-free, exportable a
   await expect(page.getByText('充值记录明细')).toBeVisible()
   await expect(
     page
-      .getByText('123456789012345678.1234567890', { exact: true })
+      .getByText('123,456,789,012,345,678.123456789', { exact: true })
+      .filter({ visible: true })
+      .first()
+  ).toBeVisible()
+  await expect(
+    page
+      .locator('[title="123456789012345678.1234567890"]')
       .filter({ visible: true })
       .first()
   ).toBeVisible()
@@ -358,7 +367,13 @@ test('keeps finance operations exact, non-reconciling, secret-free, exportable a
   ).toBeVisible()
   await expect(
     page
-      .getByText(/9223372036854775807/)
+      .getByText(/9,223,372,036,854,775,807/)
+      .filter({ visible: true })
+      .first()
+  ).toBeVisible()
+  await expect(
+    page
+      .locator('[title="9223372036854775807"]')
       .filter({ visible: true })
       .first()
   ).toBeVisible()
@@ -404,6 +419,9 @@ test('keeps finance operations exact, non-reconciling, secret-free, exportable a
     page.getByRole('heading', { name: '站点财务运营' })
   ).toBeVisible()
   await expect(
+    page.getByRole('button', { exact: true, name: '站点' })
+  ).toHaveCount(0)
+  await expect(
     page.getByText('夏季活动批次').filter({ visible: true }).first()
   ).toBeVisible()
   expect(
@@ -411,4 +429,101 @@ test('keeps finance operations exact, non-reconciling, secret-free, exportable a
       () => document.documentElement.scrollWidth <= window.innerWidth
     )
   ).toBe(true)
+})
+
+test('distinguishes an empty redemption result from incomplete data', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium-desktop')
+  await seedAuth(page, testInfo)
+  await page.route(/\/api\/redemptions(?:\?.*)?$/, (route) =>
+    route.fulfill({
+      json: envelope({
+        as_of: 1_784_348_700,
+        data_status: 'complete',
+        items: [],
+        page: 1,
+        page_size: 20,
+        total: '0',
+      }),
+    })
+  )
+  await page.route(/\/api\/redemptions\/statistics(?:\?.*)?$/, (route) =>
+    route.fulfill({
+      json: envelope({
+        data_status: 'complete',
+        site_breakdown: [],
+        status_breakdown: [],
+        summary: { count: '0', missing_count: '0', quota: '0' },
+      }),
+    })
+  )
+
+  await page.goto('/financial-operations?tab=redemptions')
+  await expect(
+    page.getByRole('heading', { name: '当前筛选下没有记录' }).first()
+  ).toBeVisible()
+  await expect(
+    page.getByText(/pending、partial 或 missing/).first()
+  ).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+})
+
+test('shows a blocking error rather than an empty redemption state on the first failure', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium-desktop')
+  await seedAuth(page, testInfo)
+  await page.route(/\/api\/redemptions(?:\?.*)?$/, (route) =>
+    route.fulfill({ status: 503, json: envelope(null) })
+  )
+  await page.route(/\/api\/redemptions\/statistics(?:\?.*)?$/, (route) =>
+    route.fulfill({ json: envelope(redemptionStatistics()) })
+  )
+
+  await page.goto('/financial-operations?tab=redemptions')
+  await expect(page.getByRole('alert')).toContainText('无法加载数据')
+  await expect(page.getByRole('button', { name: '重试' })).toBeVisible()
+  await expect(page.getByText('当前筛选下没有记录')).toHaveCount(0)
+})
+
+test('retains cached redemption rows and warns when a filtered refresh fails', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium-desktop')
+  await seedAuth(page, testInfo)
+  let reads = 0
+  await page.route(/\/api\/redemptions(?:\?.*)?$/, async (route) => {
+    reads += 1
+    if (reads === 1) {
+      await route.fulfill({
+        json: envelope({
+          as_of: 1_784_348_700,
+          data_status: 'partial',
+          items: [redemption],
+          page: 1,
+          page_size: 20,
+          total: '1',
+        }),
+      })
+      return
+    }
+    await route.fulfill({ status: 503, json: envelope(null) })
+  })
+  await page.route(/\/api\/redemptions\/statistics(?:\?.*)?$/, (route) =>
+    route.fulfill({ json: envelope(redemptionStatistics()) })
+  )
+
+  await page.goto('/financial-operations?tab=redemptions')
+  await expect(
+    page.getByText(redemption.name).filter({ visible: true }).first()
+  ).toBeVisible()
+  await page.getByRole('textbox', { name: '兑换批次名称' }).fill('刷新失败')
+  await expect.poll(() => reads).toBe(2)
+  await expect(page.getByRole('alert')).toContainText(
+    '刷新失败，当前显示的是上次成功加载的明细'
+  )
+  await expect(
+    page.getByText(redemption.name).filter({ visible: true }).first()
+  ).toBeVisible()
 })

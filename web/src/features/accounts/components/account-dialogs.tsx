@@ -152,7 +152,7 @@ function EditAccountDialog({
     <>
       <Drawer
         direction='right'
-        onOpenChange={(open) => !open && requestClose()}
+        onOpenChange={(open) => !open && !pending && requestClose()}
         open
       >
         <DrawerContent className={sideDrawerContentClassName('sm:max-w-xl')}>
@@ -164,7 +164,7 @@ function EditAccountDialog({
           </DrawerHeader>
           {content}
           <DrawerFooter className={sideDrawerFooterClassName()}>
-            <Button onClick={requestClose} variant='outline'>
+            <Button disabled={pending} onClick={requestClose} variant='outline'>
               {t('common.cancel')}
             </Button>
             <Button

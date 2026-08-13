@@ -34,7 +34,7 @@ export interface ChannelInventoryItem {
 }
 export interface ChannelInventoryPage {
   items: ChannelInventoryItem[]
-  total: number
+  total: MetricString
   page: number
   page_size: number
   data_status: DataStatus

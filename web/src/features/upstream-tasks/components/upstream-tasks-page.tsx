@@ -41,12 +41,14 @@ import type {
   StatisticsExportFormat,
   StatisticsExportJobItem,
 } from '@/features/statistics/types'
+import { useRetainedQueryData } from '@/hooks/use-retained-query-data'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import {
   isIdString,
   isNonNegativeIdString,
   parseIdString,
+  parseMetricString,
   parseNonNegativeIdString,
 } from '@/lib/api-types'
 import { BEIJING_TIMEZONE, dayjs, fromUnixSeconds } from '@/lib/dayjs'
@@ -596,8 +598,17 @@ export function UpstreamTasksPage({
       onSearchChange({ exportId: job.id })
     },
   })
-  const list = listQuery.data
-  const statistics = statisticsQuery.data
+  const retainedScope = siteId ? `site:${siteId}` : 'global'
+  const list = useRetainedQueryData(
+    listQuery.data,
+    listQuery.isError,
+    retainedScope
+  )
+  const statistics = useRetainedQueryData(
+    statisticsQuery.data,
+    statisticsQuery.isError,
+    retainedScope
+  )
   const columns = useMemo<ColumnDef<UpstreamTaskItem, unknown>[]>(
     () => [
       {
@@ -905,6 +916,16 @@ export function UpstreamTasksPage({
             onRetry={validSiteId ? () => void listQuery.refetch() : undefined}
             page={search.page}
             pageSize={search.pageSize}
+            paginationHasKnownLastPage={false}
+            paginationHasNextPage={
+              list
+                ? BigInt(list.total) >
+                  BigInt(search.page) * BigInt(search.pageSize)
+                : false
+            }
+            paginationTotalDisplay={
+              <MetricValue value={list?.total ?? parseMetricString('0')} />
+            }
             renderMobileCard={(item) => (
               <article className='bg-card text-card-foreground ring-foreground/10 grid gap-3 rounded-xl p-4 ring-1'>
                 <div className='flex items-start justify-between gap-2'>
@@ -988,7 +1009,7 @@ export function UpstreamTasksPage({
                 </div>
               </article>
             )}
-            total={list?.total ?? 0}
+            total={list?.total ?? '0'}
           />
         )}
         {statisticsQuery.isError && !statistics && (

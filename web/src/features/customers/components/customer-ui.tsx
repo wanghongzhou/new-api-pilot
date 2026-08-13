@@ -252,10 +252,10 @@ export function CustomerCard({
       </div>
       <section className='grid gap-3'>
         <div className='grid grid-cols-2 gap-x-5 gap-y-4'>
-          <MetricCell label={t('site.dashboard.totalQuota')}>
+          <MetricCell label={t('site.dashboard.todayQuota')}>
             <CustomerQuotaAmount compact customer={customer} />
           </MetricCell>
-          <MetricCell label={t('site.dashboard.totalTokens')}>
+          <MetricCell label={t('site.dashboard.todayTokens')}>
             <MetricValue
               compact
               nullLabel='0'
@@ -264,7 +264,7 @@ export function CustomerCard({
           </MetricCell>
         </div>
         <div className='grid grid-cols-3 gap-x-5 gap-y-4'>
-          <MetricCell label={t('site.dashboard.totalCount')}>
+          <MetricCell label={t('site.dashboard.todayCount')}>
             <MetricValue
               compact
               nullLabel='0'

@@ -62,7 +62,7 @@ func TestA98SubscriptionPlanCatalogMissingPrivacyAndExport(t *testing.T) {
 	q := dto.SubscriptionPlanQuery{Page: 1, PageSize: 20, SiteIDs: []int64{site.ID}}
 	page, err := svc.List(context.Background(), q)
 	normalizedPrice := strings.TrimRight(strings.TrimRight(plan.PriceAmount, "0"), ".")
-	if err != nil || page.Total != 2 || page.Items[0].PriceAmount != normalizedPrice || page.Items[0].TotalAmount != plan.TotalAmount {
+	if err != nil || page.Total != "2" || page.Items[0].PriceAmount != normalizedPrice || page.Items[0].TotalAmount != plan.TotalAmount {
 		t.Fatalf("page=%#v err=%v", page, err)
 	}
 	stats, err := svc.Statistics(context.Background(), q)
@@ -88,7 +88,7 @@ func TestA98SubscriptionPlanCatalogMissingPrivacyAndExport(t *testing.T) {
 	enabledQuery := q
 	enabledQuery.Enabled = &enabled
 	filtered, err := svc.List(context.Background(), enabledQuery)
-	if err != nil || filtered.Total != 1 || !filtered.Items[0].Enabled {
+	if err != nil || filtered.Total != "1" || !filtered.Items[0].Enabled {
 		t.Fatalf("enabled page=%#v err=%v", filtered, err)
 	}
 	filteredPath := filepath.Join(t.TempDir(), "enabled.csv")

@@ -39,7 +39,7 @@ func TestChannelInventoryListUsesCollectionCompletenessForEmptyAndFilteredResult
 	if err != nil {
 		t.Fatal(err)
 	}
-	if page.Total != 0 || page.DataStatus != "complete" || page.AsOf == nil || *page.AsOf != now {
+	if page.Total != "0" || page.DataStatus != "complete" || page.AsOf == nil || *page.AsOf != now {
 		t.Fatalf("empty completed snapshot page=%#v", page)
 	}
 }

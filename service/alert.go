@@ -110,7 +110,7 @@ func (service *AlertService) Get(ctx context.Context, id int64) (dto.AlertEventD
 	for _, delivery := range deliveries {
 		responseMessage := ""
 		if delivery.ResponseMessage != nil {
-			responseMessage = *delivery.ResponseMessage
+			responseMessage = safeAlertDeliveryResponse(*delivery.ResponseMessage)
 		}
 		items = append(items, dto.AlertDeliveryItem{
 			ID: strconv.FormatInt(delivery.ID, 10), EventType: delivery.EventType, Status: delivery.Status,
@@ -119,6 +119,20 @@ func (service *AlertService) Get(ctx context.Context, id int64) (dto.AlertEventD
 		})
 	}
 	return dto.AlertEventDetail{AlertEventItem: alertEventItem(event), ConsecutiveCount: event.ConsecutiveCount, Deliveries: items}, nil
+}
+
+func safeAlertDeliveryResponse(value string) string {
+	normalized := strings.ToLower(value)
+	for _, marker := range []string{
+		"access_token", "authorization", "bearer ", "api_key", "apikey",
+		"password", "passwd", "private_key", "secret", "webhook",
+		"cookie", "http://", "https://",
+	} {
+		if strings.Contains(normalized, marker) {
+			return "[redacted]"
+		}
+	}
+	return value
 }
 
 func (service *AlertService) ListRules(ctx context.Context, query dto.AlertRuleListQuery) (common.PageData[dto.AlertRuleItem], error) {

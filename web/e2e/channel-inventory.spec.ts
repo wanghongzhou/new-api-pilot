@@ -241,7 +241,10 @@ test('keeps channel inventory exact, filterable, exportable, secure and responsi
   })
 
   await page.goto('/channel-inventory')
-  if (testInfo.project.name !== 'chromium-mobile') {
+  if (
+    testInfo.project.name !== 'chromium-mobile' &&
+    testInfo.project.name !== 'chromium-tablet-768'
+  ) {
     const firstModel = page.locator('[title^="gpt-model-01-"]').first()
     await expect(firstModel).toBeVisible()
     const modelCell = firstModel.locator('xpath=ancestor::td')
@@ -264,7 +267,7 @@ test('keeps channel inventory exact, filterable, exportable, secure and responsi
   ).toBeVisible()
   await expect(
     page
-      .getByText('9007199254740993.1234567890')
+      .getByText('9,007,199,254,740,993.123456789')
       .filter({ visible: true })
       .first()
   ).toBeVisible()

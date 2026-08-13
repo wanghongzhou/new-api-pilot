@@ -80,7 +80,22 @@ test('theme settings keep the official config drawer structure', async () => {
   expect(rootSource).toContain('duration={5000}')
   expect(rootSource).toContain("position='top-center'")
   expect(rootSource).toContain('richColors')
+  expect(rootSource).toContain("import.meta.env.MODE === 'development'")
+  expect(rootSource.match(/initialIsOpen=\{false\}/g)).toHaveLength(2)
+  expect(rootSource).toContain(
+    "localStorage.removeItem('tanstackRouterDevtoolsOpen')"
+  )
   expect(globalStyles).not.toContain('@media (pointer: coarse)')
+})
+
+test('the global sidebar switches to a temporary drawer at tablet widths', async () => {
+  const source = await readFile(
+    new URL('../hooks/use-mobile.ts', import.meta.url),
+    'utf8'
+  )
+
+  expect(source).toContain('const MOBILE_BREAKPOINT = 1024')
+  expect(source).toContain('MOBILE_BREAKPOINT - 1')
 })
 
 test('shared buttons, badges, and confirmations use the reference visual tokens', async () => {
@@ -436,7 +451,10 @@ test('entity create and edit flows use right-side drawers while short tasks keep
   }
 
   expect(platformUsersSource).toContain('function ResetPasswordDialog')
-  expect(platformUsersSource).toContain('<Dialog onOpenChange={onOpenChange}')
+  expect(platformUsersSource).toContain(
+    '<Dialog\n        onOpenChange={(nextOpen) => {'
+  )
+  expect(platformUsersSource).toContain('else if (submitting) return')
   expect(
     platformUsersSource.match(/alignItemWithTrigger=\{false\}/g)
   ).toHaveLength(2)

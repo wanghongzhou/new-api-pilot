@@ -381,6 +381,29 @@ async function expectAccessibleSkipLink(page: Page) {
   await expect(page.locator('#main-content')).toBeFocused()
 }
 
+test('shell focuses the new main region and exposes theme settings on mobile', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await seedAuth(page)
+  await mockDashboard(page, 'complete')
+  await page.goto('/dashboard')
+
+  const themeTrigger = page.getByRole('button', { name: '打开主题设置' })
+  await expect(themeTrigger).toBeVisible()
+  await themeTrigger.click()
+  await expect(page.getByRole('dialog', { name: '主题设置' })).toBeVisible()
+  await page.keyboard.press('Escape')
+
+  await page.getByRole('button', { name: '打开导航' }).click()
+  await page
+    .getByRole('dialog', { name: '主导航' })
+    .getByRole('link', { name: '站点管理' })
+    .click()
+  await expect(page).toHaveURL(/\/sites$/)
+  await expect(page.locator('#main-content')).toBeFocused()
+})
+
 test('Dashboard renders the complete fixture across all five sections', async ({
   page,
 }) => {
@@ -454,7 +477,7 @@ test('Dashboard renders the complete fixture across all five sections', async ({
   ).toBeVisible()
   await expect(
     health.getByText(
-      '站点 华东超长名称生产站点用于验证移动端不会横向溢出 的渠道平均响应时间为 3,042.75 毫秒，超过阈值 3,000 毫秒'
+      '站点 华东超长名称生产站点用于验证移动端不会横向溢出 的渠道平均响应时间为 3,042.75 毫秒，达到或超过阈值 3,000 毫秒'
     )
   ).toBeVisible()
   await expect(
@@ -790,9 +813,9 @@ function statisticsResponse(scope: string, url: URL) {
     base.dimension_name = ''
     extras.use_group = ''
   } else if (scope === 'token') {
-    base.dimension_id = '9007199254740993:9007199254740997'
+    base.dimension_id = '9007199254740993:0'
     base.dimension_name = ''
-    extras.token_id = '9007199254740997'
+    extras.token_id = '0'
     extras.token_name = ''
   } else {
     base.dimension_name = ''
@@ -1013,6 +1036,9 @@ test('nine statistics scopes preserve URL filters, partial and null contracts', 
   })
   await page.getByRole('button', { name: '表格视图' }).click()
   await hideDeveloperOverlays(page)
+  await expect(
+    page.getByRole('columnheader', { name: '原始额度', exact: true })
+  ).toHaveCount(0)
   const statisticsLongName = page
     .getByText('跨站统计超长中文维度名称用于验证表格和移动卡片换行')
     .filter({ visible: true })
@@ -1091,10 +1117,10 @@ test('group token and node pages preserve identity filters, states, export and m
       } else if (segment === 'tokens') {
         items = [
           {
-            key: '9007199254740993:9007199254740997',
+            key: '9007199254740993:0',
             site_id: '9007199254740993',
             site_name: siteBreakdown[0]?.site_name,
-            token_id: '9007199254740997',
+            token_id: '0',
             token_name: '',
           },
         ]
@@ -1125,11 +1151,11 @@ test('group token and node pages preserve identity filters, states, export and m
     },
     {
       filterKey: 'tokenKeys',
-      filterLabel: '未命名 Token',
+      filterLabel: '未知/已删除 Token',
       route: 'tokens',
       scope: 'token',
       title: 'Token 统计',
-      value: ['9007199254740993:9007199254740997'],
+      value: ['9007199254740993:0'],
     },
     {
       filterKey: 'nodeNames',

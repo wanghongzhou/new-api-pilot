@@ -1,5 +1,6 @@
 import type { IdString } from '@/lib/api-types'
 
+import { decodeStatisticsDimensionFilters } from './search'
 import type {
   StatisticsExportCreateRequest,
   StatisticsExportFormat,
@@ -42,13 +43,13 @@ export function buildStatisticsExportRequest(
       end_timestamp: search.end,
       granularity: search.granularity,
       model_names: search.models,
-      node_names: search.nodeNames,
+      node_names: decodeStatisticsDimensionFilters(search.nodeNames),
       site_ids: search.siteIds,
       sort_by: exportSort(search),
       sort_order: search.order,
       start_timestamp: search.start,
       token_keys: search.tokenKeys,
-      use_groups: search.useGroups,
+      use_groups: decodeStatisticsDimensionFilters(search.useGroups),
     },
     format,
     statistics_type: scope,

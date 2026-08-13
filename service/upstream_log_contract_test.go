@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +17,17 @@ import (
 	"new-api-pilot/model"
 	testsupport "new-api-pilot/tests/support"
 )
+
+func TestLogResponsePreservesBigintTotalAsJSONString(t *testing.T) {
+	response := dto.LogResponse{Items: []dto.LogItem{}, Total: "9007199254740993", Page: 1, PageSize: 20, DataStatus: dto.LogCollectionComplete}
+	raw, err := json.Marshal(response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"total":"9007199254740993"`) {
+		t.Fatalf("log total must remain an exact bigint JSON string: %s", raw)
+	}
+}
 
 func TestNewAPIClientLogPageContract(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {

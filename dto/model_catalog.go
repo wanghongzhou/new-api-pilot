@@ -80,7 +80,7 @@ type ModelCatalogItem struct {
 }
 type ModelCatalogPageResponse struct {
 	Items      []ModelCatalogItem `json:"items"`
-	Total      int64              `json:"total"`
+	Total      string             `json:"total"`
 	Page       int                `json:"page"`
 	PageSize   int                `json:"page_size"`
 	DataStatus string             `json:"data_status"`
@@ -119,7 +119,7 @@ type MissingModelItem struct {
 }
 type MissingModelPageResponse struct {
 	Items      []MissingModelItem `json:"items"`
-	Total      int64              `json:"total"`
+	Total      string             `json:"total"`
 	Page       int                `json:"page"`
 	PageSize   int                `json:"page_size"`
 	DataStatus string             `json:"data_status"`

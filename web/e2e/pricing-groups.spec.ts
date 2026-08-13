@@ -303,7 +303,10 @@ test('A99 keeps pricing and configured groups exact, passive, private and respon
     page.getByText('图标文本').filter({ visible: true }).first()
   ).toBeVisible()
   const pricingSurface =
-    testInfo.project.name === 'chromium-mobile' ? 'article' : 'table'
+    testInfo.project.name === 'chromium-mobile' ||
+    testInfo.project.name === 'chromium-tablet-768'
+      ? 'article'
+      : 'table'
   const groupScope = page.locator(
     `${pricingSurface} [role="group"][aria-label="可用分组"]`
   )
@@ -406,4 +409,73 @@ test('A99 keeps pricing and configured groups exact, passive, private and respon
   expect(overflow).toBe(false)
   const accessibility = await new AxeBuilder({ page }).analyze()
   expect(accessibility.violations).toEqual([])
+})
+
+test('separates pricing empty, first-error, stale and forced-site scopes', async ({
+  page,
+}, testInfo) => {
+  await seedAuth(page, testInfo)
+  let mode: 'empty' | 'error' | 'success' = 'empty'
+  let globalReads = 0
+  const list = (items: unknown[], total: string) => ({
+    as_of: 1_784_348_700,
+    data_status: 'complete',
+    items,
+    page: 1,
+    page_size: 20,
+    site_breakdown: [],
+    total,
+  })
+  await page.route(/\/api\/pricing-catalog(?:\?.*)?$/, async (route) => {
+    globalReads += 1
+    if (mode === 'error') {
+      await route.fulfill({ status: 503, json: envelope(null) })
+      return
+    }
+    await route.fulfill({
+      json: envelope(
+        mode === 'empty' ? list([], '0') : list([pricingItem], '1')
+      ),
+    })
+  })
+  await page.route(/\/api\/pricing-catalog\/statistics(?:\?.*)?$/, (route) =>
+    route.fulfill({ json: envelope(statistics) })
+  )
+  await page.route(
+    /\/api\/sites\/9007199254740997\/pricing-catalog(?:\?.*)?$/,
+    (route) => route.fulfill({ status: 503, json: envelope(null) })
+  )
+  await page.route(
+    /\/api\/sites\/9007199254740997\/pricing-catalog\/statistics(?:\?.*)?$/,
+    (route) => route.fulfill({ status: 503, json: envelope(null) })
+  )
+
+  await page.goto('/pricing-groups?tab=pricing')
+  await expect(
+    page.getByRole('heading', { name: '当前筛选下没有定价项' })
+  ).toBeVisible()
+  mode = 'success'
+  await page.getByRole('textbox', { name: '名称关键词' }).fill('成功')
+  await expect.poll(() => globalReads).toBe(2)
+  await expect(
+    page.getByText(pricingItem.model_name).filter({ visible: true }).first()
+  ).toBeVisible()
+  mode = 'error'
+  await page.getByRole('textbox', { name: '名称关键词' }).fill('刷新失败')
+  await expect.poll(() => globalReads).toBe(3)
+  await expect(page.getByRole('alert')).toContainText('数据刷新失败')
+  await expect(
+    page.getByText(pricingItem.model_name).filter({ visible: true }).first()
+  ).toBeVisible()
+
+  await page.goto('/sites/9007199254740997/pricing-groups?tab=pricing')
+  await expect(
+    page.getByText('无法加载数据', { exact: true }).filter({ visible: true })
+  ).toBeVisible()
+  await expect(page.getByText(pricingItem.model_name)).toHaveCount(0)
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth
+    )
+  ).toBe(true)
 })

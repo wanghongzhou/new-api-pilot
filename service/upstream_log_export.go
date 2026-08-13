@@ -30,7 +30,7 @@ type UpstreamLogExportOptions struct {
 	MaxFileBytes   int64
 	MinFreeBytes   int64
 	DiskFree       ExportDiskFreeFunc
-	OnPage         func(context.Context, int, int64) error
+	OnPage         func(context.Context, int64, int64) error
 }
 
 func GenerateUpstreamLogExport(ctx context.Context, options UpstreamLogExportOptions) (ExportGenerateResult, error) {
@@ -97,7 +97,7 @@ func GenerateUpstreamLogExport(ctx context.Context, options UpstreamLogExportOpt
 			rowCount++
 		}
 		if options.OnPage != nil {
-			if err := options.OnPage(ctx, page, rowCount); err != nil {
+			if err := options.OnPage(ctx, rowCount, total); err != nil {
 				return ExportGenerateResult{}, err
 			}
 		}

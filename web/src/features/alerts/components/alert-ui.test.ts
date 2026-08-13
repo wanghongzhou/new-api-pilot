@@ -3,7 +3,11 @@ import { readFile } from 'node:fs/promises'
 
 import { builtInAlertRuleKeys } from '../constants'
 import { alertEventTargetLabel, alertEventTargetName } from '../event-text'
-import { alertRuleDescription, alertRuleName } from './alert-ui'
+import {
+  alertRuleDescription,
+  alertRuleName,
+  alertStatusText,
+} from './alert-ui'
 
 describe('alert rule UI text', () => {
   test('maps every built-in rule to a dedicated business-description key', () => {
@@ -63,6 +67,15 @@ describe('alert event target text', () => {
       'alerts.target.backfillRunValue:9007199254740993'
     )
   })
+})
+
+test('uses a neutral terminal label because resolved events are not always recovered', () => {
+  const translations: Record<string, string> = {
+    'alerts.status.resolved': '已结束',
+  }
+  expect(alertStatusText((key) => translations[key] ?? key, 'resolved')).toBe(
+    '已结束'
+  )
 })
 
 test('keeps event filters flat and summary in shared metric cards', async () => {

@@ -695,15 +695,16 @@ test('keeps the customer list responsive across loading, multi-filter, sorting, 
 
   await page.getByLabel('搜索客户').fill('force-error')
   await page.getByRole('button', { name: '搜索', exact: true }).click()
-  await expect(page.getByText('无法加载数据')).toBeVisible()
+  await expect(page.getByText('客户列表后台刷新失败')).toBeVisible()
+  await expect(page.getByRole('button', { name: '重试' })).toHaveCount(1)
   forceError = false
-  await page.getByRole('button', { name: '重试' }).click()
+  await page.getByRole('status').getByRole('button', { name: '重试' }).click()
   await expect(page.getByText('未找到匹配的客户')).toBeVisible()
 
   await page.getByRole('button', { name: '重置' }).click()
   if (!isMobile) {
     await page.getByRole('button', { name: '表格视图' }).click()
-    await page.getByRole('button', { name: '客户名称' }).click()
+    await page.getByRole('button', { name: '客户身份' }).click()
     await page.getByRole('menuitem', { name: '升序' }).click()
     await expect
       .poll(() => ({
@@ -818,6 +819,71 @@ test('keeps viewer customer and account detail read-only, accessible, and respon
   await expect(page.getByRole('heading', { name: '固定绑定' })).toBeVisible()
 })
 
+test('labels retained customer list and detail data stale after background refresh failures', async ({
+  page,
+}) => {
+  await page.clock.install()
+  await seedAuth(page, viewer)
+  await mockSelf(page, viewer)
+  let listCalls = 0
+  let detailCalls = 0
+  await page.route(/\/api\/customers(?:\?.*)?$/, async (route) => {
+    assertAuthenticatedRequest(route, viewer)
+    listCalls += 1
+    if (listCalls === 1) {
+      await route.fulfill({ json: envelope(pageData([customerFixture()])) })
+      return
+    }
+    await route.fulfill({
+      json: errorEnvelope('INTERNAL_ERROR', 'req_customer_list_refresh_failed'),
+      status: 500,
+    })
+  })
+  await page.route(/\/api\/customers\/7\/accounts(?:\?.*)?$/, async (route) => {
+    assertAuthenticatedRequest(route, viewer)
+    await route.fulfill({ json: envelope(pageData([accountFixture()])) })
+  })
+  await page.route('**/api/customers/7', async (route) => {
+    assertAuthenticatedRequest(route, viewer)
+    detailCalls += 1
+    if (detailCalls === 1) {
+      await route.fulfill({ json: envelope(customerFixture()) })
+      return
+    }
+    await route.fulfill({
+      json: errorEnvelope(
+        'INTERNAL_ERROR',
+        'req_customer_detail_refresh_failed'
+      ),
+      status: 500,
+    })
+  })
+
+  await page.goto('/customers')
+  await expect(page.getByText(customerFixture().name).first()).toBeVisible()
+  await page.clock.fastForward(60_100)
+  await expect.poll(() => listCalls).toBeGreaterThanOrEqual(2)
+  await page.clock.fastForward(1_100)
+  await expect.poll(() => listCalls).toBeGreaterThanOrEqual(3)
+  await page.clock.fastForward(2_100)
+  await expect.poll(() => listCalls).toBeGreaterThanOrEqual(4)
+  await expect(page.getByText('客户列表后台刷新失败')).toBeVisible()
+  await expect(page.getByText(customerFixture().name).first()).toBeVisible()
+
+  await page.goto('/customers/7')
+  await expect(page.getByText('1,000,000').first()).toBeVisible()
+  await page.clock.fastForward(60_100)
+  await expect.poll(() => detailCalls).toBeGreaterThanOrEqual(2)
+  await page.clock.fastForward(1_100)
+  await expect.poll(() => detailCalls).toBeGreaterThanOrEqual(3)
+  await page.clock.fastForward(2_100)
+  await expect.poll(() => detailCalls).toBeGreaterThanOrEqual(4)
+  await expect(page.getByText('客户刷新失败')).toBeVisible()
+  await expect(page.getByText('1,000,000').first()).toBeVisible()
+  await assertNoHorizontalOverflow(page)
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])
+})
+
 test('localizes customer and account 400 field errors without exposing server text', async ({
   page,
 }) => {
@@ -892,6 +958,52 @@ test('localizes customer and account 400 field errors without exposing server te
   ).toBeVisible()
   await expect.poll(() => accountPuts).toBe(1)
 })
+
+for (const width of [390, 1440]) {
+  test(`keeps account edit open during a pending save at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ height: width === 390 ? 844 : 900, width })
+    await seedAuth(page, admin)
+    await mockSelf(page, admin)
+    await mockEntityReads(page, admin)
+    let putCalls = 0
+    let releasePut = () => {}
+    const putGate = new Promise<void>((resolve) => {
+      releasePut = resolve
+    })
+    await page.route('**/api/accounts/88', async (route) => {
+      if (route.request().method() !== 'PUT') {
+        await route.fallback()
+        return
+      }
+      putCalls += 1
+      await putGate
+      await route.fulfill({ json: envelope(accountFixture()) })
+    })
+
+    await page.goto('/accounts')
+    const trigger = page
+      .getByLabel('打开账户操作')
+      .filter({ visible: true })
+      .first()
+    await trigger.click()
+    await page.getByRole('menuitem', { name: '编辑备注' }).click()
+    const dialog = page.getByRole('dialog')
+    await dialog.locator('#account-remark').fill('pending save')
+    const save = dialog.getByRole('button', { name: '保存' })
+    await save.click()
+    await page.keyboard.press('Enter')
+    await page.keyboard.press('Escape')
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByRole('button', { name: '取消' })).toBeDisabled()
+    await expect.poll(() => putCalls).toBe(1)
+
+    releasePut()
+    await expect(dialog).toHaveCount(0)
+    await expect(trigger).toBeVisible()
+  })
+}
 
 test('uses four onboarding steps with IME debounce, race protection, exact review, and immutable POST body', async ({
   page,

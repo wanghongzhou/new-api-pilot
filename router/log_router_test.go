@@ -17,7 +17,7 @@ import (
 type routerLogApplication struct{}
 
 func (routerLogApplication) Query(_ context.Context, query dto.LogQuery) (dto.LogResponse, error) {
-	return dto.LogResponse{Items: []dto.LogItem{}, Page: query.Page, PageSize: query.PageSize, DataStatus: dto.LogCollectionComplete}, nil
+	return dto.LogResponse{Items: []dto.LogItem{}, Total: "0", Page: query.Page, PageSize: query.PageSize, DataStatus: dto.LogCollectionComplete}, nil
 }
 
 func (routerLogApplication) Stats(context.Context, dto.LogQuery) (dto.LogStatResponse, error) {

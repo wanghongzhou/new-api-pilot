@@ -32,7 +32,7 @@ export interface ModelCatalogItem {
 
 export interface ModelCatalogPage {
   items: ModelCatalogItem[]
-  total: number
+  total: MetricString
   page: number
   page_size: number
   data_status: DataStatus
@@ -74,7 +74,7 @@ export interface MissingModelItem {
 
 export interface MissingModelPage {
   items: MissingModelItem[]
-  total: number
+  total: MetricString
   page: number
   page_size: number
   data_status: DataStatus

@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright'
 import {
   expect,
   test,
@@ -702,6 +703,104 @@ async function expectState(page: Page, state: A50State) {
 }
 
 test.describe('A50 statistics pages preserve all five data states', () => {
+  for (const width of [390, 768, 1024, 1440]) {
+    test(`global distinguishes first failure and retains cached data after a failed range at ${width}px`, async ({
+      page,
+    }) => {
+      test.setTimeout(60_000)
+      await page.setViewportSize({ height: width === 390 ? 844 : 900, width })
+      await seedAuth(page)
+      const globalCase = routeCases[0]
+      let successful = false
+      await page.route(/\/api\/statistics\/global(?:\?.*)?$/, async (route) => {
+        if (!successful) {
+          await route.fulfill({
+            status: 503,
+            json: {
+              code: 'UPSTREAM_UNAVAILABLE',
+              data: null,
+              message: 'temporary failure',
+              request_id: 'req_statistics_failure',
+              success: false,
+            },
+          })
+          return
+        }
+        const url = new URL(route.request().url())
+        const start = Number(url.searchParams.get('start_timestamp'))
+        const end = Number(url.searchParams.get('end_timestamp'))
+        if (url.searchParams.get('granularity') === 'day') {
+          await route.fulfill({
+            status: 503,
+            json: {
+              code: 'UPSTREAM_UNAVAILABLE',
+              data: null,
+              message: 'temporary failure',
+              request_id: 'req_statistics_stale',
+              success: false,
+            },
+          })
+          return
+        }
+        await route.fulfill({
+          json: envelope(
+            statisticsResponse('global', 'partial', start, end, 'hour')
+          ),
+        })
+      })
+
+      await page.goto(pageURL(globalCase, 'partial'))
+      await expect(
+        page.getByRole('heading', { name: '无法加载统计数据' })
+      ).toBeVisible()
+      await expect(
+        page.getByText('后台刷新失败，当前继续展示上次成功读取的数据。')
+      ).toHaveCount(0)
+
+      successful = true
+      await page.getByRole('button', { name: '重试' }).click()
+      const summary = page.getByRole('region', { name: '范围汇总' })
+      await expect(
+        metric(summary, '请求数').getByText('42', { exact: true })
+      ).toBeVisible()
+
+      await page.getByRole('button', { name: /时间范围/ }).click()
+      await page.getByRole('combobox', { name: '统计粒度' }).click()
+      await clickOpenSelectOption(page, 'day')
+      await page.getByRole('button', { name: '应用时间范围' }).click()
+      await expect(
+        page.getByText('后台刷新失败，当前继续展示上次成功读取的数据。')
+      ).toBeVisible()
+      await expect(
+        metric(summary, '请求数').getByText('42', { exact: true })
+      ).toBeVisible()
+      await expect(
+        page.getByRole('heading', { name: '无法加载统计数据' })
+      ).toHaveCount(0)
+      const staleURL = page.url()
+      await page.goBack()
+      await expect
+        .poll(() => new URL(page.url()).searchParams.get('granularity'))
+        .toBe('hour')
+      expect(new URL(page.url()).pathname).toBe(globalCase.path)
+      await expect(
+        metric(summary, '请求数').getByText('42', { exact: true })
+      ).toBeVisible()
+      await page.goForward()
+      await expect(page).toHaveURL(staleURL)
+      await expect(
+        page.getByText('后台刷新失败，当前继续展示上次成功读取的数据。')
+      ).toBeVisible()
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth > window.innerWidth
+        )
+      ).toBe(false)
+      const axe = await new AxeBuilder({ page }).analyze()
+      expect(axe.violations).toEqual([])
+    })
+  }
+
   for (const routeCase of routeCases) {
     test(`${routeCase.key} covers five states, refresh retention and reload`, async ({
       page,

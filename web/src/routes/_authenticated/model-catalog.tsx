@@ -7,7 +7,7 @@ import {
   serializeModelCatalogSearch,
 } from '@/features/model-catalog/search'
 
-export const Route = createFileRoute('/_authenticated/model-catalog/')({
+export const Route = createFileRoute('/_authenticated/model-catalog')({
   component: GlobalModelCatalogRoute,
   validateSearch: modelCatalogSearchSchema,
 })

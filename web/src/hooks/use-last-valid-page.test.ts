@@ -31,6 +31,48 @@ describe('lastValidPage', () => {
     ).toBe(1)
   })
 
+  test('uses bigint-safe totals and jumps directly when the last page is safe', () => {
+    expect(
+      pageReplacement({
+        isFetching: false,
+        isPlaceholderData: false,
+        page: 999,
+        pageSize: 20,
+        total: '9007199254740993',
+      })
+    ).toBeUndefined()
+    expect(
+      pageReplacement({
+        isFetching: false,
+        isPlaceholderData: false,
+        page: 3,
+        pageSize: 20,
+        total: '21',
+      })
+    ).toBe(2)
+    expect(
+      pageReplacement({
+        isFetching: false,
+        isPlaceholderData: false,
+        page: 999_999,
+        pageSize: 20,
+        total: '21',
+      })
+    ).toBe(2)
+  })
+
+  test('retreats sequentially only when the exact last page is unsafe', () => {
+    expect(
+      pageReplacement({
+        isFetching: false,
+        isPlaceholderData: false,
+        page: 999,
+        pageSize: 1,
+        total: '90071992547409930',
+      })
+    ).toBeUndefined()
+  })
+
   test('does not replace while a placeholder or request is active', () => {
     expect(
       pageReplacement({

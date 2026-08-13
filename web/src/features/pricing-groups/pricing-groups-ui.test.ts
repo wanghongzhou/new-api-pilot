@@ -30,8 +30,12 @@ describe('pricing and groups information architecture', () => {
     expect(source).toContain('item.tags')
     expect(source).toContain('item.icon')
     expect(source).toContain('<CompletenessSummary')
-    expect(source).toContain('activePageQuery.data?.as_of')
-    expect(source).toContain('activePageQuery.data?.site_breakdown')
+    expect(source).toContain(
+      "(search.tab === 'pricing' ? pricing : groups)?.as_of"
+    )
+    expect(source).toContain(
+      "(search.tab === 'pricing' ? pricing : groups)?.site_breakdown"
+    )
     expect(source).toContain('statistics?.sites')
     expect(source).toContain("t('pricingGroups.pricing.groups')")
     expect(source).toContain("t('pricingGroups.pricing.endpoints')")

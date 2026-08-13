@@ -68,17 +68,22 @@ export async function listAllSites(
     p: 1,
     page_size: siteOptionPageSize,
   })
-  const pages = Math.ceil(first.total / siteOptionPageSize)
-  if (pages > siteOptionMaximumPages) {
-    throw new Error('site option result exceeds the supported page limit')
-  }
+  const total = BigInt(first.total)
   const items = [...first.items]
-  for (let page = 2; page <= pages; page += 1) {
+  for (
+    let page = 2;
+    BigInt(page - 1) * BigInt(siteOptionPageSize) < total;
+    page += 1
+  ) {
+    if (page > siteOptionMaximumPages) {
+      throw new Error('site option result exceeds the supported page limit')
+    }
     const next = await listSites({
       ...params,
       p: page,
       page_size: siteOptionPageSize,
     })
+    if (next.total !== first.total || next.items.length === 0) break
     items.push(...next.items)
   }
   return {

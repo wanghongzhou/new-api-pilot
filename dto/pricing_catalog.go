@@ -130,7 +130,7 @@ type PricingCatalogItem struct {
 
 type PricingCatalogPageResponse struct {
 	Items         []PricingCatalogItem          `json:"items"`
-	Total         int64                         `json:"total"`
+	Total         string                        `json:"total"`
 	Page          int                           `json:"page"`
 	PageSize      int                           `json:"page_size"`
 	DataStatus    string                        `json:"data_status"`
@@ -165,7 +165,7 @@ type PricingGroupItem struct {
 
 type PricingGroupPageResponse struct {
 	Items         []PricingGroupItem            `json:"items"`
-	Total         int64                         `json:"total"`
+	Total         string                        `json:"total"`
 	Page          int                           `json:"page"`
 	PageSize      int                           `json:"page_size"`
 	DataStatus    string                        `json:"data_status"`

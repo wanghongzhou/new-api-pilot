@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect } from 'react'
 
 import { SitesPage } from '@/features/sites/components/sites-page'
@@ -17,6 +17,7 @@ export const Route = createFileRoute('/_authenticated/sites/')({
 function SitesRoute() {
   const rawSearch = Route.useSearch()
   const navigate = Route.useNavigate()
+  const navigateGlobal = useNavigate()
   useEffect(() => {
     if (!window.location.search) return
     void navigate({ replace: true, search: (current) => current })
@@ -47,13 +48,17 @@ function SitesRoute() {
 
   return (
     <SitesPage
-      onOpenSite={(siteId, runId) =>
-        void navigate({
+      onOpenSite={(siteId, runId) => {
+        if (runId == null) {
+          void navigateGlobal({ params: { siteId }, to: '/sites/$siteId' })
+          return
+        }
+        void navigateGlobal({
           params: { siteId },
-          search: runId == null ? undefined : { runId },
-          to: '/sites/$siteId',
+          search: { runId, tab: 'runs' },
+          to: '/sites/$siteId/collection-runs',
         })
-      }
+      }}
       onSearchChange={(changes) =>
         void navigate({
           replace: false,

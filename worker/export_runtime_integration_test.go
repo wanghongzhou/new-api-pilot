@@ -74,11 +74,12 @@ func TestMySQLExportRuntimeRetriesFirstFailureAndFinalizesSecondFailure(t *testi
 	}
 
 	job := exportRuntimePendingJob(owner.ID, "retry-budget", now.Unix())
+	job.Progress = 73
 	if err := runtime.repository.Create(ctx, &job); err != nil {
 		t.Fatalf("create retry job: %v", err)
 	}
 	first, err := runtime.repository.Claim(ctx, now.Unix(), "attempt-one", now.Add(5*time.Minute).Unix())
-	if err != nil || first == nil || first.Job.AttemptCount != 1 {
+	if err != nil || first == nil || first.Job.AttemptCount != 1 || first.Job.Progress != 0 {
 		t.Fatalf("first claim = %#v, %v", first, err)
 	}
 	temporaryName := ".attempt-one.tmp"
@@ -102,8 +103,11 @@ func TestMySQLExportRuntimeRetriesFirstFailureAndFinalizesSecondFailure(t *testi
 	}
 
 	clock.Advance(time.Minute)
+	if err := tx.Model(&model.ExportJob{}).Where("id = ?", job.ID).Update("progress", 61).Error; err != nil {
+		t.Fatalf("seed retry progress: %v", err)
+	}
 	second, err := runtime.repository.Claim(ctx, clock.Now().Unix(), "attempt-two", clock.Now().Add(5*time.Minute).Unix())
-	if err != nil || second == nil || second.Job.AttemptCount != 2 {
+	if err != nil || second == nil || second.Job.AttemptCount != 2 || second.Job.Progress != 0 {
 		t.Fatalf("second claim = %#v, %v", second, err)
 	}
 	if err := runtime.finishFailure(ctx, *second, "attempt-two", errors.Join(service.ErrStatisticsRead, errors.New("read failed again")), ""); err != nil {

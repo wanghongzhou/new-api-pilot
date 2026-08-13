@@ -37,7 +37,7 @@ func TestUserInventoryControllerParsesGlobalAndSiteQueriesStrictly(t *testing.T)
 	engine.GET("/sites/:id/inventory", controller.Site)
 
 	response := httptest.NewRecorder()
-	engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/inventory?p=2&page_size=10&site_ids=3,4&remote_user_id=9007199254740993&roles=1,2&statuses=1&groups=vip&states=normal&keyword=alice&min_balance=-5&max_balance=9", nil))
+	engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/inventory?p=2&page_size=10&site_ids=3,4&remote_user_id=9007199254740993&roles=1,10&statuses=1&groups=vip&states=normal&keyword=alice&min_balance=-5&max_balance=9", nil))
 	if response.Code != http.StatusOK || application.listQuery.Page != 2 || len(application.listQuery.SiteIDs) != 2 || application.listQuery.RemoteUserID == nil || *application.listQuery.RemoteUserID != 9007199254740993 || application.listQuery.MinBalance == nil || *application.listQuery.MinBalance != -5 {
 		t.Fatalf("global inventory = %d %#v %s", response.Code, application.listQuery, response.Body.String())
 	}
@@ -63,6 +63,7 @@ func TestUserInventoryControllerParsesGlobalAndSiteQueriesStrictly(t *testing.T)
 		"/inventory?site_ids=bad&p=1&page_size=20",
 		"/inventory?site_ids=-1&p=1&page_size=20",
 		"/inventory?roles=admin&p=1&page_size=20",
+		"/inventory?roles=2&p=1&page_size=20",
 		"/inventory?remote_user_id=01&p=1&page_size=20",
 		"/inventory?states=unknown&p=1&page_size=20",
 		"/inventory?min_balance=01&p=1&page_size=20",

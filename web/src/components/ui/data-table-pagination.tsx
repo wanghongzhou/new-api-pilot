@@ -8,6 +8,7 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { formatMetricDisplayValue } from '@/lib/display-value'
 import { getPageNumbers } from '@/lib/utils'
 
 import { Button } from './button'
@@ -33,7 +34,7 @@ interface DataTablePaginationProps {
   onPageSizeChange?: (pageSize: number) => void
   page: number
   pageSize: number
-  total: number
+  total: number | string
   totalDisplay?: ReactNode
 }
 
@@ -48,11 +49,23 @@ export function DataTablePagination({
   totalDisplay,
 }: DataTablePaginationProps) {
   const { t } = useTranslation()
-  const totalPages = Math.max(1, Math.ceil(total / pageSize))
-  const currentPage = Math.min(Math.max(page, 1), totalPages)
-  const pageNumbers = getPageNumbers(currentPage, totalPages)
+  const currentPage = Math.max(page, 1)
+  const totalCount = BigInt(total)
+  const totalPagesBigInt =
+    (totalCount + BigInt(pageSize) - 1n) / BigInt(pageSize)
+  const hasSafeLastPage =
+    hasKnownLastPage &&
+    totalCount <= BigInt(Number.MAX_SAFE_INTEGER) &&
+    totalPagesBigInt <= BigInt(Number.MAX_SAFE_INTEGER)
+  const totalPages = hasSafeLastPage
+    ? Math.max(1, Number(totalPagesBigInt))
+    : undefined
+  const pageNumbers = totalPages
+    ? getPageNumbers(Math.min(currentPage, totalPages), totalPages)
+    : []
   const canGoPrevious = currentPage > 1
-  const canGoNext = hasNextPage ?? currentPage < totalPages
+  const canGoNext =
+    hasNextPage ?? BigInt(currentPage) * BigInt(pageSize) < totalCount
 
   return (
     <div
@@ -63,7 +76,7 @@ export function DataTablePagination({
         <div className='flex shrink-0 items-baseline gap-1.5 text-xs font-medium whitespace-nowrap sm:text-sm'>
           <span className='text-muted-foreground'>{t('table.totalLabel')}</span>
           <span className='text-foreground tabular-nums'>
-            {totalDisplay ?? total.toLocaleString()}
+            {totalDisplay ?? formatMetricDisplayValue(String(total))}
           </span>
         </div>
 
@@ -129,32 +142,43 @@ export function DataTablePagination({
             <HugeiconsIcon icon={ArrowLeft01Icon} size={16} strokeWidth={2} />
           </Button>
 
-          <div className='hidden items-center gap-1 @lg/pagination:flex @xl/pagination:gap-2'>
-            {pageNumbers.map((pageNumber, index) => (
-              <div className='flex items-center' key={`${pageNumber}-${index}`}>
-                {pageNumber === '...' ? (
-                  <span className='text-muted-foreground px-0.5 text-sm @lg/pagination:px-1'>
-                    ...
-                  </span>
-                ) : (
-                  <Button
-                    className={`h-8 min-w-8 px-2 tabular-nums ${
-                      currentPage === pageNumber
-                        ? 'font-semibold'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                    onClick={() => onPageChange(pageNumber as number)}
-                    variant={currentPage === pageNumber ? 'default' : 'outline'}
-                  >
-                    <span className='sr-only'>
-                      {t('table.goToPage', { page: pageNumber })}
+          {totalPages ? (
+            <div className='hidden items-center gap-1 @lg/pagination:flex @xl/pagination:gap-2'>
+              {pageNumbers.map((pageNumber, index) => (
+                <div
+                  className='flex items-center'
+                  key={`${pageNumber}-${index}`}
+                >
+                  {pageNumber === '...' ? (
+                    <span className='text-muted-foreground px-0.5 text-sm @lg/pagination:px-1'>
+                      ...
                     </span>
-                    {pageNumber}
-                  </Button>
-                )}
-              </div>
-            ))}
-          </div>
+                  ) : (
+                    <Button
+                      className={`h-8 min-w-8 px-2 tabular-nums ${
+                        currentPage === pageNumber
+                          ? 'font-semibold'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                      onClick={() => onPageChange(pageNumber)}
+                      variant={
+                        currentPage === pageNumber ? 'default' : 'outline'
+                      }
+                    >
+                      <span className='sr-only'>
+                        {t('table.goToPage', { page: pageNumber })}
+                      </span>
+                      {pageNumber}
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <span className='text-foreground hidden min-w-8 text-center text-sm font-semibold tabular-nums @lg/pagination:inline'>
+              {currentPage}
+            </span>
+          )}
 
           <Button
             className='text-muted-foreground hover:text-foreground disabled:text-muted-foreground/50 size-10 p-0 sm:size-8'
@@ -165,7 +189,7 @@ export function DataTablePagination({
             <span className='sr-only'>{t('table.next')}</span>
             <HugeiconsIcon icon={ArrowRight01Icon} size={16} strokeWidth={2} />
           </Button>
-          {hasKnownLastPage && (
+          {totalPages && (
             <Button
               className='text-muted-foreground hover:text-foreground disabled:text-muted-foreground/50 size-10 p-0 sm:size-8 @max-lg/pagination:hidden'
               disabled={!canGoNext}

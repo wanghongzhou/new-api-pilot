@@ -36,6 +36,7 @@ type MessageParamSchema struct {
 
 const (
 	MessageCollectionRetryExhausted       MessageCode = "COLLECTION_RETRY_EXHAUSTED"
+	MessageCollectionExecutionFailed      MessageCode = "COLLECTION_EXECUTION_FAILED"
 	MessageDataValidationMismatch         MessageCode = "DATA_VALIDATION_MISMATCH"
 	MessageUpstreamResponseInvalid        MessageCode = "UPSTREAM_RESPONSE_INVALID"
 	MessageUpstreamResponseTooLarge       MessageCode = "UPSTREAM_RESPONSE_TOO_LARGE"
@@ -94,6 +95,7 @@ const (
 
 var MessageRegistry = map[MessageCode]MessageParamSchema{
 	MessageCollectionRetryExhausted:       required(idParam("site_id"), idParam("run_id")),
+	MessageCollectionExecutionFailed:      required(),
 	MessageDataValidationMismatch:         required(idParam("site_id"), timestampParam("start_timestamp"), timestampParam("end_timestamp")),
 	MessageUpstreamResponseInvalid:        optional(required(idParam("site_id")), stringParam("capability_key")),
 	MessageUpstreamResponseTooLarge:       required(idParam("site_id"), decimalStringParam("response_bytes"), decimalStringParam("limit_bytes")),

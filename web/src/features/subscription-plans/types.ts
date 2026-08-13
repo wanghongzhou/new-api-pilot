@@ -47,7 +47,7 @@ export interface SubscriptionPlanItem {
 
 export interface SubscriptionPlanPage {
   items: SubscriptionPlanItem[]
-  total: number
+  total: MetricString
   page: number
   page_size: number
   data_status: DataStatus

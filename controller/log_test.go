@@ -16,7 +16,7 @@ type fakeLogApplication struct{ query dto.LogQuery }
 
 func (application *fakeLogApplication) Query(_ context.Context, query dto.LogQuery) (dto.LogResponse, error) {
 	application.query = query
-	return dto.LogResponse{Items: []dto.LogItem{}, Page: query.Page, PageSize: query.PageSize, DataStatus: dto.LogCollectionComplete}, nil
+	return dto.LogResponse{Items: []dto.LogItem{}, Total: "0", Page: query.Page, PageSize: query.PageSize, DataStatus: dto.LogCollectionComplete}, nil
 }
 
 func (application *fakeLogApplication) Stats(_ context.Context, query dto.LogQuery) (dto.LogStatResponse, error) {

@@ -62,7 +62,7 @@ func (s *UpstreamTaskService) List(ctx context.Context, q dto.UpstreamTaskQuery)
 	} else if len(summary) != 0 {
 		return dto.UpstreamTaskPageResponse{}, model.ErrStatisticsReadContract
 	}
-	return dto.UpstreamTaskPageResponse{Items: items, Total: total, Page: q.Page, PageSize: q.PageSize, DataStatus: collectionStatus, AsOf: asOf}, nil
+	return dto.UpstreamTaskPageResponse{Items: items, Total: strconv.FormatInt(total, 10), Page: q.Page, PageSize: q.PageSize, DataStatus: collectionStatus, AsOf: asOf}, nil
 }
 func preciseRatio(n, d int64) *string {
 	if d <= 0 {

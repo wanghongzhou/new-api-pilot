@@ -38,7 +38,7 @@ func (c *UpstreamTaskController) list(g *gin.Context, forced []int64) {
 		common.AbortInternalError(g)
 		return
 	}
-	q, fields := parseUpstreamTaskQuery(g)
+	q, fields := parseUpstreamTaskQuery(g, forced == nil)
 	if len(forced) > 0 {
 		q.SiteIDs = forced
 		fields = q.Validate()
@@ -59,7 +59,7 @@ func (c *UpstreamTaskController) statistics(g *gin.Context, forced []int64) {
 		common.AbortInternalError(g)
 		return
 	}
-	q, fields := parseUpstreamTaskQuery(g)
+	q, fields := parseUpstreamTaskQuery(g, forced == nil)
 	if len(forced) > 0 {
 		q.SiteIDs = forced
 		fields = q.Validate()
@@ -75,8 +75,15 @@ func (c *UpstreamTaskController) statistics(g *gin.Context, forced []int64) {
 	}
 	common.WriteSuccess(g, http.StatusOK, out)
 }
-func parseUpstreamTaskQuery(g *gin.Context) (dto.UpstreamTaskQuery, map[string]string) {
+func parseUpstreamTaskQuery(g *gin.Context, allowSites bool) (dto.UpstreamTaskQuery, map[string]string) {
 	q := dto.UpstreamTaskQuery{Page: 1, PageSize: 20, TaskID: g.Query("task_id"), Platforms: inventoryQueryValues(g, "platforms"), Groups: inventoryQueryValues(g, "groups"), Actions: inventoryQueryValues(g, "actions"), Statuses: inventoryQueryValues(g, "statuses"), Models: inventoryQueryValues(g, "models")}
+	allowed := map[string]bool{"p": true, "page_size": true, "remote_id": true, "remote_user_id": true, "remote_channel_id": true, "task_id": true, "platforms": true, "groups": true, "actions": true, "statuses": true, "models": true, "start_timestamp": true, "end_timestamp": true}
+	if allowSites {
+		allowed["site_ids"] = true
+	}
+	if fields := strictQueryFields(g, allowed, "p", "page_size", "remote_id", "remote_user_id", "remote_channel_id", "task_id", "start_timestamp", "end_timestamp"); fields != nil {
+		return q, fields
+	}
 	if v := g.Query("p"); v != "" {
 		q.Page, _ = strconv.Atoi(v)
 	}
@@ -84,9 +91,11 @@ func parseUpstreamTaskQuery(g *gin.Context) (dto.UpstreamTaskQuery, map[string]s
 		q.PageSize, _ = strconv.Atoi(v)
 	}
 	var bad bool
-	q.SiteIDs, bad = parseLogIDList(g.QueryArray("site_ids"))
-	if bad || containsNonPositiveInventoryID(q.SiteIDs) {
-		return q, map[string]string{"site_ids": "invalid"}
+	if allowSites {
+		q.SiteIDs, bad = parseLogIDList(g.QueryArray("site_ids"))
+		if bad || containsNonPositiveInventoryID(q.SiteIDs) {
+			return q, map[string]string{"site_ids": "invalid"}
+		}
 	}
 	var fields map[string]string
 	q.RemoteID, fields = parseOptionalCanonicalInt64(g.Query("remote_id"), "remote_id")
@@ -102,11 +111,25 @@ func parseUpstreamTaskQuery(g *gin.Context) (dto.UpstreamTaskQuery, map[string]s
 		return q, fields
 	}
 	if v := g.Query("start_timestamp"); v != "" {
-		q.StartTimestamp, _ = strconv.ParseInt(v, 10, 64)
+		q.StartTimestamp, fields = parseCanonicalTaskTimestamp(v, "start_timestamp")
+		if fields != nil {
+			return q, fields
+		}
 	}
 	if v := g.Query("end_timestamp"); v != "" {
-		q.EndTimestamp, _ = strconv.ParseInt(v, 10, 64)
+		q.EndTimestamp, fields = parseCanonicalTaskTimestamp(v, "end_timestamp")
+		if fields != nil {
+			return q, fields
+		}
 	}
 	q.Normalize()
 	return q, q.Validate()
+}
+
+func parseCanonicalTaskTimestamp(raw string, field string) (int64, map[string]string) {
+	value, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || value <= 0 || strconv.FormatInt(value, 10) != raw {
+		return 0, map[string]string{field: "must be a canonical positive Unix timestamp"}
+	}
+	return value, nil
 }

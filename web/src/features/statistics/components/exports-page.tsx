@@ -7,16 +7,19 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import type { ColumnDef, SortingState } from '@tanstack/react-table'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { FacetedFilter } from '@/components/data/faceted-filter'
 import { FilterPanel } from '@/components/data/filter-panel'
+import { MetricValue } from '@/components/data/metric-value'
 import { MultiFacetedFilter } from '@/components/data/multi-faceted-filter'
+import { QueryStateAlert } from '@/components/data/query-state-alert'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
+import { useRetainedQueryData } from '@/hooks/use-retained-query-data'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import { translateMessageRef } from '@/lib/message-ref'
@@ -138,13 +141,17 @@ function ExportJobCard({
           <dt className='text-muted-foreground text-xs'>
             {t('statistics.export.task.rows')}
           </dt>
-          <dd className='break-all'>{job.row_count}</dd>
+          <dd className='break-all'>
+            <MetricValue value={job.row_count} />
+          </dd>
         </dl>
         <dl>
           <dt className='text-muted-foreground text-xs'>
             {t('statistics.export.task.size')}
           </dt>
-          <dd className='break-all'>{job.file_size}</dd>
+          <dd className='break-all'>
+            <MetricValue value={job.file_size} />
+          </dd>
         </dl>
         <dl className='col-span-2'>
           <dt className='text-muted-foreground text-xs'>
@@ -173,6 +180,7 @@ export function ExportsPage({
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [selectedJob, setSelectedJob] = useState<StatisticsExportJobItem>()
+  const recreatingRef = useRef(false)
   const params = useMemo(() => exportListParams(search), [search])
   const exportsQuery = useQuery({
     placeholderData: keepPreviousData,
@@ -193,9 +201,12 @@ export function ExportsPage({
         format: job.format,
         statistics_type: job.statistics_type,
       }),
-    onError: (error) =>
-      toast.error(t(dynamicI18nKey('api', getApiErrorTranslationKey(error)))),
+    onError: (error) => {
+      recreatingRef.current = false
+      toast.error(t(dynamicI18nKey('api', getApiErrorTranslationKey(error))))
+    },
     onSuccess: (job) => {
+      recreatingRef.current = false
       toast.success(
         job.deduplicated
           ? t('statistics.export.toast.deduplicated')
@@ -209,7 +220,13 @@ export function ExportsPage({
       onSearchChange({ exportId: job.id })
     },
   })
-  const items = exportsQuery.data?.items ?? []
+  const data = useRetainedQueryData(exportsQuery.data, exportsQuery.isError)
+  const items = data?.items ?? []
+  const recreate = (job: StatisticsExportJobItem) => {
+    if (recreatingRef.current) return
+    recreatingRef.current = true
+    recreateMutation.mutate(job)
+  }
   const activeFilters = hasExportFilters(search)
   const statusOptions = useMemo(
     () =>
@@ -306,10 +323,12 @@ export function ExportsPage({
       },
       {
         accessorKey: 'row_count',
+        cell: ({ row }) => <MetricValue value={row.original.row_count} />,
         header: t('statistics.export.task.rows'),
       },
       {
         accessorKey: 'file_size',
+        cell: ({ row }) => <MetricValue value={row.original.file_size} />,
         enableSorting: true,
         header: t('statistics.export.task.size'),
         id: 'file_size',
@@ -405,6 +424,12 @@ export function ExportsPage({
             value={search.scope ?? ''}
           />
         </FilterPanel>
+        {exportsQuery.isError && data && (
+          <QueryStateAlert
+            message={t('common.retainedDataRefreshFailed')}
+            onRetry={() => void exportsQuery.refetch()}
+          />
+        )}
         <DataTable
           ariaLabel={t('exports.table.label')}
           columns={columns}
@@ -424,7 +449,7 @@ export function ExportsPage({
             <ExportJobCard job={job} onOpen={openJob} />
           )}
           sorting={[{ desc: search.order === 'desc', id: search.sort }]}
-          total={exportsQuery.data?.total ?? 0}
+          total={data?.total ?? 0}
         />
       </div>
       <ExportTaskSheet
@@ -433,7 +458,7 @@ export function ExportsPage({
         onOpenChange={(open) => {
           if (!open) onSearchChange({ exportId: undefined })
         }}
-        onRecreate={(job) => recreateMutation.mutate(job)}
+        onRecreate={recreate}
         recreating={recreateMutation.isPending}
       />
     </SectionPageLayout>

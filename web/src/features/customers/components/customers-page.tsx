@@ -34,6 +34,7 @@ import type { CollectionRunItem } from '@/features/sites/types'
 import { statisticsKeys } from '@/features/statistics/query-keys'
 import { buildStatisticsSearch } from '@/features/statistics/search'
 import { useLastValidPage } from '@/hooks/use-last-valid-page'
+import { useRetainedQueryData } from '@/hooks/use-retained-query-data'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { formatDecimalDisplayValue } from '@/lib/display-value'
 import { cn } from '@/lib/utils'
@@ -192,9 +193,14 @@ export function CustomersPage({
         : 60_000,
     staleTime: 30_000,
   })
-  const customers = customersQuery.data?.items ?? []
-  const total = customersQuery.data?.total ?? 0
-  const listStale = customersQuery.isError && customersQuery.data != null
+  const retainedCustomers = useRetainedQueryData(
+    customersQuery.data,
+    customersQuery.isError,
+    'customers-list'
+  )
+  const customers = retainedCustomers?.items ?? []
+  const total = retainedCustomers?.total ?? 0
+  const listStale = customersQuery.isError && retainedCustomers != null
   const hasActiveFilters =
     search.filter.trim().length > 0 || search.status.length > 0
   const emptyTitle = t(
@@ -218,7 +224,7 @@ export function CustomersPage({
     onReplace: onPageReplace,
     page: search.page,
     pageSize: search.pageSize,
-    total: customersQuery.data?.total,
+    total: retainedCustomers?.total,
   })
 
   const onAction = (action: CustomerAction, customer: CustomerListItem) =>
@@ -293,10 +299,10 @@ export function CustomersPage({
         cell: ({ row }) => (
           <div className='grid min-w-72 gap-3'>
             <div className='grid grid-cols-2 gap-x-4'>
-              <ListMetric label={t('site.dashboard.totalQuota')}>
+              <ListMetric label={t('site.dashboard.todayQuota')}>
                 <CustomerQuotaAmount customer={row.original} />
               </ListMetric>
-              <ListMetric label={t('site.dashboard.totalTokens')}>
+              <ListMetric label={t('site.dashboard.todayTokens')}>
                 <MetricValue
                   compact
                   nullLabel='0'
@@ -305,7 +311,7 @@ export function CustomersPage({
               </ListMetric>
             </div>
             <div className='grid grid-cols-3 gap-x-4'>
-              <ListMetric label={t('site.dashboard.totalCount')}>
+              <ListMetric label={t('site.dashboard.todayCount')}>
                 <MetricValue
                   compact
                   nullLabel='0'
@@ -442,7 +448,7 @@ export function CustomersPage({
         {search.view === 'card' ? (
           <div className='min-h-0 flex-1 overflow-y-auto' tabIndex={0}>
             <CustomerCardGridState
-              error={customersQuery.isError}
+              error={customersQuery.isError && !listStale}
               emptyDescription={emptyDescription}
               emptyTitle={emptyTitle}
               fetching={customersQuery.isFetching}
@@ -462,7 +468,7 @@ export function CustomersPage({
               data={customers}
               emptyDescription={emptyDescription}
               emptyTitle={emptyTitle}
-              error={customersQuery.isError}
+              error={customersQuery.isError && !listStale}
               fetching={customersQuery.isFetching}
               fillAvailableHeight
               loading={customersQuery.isPending}

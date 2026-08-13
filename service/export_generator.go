@@ -68,7 +68,7 @@ type ExportGenerateOptions struct {
 	MaxFileBytes   int64
 	MinFreeBytes   int64
 	DiskFree       ExportDiskFreeFunc
-	OnPage         func(context.Context, int, int64) error
+	OnPage         func(context.Context, int64, int64) error
 	SheetRowLimit  int
 }
 
@@ -186,7 +186,7 @@ func GenerateExportFile(ctx context.Context, options ExportGenerateOptions) (Exp
 			}
 		}
 		if options.OnPage != nil {
-			if err := options.OnPage(ctx, page, rowCount); err != nil {
+			if err := options.OnPage(ctx, rowCount, response.Breakdown.Total); err != nil {
 				return ExportGenerateResult{}, err
 			}
 		}

@@ -65,6 +65,7 @@ function DetailLink({ detail }: { detail: AlertEventDetail }) {
 
 function DeliveryRow({ delivery }: { delivery: AlertDeliveryItem }) {
   const { t } = useTranslation()
+  const responseMessage = safeDeliveryDiagnostic(delivery.response_message)
   return (
     <article className='grid gap-3 py-4'>
       <div className='flex flex-wrap items-center justify-between gap-2'>
@@ -108,18 +109,40 @@ function DeliveryRow({ delivery }: { delivery: AlertDeliveryItem }) {
           </dd>
         </div>
       </dl>
-      {delivery.response_message && (
+      {responseMessage && (
         <details className='text-sm'>
           <summary className='min-h-10 cursor-pointer py-2 font-medium'>
             {t('alerts.delivery.technical')}
           </summary>
           <p className='bg-muted/45 rounded-md p-3 break-words whitespace-pre-wrap'>
-            {delivery.response_message}
+            {responseMessage}
           </p>
         </details>
       )}
     </article>
   )
+}
+
+function safeDeliveryDiagnostic(value: string) {
+  const normalized = value.toLowerCase()
+  const sensitive = [
+    'access_token',
+    'authorization',
+    'bearer ',
+    'api_key',
+    'apikey',
+    'password',
+    'passwd',
+    'private_key',
+    'secret',
+    'webhook',
+    'cookie',
+    'http://',
+    'https://',
+  ]
+  return sensitive.some((marker) => normalized.includes(marker))
+    ? '[redacted]'
+    : value
 }
 
 function DetailContent({ detail }: { detail: AlertEventDetail }) {

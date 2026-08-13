@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -10,7 +11,15 @@ import (
 	"new-api-pilot/dto"
 	"new-api-pilot/model"
 	testsupport "new-api-pilot/tests/support"
+	"strings"
 )
+
+func TestFinanceInventoryPageTotalIsJSONString(t *testing.T) {
+	payload, err := json.Marshal(dto.FinanceInventoryPage[dto.TopupInventoryItem]{Total: "9007199254740993", Items: []dto.TopupInventoryItem{}})
+	if err != nil || !strings.Contains(string(payload), `"total":"9007199254740993"`) {
+		t.Fatalf("payload=%s err=%v", payload, err)
+	}
+}
 
 func TestFinanceInventoryCompletenessCoversTheEntireFilteredResult(t *testing.T) {
 	database := openUpstreamLogExportDatabase(t)
@@ -93,7 +102,7 @@ func TestFinanceInventoryUsesCurrentConfigAndCompleteEmptySnapshots(t *testing.T
 		t.Fatal(err)
 	}
 	page, err := svc.Topups(context.Background(), dto.FinanceInventoryQuery{Page: 1, PageSize: 20, SiteIDs: []int64{site.ID}, Providers: []string{"no-match"}})
-	if err != nil || page.Total != 0 || len(page.Items) != 0 || page.DataStatus != "complete" || page.AsOf == nil || *page.AsOf != now || page.Completeness.CompleteSiteCount != 1 {
+	if err != nil || page.Total != "0" || len(page.Items) != 0 || page.DataStatus != "complete" || page.AsOf == nil || *page.AsOf != now || page.Completeness.CompleteSiteCount != 1 {
 		t.Fatalf("complete empty snapshot=%#v err=%v", page, err)
 	}
 }

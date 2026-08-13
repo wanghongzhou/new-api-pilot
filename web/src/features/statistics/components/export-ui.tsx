@@ -124,6 +124,10 @@ export function ExportStatusBadge({
 
 export function ExportTimestamp({ value }: { value: number | null }) {
   if (value == null) return <span>{formatDisplayValue(value)}</span>
-  const formatted = fromUnixSeconds(value).format('YYYY-MM-DD HH:mm:ss')
-  return <time dateTime={String(value)}>{formatted}</time>
+  const timestamp = fromUnixSeconds(value)
+  return (
+    <time dateTime={timestamp.toISOString()}>
+      {timestamp.format('YYYY-MM-DD HH:mm:ss')}
+    </time>
+  )
 }

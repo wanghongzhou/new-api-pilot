@@ -58,7 +58,7 @@ test('places total count with average RPM and TPM on the lower row', async () =>
       source.indexOf("<div className='grid grid-cols-3 gap-x-5 gap-y-4'>")
     )
   )
-  expect(lowerRow).toContain("t('site.dashboard.totalCount')")
+  expect(lowerRow).toContain("t('site.dashboard.todayCount')")
   expect(lowerRow).toContain("t('site.averageRpm')")
   expect(lowerRow).toContain("t('site.averageTpm')")
   expect(source).toContain('formatAverageRate(site.today.avg_rpm)')
@@ -73,9 +73,9 @@ test('keeps the approved card content in the grouped desktop list', async () => 
     'utf8'
   )
 
-  expect(source).toContain("label={t('site.dashboard.totalQuota')}")
-  expect(source).toContain("label={t('site.dashboard.totalTokens')}")
-  expect(source).toContain("label={t('site.dashboard.totalCount')}")
+  expect(source).toContain("label={t('site.dashboard.todayQuota')}")
+  expect(source).toContain("label={t('site.dashboard.todayTokens')}")
+  expect(source).toContain("label={t('site.dashboard.todayCount')}")
   expect(source).toContain('formatAverageRate(today.avg_rpm)')
   expect(source).toContain('formatAverageRate(today.avg_tpm)')
   expect(source).toContain("label={t('site.performance.successRate')}")

@@ -28,4 +28,18 @@ describe('rankings page failure and forced-site boundaries', () => {
       'disabled={exportMutation.isPending || !validSite}'
     )
   })
+
+  test('formats authoritative bigint metrics without number conversion', async () => {
+    const source = await readFile(
+      new URL('components/rankings-page.tsx', import.meta.url),
+      'utf8'
+    )
+
+    expect(source).toContain(
+      "import { MetricValue } from '@/components/data/metric-value'"
+    )
+    expect(source).toContain('<MetricValue value={value} />')
+    expect(source).not.toContain('Number(item.token_used)')
+    expect(source).not.toContain('Number(row.original.token_used)')
+  })
 })

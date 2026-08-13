@@ -19,7 +19,7 @@ type PerformanceHistoryExportOptions struct {
 	Format, TemporaryPath                                  string
 	DataSnapshotAt, ExportedAt, MaxFileBytes, MinFreeBytes int64
 	DiskFree                                               ExportDiskFreeFunc
-	OnPage                                                 func(context.Context, int, int64) error
+	OnPage                                                 func(context.Context, int64, int64) error
 }
 
 func GeneratePerformanceHistoryExport(ctx context.Context, o PerformanceHistoryExportOptions) (ExportGenerateResult, error) {
@@ -83,7 +83,7 @@ func GeneratePerformanceHistoryExport(ctx context.Context, o PerformanceHistoryE
 				count++
 			}
 			if o.OnPage != nil {
-				if e = o.OnPage(ctx, page, count); e != nil {
+				if e = o.OnPage(ctx, count, total); e != nil {
 					return e
 				}
 			}

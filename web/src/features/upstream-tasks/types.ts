@@ -42,7 +42,7 @@ export interface UpstreamTaskItem {
 
 export interface UpstreamTaskPage {
   items: UpstreamTaskItem[]
-  total: number
+  total: MetricString
   page: number
   page_size: number
   data_status: DataStatus

@@ -1,6 +1,6 @@
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useQuery } from '@tanstack/react-query'
-import { Link, useRouterState } from '@tanstack/react-router'
+import { useRouter, useRouterState } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 
 import { Badge } from '@/components/ui/badge'
@@ -19,8 +19,11 @@ import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { resolveAlertNavBadge } from './app-nav-badge'
 import { navGroups } from './app-nav-config'
 
+export const APP_NAVIGATE_EVENT = 'pilot:navigate'
+
 export function AppNav() {
   const { t } = useTranslation()
+  const router = useRouter()
   const { setOpenMobile } = useSidebar()
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
@@ -68,13 +71,27 @@ export function AppNav() {
                   <SidebarMenuButton
                     isActive={active}
                     render={
-                      <Link
+                      <a
                         aria-current={active ? 'page' : undefined}
-                        onClick={() => setOpenMobile(false)}
-                        to={item.to}
+                        href={item.to}
+                        onClick={(event) => {
+                          event.preventDefault()
+                          setOpenMobile(false)
+                          const navigationEvent = new CustomEvent(
+                            APP_NAVIGATE_EVENT,
+                            {
+                              cancelable: true,
+                              detail: { to: item.to },
+                            }
+                          )
+                          if (!window.dispatchEvent(navigationEvent)) return
+                          void router.navigate({
+                            href: new URL(item.to, window.location.origin).href,
+                            reloadDocument: true,
+                          })
+                        }}
                       />
                     }
-                    tooltip={label}
                   >
                     <HugeiconsIcon
                       className='shrink-0'

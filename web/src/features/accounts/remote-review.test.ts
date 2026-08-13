@@ -26,7 +26,12 @@ function remoteUser(overrides: Partial<RemoteUserItem> = {}): RemoteUserItem {
 }
 
 function page(items: RemoteUserItem[]): RemoteUserPage {
-  return { items, page: 1, page_size: 100, total: items.length }
+  return {
+    items,
+    page: 1,
+    page_size: 100,
+    total: parseMetricString(String(items.length)),
+  }
 }
 
 describe('remote user precise review', () => {

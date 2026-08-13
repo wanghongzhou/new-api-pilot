@@ -179,7 +179,9 @@ test('A71 lets an admin submit only allowed global and site-override rule fields
   const threshold = dialog.getByRole('textbox', { name: '阈值', exact: true })
   await threshold.fill('80')
   await dialog.getByRole('button', { name: '保存', exact: true }).click()
-  await expect(dialog.getByText('警告阈值必须小于严重阈值')).toBeVisible()
+  await expect(
+    dialog.getByText('警告与严重阈值的顺序不符合当前比较符语义')
+  ).toBeVisible()
   expect(state.updateBodies).toHaveLength(0)
 
   await threshold.fill('72.50')
@@ -224,6 +226,43 @@ test('A71 lets an admin submit only allowed global and site-override rule fields
     dialog.getByRole('textbox', { name: '阈值', exact: true })
   ).toHaveCount(0)
 })
+
+for (const width of [390, 1440]) {
+  test(`keeps alert rule edit open during a pending save at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ height: width === 390 ? 844 : 900, width })
+    await setup(page, admin)
+    let putCalls = 0
+    let releasePut = () => {}
+    const putGate = new Promise<void>((resolve) => {
+      releasePut = resolve
+    })
+    await page.route(/\/api\/alert-rules\/\d+$/, async (route) => {
+      putCalls += 1
+      await putGate
+      await route.fulfill({ json: envelope(percentageRule('warning')) })
+    })
+    await page.goto('/alerts?tab=rules&scope=global')
+    const trigger = page
+      .getByRole('button', { name: '编辑规则', exact: true })
+      .first()
+    await trigger.click()
+    const dialog = page.getByRole('dialog', { name: '编辑规则' })
+    await dialog.getByRole('textbox', { name: '阈值', exact: true }).fill('72')
+    const save = dialog.getByRole('button', { name: '保存', exact: true })
+    await save.click()
+    await page.keyboard.press('Enter')
+    await page.keyboard.press('Escape')
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByRole('button', { name: '取消' })).toBeDisabled()
+    await expect.poll(() => putCalls).toBe(1)
+
+    releasePut()
+    await expect(dialog).toHaveCount(0)
+    await expect(trigger).toBeVisible()
+  })
+}
 
 test('A71 keeps rule mutations unavailable to a viewer', async ({ page }) => {
   const state = await setup(page, viewer)

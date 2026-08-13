@@ -34,6 +34,7 @@ import type {
   StatisticsExportFormat,
   StatisticsExportJobItem,
 } from '@/features/statistics/types'
+import { useRetainedQueryData } from '@/hooks/use-retained-query-data'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import { isIdString, parseIdString } from '@/lib/api-types'
@@ -125,13 +126,23 @@ function errorCodeText(
   }
   return t('systemTasks.errorCode.unknown')
 }
-function StatusBadge({ status }: { status: SystemTaskStatus }) {
+function StatusBadge({
+  className,
+  status,
+}: {
+  className?: string
+  status: SystemTaskStatus
+}) {
   const { t } = useTranslation()
   let variant: 'destructive' | 'primary' | 'success' | 'warning' = 'warning'
   if (status === 'succeeded') variant = 'success'
   else if (status === 'failed') variant = 'destructive'
   else if (status === 'running') variant = 'primary'
-  return <Badge variant={variant}>{taskStatusText(t, status)}</Badge>
+  return (
+    <Badge className={className} variant={variant}>
+      {taskStatusText(t, status)}
+    </Badge>
+  )
 }
 
 function errorFilterText(
@@ -680,7 +691,12 @@ export function SystemTasksPage({
     ],
     [t]
   )
-  const data = listQuery.data
+  const retainedScope = siteId ? `site:${siteId}` : 'global'
+  const data = useRetainedQueryData(
+    listQuery.data,
+    listQuery.isError,
+    retainedScope
+  )
   const hasNext = data
     ? BigInt(data.total) > BigInt(search.page) * BigInt(search.pageSize)
     : false
@@ -690,7 +706,11 @@ export function SystemTasksPage({
       ? search.page * search.pageSize + 1
       : (search.page - 1) * search.pageSize + data.items.length
   }
-  const stats = statisticsQuery.data
+  const stats = useRetainedQueryData(
+    statisticsQuery.data,
+    statisticsQuery.isError,
+    retainedScope
+  )
   const unavailable = data?.data_status === 'unavailable'
   const emptyTitleKey = unavailable
     ? 'systemTasks.empty.unavailableTitle'
@@ -896,13 +916,18 @@ export function SystemTasksPage({
                 <div className='flex items-start justify-between gap-2'>
                   <div className='min-w-0'>
                     <strong className='block break-all'>{item.task_id}</strong>
-                    <p className='text-muted-foreground text-xs'>
+                    <p className='text-foreground text-xs'>
                       {item.site_name} · {item.site_id} · {item.remote_id}
                     </p>
                   </div>
-                  <StatusBadge status={item.status} />
+                  <StatusBadge
+                    className='bg-muted text-foreground'
+                    status={item.status}
+                  />
                 </div>
-                <Badge variant='neutral'>{taskTypeText(t, item.type)}</Badge>
+                <Badge className='bg-muted text-foreground' variant='neutral'>
+                  {taskTypeText(t, item.type)}
+                </Badge>
                 <ProgressView item={item} />
                 <ResultView item={item} />
                 {item.error_present && (
@@ -910,22 +935,25 @@ export function SystemTasksPage({
                     {errorCodeText(t, item.error_code)}
                   </Badge>
                 )}
-                <DataStatusBadge status={item.data_status} />
+                <DataStatusBadge
+                  className='bg-muted text-foreground'
+                  status={item.data_status}
+                />
                 <dl className='border-border grid gap-2 border-t pt-3 text-xs'>
                   <div>
-                    <dt className='text-muted-foreground'>
+                    <dt className='text-foreground'>
                       {t('systemTasks.time.created')}
                     </dt>
                     <dd>{timestamp(item.remote_created_at)}</dd>
                   </div>
                   <div>
-                    <dt className='text-muted-foreground'>
+                    <dt className='text-foreground'>
                       {t('systemTasks.time.updated')}
                     </dt>
                     <dd>{timestamp(item.remote_updated_at)}</dd>
                   </div>
                   <div>
-                    <dt className='text-muted-foreground'>
+                    <dt className='text-foreground'>
                       {t('systemTasks.time.collected')}
                     </dt>
                     <dd>{timestamp(item.collected_at)}</dd>

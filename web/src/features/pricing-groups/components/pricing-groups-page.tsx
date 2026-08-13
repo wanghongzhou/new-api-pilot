@@ -37,6 +37,7 @@ import type {
   StatisticsExportJobItem,
 } from '@/features/statistics/types'
 import { useLastValidPage } from '@/hooks/use-last-valid-page'
+import { useRetainedQueryData } from '@/hooks/use-retained-query-data'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import { isIdString, parseIdString } from '@/lib/api-types'
@@ -706,6 +707,22 @@ export function PricingGroupsPage({
       ? pricingGroupKeys.site(siteId ?? '', 'statistics', overviewParams)
       : pricingGroupKeys.global('statistics', overviewParams),
   })
+  const retainedScope = siteId ? `site:${siteId}` : 'global'
+  const pricing = useRetainedQueryData(
+    pricingQuery.data,
+    pricingQuery.isError,
+    retainedScope
+  )
+  const groups = useRetainedQueryData(
+    groupsQuery.data,
+    groupsQuery.isError,
+    retainedScope
+  )
+  const retainedStatistics = useRetainedQueryData(
+    statisticsQuery.data,
+    statisticsQuery.isError,
+    retainedScope
+  )
   const exportMutation = useMutation({
     mutationFn: (format: StatisticsExportFormat) =>
       createStatisticsExport(
@@ -724,8 +741,10 @@ export function PricingGroupsPage({
     isPlaceholderData: activePageQuery.isPlaceholderData,
     onReplace: onPageReplace,
     page: search.page,
-    pageSize: activePageQuery.data?.page_size ?? search.pageSize,
-    total: activePageQuery.data?.total,
+    pageSize:
+      (search.tab === 'pricing' ? pricing : groups)?.page_size ??
+      search.pageSize,
+    total: (search.tab === 'pricing' ? pricing : groups)?.total,
   })
 
   const pricingColumns = useMemo<ColumnDef<PricingCatalogItem, unknown>[]>(
@@ -1011,7 +1030,7 @@ export function PricingGroupsPage({
     [onSearchChange, siteId, t]
   )
 
-  const statistics = statisticsQuery.data
+  const statistics = retainedStatistics
   const tabs = [
     {
       count: statistics?.group_active,
@@ -1037,9 +1056,7 @@ export function PricingGroupsPage({
           title: t('pricingGroups.purpose.pricing.title'),
         }
   const activeDataStatus =
-    search.tab === 'groups'
-      ? groupsQuery.data?.data_status
-      : pricingQuery.data?.data_status
+    search.tab === 'groups' ? groups?.data_status : pricing?.data_status
 
   return (
     <SectionPageLayout
@@ -1138,8 +1155,10 @@ export function PricingGroupsPage({
           sites={sitesQuery.data?.items ?? []}
         />
         <CompletenessSummary
-          asOf={activePageQuery.data?.as_of}
-          pageSites={activePageQuery.data?.site_breakdown ?? []}
+          asOf={(search.tab === 'pricing' ? pricing : groups)?.as_of}
+          pageSites={
+            (search.tab === 'pricing' ? pricing : groups)?.site_breakdown ?? []
+          }
           statisticsSites={statistics?.sites ?? []}
           tab={search.tab}
         />
@@ -1149,20 +1168,21 @@ export function PricingGroupsPage({
             onRetry={() => void sitesQuery.refetch()}
           />
         )}
-        {activePageQuery.isError && activePageQuery.data && (
-          <QueryStateAlert
-            message={t('common.retainedDataRefreshFailed')}
-            onRetry={() => void activePageQuery.refetch()}
-          />
-        )}
+        {activePageQuery.isError &&
+          (search.tab === 'pricing' ? pricing : groups) && (
+            <QueryStateAlert
+              message={t('common.retainedDataRefreshFailed')}
+              onRetry={() => void activePageQuery.refetch()}
+            />
+          )}
         {search.tab === 'pricing' && (
           <DataTable
             ariaLabel={t('pricingGroups.pricing.table')}
             columns={pricingColumns}
-            data={pricingQuery.data?.items ?? []}
+            data={pricing?.items ?? []}
             emptyDescription={t('pricingGroups.emptyDescription')}
             emptyTitle={t('pricingGroups.pricing.empty')}
-            error={!validSiteId || (pricingQuery.isError && !pricingQuery.data)}
+            error={!validSiteId || (pricingQuery.isError && !pricing)}
             fetching={pricingQuery.isFetching}
             loading={pricingQuery.isPending}
             mobileCardBreakpoint='wide'
@@ -1175,7 +1195,7 @@ export function PricingGroupsPage({
             }
             page={search.page}
             pageSize={search.pageSize}
-            total={pricingQuery.data?.total ?? 0}
+            total={pricing?.total ?? 0}
             renderMobileCard={(item) => (
               <article className='bg-card text-card-foreground ring-foreground/10 grid gap-3 rounded-xl p-4 ring-1'>
                 <div className='min-w-0'>
@@ -1234,10 +1254,10 @@ export function PricingGroupsPage({
           <DataTable
             ariaLabel={t('pricingGroups.groups.table')}
             columns={groupColumns}
-            data={groupsQuery.data?.items ?? []}
+            data={groups?.items ?? []}
             emptyDescription={t('pricingGroups.emptyDescription')}
             emptyTitle={t('pricingGroups.groups.empty')}
-            error={!validSiteId || (groupsQuery.isError && !groupsQuery.data)}
+            error={!validSiteId || (groupsQuery.isError && !groups)}
             fetching={groupsQuery.isFetching}
             loading={groupsQuery.isPending}
             mobileCardBreakpoint='wide'
@@ -1248,7 +1268,7 @@ export function PricingGroupsPage({
             onRetry={validSiteId ? () => void groupsQuery.refetch() : undefined}
             page={search.page}
             pageSize={search.pageSize}
-            total={groupsQuery.data?.total ?? 0}
+            total={groups?.total ?? 0}
             renderMobileCard={(item) => (
               <article className='bg-card text-card-foreground ring-foreground/10 grid gap-3 rounded-xl p-4 ring-1'>
                 <div className='min-w-0'>

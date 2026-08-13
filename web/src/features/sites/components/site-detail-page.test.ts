@@ -59,6 +59,21 @@ describe('SiteDetailPage information architecture', () => {
     expect(source).not.toContain('getSiteStatistics')
   })
 
+  test('labels today metrics explicitly and normalizes rate decimals', async () => {
+    const source = await readFile(detailPagePath, 'utf8')
+
+    expect(source).toContain("t('site.dashboard.todayCount')")
+    expect(source).toContain("t('site.dashboard.todayQuota')")
+    expect(source).toContain("t('site.dashboard.todayTokens')")
+    expect(source).not.toContain("t('site.dashboard.totalCount')")
+    expect(source).toContain(
+      'formatDecimalDisplayValue(site.rate.quota_per_unit)'
+    )
+    expect(source).toContain(
+      'formatDecimalDisplayValue(site.rate.usd_exchange_rate)'
+    )
+  })
+
   test('loads only three recent durable collection records in the detail', async () => {
     const source = await readFile(detailPagePath, 'utf8')
     const recentCollection = source.slice(

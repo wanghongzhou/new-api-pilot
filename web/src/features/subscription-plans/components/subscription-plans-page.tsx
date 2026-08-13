@@ -37,10 +37,15 @@ import type {
   StatisticsExportJobItem,
 } from '@/features/statistics/types'
 import { useLastValidPage } from '@/hooks/use-last-valid-page'
+import { useRetainedQueryData } from '@/hooks/use-retained-query-data'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import { isIdString, parseIdString } from '@/lib/api-types'
 import { fromUnixSeconds } from '@/lib/dayjs'
+import {
+  formatDecimalDisplayValue,
+  formatMetricDisplayValue,
+} from '@/lib/display-value'
 import { hasFilterChanges } from '@/lib/filter-state'
 
 import {
@@ -117,7 +122,7 @@ function resetPeriodText(period: SubscriptionResetPeriod, t: TFunction) {
 function durationText(item: SubscriptionPlanItem, t: TFunction) {
   return item.duration_unit === 'custom'
     ? t('subscriptionPlans.customSecondsValue', {
-        value: item.custom_seconds,
+        value: formatMetricDisplayValue(item.custom_seconds),
       })
     : t('subscriptionPlans.durationValue', {
         unit: durationUnitText(item.duration_unit, t),
@@ -128,7 +133,7 @@ function durationText(item: SubscriptionPlanItem, t: TFunction) {
 function resetText(item: SubscriptionPlanItem, t: TFunction) {
   return item.quota_reset_period === 'custom'
     ? t('subscriptionPlans.customResetValue', {
-        value: item.quota_reset_custom_seconds,
+        value: formatMetricDisplayValue(item.quota_reset_custom_seconds),
       })
     : resetPeriodText(item.quota_reset_period, t)
 }
@@ -430,6 +435,17 @@ export function SubscriptionPlansPage({
         ? subscriptionPlanKeys.site(siteId, 'statistics', overviewParams)
         : subscriptionPlanKeys.global('statistics', overviewParams),
   })
+  const retainedScope = siteId ? `site:${siteId}` : 'global'
+  const list = useRetainedQueryData(
+    listQuery.data,
+    listQuery.isError,
+    retainedScope
+  )
+  const retainedStatistics = useRetainedQueryData(
+    statisticsQuery.data,
+    statisticsQuery.isError,
+    retainedScope
+  )
   const exportMutation = useMutation({
     mutationFn: (format: StatisticsExportFormat) =>
       createStatisticsExport(
@@ -470,13 +486,14 @@ export function SubscriptionPlansPage({
         cell: ({ row }) => (
           <div className='grid min-w-32 gap-1 text-xs'>
             <strong className='break-all'>
-              {row.original.currency} {row.original.price_amount}
+              {row.original.currency}{' '}
+              {formatDecimalDisplayValue(row.original.price_amount)}
             </strong>
             <span className='break-all'>
               {row.original.total_amount === '0'
                 ? t('subscriptionPlans.unlimited')
                 : t('subscriptionPlans.quotaValue', {
-                    value: row.original.total_amount,
+                    value: formatMetricDisplayValue(row.original.total_amount),
                   })}
             </span>
           </div>
@@ -536,15 +553,15 @@ export function SubscriptionPlansPage({
     ],
     [t]
   )
-  const statistics = statisticsQuery.data
+  const statistics = retainedStatistics
   const listTab = search.tab === 'plans'
   useLastValidPage({
     isFetching: listQuery.isFetching,
     isPlaceholderData: listQuery.isPlaceholderData,
     onReplace: onPageReplace,
     page: search.page,
-    pageSize: listQuery.data?.page_size ?? search.pageSize,
-    total: listTab ? listQuery.data?.total : undefined,
+    pageSize: list?.page_size ?? search.pageSize,
+    total: listTab ? list?.total : undefined,
   })
   const purpose = listTab
     ? {
@@ -643,12 +660,11 @@ export function SubscriptionPlansPage({
           <div className='min-w-0 flex-1'>
             <div className='flex flex-wrap items-center gap-2'>
               <h2 className='font-medium'>{purpose.title}</h2>
-              {(listQuery.data?.data_status ?? statistics?.data_status) && (
+              {(list?.data_status ?? statistics?.data_status) && (
                 <DataStatusBadge
                   status={
-                    (listTab
-                      ? listQuery.data?.data_status
-                      : statistics?.data_status) ?? 'pending'
+                    (listTab ? list?.data_status : statistics?.data_status) ??
+                    'pending'
                   }
                 />
               )}
@@ -672,7 +688,7 @@ export function SubscriptionPlansPage({
             onRetry={() => void sitesQuery.refetch()}
           />
         )}
-        {listTab && listQuery.isError && listQuery.data && (
+        {listTab && listQuery.isError && list && (
           <QueryStateAlert
             message={t('common.retainedDataRefreshFailed')}
             onRetry={() => void listQuery.refetch()}
@@ -682,10 +698,10 @@ export function SubscriptionPlansPage({
           <DataTable
             ariaLabel={t('subscriptionPlans.table')}
             columns={columns}
-            data={listQuery.data?.items ?? []}
+            data={list?.items ?? []}
             emptyDescription={t('subscriptionPlans.emptyDescription')}
             emptyTitle={t('subscriptionPlans.empty')}
-            error={!validSiteId || (listQuery.isError && !listQuery.data)}
+            error={!validSiteId || (listQuery.isError && !list)}
             fetching={listQuery.isFetching}
             loading={listQuery.isPending}
             mobileCardBreakpoint='wide'
@@ -711,13 +727,13 @@ export function SubscriptionPlansPage({
                   <EnabledBadge enabled={item.enabled} />
                 </div>
                 <strong className='break-all'>
-                  {item.currency} {item.price_amount}
+                  {item.currency} {formatDecimalDisplayValue(item.price_amount)}
                 </strong>
                 <span className='break-all'>
                   {item.total_amount === '0'
                     ? t('subscriptionPlans.unlimited')
                     : t('subscriptionPlans.quotaValue', {
-                        value: item.total_amount,
+                        value: formatMetricDisplayValue(item.total_amount),
                       })}
                 </span>
                 <span>{durationText(item, t)}</span>
@@ -756,7 +772,7 @@ export function SubscriptionPlansPage({
               </article>
             )}
             rowHeaderColumnId='identity'
-            total={listQuery.data?.total ?? 0}
+            total={list?.total ?? 0}
           />
         )}
         {!listTab && (

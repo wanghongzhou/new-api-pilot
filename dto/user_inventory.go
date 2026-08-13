@@ -45,6 +45,18 @@ func (query UserInventoryQuery) Validate() map[string]string {
 	if !validEnumList(query.States, "normal", "missing", "deleted", "identity_mismatch") {
 		errors["states"] = "contains an invalid state"
 	}
+	for _, role := range query.Roles {
+		if role != 0 && role != 1 && role != 10 && role != 100 {
+			errors["roles"] = "contains an invalid role"
+			break
+		}
+	}
+	for _, status := range query.Statuses {
+		if status != 1 && status != 2 {
+			errors["statuses"] = "contains an invalid status"
+			break
+		}
+	}
 	if query.MinBalance != nil && query.MaxBalance != nil && *query.MinBalance > *query.MaxBalance {
 		errors["balance"] = "minimum must not exceed maximum"
 	}
@@ -84,7 +96,7 @@ type UserInventoryItem struct {
 
 type UserInventoryPage struct {
 	Items      []UserInventoryItem `json:"items"`
-	Total      int64               `json:"total"`
+	Total      string              `json:"total"`
 	Page       int                 `json:"page"`
 	PageSize   int                 `json:"page_size"`
 	DataStatus string              `json:"data_status"`

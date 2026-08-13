@@ -119,9 +119,12 @@ export type AlertEventPage = PageData<AlertEventItem>
 export type AlertRuleValueKind =
   | 'boolean'
   | 'percentage'
+  | 'ratio'
   | 'seconds'
+  | 'milliseconds'
   | 'count'
   | 'quota'
+  | 'decimal'
 
 export interface AlertRuleConstraints {
   value_kind: AlertRuleValueKind

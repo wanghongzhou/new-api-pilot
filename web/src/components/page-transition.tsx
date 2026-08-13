@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { Outlet, useRouterState } from '@tanstack/react-router'
 import { motion, useReducedMotion, type Variants } from 'motion/react'
-import type { ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 
 import {
   CARD_ITEM_VARIANTS,
@@ -54,9 +54,19 @@ export function PageTransition({
 
 export function AnimatedOutlet() {
   const shouldReduce = useReducedMotion()
-  const routeKey = useRouterState({
-    select: (state) => state.matches.at(-1)?.routeId ?? state.location.pathname,
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
   })
+  const initialPathname = useRef(pathname)
+
+  useEffect(() => {
+    if (pathname === initialPathname.current) return
+    initialPathname.current = pathname
+    const frame = requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>('#main-content')?.focus()
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [pathname])
 
   if (shouldReduce) {
     return (
@@ -71,7 +81,7 @@ export function AnimatedOutlet() {
       animate={MOTION_VARIANTS.pageEnter.animate}
       className='flex min-h-0 flex-1 flex-col'
       initial={MOTION_VARIANTS.pageEnter.initial}
-      key={routeKey}
+      key={pathname}
       transition={MOTION_TRANSITION.fast}
     >
       <Outlet />

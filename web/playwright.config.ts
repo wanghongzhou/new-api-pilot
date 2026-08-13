@@ -44,6 +44,20 @@ export default defineConfig({
         viewport: { width: 390, height: 844 },
       },
     },
+    {
+      name: 'chromium-tablet-768',
+      use: {
+        browserName: 'chromium',
+        viewport: { width: 768, height: 1024 },
+      },
+    },
+    {
+      name: 'chromium-tablet-1024',
+      use: {
+        browserName: 'chromium',
+        viewport: { width: 1024, height: 768 },
+      },
+    },
   ],
   webServer: configuredBaseUrl
     ? undefined

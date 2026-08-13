@@ -26,4 +26,12 @@ describe('user inventory operational fields', () => {
     expect(source).toContain('break-words')
     expect(source).toContain('break-all')
   })
+
+  test('allows primary tabs to wrap on narrow screens', async () => {
+    const source = await readFile(pagePath, 'utf8')
+
+    expect(source).toContain(
+      "className='max-w-full flex-wrap justify-start group-data-horizontal/tabs:h-auto'"
+    )
+  })
 })

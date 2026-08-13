@@ -2,7 +2,12 @@ import { describe, expect, test } from 'bun:test'
 
 import { BEIJING_TIMEZONE, dayjs } from '@/lib/dayjs'
 
-import { buildScopeStatisticsSearch, buildStatisticsSearch } from './search'
+import {
+  buildScopeStatisticsSearch,
+  buildStatisticsSearch,
+  decodeStatisticsDimensionFilters,
+  EMPTY_STATISTICS_DIMENSION_FILTER,
+} from './search'
 
 const now = dayjs.tz('2026-07-13 12:34:56', BEIJING_TIMEZONE)
 
@@ -103,9 +108,20 @@ describe('statistics URL range normalization', () => {
     expect(search.accountIds.join(',')).toBe('9007199254740997')
     expect(search.models).toEqual(['超长中文模型名称'])
     expect(search.channelKeys).toEqual(['9007199254740993:0'])
-    expect(search.useGroups).toEqual(['', 'vip'])
+    expect(search.useGroups).toEqual([EMPTY_STATISTICS_DIMENSION_FILTER, 'vip'])
     expect(search.tokenKeys).toEqual(['9007199254740993:0'])
-    expect(search.nodeNames).toEqual(['', 'Node-A'])
+    expect(search.nodeNames).toEqual([
+      EMPTY_STATISTICS_DIMENSION_FILTER,
+      'Node-A',
+    ])
+    expect(decodeStatisticsDimensionFilters(search.useGroups)).toEqual([
+      '',
+      'vip',
+    ])
+    expect(decodeStatisticsDimensionFilters(search.nodeNames)).toEqual([
+      '',
+      'Node-A',
+    ])
   })
 })
 

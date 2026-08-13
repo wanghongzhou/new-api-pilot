@@ -82,7 +82,7 @@ func (s *SubscriptionPlanService) List(ctx context.Context, q dto.SubscriptionPl
 		for _, row := range rows {
 			items = append(items, planItem(row, statusBySite[row.SiteID]))
 		}
-		out = dto.SubscriptionPlanPageResponse{Items: items, Total: total, Page: q.Page, PageSize: q.PageSize, DataStatus: planOverallStatus(states)}
+		out = dto.SubscriptionPlanPageResponse{Items: items, Total: strconv.FormatInt(total, 10), Page: q.Page, PageSize: q.PageSize, DataStatus: planOverallStatus(states)}
 		return nil
 	}, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	return out, err

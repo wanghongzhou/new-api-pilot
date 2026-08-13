@@ -31,6 +31,7 @@
             "CAPABILITY_OK": "#/components/schemas/MessageRef_CAPABILITY_OK",
             "CAPABILITY_RESPONSE_INVALID": "#/components/schemas/MessageRef_CAPABILITY_RESPONSE_INVALID",
             "CAPABILITY_UPSTREAM_UNAVAILABLE": "#/components/schemas/MessageRef_CAPABILITY_UPSTREAM_UNAVAILABLE",
+            "COLLECTION_EXECUTION_FAILED": "#/components/schemas/MessageRef_COLLECTION_EXECUTION_FAILED",
             "COLLECTION_RETRY_EXHAUSTED": "#/components/schemas/MessageRef_COLLECTION_RETRY_EXHAUSTED",
             "DATA_BACKFILLING": "#/components/schemas/MessageRef_DATA_BACKFILLING",
             "DATA_PARTIAL_SITES": "#/components/schemas/MessageRef_DATA_PARTIAL_SITES",
@@ -143,6 +144,9 @@
           },
           {
             "$ref": "#/components/schemas/MessageRef_CAPABILITY_UPSTREAM_UNAVAILABLE"
+          },
+          {
+            "$ref": "#/components/schemas/MessageRef_COLLECTION_EXECUTION_FAILED"
           },
           {
             "$ref": "#/components/schemas/MessageRef_COLLECTION_RETRY_EXHAUSTED"
@@ -294,6 +298,7 @@
           "CAPABILITY_OK",
           "CAPABILITY_RESPONSE_INVALID",
           "CAPABILITY_UPSTREAM_UNAVAILABLE",
+          "COLLECTION_EXECUTION_FAILED",
           "COLLECTION_RETRY_EXHAUSTED",
           "DATA_BACKFILLING",
           "DATA_PARTIAL_SITES",
@@ -1331,6 +1336,29 @@
               "capability_key",
               "site_id"
             ],
+            "type": "object"
+          },
+          "technical_detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "params",
+          "technical_detail"
+        ],
+        "type": "object"
+      },
+      "MessageRef_COLLECTION_EXECUTION_FAILED": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "COLLECTION_EXECUTION_FAILED"
+          },
+          "params": {
+            "additionalProperties": false,
+            "properties": {},
+            "required": [],
             "type": "object"
           },
           "technical_detail": {

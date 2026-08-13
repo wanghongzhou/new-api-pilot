@@ -165,7 +165,7 @@ type LogStatResponse struct {
 
 type LogResponse struct {
 	Items      []LogItem `json:"items"`
-	Total      int64     `json:"total"`
+	Total      string    `json:"total"`
 	Page       int       `json:"page"`
 	PageSize   int       `json:"page_size"`
 	DataStatus string    `json:"data_status"`

@@ -46,8 +46,12 @@ describe('fixed-height data table layout', () => {
     ])
 
     expect(dataTableSource).toContain(
-      'overflow-auto overscroll-contain focus-visible:ring-2'
+      "'focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none'"
     )
+    expect(dataTableSource).toContain(
+      "? 'h-full overflow-auto overscroll-contain'"
+    )
+    expect(dataTableSource).toContain(": 'overflow-x-auto overflow-y-hidden'")
     expect(dataTableSource).toContain("containerClassName='overflow-visible'")
     expect(dataTableSource).toContain('containerTabIndex={-1}')
     expect(dataTableSource).toContain(
@@ -77,12 +81,13 @@ describe('fixed-height data table layout', () => {
 
     expect(source).toContain('data-[size=default]:h-10')
     expect(source).toContain('size-10 p-0 sm:size-8')
+    expect(source).toContain('formatMetricDisplayValue(String(total))')
     expect(source).toContain(
-      'hidden items-center gap-1 @lg/pagination:flex @xl/pagination:gap-2'
+      'BigInt(currentPage) * BigInt(pageSize) < totalCount'
     )
-    expect(source).toContain('totalDisplay ?? total.toLocaleString()')
-    expect(source).toContain('hasNextPage ?? currentPage < totalPages')
-    expect(source).toContain('hasKnownLastPage && (')
+    expect(source).toContain(
+      'totalPagesBigInt <= BigInt(Number.MAX_SAFE_INTEGER)'
+    )
   })
 
   test('bounds generic overlays to the dynamic viewport and allows scrolling', async () => {

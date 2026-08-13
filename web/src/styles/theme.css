@@ -123,7 +123,7 @@ For commercial licensing, please contact support@quantumnous.com
   --success-foreground: oklch(0.985 0 0);
   --warning: oklch(0.5 0.13 75.834);
   --warning-foreground: oklch(0.145 0 0);
-  --resource-metric-lightness: 0.596;
+  --resource-metric-lightness: 0.53;
   --resource-metric-chroma: 0.145;
   --info: oklch(0.588 0.158 241.966);
   --info-foreground: oklch(0.985 0 0);

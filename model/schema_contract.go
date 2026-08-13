@@ -202,6 +202,12 @@ func AuthoritativeSchemaContracts() (map[string]TableContract, error) {
 			return nil, err
 		}
 	}
+	if _, err := readMigrationStatements("0009_system_task_list_order.sql"); err != nil {
+		return nil, err
+	}
+	systemTasks := contracts["site_system_task"]
+	systemTasks.Indexes["idx_site_system_task_list_order"] = IndexContract{Columns: []string{"site_id", "remote_id"}}
+	contracts["site_system_task"] = systemTasks
 	return contracts, nil
 }
 

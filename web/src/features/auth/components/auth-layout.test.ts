@@ -25,7 +25,19 @@ describe('authentication page boundaries', () => {
     expect(layout).toContain("id='main-content'")
     expect(layout).not.toContain("const Root = standalone ? 'main' : 'div'")
     expect(layout).toContain("'relative grid min-h-full max-w-none'")
+    expect(layout).toContain('{standalone && (')
     expect(signIn).toContain('<AuthLayout standalone>')
     expect(changePassword).toContain('<AuthLayout>')
+  })
+
+  test('lets FormField own error descriptions without duplicate aria ids', async () => {
+    const signIn = await readFile(
+      new URL('./sign-in-page.tsx', import.meta.url),
+      'utf8'
+    )
+
+    expect(signIn).not.toContain('aria-describedby={')
+    expect(signIn).toContain('aria-invalid={Boolean(errors.username)}')
+    expect(signIn).toContain('aria-invalid={Boolean(errors.password)}')
   })
 })

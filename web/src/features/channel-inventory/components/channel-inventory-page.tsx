@@ -10,6 +10,7 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import type { ColumnDef } from '@tanstack/react-table'
+import Decimal from 'decimal.js'
 import { useMemo, useState, type ChangeEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -53,6 +54,10 @@ import {
   parseMetricString,
 } from '@/lib/api-types'
 import { BEIJING_TIMEZONE, dayjs, fromUnixSeconds } from '@/lib/dayjs'
+import {
+  formatDecimalDisplayValue,
+  formatMetricDisplayValue,
+} from '@/lib/display-value'
 import { hasFilterChanges } from '@/lib/filter-state'
 
 import {
@@ -81,6 +86,24 @@ import type {
 const statusValues = [0, 1, 2, 3] as const
 const stateValues: ChannelInventoryState[] = ['normal', 'missing']
 const collapsedModelCount = 6
+
+function availabilityText(value: string) {
+  try {
+    const percentage = new Decimal(value).mul(100)
+    return `${formatDecimalDisplayValue(percentage.toString(), 2)}%`
+  } catch {
+    return '-'
+  }
+}
+
+function qualityMetricText(
+  value: string,
+  kind: 'decimal' | 'metric' | 'percentage'
+) {
+  if (kind === 'metric') return <MetricValue value={value} />
+  if (kind === 'percentage') return availabilityText(value)
+  return formatDecimalDisplayValue(value)
+}
 
 function ChannelModelList({ models }: { models: string }) {
   const { t } = useTranslation()
@@ -244,11 +267,23 @@ function MetricGrid({ metric }: { metric: ChannelInventoryMetric }) {
     [Alert02Icon, t('channelInventory.metric.missing'), metric.missing_count],
   ] as const
   const quality = [
-    [t('channelInventory.metric.balance'), metric.balance_total],
-    [t('channelInventory.metric.usedQuota'), metric.used_quota],
-    [t('channelInventory.metric.responseAvg'), metric.response_time_avg_ms],
-    [t('channelInventory.metric.responseMax'), metric.response_time_max_ms],
-    [t('channelInventory.metric.availability'), metric.availability_rate],
+    [t('channelInventory.metric.balance'), metric.balance_total, 'decimal'],
+    [t('channelInventory.metric.usedQuota'), metric.used_quota, 'metric'],
+    [
+      t('channelInventory.metric.responseAvg'),
+      metric.response_time_avg_ms,
+      'decimal',
+    ],
+    [
+      t('channelInventory.metric.responseMax'),
+      metric.response_time_max_ms,
+      'metric',
+    ],
+    [
+      t('channelInventory.metric.availability'),
+      metric.availability_rate,
+      'percentage',
+    ],
   ] as const
   return (
     <div className='grid gap-3'>
@@ -273,14 +308,14 @@ function MetricGrid({ metric }: { metric: ChannelInventoryMetric }) {
         ))}
       </div>
       <dl className='border-border bg-muted/20 grid gap-x-6 gap-y-2 rounded-xl border px-4 py-3 sm:grid-cols-2 xl:grid-cols-5'>
-        {quality.map(([label, value]) => (
+        {quality.map(([label, value, kind]) => (
           <div
             className='flex items-baseline justify-between gap-3'
             key={label}
           >
             <dt className='text-muted-foreground text-xs'>{label}</dt>
-            <dd className='font-mono text-sm font-medium'>
-              <MetricValue value={value} />
+            <dd className='font-mono text-sm font-medium' title={value}>
+              {qualityMetricText(value, kind)}
             </dd>
           </div>
         ))}
@@ -601,27 +636,29 @@ function TrendTable({
         id: 'bucket',
       },
       {
-        accessorKey: 'channel_count',
+        accessorFn: (point) => formatMetricDisplayValue(point.channel_count),
         header: t('channelInventory.metric.channelCount'),
       },
       {
-        accessorKey: 'available_count',
+        accessorFn: (point) => formatMetricDisplayValue(point.available_count),
         header: t('channelInventory.metric.available'),
       },
       {
-        accessorKey: 'unavailable_count',
+        accessorFn: (point) =>
+          formatMetricDisplayValue(point.unavailable_count),
         header: t('channelInventory.metric.unavailable'),
       },
       {
-        accessorKey: 'balance_total',
+        accessorFn: (point) => formatDecimalDisplayValue(point.balance_total),
         header: t('channelInventory.metric.balance'),
       },
       {
-        accessorKey: 'response_time_avg_ms',
+        accessorFn: (point) =>
+          formatDecimalDisplayValue(point.response_time_avg_ms),
         header: t('channelInventory.metric.responseAvg'),
       },
       {
-        accessorKey: 'availability_rate',
+        accessorFn: (point) => availabilityText(point.availability_rate),
         header: t('channelInventory.metric.availability'),
       },
       {
@@ -762,9 +799,9 @@ function BreakdownSection({
               )}
               <p className='text-xs'>
                 {t('channelInventory.breakdownMetric', {
-                  balance: item.balance_total,
-                  channels: item.channel_count,
-                  rate: item.availability_rate,
+                  balance: formatDecimalDisplayValue(item.balance_total),
+                  channels: formatMetricDisplayValue(item.channel_count),
+                  rate: availabilityText(item.availability_rate),
                 })}
               </p>
               <p className='text-muted-foreground text-xs'>
@@ -846,10 +883,16 @@ export function ChannelInventoryPage({
       onSearchChange({ exportId: job.id })
     },
   })
-  const list = useRetainedQueryData(listQuery.data, listQuery.isError)
+  const retainedScope = siteId ? `site:${siteId}` : 'global'
+  const list = useRetainedQueryData(
+    listQuery.data,
+    listQuery.isError,
+    retainedScope
+  )
   const statistics = useRetainedQueryData(
     statisticsQuery.data,
-    statisticsQuery.isError
+    statisticsQuery.isError,
+    retainedScope
   )
   useLastValidPage({
     isFetching: listQuery.isFetching,
@@ -905,17 +948,17 @@ export function ChannelInventoryPage({
           <div className='grid max-w-40 min-w-36 gap-1 text-xs whitespace-normal'>
             <span className='break-all'>
               {t('channelInventory.balanceValue', {
-                value: row.original.balance,
+                value: formatDecimalDisplayValue(row.original.balance),
               })}
             </span>
             <span className='break-all'>
               {t('channelInventory.usedQuotaValue', {
-                value: row.original.used_quota,
+                value: formatMetricDisplayValue(row.original.used_quota),
               })}
             </span>
             <span className='break-all'>
               {t('channelInventory.responseValue', {
-                value: row.original.response_time_ms,
+                value: formatMetricDisplayValue(row.original.response_time_ms),
               })}
             </span>
           </div>
@@ -928,12 +971,12 @@ export function ChannelInventoryPage({
           <div className='grid max-w-36 min-w-32 gap-1 text-xs whitespace-normal'>
             <span>
               {t('channelInventory.priorityValue', {
-                value: row.original.priority,
+                value: formatMetricDisplayValue(row.original.priority),
               })}
             </span>
             <span>
               {t('channelInventory.weightValue', {
-                value: row.original.weight,
+                value: formatMetricDisplayValue(row.original.weight),
               })}
             </span>
             <span>
@@ -1153,13 +1196,17 @@ export function ChannelInventoryPage({
                     <dt className='text-muted-foreground text-xs'>
                       {t('channelInventory.metric.balance')}
                     </dt>
-                    <dd className='break-all'>{item.balance}</dd>
+                    <dd className='break-all' title={item.balance}>
+                      {formatDecimalDisplayValue(item.balance)}
+                    </dd>
                   </div>
                   <div>
                     <dt className='text-muted-foreground text-xs'>
                       {t('channelInventory.responseTime')}
                     </dt>
-                    <dd>{item.response_time_ms}</dd>
+                    <dd title={item.response_time_ms}>
+                      {formatMetricDisplayValue(item.response_time_ms)}
+                    </dd>
                   </div>
                   <div>
                     <dt className='text-muted-foreground text-xs'>
@@ -1177,17 +1224,19 @@ export function ChannelInventoryPage({
                     <dt className='text-muted-foreground text-xs'>
                       {t('channelInventory.metric.usedQuota')}
                     </dt>
-                    <dd className='break-all'>{item.used_quota}</dd>
+                    <dd className='break-all'>
+                      <MetricValue value={item.used_quota} />
+                    </dd>
                   </div>
                   <div className='grid gap-0.5 text-xs'>
                     <span>
                       {t('channelInventory.priorityValue', {
-                        value: item.priority,
+                        value: formatMetricDisplayValue(item.priority),
                       })}
                     </span>
                     <span>
                       {t('channelInventory.weightValue', {
-                        value: item.weight,
+                        value: formatMetricDisplayValue(item.weight),
                       })}
                     </span>
                     <span>

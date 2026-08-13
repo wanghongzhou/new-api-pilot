@@ -59,7 +59,7 @@ func (service *UserInventoryService) List(ctx context.Context, query dto.UserInv
 			LastSeenAt: row.LastSeenAt, AccountID: accountID})
 	}
 	status := inventoryOverallStatus(completeness)
-	return dto.UserInventoryPage{Items: items, Total: total, Page: query.Page, PageSize: query.PageSize, DataStatus: status}, nil
+	return dto.UserInventoryPage{Items: items, Total: strconv.FormatInt(total, 10), Page: query.Page, PageSize: query.PageSize, DataStatus: status}, nil
 }
 
 func (service *UserInventoryService) Statistics(ctx context.Context, query dto.UserInventoryStatisticsQuery) (dto.UserInventoryStatisticsResponse, error) {

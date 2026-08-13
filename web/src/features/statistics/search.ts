@@ -33,6 +33,21 @@ type StatisticsSearchInput = Omit<
   useGroups?: readonly string[]
 }
 
+// TanStack Router omits empty-string array members from the URL. Keep a
+// collision-resistant sentinel in route state and decode it at the API/export
+// boundary so the upstream empty identity remains selectable and refreshable.
+export const EMPTY_STATISTICS_DIMENSION_FILTER = '\u0000'
+
+export function encodeStatisticsDimensionFilter(value: string) {
+  return value === '' ? EMPTY_STATISTICS_DIMENSION_FILTER : value
+}
+
+export function decodeStatisticsDimensionFilters(values: readonly string[]) {
+  return values.map((value) =>
+    value === EMPTY_STATISTICS_DIMENSION_FILTER ? '' : value
+  )
+}
+
 function stableStrings(values: readonly string[] | undefined): string[] {
   return [...new Set(values ?? [])].sort((left, right) =>
     left.localeCompare(right, 'zh-CN')
@@ -101,9 +116,9 @@ export function buildStatisticsSearch(
     models: stableStrings(raw.models).filter(
       (value) => value.length > 0 && [...value].length <= 255
     ),
-    nodeNames: stableStrings(raw.nodeNames).filter(
-      (value) => [...value].length <= 128
-    ),
+    nodeNames: stableStrings(raw.nodeNames)
+      .map(encodeStatisticsDimensionFilter)
+      .filter((value) => [...value].length <= 128),
     order: raw.order ?? 'asc',
     page: raw.page ?? 1,
     pageSize: raw.pageSize ?? 20,
@@ -113,9 +128,9 @@ export function buildStatisticsSearch(
     tokenKeys: stableStrings(raw.tokenKeys).filter((value) =>
       /^[1-9]\d*:(?:0|[1-9]\d*)$/.test(value)
     ),
-    useGroups: stableStrings(raw.useGroups).filter(
-      (value) => [...value].length <= 128
-    ),
+    useGroups: stableStrings(raw.useGroups)
+      .map(encodeStatisticsDimensionFilter)
+      .filter((value) => [...value].length <= 128),
     view: raw.view ?? 'chart',
     exportId:
       typeof raw.exportId === 'string' && isIdString(raw.exportId)

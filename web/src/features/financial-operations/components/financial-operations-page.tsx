@@ -38,15 +38,22 @@ import type {
   StatisticsExportFormat,
   StatisticsExportJobItem,
 } from '@/features/statistics/types'
+import { useRetainedQueryData } from '@/hooks/use-retained-query-data'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import {
   isIdString,
   isNonNegativeIdString,
+  parseDecimalString,
   parseIdString,
+  parseMetricString,
   parseNonNegativeIdString,
 } from '@/lib/api-types'
 import { BEIJING_TIMEZONE, dayjs, fromUnixSeconds } from '@/lib/dayjs'
+import {
+  formatDecimalDisplayValue,
+  formatMetricDisplayValue,
+} from '@/lib/display-value'
 import { hasFilterChanges } from '@/lib/filter-state'
 
 import {
@@ -75,6 +82,9 @@ import type {
   RedemptionInventoryItem,
   TopupInventoryItem,
 } from '../types'
+
+const zeroMetric = parseMetricString('0')
+const zeroDecimal = parseDecimalString('0')
 
 function timestamp(value: number | null) {
   if (value == null || value <= 0) return '-'
@@ -414,10 +424,13 @@ function Breakdown({
                 })}
               </p>
               {nominal && (
-                <p className='text-sm break-all'>
+                <p
+                  className='text-sm break-all'
+                  title={`${item.amount ?? zeroMetric} / ${item.money ?? zeroDecimal}`}
+                >
                   {t('financialOperations.metric.nominalValue', {
-                    amount: item.amount ?? '0',
-                    money: item.money ?? '0',
+                    amount: formatMetricDisplayValue(item.amount ?? zeroMetric),
+                    money: formatDecimalDisplayValue(item.money ?? zeroDecimal),
                   })}
                 </p>
               )}
@@ -483,8 +496,12 @@ function TopupTable({
       {
         cell: ({ row }) => (
           <div className='min-w-44'>
-            <span className='block break-all'>{row.original.amount}</span>
-            <span className='block break-all'>{row.original.money}</span>
+            <span className='block break-all' title={row.original.amount}>
+              {formatMetricDisplayValue(row.original.amount)}
+            </span>
+            <span className='block break-all' title={row.original.money}>
+              {formatDecimalDisplayValue(row.original.money)}
+            </span>
             <span className='text-muted-foreground block text-xs'>
               {row.original.payment_provider} / {row.original.payment_method}
             </span>
@@ -552,13 +569,17 @@ function TopupTable({
               <dt className='text-muted-foreground text-xs'>
                 {t('financialOperations.metric.amount')}
               </dt>
-              <dd className='break-all'>{item.amount}</dd>
+              <dd className='break-all' title={item.amount}>
+                {formatMetricDisplayValue(item.amount)}
+              </dd>
             </div>
             <div>
               <dt className='text-muted-foreground text-xs'>
                 {t('financialOperations.metric.money')}
               </dt>
-              <dd className='break-all'>{item.money}</dd>
+              <dd className='break-all' title={item.money}>
+                {formatDecimalDisplayValue(item.money)}
+              </dd>
             </div>
           </dl>
           <p className='text-xs'>
@@ -569,7 +590,13 @@ function TopupTable({
           </time>
         </article>
       )}
-      total={data?.total ?? 0}
+      paginationHasKnownLastPage={false}
+      paginationHasNextPage={
+        data ? BigInt(data.total) > BigInt(page) * BigInt(pageSize) : false
+      }
+      paginationTotalDisplay={
+        <MetricValue value={data?.total ?? parseMetricString('0')} />
+      }
     />
   )
 }
@@ -610,7 +637,9 @@ function RedemptionTable(props: {
       },
       {
         cell: ({ row }) => (
-          <span className='break-all'>{row.original.quota}</span>
+          <span className='break-all' title={row.original.quota}>
+            {formatMetricDisplayValue(row.original.quota)}
+          </span>
         ),
         header: t('financialOperations.metric.quota'),
         id: 'quota',
@@ -693,8 +722,10 @@ function RedemptionTable(props: {
           <p className='text-muted-foreground text-xs'>
             {item.site_name} · {item.site_id}
           </p>
-          <p className='text-sm break-all'>
-            {t('financialOperations.metric.quotaValue', { value: item.quota })}
+          <p className='text-sm break-all' title={item.quota}>
+            {t('financialOperations.metric.quotaValue', {
+              value: formatMetricDisplayValue(item.quota),
+            })}
           </p>
           <div className='flex items-center gap-2'>
             <Badge
@@ -713,7 +744,16 @@ function RedemptionTable(props: {
           </time>
         </article>
       )}
-      total={props.data?.total ?? 0}
+      paginationHasKnownLastPage={false}
+      paginationHasNextPage={
+        props.data
+          ? BigInt(props.data.total) >
+            BigInt(props.page) * BigInt(props.pageSize)
+          : false
+      }
+      paginationTotalDisplay={
+        <MetricValue value={props.data?.total ?? parseMetricString('0')} />
+      }
     />
   )
 }
@@ -787,14 +827,24 @@ export function FinancialOperationsPage({
       onSearchChange({ exportId: job.id })
     },
   })
-  const statistics = statisticsQuery.data as
-    | FinanceStatisticsResponse
-    | undefined
+  const retainedScope = `${siteId ? `site:${siteId}` : 'global'}:${search.tab}`
+  const statistics = useRetainedQueryData(
+    statisticsQuery.data as FinanceStatisticsResponse | undefined,
+    statisticsQuery.isError,
+    retainedScope
+  )
   const activeListQuery =
     search.tab === 'topups' ? topupListQuery : redemptionListQuery
-  const topupData = search.tab === 'topups' ? topupListQuery.data : undefined
-  const redemptionData =
-    search.tab === 'redemptions' ? redemptionListQuery.data : undefined
+  const topupData = useRetainedQueryData(
+    search.tab === 'topups' ? topupListQuery.data : undefined,
+    search.tab === 'topups' && topupListQuery.isError,
+    retainedScope
+  )
+  const redemptionData = useRetainedQueryData(
+    search.tab === 'redemptions' ? redemptionListQuery.data : undefined,
+    search.tab === 'redemptions' && redemptionListQuery.isError,
+    retainedScope
+  )
   const currentPage = topupData ?? redemptionData
   const completeness =
     search.view === 'list'

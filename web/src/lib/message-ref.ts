@@ -27,6 +27,7 @@ type AccountAlertParams = {
 }
 
 export type MessageParamsByCode = {
+  COLLECTION_EXECUTION_FAILED: Record<string, never>
   COLLECTION_RETRY_EXHAUSTED: { site_id: IdString; run_id: IdString }
   DATA_VALIDATION_MISMATCH: SiteRangeParams
   UPSTREAM_RESPONSE_INVALID: {

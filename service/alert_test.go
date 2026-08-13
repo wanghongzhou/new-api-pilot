@@ -55,6 +55,21 @@ func TestSortAlertRuleItemsUsesBusinessSortFields(t *testing.T) {
 	}
 }
 
+func TestSafeAlertDeliveryResponseRedactsSensitiveDiagnostics(t *testing.T) {
+	for _, value := range []string{
+		"Authorization: Bearer private-token",
+		"https://example.test/hook?access_token=private",
+		`{"password":"secret"}`,
+	} {
+		if got := safeAlertDeliveryResponse(value); got != "[redacted]" {
+			t.Fatalf("safeAlertDeliveryResponse(%q) = %q", value, got)
+		}
+	}
+	if got := safeAlertDeliveryResponse("HTTP 429; retry scheduled"); got != "HTTP 429; retry scheduled" {
+		t.Fatalf("safe diagnostic changed: %q", got)
+	}
+}
+
 func TestAlertEvaluationStateMachineAndLevelSwitch(t *testing.T) {
 	tx := openAlertTestTransaction(t)
 	clock := testsupport.NewFakeClock(time.Unix(1_752_400_800, 0))

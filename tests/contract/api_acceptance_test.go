@@ -293,11 +293,11 @@ func TestA20A26A87APIEnvelopePaginationAndAuthorizationAcceptance(t *testing.T) 
 		var data struct {
 			Page     int              `json:"page"`
 			PageSize int              `json:"page_size"`
-			Total    int64            `json:"total"`
+			Total    string           `json:"total"`
 			Items    []map[string]any `json:"items"`
 		}
 		if response.Code != http.StatusOK || !envelope.Success || envelope.Code != "" || json.Unmarshal(envelope.Data, &data) != nil ||
-			data.Page != page.value || data.PageSize != 1 || data.Total != 3 || len(data.Items) != page.itemCount {
+			data.Page != page.value || data.PageSize != 1 || data.Total != "3" || len(data.Items) != page.itemCount {
 			t.Fatalf("A87 page %d response = %d %#v data=%s", page.value, response.Code, envelope, envelope.Data)
 		}
 		for _, item := range data.Items {

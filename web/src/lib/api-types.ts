@@ -31,7 +31,7 @@ export interface ApiResponse<TData> {
 export interface PageData<TItem> {
   page: number
   page_size: number
-  total: number
+  total: MetricString
   items: TItem[]
 }
 

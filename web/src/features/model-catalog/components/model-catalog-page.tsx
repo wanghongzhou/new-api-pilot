@@ -38,6 +38,7 @@ import type {
   StatisticsExportJobItem,
 } from '@/features/statistics/types'
 import { useLastValidPage } from '@/hooks/use-last-valid-page'
+import { useRetainedQueryData } from '@/hooks/use-retained-query-data'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import { getApiErrorTranslationKey } from '@/lib/api'
 import {
@@ -537,6 +538,22 @@ export function ModelCatalogPage({
         ? modelCatalogKeys.site(siteId, 'missing', currentParams)
         : modelCatalogKeys.global('missing', currentParams),
   })
+  const retainedScope = siteId ? `site:${siteId}` : 'global'
+  const catalog = useRetainedQueryData(
+    catalogQuery.data,
+    catalogQuery.isError,
+    retainedScope
+  )
+  const coverage = useRetainedQueryData(
+    coverageQuery.data,
+    coverageQuery.isError,
+    retainedScope
+  )
+  const missing = useRetainedQueryData(
+    missingQuery.data,
+    missingQuery.isError,
+    retainedScope
+  )
   const exportMutation = useMutation({
     mutationFn: (format: StatisticsExportFormat) =>
       createStatisticsExport(
@@ -554,7 +571,7 @@ export function ModelCatalogPage({
     },
   })
   const activePageQuery = search.tab === 'missing' ? missingQuery : catalogQuery
-  const activePageData = activePageQuery.data
+  const activePageData = search.tab === 'missing' ? missing : catalog
   useLastValidPage({
     isFetching: activePageQuery.isFetching,
     isPlaceholderData: activePageQuery.isPlaceholderData,
@@ -721,38 +738,38 @@ export function ModelCatalogPage({
   )
   const tabs = [
     {
-      count: coverageQuery.data?.catalog_models,
+      count: coverage?.catalog_models,
       icon: Database01Icon,
       label: t('modelCatalog.tabs.catalog'),
       value: 'catalog',
     },
     {
-      count: coverageQuery.data?.exact_covered_models,
+      count: coverage?.exact_covered_models,
       icon: Chart01Icon,
       label: t('modelCatalog.tabs.coverage'),
       value: 'coverage',
     },
     {
-      count: coverageQuery.data?.exact_missing_models,
+      count: coverage?.exact_missing_models,
       icon: Alert02Icon,
       label: t('modelCatalog.tabs.missing'),
       value: 'missing',
     },
   ] as const
   const catalogEmptyState = getModelCatalogEmptyState(
-    catalogQuery.data?.data_status,
+    catalog?.data_status,
     search
   )
   const missingEmptyState = getMissingModelEmptyState(
-    missingQuery.data?.data_status,
+    missing?.data_status,
     search
   )
-  let activeDataStatus = coverageQuery.data?.data_status
+  let activeDataStatus = coverage?.data_status
   if (search.tab === 'catalog') {
-    activeDataStatus = catalogQuery.data?.data_status
+    activeDataStatus = catalog?.data_status
   }
   if (search.tab === 'missing') {
-    activeDataStatus = missingQuery.data?.data_status
+    activeDataStatus = missing?.data_status
   }
   return (
     <SectionPageLayout
@@ -786,18 +803,18 @@ export function ModelCatalogPage({
           </DetailBackLink>
         )}
         <CoverageGrid
-          metric={coverageQuery.data}
-          missingValue={coverageQuery.data?.exact_missing_models}
+          metric={coverage}
+          missingValue={coverage?.exact_missing_models}
         />
         {coverageQuery.isError && (
           <QueryStateAlert
             message={
-              coverageQuery.data
+              coverage
                 ? t('common.retainedDataRefreshFailed')
                 : t('common.dataLoadFailed')
             }
             onRetry={() => void coverageQuery.refetch()}
-            tone={coverageQuery.data ? 'warning' : 'destructive'}
+            tone={coverage ? 'warning' : 'destructive'}
           />
         )}
         <Tabs
@@ -840,26 +857,24 @@ export function ModelCatalogPage({
             onRetry={() => void sitesQuery.refetch()}
           />
         )}
-        {search.tab === 'catalog' &&
-          catalogQuery.isError &&
-          catalogQuery.data && (
-            <QueryStateAlert
-              message={t('common.retainedDataRefreshFailed')}
-              onRetry={() => void catalogQuery.refetch()}
-            />
-          )}
+        {search.tab === 'catalog' && catalogQuery.isError && catalog && (
+          <QueryStateAlert
+            message={t('common.retainedDataRefreshFailed')}
+            onRetry={() => void catalogQuery.refetch()}
+          />
+        )}
         {search.tab === 'catalog' && (
           <DataTable
             ariaLabel={t('modelCatalog.table')}
             columns={catalogColumns}
-            data={catalogQuery.data?.items ?? []}
+            data={catalog?.items ?? []}
             emptyDescription={t(
               dynamicI18nKey('modelCatalog', catalogEmptyState.descriptionKey)
             )}
             emptyTitle={t(
               dynamicI18nKey('modelCatalog', catalogEmptyState.titleKey)
             )}
-            error={!validSiteId || (catalogQuery.isError && !catalogQuery.data)}
+            error={!validSiteId || (catalogQuery.isError && !catalog)}
             fetching={catalogQuery.isFetching}
             loading={catalogQuery.isPending}
             mobileCardBreakpoint='wide'
@@ -955,7 +970,7 @@ export function ModelCatalogPage({
               </article>
             )}
             rowHeaderColumnId='model'
-            total={catalogQuery.data?.total ?? 0}
+            total={catalog?.total ?? 0}
           />
         )}
         {search.tab === 'coverage' && (
@@ -963,21 +978,21 @@ export function ModelCatalogPage({
             className='min-h-0 overflow-visible lg:flex-1 lg:overflow-y-auto'
             tabIndex={0}
           >
-            {coverageQuery.isPending && !coverageQuery.data && (
+            {coverageQuery.isPending && !coverage && (
               <LoadingState className='min-h-64' />
             )}
-            {coverageQuery.data && (
+            {coverage && (
               <div className='grid gap-4 xl:grid-cols-3'>
                 <CoverageBreakdown
-                  items={coverageQuery.data.site_breakdown}
+                  items={coverage.site_breakdown}
                   title={t('modelCatalog.breakdown.site')}
                 />
                 <CoverageBreakdown
-                  items={coverageQuery.data.vendor_breakdown}
+                  items={coverage.vendor_breakdown}
                   title={t('modelCatalog.breakdown.vendor')}
                 />
                 <CoverageBreakdown
-                  items={coverageQuery.data.status_breakdown}
+                  items={coverage.status_breakdown}
                   title={t('modelCatalog.breakdown.status')}
                 />
               </div>
@@ -988,14 +1003,14 @@ export function ModelCatalogPage({
           <DataTable
             ariaLabel={t('modelCatalog.missingTable')}
             columns={missingColumns}
-            data={missingQuery.data?.items ?? []}
+            data={missing?.items ?? []}
             emptyDescription={t(
               dynamicI18nKey('modelCatalog', missingEmptyState.descriptionKey)
             )}
             emptyTitle={t(
               dynamicI18nKey('modelCatalog', missingEmptyState.titleKey)
             )}
-            error={!validSiteId || (missingQuery.isError && !missingQuery.data)}
+            error={!validSiteId || (missingQuery.isError && !missing)}
             fetching={missingQuery.isFetching}
             loading={missingQuery.isPending}
             mobileCardBreakpoint='wide'
@@ -1029,17 +1044,15 @@ export function ModelCatalogPage({
               </article>
             )}
             rowHeaderColumnId='model_name'
-            total={missingQuery.data?.total ?? 0}
+            total={missing?.total ?? 0}
           />
         )}
-        {search.tab === 'missing' &&
-          missingQuery.isError &&
-          missingQuery.data && (
-            <QueryStateAlert
-              message={t('common.retainedDataRefreshFailed')}
-              onRetry={() => void missingQuery.refetch()}
-            />
-          )}
+        {search.tab === 'missing' && missingQuery.isError && missing && (
+          <QueryStateAlert
+            message={t('common.retainedDataRefreshFailed')}
+            onRetry={() => void missingQuery.refetch()}
+          />
+        )}
       </div>
       <ExportTaskSheet
         exportId={search.exportId}

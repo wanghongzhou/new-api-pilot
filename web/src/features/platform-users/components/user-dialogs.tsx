@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -92,6 +92,7 @@ export function CreateUserDialog({
 }: ControlledDialogProps) {
   const { t } = useTranslation()
   const [submitting, setSubmitting] = useState(false)
+  const submittingRef = useRef(false)
   const {
     control,
     formState: { errors, isDirty },
@@ -127,7 +128,8 @@ export function CreateUserDialog({
   }, [open, reset])
 
   const submit = handleSubmit(async (values) => {
-    if (disabledReason) return
+    if (disabledReason || submittingRef.current) return
+    submittingRef.current = true
     setSubmitting(true)
     try {
       await createPlatformUser({
@@ -152,6 +154,7 @@ export function CreateUserDialog({
         })
       }
     } finally {
+      submittingRef.current = false
       setSubmitting(false)
     }
   })
@@ -302,6 +305,7 @@ export function EditUserDialog({
 }) {
   const { t } = useTranslation()
   const [submitting, setSubmitting] = useState(false)
+  const submittingRef = useRef(false)
   const {
     control,
     formState: { errors, isDirty },
@@ -329,7 +333,8 @@ export function EditUserDialog({
   }, [open, reset, user])
 
   const submit = handleSubmit(async (values) => {
-    if (!user || disabledReason) return
+    if (!user || disabledReason || submittingRef.current) return
+    submittingRef.current = true
     setSubmitting(true)
     try {
       const updated = await updatePlatformUser(user.id, {
@@ -369,6 +374,7 @@ export function EditUserDialog({
         if (isConcurrentEdit) toast.error(message)
       }
     } finally {
+      submittingRef.current = false
       setSubmitting(false)
     }
   })
@@ -499,6 +505,7 @@ export function ResetPasswordDialog({
 }: ControlledDialogProps & { user: PlatformUserItem | null }) {
   const { t } = useTranslation()
   const [submitting, setSubmitting] = useState(false)
+  const submittingRef = useRef(false)
   const {
     formState: { errors, isDirty },
     handleSubmit,
@@ -519,7 +526,8 @@ export function ResetPasswordDialog({
   }, [open, reset])
 
   const submit = handleSubmit(async (values) => {
-    if (!user || disabledReason) return
+    if (!user || disabledReason || submittingRef.current) return
+    submittingRef.current = true
     setSubmitting(true)
     try {
       await resetPlatformUserPassword(user.id, {
@@ -541,6 +549,7 @@ export function ResetPasswordDialog({
         })
       }
     } finally {
+      submittingRef.current = false
       setSubmitting(false)
     }
   })
@@ -640,9 +649,11 @@ export function ToggleUserDialog({
 }) {
   const { t } = useTranslation()
   const [submitting, setSubmitting] = useState(false)
+  const submittingRef = useRef(false)
 
   const submit = async () => {
-    if (!user || disabledReason) return
+    if (!user || disabledReason || submittingRef.current) return
+    submittingRef.current = true
     setSubmitting(true)
     try {
       if (action === 'enable') await enablePlatformUser(user.id)
@@ -664,6 +675,7 @@ export function ToggleUserDialog({
         t(dynamicI18nKey('platformUser', getApiErrorTranslationKey(error)))
       )
     } finally {
+      submittingRef.current = false
       setSubmitting(false)
     }
   }
@@ -693,7 +705,13 @@ export function ToggleUserDialog({
     )
   }
   return (
-    <Dialog onOpenChange={onOpenChange} open={open}>
+    <Dialog
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) onOpenChange(true)
+        else if (!submitting) onOpenChange(false)
+      }}
+      open={open}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{t('Enable platform user')}</DialogTitle>
@@ -705,7 +723,7 @@ export function ToggleUserDialog({
         </DialogHeader>
         <DisabledWriteNotice reason={disabledReason} />
         <DialogFooter>
-          <DialogCancelButton />
+          <DialogCancelButton disabled={submitting} />
           <Button
             disabled={submitting || Boolean(disabledReason)}
             onClick={() => void submit()}

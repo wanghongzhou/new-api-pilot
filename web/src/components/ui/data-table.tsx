@@ -60,7 +60,7 @@ interface DataTableProps<TData> {
   renderMobileCard?: (item: TData) => ReactNode
   rowHeaderColumnId?: string
   sorting?: SortingState
-  total?: number
+  total?: number | string
 }
 
 export function DataTable<TData>({

@@ -19,6 +19,7 @@ import { toast } from 'sonner'
 
 import { DataStatusBadge } from '@/components/data/data-status'
 import { FacetedFilter } from '@/components/data/faceted-filter'
+import { MetricValue } from '@/components/data/metric-value'
 import { QueryStateAlert } from '@/components/data/query-state-alert'
 import { DetailBackLink } from '@/components/layout/detail-back-link'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
@@ -49,6 +50,7 @@ import type {
   StatisticsExportFormat,
   StatisticsExportJobItem,
 } from '@/features/statistics/types'
+import { useRetainedQueryData } from '@/hooks/use-retained-query-data'
 import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 import {
   calculateCrossSiteQuotaAmount,
@@ -61,6 +63,7 @@ import {
   isIdString,
   isNonNegativeIdString,
   parseIdString,
+  parseMetricString,
   parseNonNegativeIdString,
   type MetricString,
   type RateInfo,
@@ -891,8 +894,17 @@ export function LogsPage({
       onSearchChange({ exportId: job.id })
     },
   })
-  const data = logsQuery.data
-  const stats = statsQuery.data
+  const retainedScope = siteId ? `site:${siteId}` : 'global'
+  const data = useRetainedQueryData(
+    logsQuery.data,
+    logsQuery.isError,
+    retainedScope
+  )
+  const stats = useRetainedQueryData(
+    statsQuery.data,
+    statsQuery.isError,
+    retainedScope
+  )
   const usageAmount = useMemo(
     () =>
       calculateCrossSiteQuotaAmount(
@@ -1094,7 +1106,9 @@ export function LogsPage({
           <StatBadge
             accent='bg-violet-500/70'
             label={t('logs.overview.total')}
-            value={data?.total ?? 0}
+            value={
+              <MetricValue value={data?.total ?? parseMetricString('0')} />
+            }
           />
           <StatBadge
             accent='bg-sky-500/70'
@@ -1194,6 +1208,16 @@ export function LogsPage({
           onRetry={validSiteId ? () => void logsQuery.refetch() : undefined}
           page={search.page}
           pageSize={search.pageSize}
+          paginationHasKnownLastPage={false}
+          paginationHasNextPage={
+            data
+              ? BigInt(data.total) >
+                BigInt(search.page) * BigInt(search.pageSize)
+              : false
+          }
+          paginationTotalDisplay={
+            <MetricValue value={data?.total ?? parseMetricString('0')} />
+          }
           renderMobileCard={(item) => (
             <article className='bg-card text-card-foreground ring-foreground/10 grid gap-3 rounded-xl p-4 ring-1'>
               <div className='flex items-start justify-between gap-3'>
@@ -1284,7 +1308,7 @@ export function LogsPage({
               </Button>
             </article>
           )}
-          total={data?.total ?? 0}
+          total={0}
         />
       </div>
       {selected && (

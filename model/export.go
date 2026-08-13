@@ -234,6 +234,7 @@ func (repository *ExportRepository) Claim(
 		}
 		updates := map[string]any{
 			"status": "running", "attempt_count": job.AttemptCount + 1,
+			"progress":     0,
 			"heartbeat_at": now, "claim_token": claimToken, "lease_expires_at": leaseExpiresAt,
 			"started_at": gorm.Expr("COALESCE(started_at, ?)", now), "updated_at": now,
 		}
@@ -246,6 +247,7 @@ func (repository *ExportRepository) Claim(
 			return ErrExportClaimLost
 		}
 		job.Status = "running"
+		job.Progress = 0
 		job.AttemptCount++
 		job.HeartbeatAt = pointerInt64(now)
 		job.LeaseExpiresAt = pointerInt64(leaseExpiresAt)

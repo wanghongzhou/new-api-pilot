@@ -175,13 +175,18 @@ export function createAlertRuleFormSchema(
       if (!pairedRule?.threshold_value) return
       const paired = decimalValue(pairedRule.threshold_value)
       if (!paired) return
-      const invalidPair =
-        (rule.level === 'warning' && threshold.gte(paired)) ||
-        (rule.level === 'critical' && threshold.lte(paired))
+      const warningThreshold = rule.level === 'warning' ? threshold : paired
+      const criticalThreshold = rule.level === 'critical' ? threshold : paired
+      let invalidPair = !warningThreshold.eq(criticalThreshold)
+      if (rule.compare_operator === '<=') {
+        invalidPair = warningThreshold.lte(criticalThreshold)
+      } else if (rule.compare_operator === '>=') {
+        invalidPair = warningThreshold.gte(criticalThreshold)
+      }
       if (invalidPair) {
         context.addIssue({
           code: 'custom',
-          message: 'alerts.validation.warningLessCritical',
+          message: 'alerts.validation.thresholdPair',
           path: ['thresholdValue'],
         })
       }

@@ -49,9 +49,7 @@ describe('model catalog information architecture', () => {
   test('keeps coverage context and the active view purpose visible', async () => {
     const source = await readFile(pagePath, 'utf8')
     expect(source).toContain('<CoverageGrid')
-    expect(source).toContain(
-      'missingValue={coverageQuery.data?.exact_missing_models}'
-    )
+    expect(source).toContain('missingValue={coverage?.exact_missing_models}')
     expect(source).toContain('<TabPurpose')
     expect(source).toContain('modelCatalog.purpose.catalogDescription')
     expect(source).toContain('modelCatalog.purpose.coverageDescription')
@@ -116,8 +114,6 @@ describe('model catalog information architecture', () => {
     const source = await readFile(pagePath, 'utf8')
     expect(source).toContain('{coverageQuery.isError && (')
     expect(source).toContain("'common.dataLoadFailed'")
-    expect(source).toContain(
-      "tone={coverageQuery.data ? 'warning' : 'destructive'}"
-    )
+    expect(source).toContain("tone={coverage ? 'warning' : 'destructive'}")
   })
 })

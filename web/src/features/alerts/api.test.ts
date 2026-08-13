@@ -32,7 +32,7 @@ describe('alert API contract', () => {
           code: '',
           data:
             config.url === '/api/alert-rules'
-              ? { items: [], page: 1, page_size: 20, total: 0 }
+              ? { items: [], page: 1, page_size: 20, total: '0' }
               : {},
           message: '',
           request_id: 'req_alerts',

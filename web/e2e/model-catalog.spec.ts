@@ -38,7 +38,10 @@ function assertAuthenticated(route: Route) {
 
 async function seedAuth(page: Page, testInfo: TestInfo) {
   await mockAuthenticatedShell(page)
-  if (testInfo.project.name === 'chromium-mobile') {
+  if (
+    testInfo.project.name === 'chromium-mobile' ||
+    testInfo.project.name === 'chromium-tablet-768'
+  ) {
     await page.setViewportSize({ height: 812, width: 375 })
   }
   await page.addInitScript(
@@ -300,7 +303,10 @@ test('A96 keeps model catalog exact, icon-text-only, private, exportable and res
   expect(externalIconRequests).toBe(0)
   await expect(page.locator(`img[src="${iconText}"]`)).toHaveCount(0)
   await expect(page.locator(`a[href="${iconText}"]`)).toHaveCount(0)
-  if (testInfo.project.name === 'chromium-mobile') {
+  if (
+    testInfo.project.name === 'chromium-mobile' ||
+    testInfo.project.name === 'chromium-tablet-768'
+  ) {
     await expect(
       page.getByText(longDescription, { exact: true }).filter({ visible: true })
     ).toBeVisible()
@@ -484,4 +490,45 @@ test('shows a visible retry alert when initial model coverage loading fails', as
   const alert = page.getByRole('alert')
   await expect(alert).toBeVisible({ timeout: 20_000 })
   await expect(alert.getByRole('button')).toBeVisible()
+})
+
+test('retains the last successful model rows when a filtered refresh fails', async ({
+  page,
+}, testInfo) => {
+  await seedAuth(page, testInfo)
+  let reads = 0
+  await page.route(/\/api\/model-catalog(?:\?.*)?$/, async (route) => {
+    reads += 1
+    if (reads === 1) {
+      await route.fulfill({
+        json: envelope({
+          data_status: 'complete',
+          items: [catalogItems[0]],
+          page: 1,
+          page_size: 20,
+          total: '1',
+        }),
+      })
+      return
+    }
+    await route.fulfill({ status: 503, json: envelope(null) })
+  })
+  await page.route(/\/api\/model-catalog\/coverage(?:\?.*)?$/, (route) =>
+    route.fulfill({ json: envelope(coverage()) })
+  )
+
+  await page.goto('/model-catalog')
+  await expect(
+    page.getByText('gpt-4o', { exact: true }).filter({ visible: true }).first()
+  ).toBeVisible()
+  await page.getByRole('textbox', { name: '模型关键词' }).fill('刷新失败')
+  await expect.poll(() => reads).toBe(2)
+  await expect(page.getByRole('alert')).toContainText(
+    '数据刷新失败，当前显示的是上次成功加载的结果'
+  )
+  await expect(
+    page.getByText('gpt-4o', { exact: true }).filter({ visible: true }).first()
+  ).toBeVisible()
+  await page.reload()
+  await expect(page).toHaveURL(/keyword=%E5%88%B7%E6%96%B0%E5%A4%B1%E8%B4%A5/)
 })

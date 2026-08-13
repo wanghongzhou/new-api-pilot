@@ -348,7 +348,14 @@ func dtoExportJobContract(item dto.ExportJobItem) bool {
 			item.StatisticsType == dto.StatisticsScopeCustomer || item.StatisticsType == dto.StatisticsScopeAccount ||
 			item.StatisticsType == dto.StatisticsScopeModel || item.StatisticsType == dto.StatisticsScopeChannel ||
 			item.StatisticsType == dto.StatisticsScopeGroup || item.StatisticsType == dto.StatisticsScopeToken ||
-			item.StatisticsType == dto.StatisticsScopeNode) &&
+			item.StatisticsType == dto.StatisticsScopeNode || item.StatisticsType == "logs" ||
+			item.StatisticsType == "user_inventory" || item.StatisticsType == "channel_inventory" ||
+			item.StatisticsType == "performance_history" || item.StatisticsType == "topup_inventory" ||
+			item.StatisticsType == "redemption_inventory" || item.StatisticsType == "upstream_tasks" ||
+			item.StatisticsType == "model_catalog" || item.StatisticsType == "model_rankings" ||
+			item.StatisticsType == "vendor_rankings" || item.StatisticsType == "subscription_plans" ||
+			item.StatisticsType == "pricing_catalog" || item.StatisticsType == "group_catalog" ||
+			item.StatisticsType == "system_tasks") &&
 		(item.Status == dto.ExportStatusPending || item.Status == dto.ExportStatusRunning || item.Status == dto.ExportStatusSuccess ||
 			item.Status == dto.ExportStatusFailed || item.Status == dto.ExportStatusExpired) &&
 		item.Progress >= 0 && item.Progress <= 100

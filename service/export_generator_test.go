@@ -179,6 +179,7 @@ func TestGenerateExportFileChecksDiskPerPageAndUsesPrivateMode(t *testing.T) {
 	query := exportTestQuery(t, 1)
 	value := "1"
 	reader := &fakeExportRowReader{rows: []model.StatisticsExportRow{{
+		TotalRows:   1,
 		DimensionID: "global", DimensionName: "全局", BucketStart: query.StartTimestamp,
 		BucketEnd: query.EndTimestamp, RequestCount: &value, DataStatus: "complete", IsFinal: true,
 		SortKnown: 1, SortNumber: query.StartTimestamp,
@@ -202,10 +203,10 @@ func TestGenerateExportFileChecksDiskPerPageAndUsesPrivateMode(t *testing.T) {
 			diskChecks++
 			return math.MaxUint64, nil
 		},
-		OnPage: func(_ context.Context, page int, rows int64) error {
+		OnPage: func(_ context.Context, rows, total int64) error {
 			pageCallbacks++
-			if page != 1 || rows != 1 {
-				t.Fatalf("page callback = %d/%d", page, rows)
+			if rows != 1 || total != 1 {
+				t.Fatalf("progress callback = %d/%d", rows, total)
 			}
 			return nil
 		},

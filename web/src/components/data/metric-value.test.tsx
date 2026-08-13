@@ -31,4 +31,12 @@ describe('MetricValue', () => {
       '>-</span>'
     )
   })
+
+  test('groups bigint values without losing the authoritative string', () => {
+    const value = parseMetricString('9007199254740993123456789')
+    const markup = renderToStaticMarkup(<MetricValue value={value} />)
+
+    expect(markup).toContain('title="9007199254740993123456789"')
+    expect(markup).toContain('>9,007,199,254,740,993,123,456,789</span>')
+  })
 })

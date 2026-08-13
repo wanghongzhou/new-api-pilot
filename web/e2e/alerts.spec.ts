@@ -252,9 +252,11 @@ async function mockSelf(page: Page, user: TestUser) {
 }
 
 type MockOptions = {
+  alertListFailures?: number
   createFailures?: number
   detailFailures?: number
   missingDetailIds?: string[]
+  ruleListFailures?: number
   summaryError?: boolean
   updateFailures?: number
 }
@@ -266,6 +268,7 @@ async function mockAlerts(
 ) {
   const state = {
     createBodies: [] as Record<string, unknown>[],
+    alertListFailures: options.alertListFailures ?? 0,
     createFailures: options.createFailures ?? 0,
     deleteCalls: 0,
     detailFailures: options.detailFailures ?? 0,
@@ -274,6 +277,7 @@ async function mockAlerts(
     overrideActive: false,
     overrideForTimes: 3,
     overrideThreshold: '70',
+    ruleListFailures: options.ruleListFailures ?? 0,
     summaryError: options.summaryError ?? false,
     updateBodies: [] as Record<string, unknown>[],
     updateFailures: options.updateFailures ?? 0,
@@ -349,6 +353,14 @@ async function mockAlerts(
     assertAuthenticatedRequest(route, user)
     const search = new URL(route.request().url()).searchParams
     state.listSearches.push(new URLSearchParams(search))
+    if (state.alertListFailures > 0) {
+      state.alertListFailures -= 1
+      await route.fulfill({
+        json: errorEnvelope('INTERNAL_ERROR'),
+        status: 503,
+      })
+      return
+    }
     const empty = search.getAll('status').includes('resolved')
     const pageNumber = Number(search.get('p') ?? 1)
     await route.fulfill({
@@ -363,6 +375,14 @@ async function mockAlerts(
   await page.route(/\/api\/alert-rules(?:\?.*)?$/, async (route) => {
     assertAuthenticatedRequest(route, user)
     const search = new URL(route.request().url()).searchParams
+    if (state.ruleListFailures > 0) {
+      state.ruleListFailures -= 1
+      await route.fulfill({
+        json: errorEnvelope('INTERNAL_ERROR'),
+        status: 503,
+      })
+      return
+    }
     const rules =
       search.get('scope_type') === 'site'
         ? effectiveRules()
@@ -592,7 +612,7 @@ test('isolates summary and missing-detail failures, renders empty state, and kee
 
   const filters = page.getByRole('region', { name: '筛选' })
   await filters.getByRole('button', { name: '状态', exact: true }).click()
-  await page.getByRole('button', { name: '已恢复', exact: true }).click()
+  await page.getByRole('button', { name: '已结束', exact: true }).click()
   await expect(
     page
       .getByText('当前没有匹配告警', { exact: true })
@@ -713,4 +733,53 @@ test('preserves Admin rule edits across conflict and service errors, then restor
       .getByRole('dialog', { name: '告警事件详情' })
       .getByText('CPU 使用率过高')
   ).toBeVisible()
+})
+
+test('alerts events and rules distinguish first failures from retained refresh failures', async ({
+  page,
+}) => {
+  const state = await setup(page, admin)
+  await page.goto('/alerts')
+  await expect(
+    page.getByText(longTargetName).filter({ visible: true }).first()
+  ).toBeVisible()
+  state.alertListFailures = 10
+  await page
+    .getByLabel('筛选')
+    .getByRole('button', { name: '状态', exact: true })
+    .click()
+  await page.getByRole('button', { name: '已结束', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('数据刷新失败')
+  await expect(
+    page.getByText(longTargetName).filter({ visible: true }).first()
+  ).toBeVisible()
+  state.alertListFailures = 0
+
+  await page.getByRole('tab', { name: '规则', exact: true }).click()
+  await expect(
+    page.getByText('CPU 使用率过高（警告）').filter({ visible: true }).first()
+  ).toBeVisible()
+  state.ruleListFailures = 10
+  await page
+    .getByLabel('规则筛选')
+    .getByRole('button', { name: '级别', exact: true })
+    .click()
+  await page.getByRole('button', { name: '严重', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('数据刷新失败')
+  await expect(
+    page.getByText('CPU 使用率过高（警告）').filter({ visible: true }).first()
+  ).toBeVisible()
+
+  await page.unroute(/\/api\/alerts(?:\?.*)?$/)
+  await page.route(/\/api\/alerts(?:\?.*)?$/, (route) =>
+    route.fulfill({ json: errorEnvelope('INTERNAL_ERROR'), status: 503 })
+  )
+  await page.goto('/alerts?status=pending')
+  await expect(
+    page.getByRole('heading', { name: '无法加载数据' })
+  ).toBeVisible()
+  await expect(page.getByText(longTargetName)).toHaveCount(0)
+
+  await assertNoHorizontalOverflow(page)
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])
 })

@@ -63,13 +63,14 @@ VALUES (?, 'B6 HTTP', 1, 'warning', 'instance.cpu_percent', '>=', 85, 3, 'global
 	}
 	var rulePage struct {
 		Page  int              `json:"page"`
-		Total int64            `json:"total"`
+		Total string           `json:"total"`
 		Items []map[string]any `json:"items"`
 	}
 	if err := json.Unmarshal(readRulesEnvelope.Data, &rulePage); err != nil {
 		t.Fatalf("decode rules: %v", err)
 	}
-	if rulePage.Page != 1 || rulePage.Total < int64(len(rulePage.Items)) || len(rulePage.Items) > 10 {
+	total, err := strconv.ParseInt(rulePage.Total, 10, 64)
+	if err != nil || rulePage.Page != 1 || total < int64(len(rulePage.Items)) || len(rulePage.Items) > 10 {
 		t.Fatalf("rule pagination = %#v", rulePage)
 	}
 	var foundRule bool

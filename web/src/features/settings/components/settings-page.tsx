@@ -9,7 +9,7 @@ import {
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useBlocker } from '@tanstack/react-router'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Controller,
   useForm,
@@ -20,7 +20,9 @@ import {
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import { QueryStateAlert } from '@/components/data/query-state-alert'
 import { ErrorState } from '@/components/error-state'
+import { APP_NAVIGATE_EVENT } from '@/components/layout/app-nav'
 import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { LoadingState } from '@/components/loading-state'
 import { Badge } from '@/components/ui/badge'
@@ -59,6 +61,7 @@ import {
 } from '../contract'
 import { settingsKeys } from '../query-keys'
 import { createSettingsFormSchema } from '../schema'
+import { revealHorizontalTarget } from '../settings-navigation'
 import type {
   NotificationTestResult,
   SecretAction,
@@ -199,6 +202,7 @@ function EditableSetting({
             name='dingTalkEnabled'
             render={({ field }) => (
               <Checkbox
+                aria-label={t(dynamicI18nKey('settings', definition.labelKey))}
                 checked={field.value}
                 id='setting-dingtalk-enabled'
                 onBlur={field.onBlur}
@@ -596,6 +600,13 @@ export function SettingsPage({
     queryKey: settingsKeys.all,
     staleTime: 30_000,
   })
+  const cachedRefreshFailed =
+    settingsQuery.isRefetchError && Boolean(settingsQuery.data)
+  const canEdit = isAdmin && !cachedRefreshFailed
+  const sectionScrollRef = useRef<HTMLDivElement>(null)
+  const sectionTriggerRefs = useRef(
+    new Map<SettingsSectionKey, HTMLButtonElement>()
+  )
   const secretState = useMemo(
     () => settingsSecretState(settingsQuery.data),
     [settingsQuery.data]
@@ -618,6 +629,9 @@ export function SettingsPage({
   const [pendingFocusField, setPendingFocusField] =
     useState<FieldPath<SettingsFormValues> | null>(null)
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
+  const [pendingNavigation, setPendingNavigation] = useState<string | null>(
+    null
+  )
   const updateMutation = useMutation({ mutationFn: updateSettings })
   const blocker = useBlocker({
     disabled: !form.formState.isDirty,
@@ -626,11 +640,32 @@ export function SettingsPage({
     withResolver: true,
   })
   useEffect(() => {
+    if (!form.formState.isDirty) return
+    const blockGlobalNavigation = (event: Event) => {
+      event.preventDefault()
+      setPendingNavigation(
+        (event as CustomEvent<{ to?: string }>).detail?.to ?? null
+      )
+    }
+    window.addEventListener(APP_NAVIGATE_EVENT, blockGlobalNavigation)
+    return () => {
+      window.removeEventListener(APP_NAVIGATE_EVENT, blockGlobalNavigation)
+    }
+  }, [form.formState.isDirty])
+  useEffect(() => {
     if (!settingsQuery.data || form.formState.isDirty) return
     const values = settingsToFormValues(settingsQuery.data)
     setInitialValues(values)
     form.reset(values)
   }, [form, form.formState.isDirty, settingsQuery.data])
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      const container = sectionScrollRef.current
+      const trigger = sectionTriggerRefs.current.get(activeSection)
+      if (container && trigger) revealHorizontalTarget(container, trigger)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [activeSection, settingsQuery.data])
 
   const items = useMemo(
     () => settingItemsByKey(settingsQuery.data),
@@ -714,7 +749,7 @@ export function SettingsPage({
   )
 
   const actions =
-    isAdmin && settingsQuery.data ? (
+    canEdit && settingsQuery.data ? (
       <>
         <Button
           aria-label={t('settings.reset')}
@@ -754,7 +789,7 @@ export function SettingsPage({
           {settingsQuery.isPending && (
             <LoadingState message={t('settings.loading')} />
           )}
-          {settingsQuery.isError && (
+          {settingsQuery.isError && !settingsQuery.data && (
             <ErrorState
               description={t('table.loadErrorDescription')}
               onRetry={() => void settingsQuery.refetch()}
@@ -774,10 +809,21 @@ export function SettingsPage({
                 }
                 value={activeSection}
               >
-                <div className='w-full min-w-0 overflow-x-auto overscroll-x-contain pb-1'>
+                <div
+                  className='w-full min-w-0 overflow-x-auto overscroll-x-contain pb-1'
+                  ref={sectionScrollRef}
+                >
                   <TabsList aria-label={t('settings.sections.label')}>
                     {settingsSections.map((section) => (
-                      <TabsTrigger key={section.key} value={section.key}>
+                      <TabsTrigger
+                        key={section.key}
+                        ref={(node) => {
+                          if (node) {
+                            sectionTriggerRefs.current.set(section.key, node)
+                          } else sectionTriggerRefs.current.delete(section.key)
+                        }}
+                        value={section.key}
+                      >
                         {t(dynamicI18nKey('settings', section.titleKey))}
                         {dirtySections.has(section.key) && (
                           <span
@@ -791,6 +837,12 @@ export function SettingsPage({
                   </TabsList>
                 </div>
               </Tabs>
+              {cachedRefreshFailed && (
+                <QueryStateAlert
+                  message={t('settings.staleWarning')}
+                  onRetry={() => void settingsQuery.refetch()}
+                />
+              )}
               {errorSummary && (
                 <div
                   aria-live='assertive'
@@ -830,13 +882,13 @@ export function SettingsPage({
                           <SettingRow
                             definition={definition}
                             form={form}
-                            isAdmin={isAdmin}
+                            isAdmin={canEdit}
                             item={items.get(definition.key)}
                             key={definition.key}
                           />
                         ))}
                     </div>
-                    {section.key === 'notification' && isAdmin && (
+                    {section.key === 'notification' && canEdit && (
                       <div className='mt-4 flex flex-wrap items-center justify-end gap-3'>
                         <NotificationTest
                           dirty={form.formState.isDirty}
@@ -902,11 +954,20 @@ export function SettingsPage({
         title={t('settings.resetTitle')}
       />
       <UnsavedChangesConfirmDialog
-        onConfirm={() => blocker.proceed?.()}
-        onOpenChange={(open) => {
-          if (!open && !updateMutation.isPending) blocker.reset?.()
+        onConfirm={() => {
+          if (pendingNavigation) {
+            window.location.assign(pendingNavigation)
+            return
+          }
+          blocker.proceed?.()
         }}
-        open={blocker.status === 'blocked'}
+        onOpenChange={(open) => {
+          if (!open && !updateMutation.isPending) {
+            setPendingNavigation(null)
+            blocker.reset?.()
+          }
+        }}
+        open={blocker.status === 'blocked' || pendingNavigation != null}
         pending={updateMutation.isPending}
       />
     </>
