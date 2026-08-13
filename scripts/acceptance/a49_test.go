@@ -604,7 +604,7 @@ func newPassingA49ReportInputs(profile a49RunProfile) a49ReportTestInputs {
 	result.environment.Images.MySQL = "sha256:" + strings.Repeat("b", 64)
 	result.environment.Images.Go = "sha256:" + strings.Repeat("c", 64)
 	result.environment.MySQL.Version = "8.4.6"
-	result.environment.MySQL.TransactionIsolation = "READ-COMMITTED"
+	result.environment.MySQL.TransactionIsolation = "REPEATABLE-READ"
 	result.environment.MySQL.CharacterSetServer = "utf8mb4"
 	result.environment.MySQL.CollationServer = "utf8mb4_unicode_ci"
 	result.environment.MySQL.TimeZone = "+08:00"

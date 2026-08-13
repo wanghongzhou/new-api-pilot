@@ -308,7 +308,7 @@ func validA51FinalInputs() a51FinalInputs {
 		},
 	}
 	inputs.environment.MySQL.Version = "8.4.6"
-	inputs.environment.MySQL.TransactionIsolation = "READ-COMMITTED"
+	inputs.environment.MySQL.TransactionIsolation = "REPEATABLE-READ"
 	inputs.environment.MySQL.CharacterSetServer = "utf8mb4"
 	inputs.environment.MySQL.CollationServer = "utf8mb4_unicode_ci"
 	inputs.environment.MySQL.TimeZone = "+08:00"

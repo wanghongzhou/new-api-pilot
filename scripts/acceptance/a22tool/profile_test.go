@@ -15,7 +15,7 @@ clock:
   now_unix: 1768665599
 mysql:
   version: "8.4"
-  transaction_isolation: READ-COMMITTED
+  transaction_isolation: REPEATABLE-READ
   charset: utf8mb4
   collation: utf8mb4_unicode_ci
   binlog_enabled: true

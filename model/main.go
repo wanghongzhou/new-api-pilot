@@ -84,8 +84,8 @@ func verifyMySQLRuntime(ctx context.Context, db *sql.DB) error {
 	if err := db.QueryRowContext(ctx, "SELECT @@transaction_isolation").Scan(&isolation); err != nil {
 		return fmt.Errorf("read MySQL transaction isolation: %w", err)
 	}
-	if normalized := strings.ToUpper(strings.ReplaceAll(isolation, "_", "-")); normalized != "READ-COMMITTED" {
-		return fmt.Errorf("MySQL transaction isolation must be READ-COMMITTED, got %q", isolation)
+	if err := validateMySQLTransactionIsolation(isolation); err != nil {
+		return err
 	}
 
 	var charset, collation string
@@ -93,6 +93,13 @@ func verifyMySQLRuntime(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("read MySQL database charset: %w", err)
 	}
 	return validateMySQLCharsetAndCollation(charset, collation)
+}
+
+func validateMySQLTransactionIsolation(isolation string) error {
+	if normalized := strings.ToUpper(strings.ReplaceAll(isolation, "_", "-")); normalized != "REPEATABLE-READ" {
+		return fmt.Errorf("MySQL transaction isolation must be REPEATABLE-READ, got %q", isolation)
+	}
+	return nil
 }
 
 func validateMySQLCharsetAndCollation(charset, collation string) error {

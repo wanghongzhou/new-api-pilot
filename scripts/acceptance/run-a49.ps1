@@ -445,7 +445,7 @@ try {
         '--health-cmd', 'mysqladmin ping --host=127.0.0.1 --user=root --silent',
         '--health-interval', '2s', '--health-timeout', '2s', '--health-retries', '75', '--health-start-period', '10s',
         $mysqlImage, '--character-set-server=utf8mb4', '--collation-server=utf8mb4_unicode_ci',
-        '--transaction-isolation=READ-COMMITTED', "--innodb-buffer-pool-size=$mysqlBufferPool",
+        "--innodb-buffer-pool-size=$mysqlBufferPool",
         '--innodb-redo-log-capacity=2G', '--default-time-zone=+08:00', '--skip-log-bin'
     ))
     $healthDeadline = [DateTimeOffset]::UtcNow.AddSeconds($mysqlHealthTimeoutSeconds)
@@ -462,7 +462,7 @@ try {
     ) -TimeoutSeconds 60
     $mysqlContractFields = $mysqlContractResult.Stdout.Trim() -split "`t"
     if ($mysqlContractFields.Count -ne 5 -or -not $mysqlContractFields[0].StartsWith('8.4.', [System.StringComparison]::Ordinal) -or
-        $mysqlContractFields[1] -cne 'READ-COMMITTED' -or $mysqlContractFields[2] -cne 'utf8mb4' -or
+        $mysqlContractFields[1] -cne 'REPEATABLE-READ' -or $mysqlContractFields[2] -cne 'utf8mb4' -or
         $mysqlContractFields[3] -cne 'utf8mb4_unicode_ci' -or $mysqlContractFields[4] -cne '+08:00') {
         throw 'A49 MySQL runtime contract does not match F05.'
     }

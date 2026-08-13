@@ -199,7 +199,7 @@ func writeValidA25Run(t *testing.T) string {
 	environment.Images.Legacy = a25TestImage("mysql:5.7", "mysql")
 	environment.Images.MariaDB = a25TestImage("mariadb:10.11", "mariadb")
 	environment.Servers.Current = currentServer{
-		Version: "8.4.6", TransactionIsolation: "READ-COMMITTED", CharacterSetServer: "utf8mb4",
+		Version: "8.4.6", TransactionIsolation: "REPEATABLE-READ", CharacterSetServer: "utf8mb4",
 		CollationServer: "utf8mb4_unicode_ci", TimeZone: "+08:00",
 	}
 	environment.Servers.Legacy.Version = "5.7.44"

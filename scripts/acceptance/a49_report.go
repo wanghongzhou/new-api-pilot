@@ -517,7 +517,7 @@ func validateA49Environment(
 		environment.Docker.StorageDriver != "" && environment.Docker.DockerRootDir != "" &&
 		strings.HasPrefix(environment.Images.Application, "sha256:") && strings.HasPrefix(environment.Images.MySQL, "sha256:") &&
 		strings.HasPrefix(environment.Images.Go, "sha256:") && strings.HasPrefix(environment.MySQL.Version, "8.4.") &&
-		environment.MySQL.TransactionIsolation == "READ-COMMITTED" && environment.MySQL.CharacterSetServer == "utf8mb4" &&
+		environment.MySQL.TransactionIsolation == "REPEATABLE-READ" && environment.MySQL.CharacterSetServer == "utf8mb4" &&
 		environment.MySQL.CollationServer == "utf8mb4_unicode_ci" && environment.MySQL.TimeZone == "+08:00" &&
 		environment.MySQL.Database == "pilot_a49" && environment.Network.Internal &&
 		environment.Network.HostPorts != nil && len(environment.Network.HostPorts) == 0 &&

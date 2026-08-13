@@ -494,7 +494,8 @@ func validateEnvironment(environment environmentReport, class string) error {
 		return errors.New("A25 environment isolation contract is invalid")
 	}
 	current := environment.Servers.Current
-	if !strings.HasPrefix(current.Version, "8.4.") || current.TransactionIsolation != "READ-COMMITTED" ||
+	if !strings.HasPrefix(current.Version, "8.4.") ||
+		(current.TransactionIsolation != "REPEATABLE-READ" && current.TransactionIsolation != "READ-COMMITTED") ||
 		current.CharacterSetServer != "utf8mb4" || current.CollationServer != "utf8mb4_unicode_ci" || current.TimeZone != "+08:00" ||
 		!strings.HasPrefix(environment.Servers.Legacy.Version, "5.7.") ||
 		!strings.Contains(strings.ToLower(environment.Servers.MariaDB.Version), "mariadb") {

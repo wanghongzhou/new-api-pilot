@@ -71,6 +71,19 @@ func TestValidateMySQLVersion(t *testing.T) {
 	}
 }
 
+func TestValidateMySQLTransactionIsolation(t *testing.T) {
+	for _, isolation := range []string{"REPEATABLE-READ", "repeatable_read"} {
+		if err := validateMySQLTransactionIsolation(isolation); err != nil {
+			t.Fatalf("validateMySQLTransactionIsolation(%q) error = %v", isolation, err)
+		}
+	}
+	for _, isolation := range []string{"READ-COMMITTED", "SERIALIZABLE", ""} {
+		if err := validateMySQLTransactionIsolation(isolation); err == nil {
+			t.Fatalf("validateMySQLTransactionIsolation(%q) succeeded", isolation)
+		}
+	}
+}
+
 func TestValidateMySQLCharsetAndCollation(t *testing.T) {
 	if err := validateMySQLCharsetAndCollation("utf8mb4", "utf8mb4_unicode_ci"); err != nil {
 		t.Fatalf("valid charset/collation error = %v", err)

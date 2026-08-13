@@ -294,7 +294,7 @@ try {
         '--health-cmd', 'mysqladmin ping --host=127.0.0.1 --user=root --silent',
         '--health-interval', '2s', '--health-timeout', '2s', '--health-retries', '60', '--health-start-period', '5s',
         $mysqlImage, '--character-set-server=utf8mb4', '--collation-server=utf8mb4_unicode_ci',
-        '--transaction-isolation=READ-COMMITTED', '--default-time-zone=+08:00'
+        '--default-time-zone=+08:00'
     ) -TimeoutSeconds 60)
 
     $legacyContainerMayExist = $true

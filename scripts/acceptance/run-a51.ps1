@@ -323,7 +323,7 @@ try {
             '--health-cmd', 'mysqladmin ping --host=127.0.0.1 --user=root --silent',
             '--health-interval', '2s', '--health-timeout', '2s', '--health-retries', '75', '--health-start-period', '10s',
             $mysqlImage, '--character-set-server=utf8mb4', '--collation-server=utf8mb4_unicode_ci',
-            '--transaction-isolation=READ-COMMITTED', '--default-time-zone=+08:00', '--skip-log-bin'
+            '--default-time-zone=+08:00', '--skip-log-bin'
         ))
         $createdContainers.mysql = $true
         $containerResourcesCreated = $true
@@ -349,7 +349,7 @@ try {
         "SELECT VERSION(), @@transaction_isolation, @@character_set_server, @@collation_server, @@global.time_zone;"
     ) -TimeoutSeconds 60
     $mysqlFields = $mysqlContract.Stdout.Trim() -split "`t"
-    if ($mysqlFields.Count -ne 5 -or -not $mysqlFields[0].StartsWith('8.4.') -or $mysqlFields[1] -cne 'READ-COMMITTED' -or
+    if ($mysqlFields.Count -ne 5 -or -not $mysqlFields[0].StartsWith('8.4.') -or $mysqlFields[1] -cne 'REPEATABLE-READ' -or
         $mysqlFields[2] -cne 'utf8mb4' -or $mysqlFields[3] -cne 'utf8mb4_unicode_ci' -or $mysqlFields[4] -cne '+08:00') {
         throw 'A51 MySQL runtime contract failed'
     }

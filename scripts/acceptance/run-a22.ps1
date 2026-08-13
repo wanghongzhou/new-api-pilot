@@ -464,7 +464,7 @@ try {
             '--health-cmd', 'mysqladmin ping --host=127.0.0.1 --user=root --silent',
             '--health-interval', '2s', '--health-timeout', '2s', '--health-retries', '60', '--health-start-period', '5s',
             $mysqlImage, '--character-set-server=utf8mb4', '--collation-server=utf8mb4_unicode_ci',
-            '--transaction-isolation=READ-COMMITTED', '--default-time-zone=+08:00',
+            '--default-time-zone=+08:00',
             "--server-id=$($databaseContainer.ServerID)", '--log-bin=mysql-bin', '--binlog-format=ROW'
         ) -TimeoutSeconds 60)
         $createdContainers[$databaseContainer.Name] = $true
@@ -512,8 +512,8 @@ SELECT VERSION(), @@server_uuid, DATABASE(), @@transaction_isolation,
     $targetLogBin = @(Get-A22MySQLFields -Container $targetName -ExpectedFields 1 -Query 'SELECT @@log_bin')[0]
     if ($sourceFields[0] -notmatch '^8\.4\.' -or $targetFields[0] -notmatch '^8\.4\.' -or
         $sourceFields[2] -cne $databaseName -or $targetFields[2] -cne $databaseName -or
-        $sourceFields[1] -ceq $targetFields[1] -or $sourceFields[3] -cne 'READ-COMMITTED' -or
-        $targetFields[3] -cne 'READ-COMMITTED' -or $sourceFields[4] -cne 'utf8mb4' -or
+        $sourceFields[1] -ceq $targetFields[1] -or $sourceFields[3] -cne 'REPEATABLE-READ' -or
+        $targetFields[3] -cne 'REPEATABLE-READ' -or $sourceFields[4] -cne 'utf8mb4' -or
         $targetFields[4] -cne 'utf8mb4' -or $sourceFields[5] -cne 'utf8mb4_unicode_ci' -or
         $targetFields[5] -cne 'utf8mb4_unicode_ci' -or $sourceFields[6] -cne '+08:00' -or
         $targetFields[6] -cne '+08:00' -or $sourceLogBin -ne '1' -or $targetLogBin -ne '1') {

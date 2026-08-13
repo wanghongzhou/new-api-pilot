@@ -280,7 +280,8 @@ func ValidateInnerArtifacts(runDirectory, class string) error {
 	if environment.SchemaVersion != 1 || environment.AcceptanceID != AcceptanceID || environment.EvidenceClass != class ||
 		(environment.Commit != "unborn" && !regexp.MustCompile(`^[0-9a-f]{40,64}$`).MatchString(environment.Commit)) ||
 		!environment.IsolatedGuard || !strings.HasPrefix(environment.MySQL.Version, "8.") ||
-		environment.MySQL.TransactionIsolation != "READ-COMMITTED" || environment.MySQL.CharacterSetServer != "utf8mb4" ||
+		(environment.MySQL.TransactionIsolation != "REPEATABLE-READ" && environment.MySQL.TransactionIsolation != "READ-COMMITTED") ||
+		environment.MySQL.CharacterSetServer != "utf8mb4" ||
 		environment.MySQL.CollationServer != "utf8mb4_unicode_ci" || environment.MySQL.TimeZone != "+08:00" ||
 		!environment.Network.Internal || environment.Network.HostPorts == nil || len(environment.Network.HostPorts) != 0 ||
 		environment.Database != "pilot_a62" {

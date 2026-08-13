@@ -291,8 +291,7 @@ try {
         '--health-retries', '45', '--health-start-period', '5s',
         $mysqlImage,
         '--character-set-server=utf8mb4',
-        '--collation-server=utf8mb4_unicode_ci',
-        '--transaction-isolation=READ-COMMITTED'
+        '--collation-server=utf8mb4_unicode_ci'
     ))
 
     $healthDeadline = [DateTimeOffset]::UtcNow.AddSeconds($mysqlHealthTimeoutSeconds)

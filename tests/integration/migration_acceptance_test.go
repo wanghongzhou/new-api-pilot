@@ -328,7 +328,7 @@ func loadA25Fixture(t *testing.T) (a25Fixture, string, string) {
 		t.Fatalf("decode A25 fixture: %v", err)
 	}
 	if fixture.SchemaVersion != 2 || fixture.FixtureID != "F05" || fixture.Clock.NowUnix <= 0 ||
-		fixture.MySQL.Version != "8.4" || fixture.MySQL.TransactionIsolation != "READ-COMMITTED" ||
+		fixture.MySQL.Version != "8.4" || fixture.MySQL.TransactionIsolation != "REPEATABLE-READ" ||
 		fixture.MySQL.Charset != "utf8mb4" || fixture.MySQL.Collation != "utf8mb4_unicode_ci" ||
 		!fixture.MySQL.MigrationChecksumTamperFail {
 		t.Fatalf("unexpected A25 fixture: %#v", fixture)

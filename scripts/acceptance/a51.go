@@ -670,7 +670,7 @@ func buildA51FinalReport(
 	}
 	if environment.SchemaVersion != evidenceSchemaVersion || environment.AcceptanceID != a51AcceptanceID ||
 		environment.EvidenceClass != "formal" || environment.Commit == "" || !strings.HasPrefix(environment.MySQL.Version, "8.4.") ||
-		environment.MySQL.TransactionIsolation != "READ-COMMITTED" || environment.MySQL.CharacterSetServer != "utf8mb4" ||
+		environment.MySQL.TransactionIsolation != "REPEATABLE-READ" || environment.MySQL.CharacterSetServer != "utf8mb4" ||
 		environment.MySQL.CollationServer != "utf8mb4_unicode_ci" || environment.MySQL.TimeZone != "+08:00" ||
 		!environment.Network.Internal || environment.Network.HostPorts == nil || len(environment.Network.HostPorts) != 0 ||
 		!stringSlicesEqualA51(environment.Databases, []string{"pilot_a51", "pilot_a51_tests"}) {

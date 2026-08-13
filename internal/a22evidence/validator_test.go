@@ -517,7 +517,7 @@ func writeCanonicalRunDirectory(t *testing.T, class string) string {
 func canonicalEnvironmentSide(fingerprint, version string) environmentSide {
 	return environmentSide{
 		Database: "pilot_a22", UUIDFingerprint: fingerprint, Version: version,
-		TransactionIsolation: "READ-COMMITTED", CharacterSetServer: "utf8mb4",
+		TransactionIsolation: "REPEATABLE-READ", CharacterSetServer: "utf8mb4",
 		CollationServer: "utf8mb4_unicode_ci", TimeZone: "+08:00", BinaryLoggingEnabled: true,
 	}
 }

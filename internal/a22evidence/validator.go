@@ -628,7 +628,8 @@ func ValidateEvidenceRoot(evidenceRoot, class string) error {
 func validEnvironment(value environmentReport, class string) bool {
 	validSide := func(side environmentSide) bool {
 		return side.Database == "pilot_a22" && len(side.UUIDFingerprint) == 12 && side.Version != "" &&
-			side.TransactionIsolation == "READ-COMMITTED" && side.CharacterSetServer == "utf8mb4" &&
+			(side.TransactionIsolation == "REPEATABLE-READ" || side.TransactionIsolation == "READ-COMMITTED") &&
+			side.CharacterSetServer == "utf8mb4" &&
 			side.CollationServer == "utf8mb4_unicode_ci" && side.TimeZone == "+08:00" && side.BinaryLoggingEnabled
 	}
 	validImage := func(value imageIdentity, reference string, local bool) bool {

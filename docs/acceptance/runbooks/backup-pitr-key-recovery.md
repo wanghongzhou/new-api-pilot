@@ -54,7 +54,7 @@ go run ./scripts/acceptance run -case A22 -- powershell.exe -NoProfile -Executio
 
 ## 4. 隔离 PITR
 
-1. 在空隔离环境安装与源环境兼容的 MySQL 8.4，设置 utf8mb4/utf8mb4_unicode_ci、READ-COMMITTED 和 Asia/Shanghai；创建存在但零表的目标 schema，不接入生产流量。
+1. 在空隔离环境安装与源环境兼容的 MySQL 8.4，使用默认 REPEATABLE-READ，并设置 utf8mb4/utf8mb4_unicode_ci 和 Asia/Shanghai；创建存在但零表的目标 schema，不接入生产流量。
 2. 先执行 `new-api-pilot verify-backup --mode=manifest-only --manifest=/absolute/path/manifest.json`，验证绝对路径、未知/缺失字段、密钥指纹、SOURCE 坐标、dump 与双 sidecar 的 hash/size；退出非 0 时确认目标仍为零表。随后把全量 dump 导入空目标 schema 并保存导入 JSON/日志和退出码。只做全量恢复且不回放 binlog 时可使用 `scripts/restore.sh` 一体化执行本步、第 3～5 步和 release gate。
 3. PITR 从记录的位置顺序应用 binlog，严格停止在目标时间 T；保存每段应用结果和最终位点。在回放完成前不得运行一体化 restore 脚本创建 release gate。
 4. 装载与 manifest `encryption_key_id` 精确匹配的 `ENCRYPTION_KEY` 和精确镜像 digest；密钥不得通过命令行参数或日志输出。`DATABASE_DSN` 必须选择隔离目标 schema。

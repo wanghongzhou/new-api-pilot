@@ -134,7 +134,6 @@ func (seed *a49SeedContext) run(ctx context.Context, stdout io.Writer) error {
 	}
 	for _, statement := range []string{
 		"SET SESSION time_zone = '+08:00'",
-		"SET SESSION transaction_isolation = 'READ-COMMITTED'",
 		"SET SESSION innodb_lock_wait_timeout = 120",
 	} {
 		if _, err := seed.connection.ExecContext(ctx, statement); err != nil {

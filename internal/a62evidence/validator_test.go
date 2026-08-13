@@ -162,7 +162,7 @@ func writeValidRunDirectory(t *testing.T, withSkip bool) string {
 		Commit: "unborn", WorktreeDirty: true, IsolatedGuard: true, Database: "pilot_a62",
 	}
 	environment.MySQL.Version = "8.4.10"
-	environment.MySQL.TransactionIsolation = "READ-COMMITTED"
+	environment.MySQL.TransactionIsolation = "REPEATABLE-READ"
 	environment.MySQL.CharacterSetServer = "utf8mb4"
 	environment.MySQL.CollationServer = "utf8mb4_unicode_ci"
 	environment.MySQL.TimeZone = "+08:00"

@@ -89,7 +89,6 @@ services:
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
-      - --transaction-isolation=READ-COMMITTED
     volumes:
       - pilot_dev_mysql:/var/lib/mysql
     healthcheck:

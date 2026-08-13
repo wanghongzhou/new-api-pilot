@@ -51,7 +51,7 @@ func loadProfile(path string) (a22Profile, string, error) {
 		return a22Profile{}, "", errors.New("F05 clock contract is invalid")
 	}
 	if profile.SchemaVersion != 2 || profile.FixtureID != fixtureID || profile.Clock.Timezone != "Asia/Shanghai" ||
-		profile.MySQL.Version != "8.4" || profile.MySQL.TransactionIsolation != "READ-COMMITTED" ||
+		profile.MySQL.Version != "8.4" || profile.MySQL.TransactionIsolation != "REPEATABLE-READ" ||
 		profile.MySQL.Charset != "utf8mb4" || profile.MySQL.Collation != "utf8mb4_unicode_ci" ||
 		!profile.MySQL.BinlogEnabled || !profile.MySQL.TamperMustFail ||
 		profile.MySQL.RPOSeconds != 3600 || profile.MySQL.RTOSeconds != 14400 {

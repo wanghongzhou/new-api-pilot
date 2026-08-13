@@ -533,7 +533,7 @@ func findAccount(db *gorm.DB, id int64) (Account, error) {
 
 // LockAccountOperationScope is the common transaction fence for account rebuild
 // run writers and lifecycle completion. Callers must insert or inspect runs only
-// after this function returns so READ-COMMITTED cannot admit a newer logical run.
+// after this function returns so the locking read cannot admit a newer logical run.
 func LockAccountOperationScope(ctx context.Context, db *gorm.DB, id int64) (AccountOperationScope, error) {
 	if db == nil || id <= 0 {
 		return AccountOperationScope{}, ErrAccountRestoreContract

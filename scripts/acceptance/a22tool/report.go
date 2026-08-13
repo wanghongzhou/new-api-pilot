@@ -342,7 +342,7 @@ func buildFinalReport(directory, evidenceClass string) (finalReport, error) {
 
 func validEnvironment(value environmentArtifact, class string) bool {
 	validSide := func(database, fingerprint, version, isolation, charset, collation, timezone string, binlog bool) bool {
-		return database == databaseName && len(fingerprint) == 12 && version != "" && isolation == "READ-COMMITTED" &&
+		return database == databaseName && len(fingerprint) == 12 && version != "" && isolation == "REPEATABLE-READ" &&
 			charset == "utf8mb4" && collation == "utf8mb4_unicode_ci" && timezone == "+08:00" && binlog
 	}
 	validImage := func(value imageArtifact, reference string, local bool) bool {
