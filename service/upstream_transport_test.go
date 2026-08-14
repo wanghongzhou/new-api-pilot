@@ -172,7 +172,7 @@ func TestProductionUpstreamNetworkPolicyAllowsConfiguredFavorAISNetworks(t *test
 		[]string{"favorais.com"},
 		allowedCIDRs,
 		false,
-		staticUpstreamResolver{addresses: []netip.Addr{netip.MustParseAddr("10.89.0.1")}},
+		staticUpstreamResolver{addresses: []netip.Addr{netip.MustParseAddr("::ffff:10.89.0.1")}},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -210,7 +210,7 @@ func TestProductionUpstreamNetworkPolicyAllowsConfiguredFavorAISNetworks(t *test
 		[]string{"favorais.com"},
 		allowedCIDRs,
 		false,
-		staticUpstreamResolver{addresses: []netip.Addr{netip.MustParseAddr("74.82.196.49")}},
+		staticUpstreamResolver{addresses: []netip.Addr{netip.MustParseAddr("::ffff:74.82.196.49")}},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -218,6 +218,20 @@ func TestProductionUpstreamNetworkPolicyAllowsConfiguredFavorAISNetworks(t *test
 	_, err = publicOutsideCIDRs.resolveAndValidate(context.Background(), "www.favorais.com")
 	if !errors.Is(err, ErrUpstreamAddressForbidden) || upstreamAddressRejectionReason(err) != "cidr_mismatch" {
 		t.Fatalf("DNS-resolved public address outside configured CIDRs returned %v", err)
+	}
+
+	mappedLoopback, err := newUpstreamNetworkPolicy(
+		[]string{"favorais.com"},
+		nil,
+		false,
+		staticUpstreamResolver{addresses: []netip.Addr{netip.MustParseAddr("::ffff:127.0.0.1")}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = mappedLoopback.resolveAndValidate(context.Background(), "www.favorais.com")
+	if !errors.Is(err, ErrUpstreamAddressForbidden) || upstreamAddressRejectionReason(err) != "special_use_address" {
+		t.Fatalf("DNS-resolved mapped loopback returned %v", err)
 	}
 }
 

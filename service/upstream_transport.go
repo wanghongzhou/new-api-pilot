@@ -244,6 +244,9 @@ func (policy *upstreamNetworkPolicy) resolveAndValidate(ctx context.Context, hos
 	result := make([]netip.Addr, 0, len(addresses))
 	seen := make(map[netip.Addr]struct{}, len(addresses))
 	for _, address := range addresses {
+		if !literalHost && address.Is4In6() {
+			address = address.Unmap()
+		}
 		if err := policy.validateResolvedAddress(address, literalHost); err != nil {
 			return nil, err
 		}
