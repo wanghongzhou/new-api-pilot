@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestAuthoritativeDesignContractsFreezeSystemTaskAndMobileBaselines(t *testing.T) {
+func TestAuthoritativeDesignContractsFreezeSystemTaskAndViewportBaselines(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "docs"), 0o755); err != nil {
 		t.Fatal(err)
@@ -17,9 +17,10 @@ func TestAuthoritativeDesignContractsFreezeSystemTaskAndMobileBaselines(t *testi
 五个 current 完整性槽
 `)
 	writeTestFile(t, filepath.Join(root, "docs", "多站点运营管理平台-详细设计-06-前端实现.md"), `
-默认移动 390×844 项目
-额外覆盖 375px
-不增加第三个 Playwright project
+四个 Playwright project
+chromium-tablet-768
+chromium-tablet-1024
+不另建第五个 project
 `)
 	writeTestFile(t, filepath.Join(root, "docs", "多站点运营管理平台-详细设计-07-运维与验收.md"), `
 六类 task type，六类 current 各请求一次并映射为五个 current 完整性槽

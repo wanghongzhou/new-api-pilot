@@ -63,13 +63,6 @@ func (mutation LocalRebuildMutation) ApplyCollectionTaskWindow(
 		window.Status != CollectionTaskStatusRunning {
 		return CollectionTaskWindowMutationResult{}, ErrCollectionRunContract
 	}
-	factWindow, exists, err := lockCollectionWindow(ctx, tx, request.SiteID, request.HourTS)
-	if err != nil {
-		return CollectionTaskWindowMutationResult{}, err
-	}
-	if !exists || factWindow.Status != CollectionWindowStatusComplete {
-		return CollectionTaskWindowMutationResult{}, ErrLocalRebuildDependencyPending
-	}
 	dateKey, dateStart, dateEnd, err := UsageDateBucket(request.HourTS)
 	if err != nil {
 		return CollectionTaskWindowMutationResult{}, err
@@ -82,6 +75,13 @@ func (mutation LocalRebuildMutation) ApplyCollectionTaskWindow(
 	}
 	if err := lockUsageAggregationBuckets(ctx, tx, keys, request.Now); err != nil {
 		return CollectionTaskWindowMutationResult{}, err
+	}
+	factWindow, exists, err := lockCollectionWindow(ctx, tx, request.SiteID, request.HourTS)
+	if err != nil {
+		return CollectionTaskWindowMutationResult{}, err
+	}
+	if !exists || factWindow.Status != CollectionWindowStatusComplete {
+		return CollectionTaskWindowMutationResult{}, ErrLocalRebuildDependencyPending
 	}
 	options, err := localRebuildAggregationOptions(ctx, tx, run)
 	if err != nil {

@@ -584,7 +584,9 @@ test('uses the refreshed new-api list chrome for account and customer pages', as
     ).toBeVisible()
     await assertNoHorizontalOverflow(page)
   } else {
-    const usernameSort = page.getByRole('button', { name: '用户名' })
+    const usernameSort = page.getByRole('button', {
+      name: '账户身份与状态',
+    })
     await usernameSort.click()
     await expect(page.getByRole('menuitem', { name: '升序' })).toBeVisible()
     await expect(page.getByRole('menuitem', { name: '降序' })).toBeVisible()
@@ -1332,8 +1334,9 @@ test('keeps authoritative statistics exact, exportable, accessible, and responsi
   const pollingInterval = (exportReadTimes[1] ?? 0) - (exportReadTimes[0] ?? 0)
   expect(pollingInterval).toBeGreaterThanOrEqual(1_500)
   await expect(exportSheet).toContainText('501')
-  await expect(exportSheet).toContainText('9007199254740995')
-  await expect(exportSheet).toContainText('2048')
+  await expect(exportSheet).toContainText('9,007,199,254,740,995')
+  await expect(exportSheet).toContainText('2.00 KB')
+  await expect(exportSheet).toContainText('2,048')
   await expect(exportSheet).toContainText('2026-07-13 00:00:00')
   await expect(exportSheet).toContainText('2026-07-14 01:00:00')
   const readsAtTerminal = exportReadTimes.length
@@ -1346,7 +1349,7 @@ test('keeps authoritative statistics exact, exportable, accessible, and responsi
   await expect
     .poll(() => exportReadTimes.length)
     .toBeGreaterThan(readsAtTerminal)
-  await expect(recoveredSheet).toContainText('9007199254740995')
+  await expect(recoveredSheet).toContainText('9,007,199,254,740,995')
   await recoveredSheet.getByRole('button', { name: '关闭' }).click()
   await expect(page).not.toHaveURL(/exportId=/)
 
@@ -1354,14 +1357,15 @@ test('keeps authoritative statistics exact, exportable, accessible, and responsi
   await clickOpenSelectOption(page, 'quota')
   await page.getByRole('button', { name: '图表视图' }).click()
   await expect(page.getByRole('img', { name: '统计趋势图' })).toBeVisible()
-  await expect(page.getByText('部分或未最终确认的数据')).toBeVisible()
+  await expect(page.getByText('虚线表示缺失或部分完整的时间桶')).toBeVisible()
   await expect(page.getByTestId('statistics-chart-scale')).toContainText(
     '9223372036854775806'
   )
   const exactValues = page.getByTestId('statistics-chart-exact-values')
   await expect(exactValues).toContainText('9223372036854775806')
   await expect(exactValues).toContainText('9223372036854775807')
-  await expect(exactValues).toContainText('原始指标值 -')
+  await expect(exactValues).toContainText('原始指标值 0')
+  await expect(exactValues).not.toContainText('原始指标值 -')
   if (!isMobile) {
     const chart = page.getByRole('img', { name: '统计趋势图' })
     const chartCanvas = chart.locator('canvas').last()
@@ -1387,7 +1391,7 @@ test('keeps authoritative statistics exact, exportable, accessible, and responsi
     await expect(
       page
         .getByText(
-          /华东站点（ID 1）：完整，quota 9223372036854775807，quota_per_unit 500000，汇率 7\.3（站点当前汇率，2026-07-13 00:00:00），USD/
+          /华东站点（ID 1）：完整，额度 9223372036854775807，额度单价基数 500000，汇率 7\.3（站点当前汇率，2026-07-13 00:00:00），USD/
         )
         .filter({ visible: true })
         .first()
@@ -1406,7 +1410,9 @@ test('keeps authoritative statistics exact, exportable, accessible, and responsi
   await expect(
     page
       .getByRole('region', { name: '范围汇总' })
-      .getByText('-', { exact: true })
+      .locator('dl')
+      .filter({ hasText: '美元金额' })
+      .getByText('0', { exact: true })
   ).toBeVisible()
   await expect(
     page.getByText('站点 / ID').filter({ visible: true }).first()

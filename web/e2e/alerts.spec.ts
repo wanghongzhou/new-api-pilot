@@ -665,7 +665,9 @@ test('preserves Admin rule edits across conflict and service errors, then restor
   })
   await createThreshold.fill('80')
   await dialog.getByRole('button', { name: '创建站点覆盖' }).click()
-  await expect(dialog.getByText('警告阈值必须小于严重阈值')).toBeVisible()
+  await expect(
+    dialog.getByText('警告与严重阈值的顺序不符合当前比较符语义')
+  ).toBeVisible()
   expect(state.createBodies).toHaveLength(0)
 
   await createThreshold.fill('72.50')

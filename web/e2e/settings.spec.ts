@@ -412,6 +412,7 @@ test('clears the session and replaces settings with sign-in after an API 401', a
 test('retains cached settings as read-only after a background refresh failure', async ({
   page,
 }) => {
+  test.setTimeout(60_000)
   await seedAuth(page, admin)
   await mockSelf(page, admin)
   await page.route(/\/api\/user\/(?:\?.*)?$/, async (route) => {
@@ -424,34 +425,7 @@ test('retains cached settings as read-only after a background refresh failure', 
 
   await expect(page.getByLabel('站点状态检查周期（分钟）')).toHaveValue('1')
   settings.failGets = true
-  await page.clock.install()
-  await page.clock.fastForward(31_000)
-  const openMobileNavigation = async () => {
-    if ((page.viewportSize()?.width ?? 0) < 1024) {
-      await page.getByRole('button', { name: '打开导航' }).click()
-    }
-  }
-  await openMobileNavigation()
-  await page
-    .getByRole(
-      (page.viewportSize()?.width ?? 0) < 1024 ? 'dialog' : 'navigation',
-      {
-        name: '主导航',
-      }
-    )
-    .getByRole('link', { name: '平台用户' })
-    .click()
-  await openMobileNavigation()
-  await page
-    .getByRole(
-      (page.viewportSize()?.width ?? 0) < 1024 ? 'dialog' : 'navigation',
-      {
-        name: '主导航',
-      }
-    )
-    .getByRole('link', { name: '系统设置' })
-    .click()
-  await page.clock.fastForward(10_000)
+  await page.waitForTimeout(34_000)
 
   await expect(
     page.getByText(

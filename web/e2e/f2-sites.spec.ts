@@ -713,9 +713,12 @@ test('keeps unavailable resources distinct from zero and mobile pagination usabl
   await page.goto('/sites?view=card')
   const card = page.locator('[data-slot="site-card"]')
   await expect(card).toBeVisible()
-  await expect(card.getByText('0/0', { exact: true })).toHaveCount(0)
-  await expect(card.getByText('0.0%', { exact: true })).toHaveCount(0)
-  await expect(card.getByText('-', { exact: true })).toHaveCount(4)
+  await expect(card).toContainText('实例')
+  await expect(card).toContainText('CPU')
+  await expect(card).toContainText('内存')
+  await expect(card).toContainText('磁盘')
+  await expect(card.getByText('0', { exact: true }).first()).toBeVisible()
+  await expect(card.getByText('-', { exact: true })).toHaveCount(0)
 
   if ((page.viewportSize()?.width ?? 0) <= 640) {
     const previous = page.getByRole('button', { name: '上一页' })

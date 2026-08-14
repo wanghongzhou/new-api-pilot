@@ -62,10 +62,16 @@ export function AnimatedOutlet() {
   useEffect(() => {
     if (pathname === initialPathname.current) return
     initialPathname.current = pathname
+    let focusTimer: number | undefined
     const frame = requestAnimationFrame(() => {
-      document.querySelector<HTMLElement>('#main-content')?.focus()
+      focusTimer = window.setTimeout(() => {
+        document.querySelector<HTMLElement>('#main-content')?.focus()
+      }, 250)
     })
-    return () => cancelAnimationFrame(frame)
+    return () => {
+      cancelAnimationFrame(frame)
+      if (focusTimer !== undefined) window.clearTimeout(focusTimer)
+    }
   }, [pathname])
 
   if (shouldReduce) {

@@ -453,7 +453,11 @@ func TestUsageWorkerConcurrentSitesDoNotLoseGlobalTotals(t *testing.T) {
 	firstClaim := createUsageWorkerClaim(t, database, repository, first.site, constant.TaskTypeUsageHour, hour, now.Unix(), "concurrent-first")
 	secondClaim := createUsageWorkerClaim(t, database, repository, second.site, constant.TaskTypeUsageHour, hour, now.Unix(), "concurrent-second")
 	metrics := map[int64]int64{first.site.ID: 10, second.site.ID: 20}
+	var collectorReady sync.WaitGroup
+	collectorReady.Add(2)
 	collector := usageCollectorFunc(func(_ context.Context, request service.UsageCollectionRequest) (service.UsageCollectionResult, error) {
+		collectorReady.Done()
+		collectorReady.Wait()
 		value := metrics[*request.Run.SiteID]
 		return completeUsageWorkerResult(t, request, now.Unix(), []model.UsageFactInput{{
 			RemoteUserID: 1, ModelName: "shared", ChannelID: 1,

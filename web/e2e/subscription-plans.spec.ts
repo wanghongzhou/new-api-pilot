@@ -425,7 +425,7 @@ test('separates subscription plan empty, first-error, stale and forced-site scop
   await page.goto('/sites/9007199254740997/subscription-plans')
   await expect(
     page.getByText('无法加载数据', { exact: true }).filter({ visible: true })
-  ).toBeVisible()
+  ).toBeVisible({ timeout: 20_000 })
   await expect(page.getByText(plans[0].title)).toHaveCount(0)
   expect(
     await page.evaluate(

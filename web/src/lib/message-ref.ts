@@ -205,8 +205,13 @@ function formatDecimalParam(
 ) {
   const value = params[key]
   if (typeof value !== 'string') return
-  const formatted = formatDecimalDisplayValue(value, maximumFractionDigits)
-  if (formatted !== EMPTY_NUMERIC_DISPLAY_VALUE) params[key] = formatted
+  try {
+    const decimal = new Decimal(value)
+    if (!decimal.isFinite()) return
+    params[key] = formatDecimalDisplayValue(value, maximumFractionDigits)
+  } catch {
+    // Keep the validated backend value when formatting is not possible.
+  }
 }
 
 function formatPercentParam(

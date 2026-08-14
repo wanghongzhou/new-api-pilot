@@ -598,6 +598,7 @@ export function SettingsPage({
   const settingsQuery = useQuery({
     queryFn: getSettings,
     queryKey: settingsKeys.all,
+    refetchInterval: 30_000,
     staleTime: 30_000,
   })
   const cachedRefreshFailed =

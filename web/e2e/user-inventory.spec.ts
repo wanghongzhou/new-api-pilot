@@ -372,7 +372,9 @@ test('uses forced site inventory endpoints and keeps unavailable distinct from z
     page.getByRole('heading', { name: '站点上游用户库存' })
   ).toBeVisible()
   await expect(page.getByText('等待采集')).toBeVisible()
-  await expect(page.getByText('-')).toBeVisible()
+  await expect(
+    page.locator('#main-content').getByText('-', { exact: true }).first()
+  ).toBeVisible()
   await expect(page.getByLabel('站点 ID')).toHaveCount(0)
   await page.getByRole('button', { name: /更多筛选/ }).click()
   await page.getByLabel('分组').fill('vip')

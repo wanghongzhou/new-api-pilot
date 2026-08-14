@@ -338,9 +338,8 @@ test('A101 shows the F12 nineteen-task catalog and exact fast-task subset', asyn
   const taskFilters = page.getByRole('combobox', {
     name: zh['collection.filterTaskType'],
   })
-  await expect(taskFilters).toHaveCount(2)
-  const collectionFilter = taskFilters.nth(0)
-  const fastFilter = taskFilters.nth(1)
+  await expect(taskFilters).toHaveCount(1)
+  const collectionFilter = taskFilters
   await collectionFilter.click()
   await expect(
     page
@@ -364,6 +363,10 @@ test('A101 shows the F12 nineteen-task catalog and exact fast-task subset', asyn
     ).toHaveText(label)
   }
   await page.keyboard.press('Escape')
+  await page.getByRole('tab', { name: zh['collection.tabs.fast'] }).click()
+  const fastFilter = page.getByRole('combobox', {
+    name: zh['collection.filterTaskType'],
+  })
   await fastFilter.click()
   await expect(
     page
@@ -373,6 +376,7 @@ test('A101 shows the F12 nineteen-task catalog and exact fast-task subset', asyn
       .getByRole('option')
   ).toHaveCount(3)
   await page.keyboard.press('Escape')
+  await page.getByRole('tab', { name: zh['collection.tabs.runs'] }).click()
 
   for (const status of ['pending', 'running', 'success', 'failed']) {
     await expect(
@@ -397,6 +401,7 @@ test('A101 shows the F12 nineteen-task catalog and exact fast-task subset', asyn
     ).toBeVisible()
   }
 
+  await page.getByRole('tab', { name: zh['collection.tabs.fast'] }).click()
   await fastFilter.click()
   await clickOpenSelectOption(page, 'resource_snapshot')
   await expect
@@ -416,7 +421,10 @@ test('A101 shows the F12 nineteen-task catalog and exact fast-task subset', asyn
   ).toBe(false)
   const accessibility = await new AxeBuilder({ page }).analyze()
   expect(accessibility.violations).toEqual([])
-  expect(['chromium-desktop', 'chromium-mobile']).toContain(
-    testInfo.project.name
-  )
+  expect([
+    'chromium-desktop',
+    'chromium-mobile',
+    'chromium-tablet-768',
+    'chromium-tablet-1024',
+  ]).toContain(testInfo.project.name)
 })

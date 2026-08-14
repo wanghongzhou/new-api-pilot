@@ -39,14 +39,12 @@ live under `web/src/routes/`.
   authoritative documentation, implementation, and tests. A feature addition
   or externally visible contract change must update all three together; partial
   delivery is not acceptable.
-- For a feature addition or externally visible contract change, update the
-  relevant existing authoritative detailed-design document under `docs/`
-  before changing implementation and tests. Do not create a standalone
-  requirement document unless the user asks for one or no suitable existing
-  document exists.
-- For a bug fix that preserves the documented contract, update implementation
-  and regression tests without creating documentation. Correct the existing
-  detailed design only when it is inaccurate or lacks the affected boundary.
+- Before changing implementation or tests for any requested change, including
+  contract-preserving bug fixes, update the relevant existing authoritative
+  detailed-design document under `docs/`. A bug fix may document or clarify
+  the affected invariant and regression boundary without inventing a new
+  product requirement. Do not create a standalone requirement document unless
+  the user asks for one or no suitable existing document exists.
 - When removing a feature or externally visible contract, remove or update its
   entire vertical slice in the same change: authoritative documentation,
   backend and frontend implementation, routes and navigation, API contracts,
@@ -93,24 +91,33 @@ sequence without waiting for the user to repeat it:
 1. Classify the request as a feature/contract change or a contract-preserving
    bug fix, and inspect the existing dirty worktree without reverting unrelated
    user changes.
-2. For a feature/contract change, update the authoritative detailed design
-   first. For a bug fix, update the design only when the documented boundary is
-   inaccurate or incomplete.
+2. Update the authoritative detailed design first for every change, including
+   bug fixes, before editing implementation or tests.
 3. Implement the complete vertical slice, including backend, frontend, API
    contracts, configuration, permissions, jobs, translations, fixtures and
    exposed integration points that are actually affected.
 4. Add or update deterministic tests that prove the changed behavior. Do not
    weaken existing assertions merely to make a change pass.
-5. Run validation proportionate to the touched areas: `gofmt` and Docker Go
-   tests for backend changes; `bun run check` plus relevant unit tests for
-   frontend changes; docs checks for authoritative documentation changes.
+5. Run validation proportionate to the touched areas, followed by the complete
+   repository test gate: `gofmt` and Docker Go tests for backend changes; `bun
+   run check` plus relevant unit tests for frontend changes; docs checks for
+   authoritative documentation changes. Do not submit while any required test
+   is failing; fix newly discovered pre-existing failures as part of the task
+   unless the user explicitly narrows or waives that work.
 6. Refresh the isolated local development stack, verify health, and leave the
    browser-review URL ready before handoff.
+7. After all tests and health checks pass, fetch both configured Git remotes
+   (`origin` and `github`) before committing. Compare the local branch with
+   each remote branch, inspect every remote-only commit and overlapping diff,
+   and integrate compatible remote work into one coherent result. Resolve
+   semantic overlap as well as textual conflicts, rerun affected validation,
+   then commit and push the final commit to both remotes. Do not overwrite or
+   ignore remote work merely because Git can fast-forward cleanly.
 
-Do not call a feature/contract change complete while documentation,
-implementation, tests, generated contracts or the running development stack
-disagree. If a validation failure is caused by unrelated pre-existing work,
-report it explicitly while still running every safe in-scope validation.
+Do not call a task complete while documentation, implementation, tests,
+generated contracts, either Git remote, or the running development stack
+disagree. Required validation must be green before the automatic commit and
+dual-remote push.
 
 ## Development stack and local refresh
 

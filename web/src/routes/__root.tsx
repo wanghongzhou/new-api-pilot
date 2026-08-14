@@ -20,6 +20,13 @@ function DevelopmentTools() {
     localStorage.removeItem('tanstackRouterDevtoolsOpen')
   })
 
+  // Playwright exposes navigator.webdriver. Keeping floating development
+  // launchers out of automated browsers prevents them from covering real
+  // mobile controls while preserving the tools for interactive development.
+  if (navigator.webdriver) {
+    return null
+  }
+
   return (
     <>
       <ReactQueryDevtools buttonPosition='bottom-left' initialIsOpen={false} />

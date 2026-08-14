@@ -52,7 +52,9 @@ describe('extended A89-A100 export scopes', () => {
     expect(page).toContain('<MetricValue value={job.row_count} />')
     expect(page).toContain('<MetricValue value={job.file_size} />')
     expect(sheet).toContain('<MetricValue value={job.row_count} />')
-    expect(sheet).toContain('<MetricValue value={job.file_size} />')
+    expect(sheet).toContain('{readableFileSize(job.file_size)}')
+    expect(sheet).toContain('count: formatMetricDisplayValue(job.file_size)')
+    expect(sheet).not.toContain('<MetricValue value={job.file_size} />')
     expect(sheet).toContain('job.filters.start_timestamp > 0')
     expect(sheet).toContain(
       'job.filters.end_timestamp > job.filters.start_timestamp'

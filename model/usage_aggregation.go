@@ -320,9 +320,6 @@ func NewUsageAggregationCommit(
 		if err != nil {
 			return UsageAggregationMutationResult{}, err
 		}
-		if _, _, err := lockCollectionWindow(ctx, tx, request.SiteID, request.HourTS); err != nil {
-			return UsageAggregationMutationResult{}, err
-		}
 		dateKey, dateStart, dateEnd, err := UsageDateBucket(request.HourTS)
 		if err != nil {
 			return UsageAggregationMutationResult{}, err

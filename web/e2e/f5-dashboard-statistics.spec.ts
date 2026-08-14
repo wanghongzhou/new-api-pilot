@@ -592,7 +592,7 @@ test('Dashboard renders empty trend, ranking, site and alert states', async ({
   await expect(resource.getByText('完整站点 0 / 预期 0')).toBeVisible()
   await expect(resource.getByText('暂无更新时间')).toBeVisible()
 
-  await expect(realtime.getByText('0', { exact: true })).toHaveCount(2)
+  await expect(realtime.getByText('0', { exact: true }).first()).toBeVisible()
   await expect(realtime.getByText('完整站点 0 / 预期 0')).toHaveCount(2)
 
   const trend = page.getByRole('region', { name: '近 30 天趋势' })

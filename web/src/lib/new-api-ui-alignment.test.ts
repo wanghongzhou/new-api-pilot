@@ -85,6 +85,7 @@ test('theme settings keep the official config drawer structure', async () => {
   expect(rootSource).toContain(
     "localStorage.removeItem('tanstackRouterDevtoolsOpen')"
   )
+  expect(rootSource).toContain('if (navigator.webdriver)')
   expect(globalStyles).not.toContain('@media (pointer: coarse)')
 })
 

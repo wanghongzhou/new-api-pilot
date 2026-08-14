@@ -34,9 +34,10 @@ func (current *checker) checkAuthoritativeDesignContracts() {
 		{
 			path: "docs/多站点运营管理平台-详细设计-06-前端实现.md",
 			required: []string{
-				"默认移动 390×844 项目",
-				"额外覆盖 375px",
-				"不增加第三个 Playwright project",
+				"四个 Playwright project",
+				"chromium-tablet-768",
+				"chromium-tablet-1024",
+				"不另建第五个 project",
 			},
 		},
 	}

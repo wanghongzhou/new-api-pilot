@@ -184,37 +184,24 @@ async function mockDashboard(page: Page) {
   })
 }
 
-async function followAppNavigation(page: Page, name: string) {
-  const mobileNavigation = page.getByRole('dialog', { name: '主导航' })
-  if (await mobileNavigation.isVisible()) {
-    await expect(mobileNavigation).toBeHidden()
-  }
-
-  const directLink = page
-    .getByRole('navigation', { name: '主导航' })
-    .getByRole('link', { name, exact: true })
-  if (await directLink.isVisible()) {
-    await directLink.click()
-    return
-  }
-
-  const desktopSidebarButton = page
-    .getByRole('banner')
-    .getByRole('button', { name: '展开或收起侧栏' })
-  if (await desktopSidebarButton.isVisible()) {
-    await desktopSidebarButton.click()
-    await expect(directLink).toBeVisible()
-    await directLink.click()
-    return
-  }
-
+async function followAppNavigation(page: Page, href: string) {
   const mobileNavigationButton = page.getByRole('button', {
     name: '打开导航',
   })
-  await mobileNavigationButton.click()
-  await expect(mobileNavigation).toBeVisible()
-  await mobileNavigation.getByRole('link', { name, exact: true }).click()
-  await expect(mobileNavigation).toBeHidden()
+  if (await mobileNavigationButton.isVisible()) {
+    await mobileNavigationButton.click()
+    await page
+      .getByRole('dialog', { name: '主导航' })
+      .locator(`a[href="${href}"]`)
+      .click()
+    return
+  }
+
+  const directLink = page
+    .locator(`nav[aria-label="主导航"] a[href="${href}"]`)
+    .filter({ visible: true })
+    .first()
+  await directLink.click()
 }
 
 test('signs in, enforces password change, and keeps passwords out of storage', async ({
@@ -355,8 +342,8 @@ test('restores a deep link, verifies the session once, and shows viewer read-onl
   await expect(page.getByRole('button', { name: '新建用户' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: '编辑用户' })).toHaveCount(0)
 
-  await followAppNavigation(page, '运营概览')
-  await followAppNavigation(page, '平台用户')
+  await followAppNavigation(page, '/dashboard')
+  await followAppNavigation(page, '/settings/users')
   await expect(page).toHaveURL(/\/settings\/users/)
   expect(selfCalls).toBe(1)
 
@@ -433,6 +420,8 @@ test('supports administrator user creation and protects the last administrator',
   expect(roleListboxBox.y).toBeGreaterThanOrEqual(
     roleTriggerBox.y + roleTriggerBox.height
   )
+  await clickOpenSelectOption(page, 'admin')
+  await roleSelect.click()
   await clickOpenSelectOption(page, 'viewer')
   await createDialog
     .getByRole('textbox', { name: '临时密码', exact: true })

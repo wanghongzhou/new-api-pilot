@@ -1,6 +1,6 @@
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useQuery } from '@tanstack/react-query'
-import { useRouter, useRouterState } from '@tanstack/react-router'
+import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 
 import { Badge } from '@/components/ui/badge'
@@ -23,7 +23,7 @@ export const APP_NAVIGATE_EVENT = 'pilot:navigate'
 
 export function AppNav() {
   const { t } = useTranslation()
-  const router = useRouter()
+  const navigate = useNavigate({ from: '/' })
   const { setOpenMobile } = useSidebar()
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
@@ -76,7 +76,6 @@ export function AppNav() {
                         href={item.to}
                         onClick={(event) => {
                           event.preventDefault()
-                          setOpenMobile(false)
                           const navigationEvent = new CustomEvent(
                             APP_NAVIGATE_EVENT,
                             {
@@ -84,11 +83,12 @@ export function AppNav() {
                               detail: { to: item.to },
                             }
                           )
-                          if (!window.dispatchEvent(navigationEvent)) return
-                          void router.navigate({
-                            href: new URL(item.to, window.location.origin).href,
-                            reloadDocument: true,
-                          })
+                          if (!window.dispatchEvent(navigationEvent)) {
+                            event.preventDefault()
+                            return
+                          }
+                          setOpenMobile(false)
+                          void navigate({ to: item.to })
                         }}
                       />
                     }

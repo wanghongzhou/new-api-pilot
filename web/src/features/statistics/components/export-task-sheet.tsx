@@ -354,41 +354,41 @@ export function ExportTaskSheet({
                     {t('exports.detail.filtersDescription')}
                   </p>
                 </div>
-                <dl className='grid gap-3 text-sm sm:grid-cols-2'>
-                  <div className='rounded-md border p-3'>
+                <div className='grid gap-3 text-sm sm:grid-cols-2'>
+                  <dl className='rounded-md border p-3'>
                     <dt className='text-muted-foreground text-xs'>
                       {t('statistics.export.granularity')}
                     </dt>
                     <dd>{granularityLabel}</dd>
-                  </div>
-                  <div className='rounded-md border p-3'>
+                  </dl>
+                  <dl className='rounded-md border p-3'>
                     <dt className='text-muted-foreground text-xs'>
                       {t('exports.detail.sort')}
                     </dt>
                     <dd>
                       {job.filters.sort_by} · {job.filters.sort_order}
                     </dd>
-                  </div>
+                  </dl>
                   {filterSummary.length === 0 ? (
-                    <div className='rounded-md border p-3 sm:col-span-2'>
+                    <dl className='rounded-md border p-3 sm:col-span-2'>
                       <dt className='text-muted-foreground text-xs'>
                         {t('exports.detail.scopeFilters')}
                       </dt>
                       <dd>{t('exports.detail.allData')}</dd>
-                    </div>
+                    </dl>
                   ) : (
                     filterSummary.map(([key, values]) => (
-                      <div className='rounded-md border p-3' key={String(key)}>
+                      <dl className='rounded-md border p-3' key={String(key)}>
                         <dt className='text-muted-foreground text-xs'>
                           {filterLabels[String(key)]}
                         </dt>
                         <dd className='break-words'>
                           {(values as string[]).join(', ')}
                         </dd>
-                      </div>
+                      </dl>
                     ))
                   )}
-                </dl>
+                </div>
               </section>
               {job.status === 'expired' && (
                 <p

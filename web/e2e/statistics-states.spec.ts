@@ -656,7 +656,8 @@ async function expectState(page: Page, state: A50State) {
       await expect(exactValues).toContainText('原始指标值 42')
     } else {
       await expect(exactValues).toContainText('原始指标值 314')
-      await expect(exactValues).toContainText('原始指标值 -')
+      await expect(exactValues).toContainText('原始指标值 0')
+      await expect(exactValues).not.toContainText('原始指标值 -')
     }
   }
 

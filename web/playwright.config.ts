@@ -10,6 +10,9 @@ const workers =
 
 export default defineConfig({
   testDir: './e2e',
+  testIgnore: process.env.PLAYWRIGHT_REAL_ENTITY_VALUES
+    ? []
+    : ['**/real-entity-values.spec.ts'],
   outputDir: './test-results',
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),

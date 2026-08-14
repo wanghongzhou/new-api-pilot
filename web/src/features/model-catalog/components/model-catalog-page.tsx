@@ -8,7 +8,7 @@ import {
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
+import { Link, useRouterState } from '@tanstack/react-router'
 import type { ColumnDef } from '@tanstack/react-table'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -49,6 +49,7 @@ import {
 } from '@/lib/api-types'
 import { fromUnixSeconds } from '@/lib/dayjs'
 import { hasFilterChanges } from '@/lib/filter-state'
+import { stringifyRouterSearch } from '@/lib/router-search'
 import { cn } from '@/lib/utils'
 
 import {
@@ -70,6 +71,7 @@ import {
   buildModelCatalogSearch,
   changeModelCatalogTab,
   hasMissingIncompatibleFilters,
+  serializeModelCatalogSearch,
   type ModelCatalogSearch,
 } from '../search'
 import type {
@@ -459,6 +461,9 @@ export function ModelCatalogPage({
   siteId?: string
 }) {
   const { t } = useTranslation()
+  const isRouterBusy = useRouterState({
+    select: (state) => state.isTransitioning || state.status !== 'idle',
+  })
   const [initialJob, setInitialJob] = useState<StatisticsExportJobItem>()
   const canonicalizedSearch = useRef(false)
   const validSiteId = siteId == null || isIdString(siteId)
@@ -476,7 +481,11 @@ export function ModelCatalogPage({
     hasMissingIncompatibleFilters(search)
   const hasCoverageIncompatibleState =
     hasAnyViewFilter || search.page !== 1 || search.pageSize !== 20
+  const canonicalSearchString = stringifyRouterSearch(
+    serializeModelCatalogSearch(search)
+  )
   useEffect(() => {
+    if (isRouterBusy) return
     if (search.tab === 'coverage' && hasCoverageIncompatibleState) {
       onSearchChange(changeModelCatalogTab('coverage'))
     } else if (
@@ -486,9 +495,17 @@ export function ModelCatalogPage({
       onSearchChange(changeModelCatalogTab('missing'))
     } else if (!canonicalizedSearch.current) {
       canonicalizedSearch.current = true
-      onSearchChange({})
+      if (window.location.search !== canonicalSearchString) {
+        onSearchChange({})
+      }
     }
-  }, [hasCoverageIncompatibleState, onSearchChange, search])
+  }, [
+    canonicalSearchString,
+    hasCoverageIncompatibleState,
+    isRouterBusy,
+    onSearchChange,
+    search,
+  ])
   const siteParams = useMemo(
     () => ({
       sort_by: 'name',
