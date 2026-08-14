@@ -27,6 +27,30 @@ const (
 
 var ErrUpstreamAddressForbidden = errors.New("upstream address is forbidden")
 
+type upstreamAddressRejectionError struct {
+	reason string
+}
+
+func (err *upstreamAddressRejectionError) Error() string {
+	return ErrUpstreamAddressForbidden.Error() + ": " + err.reason
+}
+
+func (err *upstreamAddressRejectionError) Unwrap() error {
+	return ErrUpstreamAddressForbidden
+}
+
+func rejectUpstreamAddress(reason string) error {
+	return &upstreamAddressRejectionError{reason: reason}
+}
+
+func upstreamAddressRejectionReason(err error) string {
+	var rejection *upstreamAddressRejectionError
+	if errors.As(err, &rejection) && rejection != nil {
+		return rejection.reason
+	}
+	return "address_forbidden"
+}
+
 type upstreamResolver interface {
 	LookupNetIP(context.Context, string, string) ([]netip.Addr, error)
 }
@@ -113,7 +137,7 @@ func normalizeUpstreamHostname(raw string) (string, error) {
 	}
 	if address, err := netip.ParseAddr(hostname); err == nil {
 		if address.Is4In6() {
-			return "", fmt.Errorf("%w: IPv4-mapped IPv6 addresses are not allowed", ErrUpstreamAddressForbidden)
+			return "", rejectUpstreamAddress("ipv4_mapped_ipv6")
 		}
 		return address.String(), nil
 	}
@@ -191,7 +215,7 @@ func (policy *upstreamNetworkPolicy) validateHost(host string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("%w: host does not match the configured suffixes", ErrUpstreamAddressForbidden)
+	return rejectUpstreamAddress("host_suffix_mismatch")
 }
 
 func (policy *upstreamNetworkPolicy) resolveAndValidate(ctx context.Context, host string) ([]netip.Addr, error) {
@@ -237,12 +261,12 @@ func (policy *upstreamNetworkPolicy) validateAddress(address netip.Addr) error {
 
 func (policy *upstreamNetworkPolicy) validateResolvedAddress(address netip.Addr, literalHost bool) error {
 	if !address.IsValid() || address.Is4In6() {
-		return fmt.Errorf("%w: invalid or IPv4-mapped address", ErrUpstreamAddressForbidden)
+		return rejectUpstreamAddress("invalid_or_ipv4_mapped_address")
 	}
 	if address.IsUnspecified() || address.IsLoopback() || address.IsLinkLocalUnicast() ||
 		address.IsLinkLocalMulticast() || address.IsMulticast() || isReservedUpstreamAddress(address) ||
 		isForbiddenTransitionAddress(address) {
-		return fmt.Errorf("%w: special-use address", ErrUpstreamAddressForbidden)
+		return rejectUpstreamAddress("special_use_address")
 	}
 	allowed := false
 	for _, prefix := range policy.allowedCIDRs {
@@ -251,11 +275,14 @@ func (policy *upstreamNetworkPolicy) validateResolvedAddress(address netip.Addr,
 			break
 		}
 	}
+	if len(policy.allowedCIDRs) > 0 && !allowed {
+		return rejectUpstreamAddress("cidr_mismatch")
+	}
 	if literalHost && !allowed && !(policy.allowPrivateNetworks && address.IsPrivate()) {
-		return fmt.Errorf("%w: address does not match the configured CIDRs", ErrUpstreamAddressForbidden)
+		return rejectUpstreamAddress("cidr_mismatch")
 	}
 	if address.IsPrivate() && !allowed && !policy.allowPrivateNetworks {
-		return fmt.Errorf("%w: private address requires an explicit CIDR", ErrUpstreamAddressForbidden)
+		return rejectUpstreamAddress("private_address_requires_cidr")
 	}
 	return nil
 }
@@ -309,11 +336,11 @@ func (dialer safeUpstreamDialer) DialContext(ctx context.Context, network, addre
 	ctx, cancel := context.WithTimeout(ctx, dialer.timeout)
 	defer cancel()
 	if network != "tcp" && network != "tcp4" && network != "tcp6" {
-		return nil, fmt.Errorf("%w: unsupported network", ErrUpstreamAddressForbidden)
+		return nil, rejectUpstreamAddress("unsupported_network")
 	}
 	host, port, err := net.SplitHostPort(address)
 	if err != nil {
-		return nil, fmt.Errorf("%w: invalid dial address", ErrUpstreamAddressForbidden)
+		return nil, rejectUpstreamAddress("invalid_dial_address")
 	}
 	if _, err := normalizeUpstreamPort("tcp", port); err != nil {
 		return nil, err
@@ -415,14 +442,14 @@ func newSafeUpstreamHTTPClient(
 		Transport: transport,
 		CheckRedirect: func(request *http.Request, via []*http.Request) error {
 			if len(via) >= maximumUpstreamRedirects {
-				return fmt.Errorf("%w: redirect limit exceeded", ErrUpstreamAddressForbidden)
+				return rejectUpstreamAddress("redirect_limit_exceeded")
 			}
 			origin, err := normalizedRequestOrigin(request.URL)
 			if err != nil {
 				return err
 			}
 			if origin != baseOrigin {
-				return fmt.Errorf("%w: redirect changed the upstream origin", ErrUpstreamAddressForbidden)
+				return rejectUpstreamAddress("redirect_origin_changed")
 			}
 			preventAutomaticRequestReplay(request)
 			return policy.validateHost(request.URL.Hostname())
@@ -447,15 +474,15 @@ func preventAutomaticRequestReplay(request *http.Request) {
 
 func normalizedRequestOrigin(value *url.URL) (string, error) {
 	if value == nil || value.User != nil || value.Fragment != "" || value.RawFragment != "" {
-		return "", fmt.Errorf("%w: redirect URL is invalid", ErrUpstreamAddressForbidden)
+		return "", rejectUpstreamAddress("invalid_redirect_url")
 	}
 	normalized, err := NormalizeUpstreamBaseURL(value.Scheme + "://" + value.Host)
 	if err != nil {
-		return "", fmt.Errorf("%w: redirect URL is invalid", ErrUpstreamAddressForbidden)
+		return "", rejectUpstreamAddress("invalid_redirect_url")
 	}
 	parsed, err := url.Parse(normalized)
 	if err != nil {
-		return "", fmt.Errorf("%w: redirect URL is invalid", ErrUpstreamAddressForbidden)
+		return "", rejectUpstreamAddress("invalid_redirect_url")
 	}
 	return parsed.Scheme + "://" + parsed.Host, nil
 }

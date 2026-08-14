@@ -1185,7 +1185,8 @@ func (client *NewAPIClient) do(
 			return 0, newUpstreamRequestError(UpstreamErrorTokenRotationResultUnknown)
 		}
 		if errors.Is(err, ErrUpstreamAddressForbidden) {
-			return 0, newUpstreamRequestError(UpstreamErrorAddressForbidden)
+			reason := upstreamAddressRejectionReason(err)
+			return 0, newUpstreamRequestErrorWithDetail(UpstreamErrorAddressForbidden, reason)
 		}
 		return 0, annotateUpstreamRequestError(newUpstreamRequestError(UpstreamErrorUnavailable), method, endpoint, "", 0, 0)
 	}

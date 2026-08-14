@@ -163,6 +163,89 @@ func TestDevelopmentUpstreamNetworkPolicyAllowsPrivateAddresses(t *testing.T) {
 	}
 }
 
+func TestProductionUpstreamNetworkPolicyAllowsConfiguredFavorAISNetworks(t *testing.T) {
+	allowedCIDRs := []netip.Prefix{
+		netip.MustParsePrefix("10.34.12.0/24"),
+		netip.MustParsePrefix("10.89.0.0/24"),
+	}
+	policy, err := newUpstreamNetworkPolicy(
+		[]string{"favorais.com"},
+		allowedCIDRs,
+		false,
+		staticUpstreamResolver{addresses: []netip.Addr{netip.MustParseAddr("10.89.0.1")}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, host := range []string{"favorais.com", "www.favorais.com", "api.favorais.com", "dxm.favorais.com"} {
+		addresses, err := policy.resolveAndValidate(context.Background(), host)
+		if err != nil {
+			t.Errorf("configured host %q was rejected: %v", host, err)
+			continue
+		}
+		if len(addresses) != 1 || addresses[0].String() != "10.89.0.1" {
+			t.Errorf("resolved addresses for %q = %v", host, addresses)
+		}
+	}
+
+	for _, raw := range []string{"10.34.12.0", "10.34.12.255", "10.89.0.1", "10.89.0.255"} {
+		if err := policy.validateAddress(netip.MustParseAddr(raw)); err != nil {
+			t.Errorf("configured address %s was rejected: %v", raw, err)
+		}
+	}
+	for _, raw := range []string{"10.34.11.255", "10.34.13.0", "10.88.255.255", "10.89.1.0"} {
+		err := policy.validateAddress(netip.MustParseAddr(raw))
+		if !errors.Is(err, ErrUpstreamAddressForbidden) || upstreamAddressRejectionReason(err) != "cidr_mismatch" {
+			t.Errorf("address outside configured CIDRs %s returned %v", raw, err)
+		}
+	}
+
+	err = policy.validateHost("favorais.com.evil.example")
+	if !errors.Is(err, ErrUpstreamAddressForbidden) || upstreamAddressRejectionReason(err) != "host_suffix_mismatch" {
+		t.Fatalf("host outside configured suffix returned %v", err)
+	}
+
+	publicOutsideCIDRs, err := newUpstreamNetworkPolicy(
+		[]string{"favorais.com"},
+		allowedCIDRs,
+		false,
+		staticUpstreamResolver{addresses: []netip.Addr{netip.MustParseAddr("74.82.196.49")}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = publicOutsideCIDRs.resolveAndValidate(context.Background(), "www.favorais.com")
+	if !errors.Is(err, ErrUpstreamAddressForbidden) || upstreamAddressRejectionReason(err) != "cidr_mismatch" {
+		t.Fatalf("DNS-resolved public address outside configured CIDRs returned %v", err)
+	}
+}
+
+func TestUpstreamAddressRejectionPreservesSafeReason(t *testing.T) {
+	client, err := newNewAPIClient(NewAPIClientOptions{
+		BaseURL:             "https://www.favorais.com",
+		AllowedHostSuffixes: []string{"favorais.com"},
+		AllowedCIDRs:        []netip.Prefix{netip.MustParsePrefix("10.89.0.0/24")},
+	}, newAPIClientDependencies{
+		transport: upstreamTransportDependencies{
+			resolver: staticUpstreamResolver{addresses: []netip.Addr{netip.MustParseAddr("10.90.0.1")}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.CloseIdleConnections()
+
+	_, err = client.Status(context.Background(), "favorais-cidr-rejection")
+	if !errors.Is(err, ErrUpstreamAddressForbidden) {
+		t.Fatalf("expected address rejection, got %v", err)
+	}
+	var requestError *UpstreamRequestError
+	if !errors.As(err, &requestError) || requestError.Detail != "cidr_mismatch" {
+		t.Fatalf("rejection detail = %#v", requestError)
+	}
+}
+
 func TestUpstreamDNSRebindingAndPinnedDial(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		writer.Header().Set("Connection", "close")

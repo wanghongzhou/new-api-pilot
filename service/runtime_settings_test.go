@@ -74,6 +74,10 @@ func TestRuntimeSettingCanonicalizersNormalizeOperatorInput(t *testing.T) {
 	if err != nil || cidrs != "10.0.0.1/32,192.168.1.0/24" {
 		t.Fatalf("canonical CIDRs = %q, %v", cidrs, err)
 	}
+	favorAISCIDRs, err := canonicalUpstreamCIDRs("10.34.12.0/24\n10.89.0.0/24")
+	if err != nil || favorAISCIDRs != "10.34.12.0/24,10.89.0.0/24" {
+		t.Fatalf("FavorAIS CIDRs = %q, %v", favorAISCIDRs, err)
+	}
 }
 
 func TestRuntimeSettingsStoreDoesNotPublishSnapshotWhenGovernorReconfigureFails(t *testing.T) {
