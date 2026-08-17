@@ -7,7 +7,7 @@ import {
   serializePricingGroupSearch,
 } from '@/features/pricing-groups/search'
 
-export const Route = createFileRoute('/_authenticated/pricing-groups/')({
+export const Route = createFileRoute('/_authenticated/pricing-groups')({
   component: GlobalPricingGroups,
   validateSearch: pricingGroupSearchSchema,
 })

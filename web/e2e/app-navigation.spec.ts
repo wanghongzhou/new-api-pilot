@@ -16,6 +16,15 @@ const destinations = [
   { heading: '系统设置', label: '系统设置', path: '/settings/system' },
 ] as const
 
+const sources = [
+  { heading: '模型审计', name: 'model catalog', path: '/model-catalog' },
+  {
+    heading: '定价与分组',
+    name: 'pricing and groups',
+    path: '/pricing-groups',
+  },
+] as const
+
 test.describe.configure({ mode: 'serial' })
 
 async function login(page: Page) {
@@ -56,29 +65,35 @@ async function expectGlobalNavigationEntry(
 
 test.beforeEach(async ({ page }) => login(page))
 
-for (const destination of destinations) {
-  test(`model catalog navigates independently to ${destination.path}`, async ({
-    page,
-  }) => {
-    const errors = collectRuntimeErrors(page)
-    await page.goto('/model-catalog')
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('模型审计')
-
-    const link = await expectGlobalNavigationEntry(
+for (const source of sources) {
+  for (const destination of destinations) {
+    test(`${source.name} navigates independently to ${destination.path}`, async ({
       page,
-      destination.label,
-      destination.path
-    )
-    await link.click()
+    }) => {
+      const errors = collectRuntimeErrors(page)
+      await page.goto(source.path)
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+        source.heading
+      )
 
-    await expect(page).toHaveURL(
-      'url' in destination ? destination.url : destination.path
-    )
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText(
-      destination.heading
-    )
-    expect(errors).toEqual([])
-  })
+      const link = await expectGlobalNavigationEntry(
+        page,
+        destination.label,
+        destination.path
+      )
+      await link.click()
+
+      await page.waitForTimeout(100)
+      expect(errors).toEqual([])
+
+      await expect(page).toHaveURL(
+        'url' in destination ? destination.url : destination.path
+      )
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+        destination.heading
+      )
+    })
+  }
 }
 
 test('brand home link independently returns from model catalog to dashboard', async ({

@@ -1,6 +1,6 @@
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate, useRouterState } from '@tanstack/react-router'
+import { Link, useRouterState } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 
 import { Badge } from '@/components/ui/badge'
@@ -23,7 +23,6 @@ export const APP_NAVIGATE_EVENT = 'pilot:navigate'
 
 export function AppNav() {
   const { t } = useTranslation()
-  const navigate = useNavigate({ from: '/' })
   const { setOpenMobile } = useSidebar()
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
@@ -71,11 +70,9 @@ export function AppNav() {
                   <SidebarMenuButton
                     isActive={active}
                     render={
-                      <a
+                      <Link
                         aria-current={active ? 'page' : undefined}
-                        href={item.to}
                         onClick={(event) => {
-                          event.preventDefault()
                           const navigationEvent = new CustomEvent(
                             APP_NAVIGATE_EVENT,
                             {
@@ -88,8 +85,9 @@ export function AppNav() {
                             return
                           }
                           setOpenMobile(false)
-                          void navigate({ to: item.to })
                         }}
+                        reloadDocument={pathname.endsWith('/pricing-groups')}
+                        to={item.to}
                       />
                     }
                   >
