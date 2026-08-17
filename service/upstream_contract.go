@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"new-api-pilot/dto"
 )
@@ -1449,7 +1450,7 @@ func (client *NewAPIClient) validateUser(wire upstreamUserWire) (dto.UpstreamUse
 		Role: wire.Role, Status: wire.Status, Group: wire.Group,
 	})
 	if err != nil || wire.Quota == nil || wire.UsedQuota == nil || wire.RequestCount == nil ||
-		wire.CreatedAt == nil || wire.LastLoginAt == nil || *wire.Quota < 0 || *wire.UsedQuota < 0 ||
+		wire.CreatedAt == nil || wire.LastLoginAt == nil || *wire.UsedQuota < 0 ||
 		*wire.RequestCount < 0 || *wire.CreatedAt <= 0 || *wire.CreatedAt > client.now().Unix()+5 ||
 		*wire.LastLoginAt < 0 || len(wire.DeletedAt) == 0 {
 		return dto.UpstreamUser{}, invalidUpstreamResponse()
@@ -1470,8 +1471,19 @@ func (client *NewAPIClient) validateUser(wire upstreamUserWire) (dto.UpstreamUse
 }
 
 func parseUpstreamDeletedAt(raw json.RawMessage) (bool, bool) {
-	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+	trimmed := bytes.TrimSpace(raw)
+	if bytes.Equal(trimmed, []byte("null")) {
 		return false, true
+	}
+	var timestamp string
+	if err := json.Unmarshal(trimmed, &timestamp); err == nil {
+		if timestamp == "" {
+			return false, false
+		}
+		if _, err := time.Parse(time.RFC3339Nano, timestamp); err != nil {
+			return false, false
+		}
+		return true, true
 	}
 	var value struct {
 		Valid *bool `json:"Valid"`

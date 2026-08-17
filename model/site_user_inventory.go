@@ -72,7 +72,7 @@ func applySiteUserInventorySnapshot(tx *gorm.DB, site Site, observedAt, hourTS i
 	sort.Slice(observations, func(i, j int) bool { return observations[i].RemoteUserID < observations[j].RemoteUserID })
 	byID := make(map[int64]SiteUserObservation, len(observations))
 	for _, item := range observations {
-		if item.RemoteUserID <= 0 || item.RemoteCreatedAt <= 0 || item.RemoteCreatedAt > observedAt || item.Quota < 0 || item.UsedQuota < 0 || item.RequestCount < 0 || item.LastLoginAt < 0 ||
+		if item.RemoteUserID <= 0 || item.RemoteCreatedAt <= 0 || item.RemoteCreatedAt > observedAt || item.UsedQuota < 0 || item.RequestCount < 0 || item.LastLoginAt < 0 ||
 			!validInventoryString(item.Username, 255) || !validInventoryString(item.DisplayName, 255) || !validInventoryString(item.RemoteGroup, 128) {
 			return 0, ErrAccountObservationInvalid
 		}

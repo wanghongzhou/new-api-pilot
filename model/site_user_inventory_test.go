@@ -16,7 +16,7 @@ func TestSiteUserInventorySnapshotAtomicStatesAndHourly(t *testing.T) {
 	site := createRunnableSite(t, database, fmt.Sprintf("inventory-%d", time.Now().UnixNano()), now)
 	repository := NewCollectionTaskRepository(database.GORM)
 	initial := []SiteUserObservation{
-		{RemoteUserID: 1, RemoteCreatedAt: hour - 7200, Username: "alice", DisplayName: "Alice", RemoteRole: 1, RemoteStatus: 1, RemoteGroup: "vip", Quota: 100, UsedQuota: 40, RequestCount: 7, LastLoginAt: hour + 60},
+		{RemoteUserID: 1, RemoteCreatedAt: hour - 7200, Username: "alice", DisplayName: "Alice", RemoteRole: 1, RemoteStatus: 1, RemoteGroup: "vip", Quota: -100, UsedQuota: 40, RequestCount: 7, LastLoginAt: hour + 60},
 		{RemoteUserID: 2, RemoteCreatedAt: hour + 120, Username: "bob", DisplayName: "Bob", RemoteRole: 2, RemoteStatus: 1, RemoteGroup: "default", Quota: 200, UsedQuota: 50, RequestCount: 9},
 	}
 	written, err := repository.ApplySiteUserSnapshot(context.Background(), site, now, hour, initial)
@@ -27,7 +27,7 @@ func TestSiteUserInventorySnapshotAtomicStatesAndHourly(t *testing.T) {
 	if err := database.GORM.Where("site_id = ?", site.ID).Order("remote_user_id").Find(&inventory).Error; err != nil {
 		t.Fatal(err)
 	}
-	if len(inventory) != 2 || inventory[0].RemoteState != SiteUserInventoryNormal || inventory[1].RemoteState != SiteUserInventoryNormal {
+	if len(inventory) != 2 || inventory[0].RemoteState != SiteUserInventoryNormal || inventory[0].Quota != -100 || inventory[1].RemoteState != SiteUserInventoryNormal {
 		t.Fatalf("initial inventory = %+v", inventory)
 	}
 	var hourly []SiteUserInventoryHourly

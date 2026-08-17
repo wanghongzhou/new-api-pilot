@@ -263,6 +263,29 @@ func TestStrictJSONKnownFieldCaseInNestedStructsAndSlices(t *testing.T) {
 	}
 }
 
+func TestUserContractAcceptsSignedQuotaAndGORMDeletedTimestamp(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		_, _ = writer.Write([]byte(`{"success":true,"message":"","data":{"id":1,"username":"root","display_name":"Root","role":100,"status":1,"group":"default","quota":-1,"used_quota":2,"request_count":3,"created_at":1,"last_login_at":0,"DeletedAt":"2026-06-17T11:43:19.268+08:00"}}`))
+	}))
+	defer server.Close()
+	client := testClientForServer(t, server, true, testClientSettings{})
+	user, err := client.GetUser(context.Background(), "signed-quota-deleted-user", 1)
+	if err != nil || user.Quota != -1 || !user.Deleted {
+		t.Fatalf("user=%#v err=%v", user, err)
+	}
+}
+
+func TestUserContractRejectsMalformedDeletedTimestamp(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		_, _ = writer.Write([]byte(`{"success":true,"message":"","data":{"id":1,"username":"root","display_name":"Root","role":100,"status":1,"group":"default","quota":0,"used_quota":0,"request_count":0,"created_at":1,"last_login_at":0,"DeletedAt":"not-a-timestamp"}}`))
+	}))
+	defer server.Close()
+	client := testClientForServer(t, server, true, testClientSettings{})
+	if _, err := client.GetUser(context.Background(), "malformed-deleted-user", 1); !errors.Is(err, ErrUpstreamResponseInvalid) {
+		t.Fatalf("malformed deleted timestamp error=%v", err)
+	}
+}
+
 func TestUpstreamIntegerOverflowAndSafeAggregation(t *testing.T) {
 	t.Run("wire int64 overflow", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
