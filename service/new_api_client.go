@@ -1013,7 +1013,7 @@ func (client *NewAPIClient) LoginAndGenerateAccessToken(ctx context.Context, req
 	if err != nil {
 		return dto.UpstreamIdentity{}, "", newUpstreamRequestError(UpstreamErrorResponseInvalid)
 	}
-	var loginWire upstreamIdentityWire
+	var loginWire upstreamLoginWire
 	if _, err := client.do(ctx, sessionClient, http.MethodPost, "/api/user/login", nil, requestID, upstreamAuthPublic, client.requestTimeout, bytes.NewReader(body), "application/json", &loginWire, false); err != nil {
 		var requestError *UpstreamRequestError
 		if errors.As(err, &requestError) && requestError.Kind == UpstreamErrorEnvelopeInvalid && requestError.Detail == "success_false" {
@@ -1021,12 +1021,26 @@ func (client *NewAPIClient) LoginAndGenerateAccessToken(ctx context.Context, req
 		}
 		return dto.UpstreamIdentity{}, "", err
 	}
-	identity, err := validateUpstreamIdentity(loginWire)
+	identityWire := loginWire.upstreamIdentityWire
+	sessionAuth := upstreamSessionAuth{}
+	if loginWire.User != nil {
+		if loginWire.AccessToken == nil || loginWire.TokenType == nil || loginWire.AccessExpiresAt == nil ||
+			*loginWire.TokenType != "Bearer" || !validAccessToken(*loginWire.AccessToken) ||
+			*loginWire.AccessExpiresAt <= client.now().Unix() {
+			return dto.UpstreamIdentity{}, "", newUpstreamRequestError(UpstreamErrorResponseInvalid)
+		}
+		identityWire = *loginWire.User
+		sessionAuth.bearerToken = *loginWire.AccessToken
+	} else if loginWire.AccessToken != nil || loginWire.TokenType != nil || loginWire.AccessExpiresAt != nil {
+		return dto.UpstreamIdentity{}, "", newUpstreamRequestError(UpstreamErrorResponseInvalid)
+	}
+	identity, err := validateUpstreamIdentity(identityWire)
 	if err != nil || identity.Role != 100 || identity.Status != 1 {
 		return dto.UpstreamIdentity{}, "", newUpstreamRequestError(UpstreamErrorResponseInvalid)
 	}
+	sessionAuth.userID = identity.ID
 	var token string
-	if _, err := client.get(ctx, sessionClient, "/api/user/token", nil, requestID, upstreamAuthSession, client.requestTimeout, &token, true, identity.ID); err != nil {
+	if _, err := client.get(ctx, sessionClient, "/api/user/token", nil, requestID, upstreamAuthSession, client.requestTimeout, &token, true, sessionAuth); err != nil {
 		return dto.UpstreamIdentity{}, "", err
 	}
 	if !validAccessToken(token) {
@@ -1054,6 +1068,11 @@ func (client *NewAPIClient) newMutationSessionClient(jar http.CookieJar) (*http.
 
 type upstreamAuthMode int
 
+type upstreamSessionAuth struct {
+	userID      int64
+	bearerToken string
+}
+
 type upstreamResponseDecoder interface {
 	decodeUpstreamResponse([]byte) error
 }
@@ -1074,13 +1093,9 @@ func (client *NewAPIClient) get(
 	timeout time.Duration,
 	destination any,
 	tokenMutation bool,
-	sessionUserID ...int64,
+	sessionAuth ...upstreamSessionAuth,
 ) (int64, error) {
-	var sessionID int64
-	if len(sessionUserID) > 0 {
-		sessionID = sessionUserID[0]
-	}
-	return client.do(ctx, httpClient, http.MethodGet, endpoint, query, requestID, authMode, timeout, nil, "", destination, tokenMutation, sessionID)
+	return client.do(ctx, httpClient, http.MethodGet, endpoint, query, requestID, authMode, timeout, nil, "", destination, tokenMutation, sessionAuth...)
 }
 
 func (client *NewAPIClient) do(
@@ -1096,7 +1111,7 @@ func (client *NewAPIClient) do(
 	contentType string,
 	destination any,
 	tokenMutation bool,
-	sessionUserID ...int64,
+	sessionAuth ...upstreamSessionAuth,
 ) (payloadSize int64, resultErr error) {
 	startedAt := time.Now()
 	responseStatus := 0
@@ -1174,10 +1189,16 @@ func (client *NewAPIClient) do(
 		request.Header.Set("Authorization", client.accessToken)
 		request.Header.Set("New-Api-User", strconv.FormatInt(client.rootUserID, 10))
 	case upstreamAuthSession:
-		if len(sessionUserID) != 1 || sessionUserID[0] <= 0 {
+		if len(sessionAuth) != 1 || sessionAuth[0].userID <= 0 {
 			return 0, newUpstreamRequestError(UpstreamErrorResponseInvalid)
 		}
-		request.Header.Set("New-Api-User", strconv.FormatInt(sessionUserID[0], 10))
+		request.Header.Set("New-Api-User", strconv.FormatInt(sessionAuth[0].userID, 10))
+		if sessionAuth[0].bearerToken != "" {
+			if !validAccessToken(sessionAuth[0].bearerToken) {
+				return 0, newUpstreamRequestError(UpstreamErrorResponseInvalid)
+			}
+			request.Header.Set("Authorization", "Bearer "+sessionAuth[0].bearerToken)
+		}
 	}
 	response, err := httpClient.Do(request)
 	if err != nil {

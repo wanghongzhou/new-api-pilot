@@ -30,6 +30,14 @@ type upstreamIdentityWire struct {
 	Group       *string `json:"group"`
 }
 
+type upstreamLoginWire struct {
+	upstreamIdentityWire
+	AccessToken     *string               `json:"access_token"`
+	TokenType       *string               `json:"token_type"`
+	AccessExpiresAt *int64                `json:"access_expires_at"`
+	User            *upstreamIdentityWire `json:"user"`
+}
+
 type upstreamUserWire struct {
 	ID           *int64          `json:"id"`
 	Username     *string         `json:"username"`

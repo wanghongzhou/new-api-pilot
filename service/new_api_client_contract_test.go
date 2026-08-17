@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -618,6 +619,38 @@ func TestCredentialOriginAndHeaderIsolation(t *testing.T) {
 		identity, token, err := client.LoginAndGenerateAccessToken(context.Background(), "session-headers", "root", "password")
 		if err != nil || identity.ID != 1 || token != "rotated-token" || violations.Load() != 0 {
 			t.Fatalf("temporary session isolation failed: id=%d token=%q violations=%d err=%v", identity.ID, token, violations.Load(), err)
+		}
+	})
+
+	t.Run("modern login bearer is isolated to token generation", func(t *testing.T) {
+		var violations atomic.Int32
+		now := time.Date(2026, 8, 17, 8, 0, 0, 0, time.UTC)
+		accessExpiresAt := now.Add(time.Hour).Unix()
+		server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			if request.Header.Get("X-Request-ID") == "" {
+				violations.Add(1)
+			}
+			switch request.URL.Path {
+			case "/api/user/login":
+				if request.Header.Get("Authorization") != "" || request.Header.Get("New-Api-User") != "" || request.Header.Get("Cookie") != "" {
+					violations.Add(1)
+				}
+				_, _ = fmt.Fprintf(writer, `{"success":true,"message":"","data":{"access_token":"dashboard-jwt","token_type":"Bearer","access_expires_at":%d,"session":{"id":"ignored"},"user":{"id":1,"username":"root","display_name":"Root","role":100,"status":1,"group":"default"}}}`, accessExpiresAt)
+			case "/api/user/token":
+				if request.Header.Get("Authorization") != "Bearer dashboard-jwt" || request.Header.Get("New-Api-User") != "1" {
+					violations.Add(1)
+				}
+				_, _ = writer.Write([]byte(`{"success":true,"message":"","data":"rotated-token"}`))
+			default:
+				http.NotFound(writer, request)
+			}
+		}))
+		defer server.Close()
+		client := testClientForServer(t, server, false, testClientSettings{})
+		client.now = func() time.Time { return now }
+		identity, token, err := client.LoginAndGenerateAccessToken(context.Background(), "modern-session-headers", "root", "password")
+		if err != nil || identity.ID != 1 || token != "rotated-token" || violations.Load() != 0 {
+			t.Fatalf("modern temporary bearer isolation failed: id=%d token=%q violations=%d err=%v", identity.ID, token, violations.Load(), err)
 		}
 	})
 }
