@@ -3,6 +3,12 @@ import { readFileSync } from 'node:fs'
 
 import { resolveAlertNavBadge } from './app-nav-badge'
 import { navGroups } from './app-nav-config'
+import { requiresDocumentNavigation } from './app-nav-navigation'
+
+const appNavSource = readFileSync(
+  new URL('./app-nav.tsx', import.meta.url),
+  'utf8'
+)
 
 describe('app navigation', () => {
   test('uses the approved concise Chinese navigation labels', () => {
@@ -75,5 +81,17 @@ describe('app navigation', () => {
       '/settings/users',
       '/settings/system',
     ])
+  })
+
+  test('uses native document navigation when leaving pricing groups routes', () => {
+    expect(requiresDocumentNavigation('/pricing-groups')).toBe(true)
+    expect(requiresDocumentNavigation('/pricing-groups/')).toBe(true)
+    expect(requiresDocumentNavigation('/sites/4/pricing-groups')).toBe(true)
+    expect(requiresDocumentNavigation('/sites/4/pricing-groups/')).toBe(true)
+    expect(requiresDocumentNavigation('/model-catalog')).toBe(false)
+
+    expect(appNavSource).toContain('documentNavigation ? (')
+    expect(appNavSource).toContain('href={item.to}')
+    expect(appNavSource).not.toContain('reloadDocument=')
   })
 })

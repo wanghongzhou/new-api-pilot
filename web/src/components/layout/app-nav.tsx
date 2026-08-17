@@ -1,6 +1,7 @@
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useRouterState } from '@tanstack/react-router'
+import type { MouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Badge } from '@/components/ui/badge'
@@ -18,6 +19,7 @@ import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 
 import { resolveAlertNavBadge } from './app-nav-badge'
 import { navGroups } from './app-nav-config'
+import { requiresDocumentNavigation } from './app-nav-navigation'
 
 export const APP_NAVIGATE_EVENT = 'pilot:navigate'
 
@@ -54,6 +56,20 @@ export function AppNav() {
                 pathname === item.to ||
                 pathname.startsWith(`${item.to}/`)
               const label = t(dynamicI18nKey('layout', item.label))
+              const documentNavigation = requiresDocumentNavigation(pathname)
+              const handleNavigationClick = (
+                event: MouseEvent<HTMLAnchorElement>
+              ) => {
+                const navigationEvent = new CustomEvent(APP_NAVIGATE_EVENT, {
+                  cancelable: true,
+                  detail: { to: item.to },
+                })
+                if (!window.dispatchEvent(navigationEvent)) {
+                  event.preventDefault()
+                  return
+                }
+                setOpenMobile(false)
+              }
               let alertBadgeLabel = t('alerts.navigation.firingCount', {
                 count: firingAlertCount ?? 0,
               })
@@ -70,25 +86,19 @@ export function AppNav() {
                   <SidebarMenuButton
                     isActive={active}
                     render={
-                      <Link
-                        aria-current={active ? 'page' : undefined}
-                        onClick={(event) => {
-                          const navigationEvent = new CustomEvent(
-                            APP_NAVIGATE_EVENT,
-                            {
-                              cancelable: true,
-                              detail: { to: item.to },
-                            }
-                          )
-                          if (!window.dispatchEvent(navigationEvent)) {
-                            event.preventDefault()
-                            return
-                          }
-                          setOpenMobile(false)
-                        }}
-                        reloadDocument={pathname.endsWith('/pricing-groups')}
-                        to={item.to}
-                      />
+                      documentNavigation ? (
+                        <a
+                          aria-current={active ? 'page' : undefined}
+                          href={item.to}
+                          onClick={handleNavigationClick}
+                        />
+                      ) : (
+                        <Link
+                          aria-current={active ? 'page' : undefined}
+                          onClick={handleNavigationClick}
+                          to={item.to}
+                        />
+                      )
                     }
                   >
                     <HugeiconsIcon
