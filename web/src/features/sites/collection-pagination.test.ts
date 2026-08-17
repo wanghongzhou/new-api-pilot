@@ -29,7 +29,16 @@ describe('site detail collection pagination', () => {
     expect(collectionRunsSource).toContain(
       'const collectionWindowPageSize = 10'
     )
-    expect(collectionRunsSource.match(/<DataTablePagination/g)).toHaveLength(1)
+    expect(collectionRunsSource).not.toContain('DataTablePagination')
+    expect(collectionRunsSource).toContain(
+      "className='w-full gap-0 sm:max-w-5xl'"
+    )
+    expect(collectionRunsSource).toContain(
+      "className='grid min-h-0 flex-1 content-start gap-4 overflow-y-auto p-4'"
+    )
+    expect(collectionRunsSource).toContain(
+      "className='text-muted-foreground text-sm whitespace-nowrap'"
+    )
     expect(collectionRunsSource).toContain('fillAvailableHeight={false}')
     expect(collectionRunsSource).toContain('paginationInFooter={false}')
     expect(collectionRunsSource).toContain(

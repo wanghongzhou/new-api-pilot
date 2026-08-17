@@ -15,7 +15,6 @@ import { MetricValue } from '@/components/data/metric-value'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
-import { DataTablePagination } from '@/components/ui/data-table-pagination'
 import { SelectControl as Select } from '@/components/ui/select-control'
 import {
   Sheet,
@@ -369,150 +368,151 @@ function RunWindowsSheet({
 
   return (
     <Sheet onOpenChange={(open) => !open && onClose()} open>
-      <SheetContent>
-        <SheetHeader>
+      <SheetContent className='w-full gap-0 sm:max-w-5xl'>
+        <SheetHeader className='border-b pr-12'>
           <SheetTitle>{t('collection.windowsTitle', { id: runId })}</SheetTitle>
           <SheetDescription>
             {t('collection.windowsDescription')}
           </SheetDescription>
         </SheetHeader>
-        {run && !runContractError && (
-          <section className='border-border bg-muted/30 rounded-lg border p-4'>
-            <div className='flex flex-wrap items-center justify-between gap-2'>
-              <div>
-                <strong>
-                  {t(
-                    dynamicI18nKey('site', `collection.task.${run.task_type}`)
-                  )}
-                </strong>
-                <p className='text-muted-foreground mt-1 text-sm'>
-                  {t(
-                    dynamicI18nKey(
-                      'site',
-                      collectionTaskCatalog[run.task_type].purposeKey
-                    )
-                  )}
-                </p>
-              </div>
-              <RunStatusBadge status={run.status} />
-            </div>
-            <p className='text-muted-foreground mt-1 text-sm'>
-              {formatRange(run)}
-            </p>
-            {run.error && (
-              <div className='mt-3 text-sm'>
-                <p className='text-destructive'>
-                  {translateMessageRef(run.error)}
-                </p>
-                {run.error.technical_detail && (
-                  <code className='text-muted-foreground mt-1 block text-xs break-all'>
-                    {run.error.technical_detail}
-                  </code>
-                )}
-                {run.last_request_id && (
-                  <p className='text-muted-foreground mt-1 text-xs'>
-                    {t('collection.requestId', {
-                      requestId: run.last_request_id,
-                    })}
-                  </p>
-                )}
-              </div>
-            )}
-          </section>
-        )}
-        {(runContractError || windowsContractError) && (
-          <p className='text-destructive text-sm' role='alert'>
-            {t(
-              dynamicI18nKey(
-                'site',
-                runContractError ?? 'collection.contract.foreignWindow'
-              )
-            )}
-          </p>
-        )}
-        {ownedRun && !windowedRun && (
-          <p className='text-muted-foreground text-sm'>
-            {t('collection.windowsUnavailable')}
-          </p>
-        )}
-        {windowedRun && (
-          <>
-            <div className='flex flex-wrap items-center gap-2'>
-              <Select
-                aria-label={t('collection.filterWindowStatus')}
-                onChange={(event) =>
-                  onSearchChange({
-                    windowPage: 1,
-                    windowStatus:
-                      event.target.value === ''
-                        ? undefined
-                        : (event.target
-                            .value as CollectionRunWindowItem['status']),
-                  })
-                }
-                value={search.windowStatus ?? ''}
-              >
-                <option value=''>{t('common.allStatuses')}</option>
-                {collectionRunWindowStatuses.map((status) => (
-                  <option key={status} value={status}>
+        <div className='grid min-h-0 flex-1 content-start gap-4 overflow-y-auto p-4'>
+          {run && !runContractError && (
+            <section className='border-border bg-muted/30 rounded-lg border p-4'>
+              <div className='flex flex-wrap items-center justify-between gap-2'>
+                <div>
+                  <strong>
+                    {t(
+                      dynamicI18nKey('site', `collection.task.${run.task_type}`)
+                    )}
+                  </strong>
+                  <p className='text-muted-foreground mt-1 text-sm'>
                     {t(
                       dynamicI18nKey(
                         'site',
-                        `collection.windowStatus.${status}`
+                        collectionTaskCatalog[run.task_type].purposeKey
                       )
                     )}
-                  </option>
-                ))}
-              </Select>
-              {isAdmin && run && canRetrySiteUsageRun(run, siteId) && (
-                <Button
-                  disabled={retrying}
-                  onClick={() => void retryFailed()}
-                  variant='outline'
-                >
-                  {retrying ? (
-                    <Spinner />
-                  ) : (
-                    <HugeiconsIcon icon={Refresh01Icon} strokeWidth={2} />
+                  </p>
+                </div>
+                <RunStatusBadge status={run.status} />
+              </div>
+              <p className='text-muted-foreground mt-1 text-sm'>
+                {formatRange(run)}
+              </p>
+              {run.error && (
+                <div className='mt-3 text-sm'>
+                  <p className='text-destructive'>
+                    {translateMessageRef(run.error)}
+                  </p>
+                  {run.error.technical_detail && (
+                    <code className='text-muted-foreground mt-1 block text-xs break-all'>
+                      {run.error.technical_detail}
+                    </code>
                   )}
-                  {t('collection.retryFailedWindows')}
-                </Button>
+                  {run.last_request_id && (
+                    <p className='text-muted-foreground mt-1 text-xs'>
+                      {t('collection.requestId', {
+                        requestId: run.last_request_id,
+                      })}
+                    </p>
+                  )}
+                </div>
               )}
-            </div>
-            <DataTablePagination
-              onPageChange={(windowPage) => onSearchChange({ windowPage })}
-              page={search.windowPage}
-              pageSize={collectionWindowPageSize}
-              total={windowTotal}
-            />
-            <DataTable
-              ariaLabel={t('collection.windowsTable')}
-              columns={columns}
-              data={windows}
-              emptyDescription={t('collection.windowsEmptyDescription')}
-              emptyTitle={t('collection.windowsEmpty')}
-              error={
-                !validRunId ||
-                !validSiteId ||
-                runQuery.isError ||
-                Boolean(runContractError) ||
-                windowsQuery.isError ||
-                windowsContractError
-              }
-              fetching={windowsQuery.isFetching}
-              loading={runQuery.isPending || windowsQuery.isPending}
-              onPageChange={(windowPage) => onSearchChange({ windowPage })}
-              onRetry={() => void windowsQuery.refetch()}
-              page={search.windowPage}
-              paginationInFooter={false}
-              pageSize={
-                windowsQuery.data?.page_size ?? collectionWindowPageSize
-              }
-              renderMobileCard={(window) => <WindowCard window={window} />}
-              total={windowsQuery.data?.total ?? 0}
-            />
-          </>
-        )}
+            </section>
+          )}
+          {(runContractError || windowsContractError) && (
+            <p className='text-destructive text-sm' role='alert'>
+              {t(
+                dynamicI18nKey(
+                  'site',
+                  runContractError ?? 'collection.contract.foreignWindow'
+                )
+              )}
+            </p>
+          )}
+          {ownedRun && !windowedRun && (
+            <p className='text-muted-foreground text-sm'>
+              {t('collection.windowsUnavailable')}
+            </p>
+          )}
+          {windowedRun && (
+            <>
+              <div className='flex flex-wrap items-center gap-2'>
+                <span className='text-muted-foreground text-sm whitespace-nowrap'>
+                  {t('collection.executionStatus')}
+                </span>
+                <Select
+                  aria-label={t('collection.filterWindowStatus')}
+                  className='w-40'
+                  onChange={(event) =>
+                    onSearchChange({
+                      windowPage: 1,
+                      windowStatus:
+                        event.target.value === ''
+                          ? undefined
+                          : (event.target
+                              .value as CollectionRunWindowItem['status']),
+                    })
+                  }
+                  value={search.windowStatus ?? ''}
+                >
+                  <option value=''>{t('common.allStatuses')}</option>
+                  {collectionRunWindowStatuses.map((status) => (
+                    <option key={status} value={status}>
+                      {t(
+                        dynamicI18nKey(
+                          'site',
+                          `collection.windowStatus.${status}`
+                        )
+                      )}
+                    </option>
+                  ))}
+                </Select>
+                {isAdmin && run && canRetrySiteUsageRun(run, siteId) && (
+                  <Button
+                    disabled={retrying}
+                    onClick={() => void retryFailed()}
+                    variant='outline'
+                  >
+                    {retrying ? (
+                      <Spinner />
+                    ) : (
+                      <HugeiconsIcon icon={Refresh01Icon} strokeWidth={2} />
+                    )}
+                    {t('collection.retryFailedWindows')}
+                  </Button>
+                )}
+              </div>
+              <DataTable
+                ariaLabel={t('collection.windowsTable')}
+                columns={columns}
+                data={windows}
+                emptyDescription={t('collection.windowsEmptyDescription')}
+                emptyTitle={t('collection.windowsEmpty')}
+                error={
+                  !validRunId ||
+                  !validSiteId ||
+                  runQuery.isError ||
+                  Boolean(runContractError) ||
+                  windowsQuery.isError ||
+                  windowsContractError
+                }
+                fetching={windowsQuery.isFetching}
+                fillAvailableHeight={false}
+                loading={runQuery.isPending || windowsQuery.isPending}
+                onPageChange={(windowPage) => onSearchChange({ windowPage })}
+                onRetry={() => void windowsQuery.refetch()}
+                page={search.windowPage}
+                paginationInFooter={false}
+                pageSize={
+                  windowsQuery.data?.page_size ?? collectionWindowPageSize
+                }
+                renderMobileCard={(window) => <WindowCard window={window} />}
+                total={windowsQuery.data?.total ?? 0}
+              />
+            </>
+          )}
+        </div>
       </SheetContent>
     </Sheet>
   )
