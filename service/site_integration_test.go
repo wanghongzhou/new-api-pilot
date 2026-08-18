@@ -576,7 +576,7 @@ func TestManualBackfillLimitReadsCurrentSetting(t *testing.T) {
 	}
 }
 
-func TestListInstancesUsesEffectiveRuleAndRejectsOldSamplesAsCurrent(t *testing.T) {
+func TestListInstancesUsesEffectiveRuleAndKeepsPreviousMinuteSample(t *testing.T) {
 	tx := openSiteTestTransaction(t)
 	now := int64(1_752_400_830)
 	clock := testsupport.NewFakeClock(time.Unix(now, 0))
@@ -589,11 +589,13 @@ func TestListInstancesUsesEffectiveRuleAndRejectsOldSamplesAsCurrent(t *testing.
 	}
 	upsertInstanceStaleRule(t, tx, "global", 0, 90, now)
 	currentMinute := floorMinute(now)
-	oldMinute := currentMinute - 60
+	previousMinute := currentMinute - 60
+	outdatedMinute := currentMinute - 120
 	createInstanceFixture(t, tx, site.ID, "exact", now-90, currentMinute, 10)
 	createInstanceFixture(t, tx, site.ID, "fresh", now-89, currentMinute, 20)
 	createInstanceFixture(t, tx, site.ID, "expired", now-91, currentMinute, 25)
-	createInstanceFixture(t, tx, site.ID, "old", now-70, oldMinute, 30)
+	createInstanceFixture(t, tx, site.ID, "previous", now-70, previousMinute, 30)
+	createInstanceFixture(t, tx, site.ID, "outdated", now-70, outdatedMinute, 35)
 	if err := tx.Create(&model.SiteInstance{
 		SiteID: site.ID, NodeName: "none", Hostname: "none.local", UpstreamStatus: "unknown",
 		CurrentStatus: "online", FirstSeenAt: now - 300, LastSyncedAt: now - 120,
@@ -616,11 +618,17 @@ func TestListInstancesUsesEffectiveRuleAndRejectsOldSamplesAsCurrent(t *testing.
 	if byNode["expired"].CurrentStatus != "stale" {
 		t.Fatalf("expired instance = %#v", byNode["expired"])
 	}
-	old := byNode["old"]
-	if old.CurrentStatus != "unknown" || old.DataStatus != "missing" || old.SampledAt == nil ||
-		old.CPUPercent != nil || old.MemoryPercent != nil || old.DiskUsedPercent != nil ||
-		old.DiskTotalBytes != nil || old.DiskUsedBytes != nil {
-		t.Fatalf("old instance exposed current data = %#v", old)
+	previous := byNode["previous"]
+	if previous.CurrentStatus != "online" || previous.DataStatus != "complete" || previous.SampledAt == nil ||
+		previous.CPUPercent == nil || previous.MemoryPercent == nil || previous.DiskUsedPercent == nil ||
+		previous.DiskTotalBytes == nil || previous.DiskUsedBytes == nil {
+		t.Fatalf("previous-minute instance was hidden at minute boundary = %#v", previous)
+	}
+	outdated := byNode["outdated"]
+	if outdated.CurrentStatus != "unknown" || outdated.DataStatus != "missing" || outdated.SampledAt == nil ||
+		outdated.CPUPercent != nil || outdated.MemoryPercent != nil || outdated.DiskUsedPercent != nil ||
+		outdated.DiskTotalBytes != nil || outdated.DiskUsedBytes != nil {
+		t.Fatalf("outdated instance exposed current data = %#v", outdated)
 	}
 	if none := byNode["none"]; none.CurrentStatus != "unknown" || none.DataStatus != "missing" || none.SampledAt != nil {
 		t.Fatalf("no-sample instance = %#v", none)

@@ -91,7 +91,8 @@ func TestA19A63ResourceSnapshotAcceptance(t *testing.T) {
 		t.Fatalf("A63 node-name resource identity was merged or incomplete: %#v", items)
 	}
 
-	// A failed upstream round must not invent a current sample or an all-instance failure.
+	// A failed upstream round must not invent a current sample or an all-instance failure. During the
+	// minute boundary, the immediately preceding successful snapshot remains displayable.
 	clock.Advance(time.Minute)
 	failedMinute := clock.Now().Unix() - clock.Now().Unix()%60
 	upstreamFailure := errors.New("instances endpoint unavailable")
@@ -112,8 +113,9 @@ func TestA19A63ResourceSnapshotAcceptance(t *testing.T) {
 		t.Fatalf("A19 list instances after upstream failure: %v", err)
 	}
 	for node, item := range a19ItemsByNode(items) {
-		if item.CurrentStatus != "unknown" || item.DataStatus != "missing" {
-			t.Fatalf("A19 failed resource status for %s = %#v, want unknown/missing", node, item)
+		if item.CurrentStatus != "online" || item.DataStatus != "complete" || item.CPUPercent == nil ||
+			item.MemoryPercent == nil || item.DiskUsedPercent == nil {
+			t.Fatalf("A19 previous-minute resource status for %s = %#v, want retained complete/online data", node, item)
 		}
 	}
 	alertService, err := service.NewAlertService(service.AlertServiceOptions{Database: database, Clock: clock})
@@ -132,11 +134,22 @@ func TestA19A63ResourceSnapshotAcceptance(t *testing.T) {
 		Count(&falseNoInstanceEvents).Error; err != nil || falseNoInstanceEvents != 0 {
 		t.Fatalf("A19 failed resource sample created all-instances event count=%d err=%v", falseNoInstanceEvents, err)
 	}
+	clock.Advance(time.Minute)
+	items, err = sites.ListInstances(context.Background(), site.ID)
+	if err != nil {
+		t.Fatalf("A19 list instances after previous-minute grace window: %v", err)
+	}
+	for node, item := range a19ItemsByNode(items) {
+		if item.CurrentStatus != "stale" || item.DataStatus != "missing" || item.CPUPercent != nil ||
+			item.MemoryPercent != nil || item.DiskUsedPercent != nil {
+			t.Fatalf("A19 expired resource status for %s = %#v, want stale/missing", node, item)
+		}
+	}
 
 	// A successful empty upstream snapshot retires nodes; a failed round above did not.
 	client.instancesErr = nil
 	client.instances = []dto.UpstreamInstance{}
-	clock.Advance(1439 * time.Minute)
+	clock.Advance(1438 * time.Minute)
 	if fetched, written, executeErr := sites.ExecutePeriodicSiteTask(
 		context.Background(), constant.TaskTypeResourceSnapshot, site.ID, site.ConfigVersion, "a63-long-absence",
 	); executeErr != nil || fetched != 0 || written != 1 {

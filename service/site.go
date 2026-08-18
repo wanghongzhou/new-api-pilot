@@ -282,18 +282,18 @@ func (service *SiteService) ListInstances(ctx context.Context, siteID int64) ([]
 	now := service.clock.Now().Unix()
 	currentMinute := floorMinute(now)
 	for _, snapshot := range snapshots {
-		currentSample := snapshot.SampledAt != nil && *snapshot.SampledAt == currentMinute
+		displayableSample := isDisplayableInstanceSample(snapshot.SampledAt, currentMinute)
 		item := dto.SiteInstanceItem{
 			SiteID: strconv.FormatInt(siteID, 10), NodeName: snapshot.NodeName,
 			Hostname: snapshot.Hostname, IsMaster: snapshot.IsMaster, RuntimeVersion: snapshot.RuntimeVersion,
 			GOOS: snapshot.GOOS, GOARCH: snapshot.GOARCH, UpstreamStatus: snapshot.UpstreamStatus,
 			UpstreamStaleAfterSeconds:  snapshot.UpstreamStaleAfterSeconds,
-			CurrentStatus:              effectiveInstanceStatus(snapshot, now, int64(staleSeconds), currentSample),
+			CurrentStatus:              effectiveInstanceStatus(snapshot, now, int64(staleSeconds), displayableSample),
 			EffectiveStaleAfterSeconds: staleSeconds,
 			SampledAt:                  snapshot.SampledAt, DataStatus: "missing", FirstSeenAt: snapshot.FirstSeenAt,
 			StartedAt: snapshot.StartedAt, LastSeenAt: snapshot.LastSeenAt, LastSyncedAt: snapshot.LastSyncedAt,
 		}
-		if currentSample {
+		if displayableSample {
 			item.DataStatus = "complete"
 			item.CPUPercent = snapshot.CPUPercent
 			item.MemoryPercent = snapshot.MemoryPercent
@@ -312,8 +312,12 @@ func (service *SiteService) ListInstances(ctx context.Context, siteID int64) ([]
 	return items, nil
 }
 
-func effectiveInstanceStatus(snapshot model.SiteInstanceSnapshot, now, staleSeconds int64, currentSample bool) string {
-	if currentSample && snapshot.SampleStatus != nil {
+func isDisplayableInstanceSample(sampledAt *int64, currentMinute int64) bool {
+	return sampledAt != nil && (*sampledAt == currentMinute || *sampledAt == currentMinute-60)
+}
+
+func effectiveInstanceStatus(snapshot model.SiteInstanceSnapshot, now, staleSeconds int64, displayableSample bool) string {
+	if displayableSample && snapshot.SampleStatus != nil {
 		switch *snapshot.SampleStatus {
 		case "offline":
 			return "offline"
