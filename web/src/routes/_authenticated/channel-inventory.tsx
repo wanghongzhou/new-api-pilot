@@ -4,7 +4,7 @@ import { ChannelInventoryPage } from '@/features/channel-inventory/components/ch
 import { channelInventorySearchSchema } from '@/features/channel-inventory/schema'
 import { buildChannelInventorySearch } from '@/features/channel-inventory/search'
 
-export const Route = createFileRoute('/_authenticated/channel-inventory/')({
+export const Route = createFileRoute('/_authenticated/channel-inventory')({
   component: GlobalChannelInventoryRoute,
   validateSearch: channelInventorySearchSchema,
 })

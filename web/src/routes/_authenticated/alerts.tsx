@@ -9,7 +9,7 @@ import {
 import type { AlertSearch } from '@/features/alerts/types'
 import { isIdString } from '@/lib/api-types'
 
-export const Route = createFileRoute('/_authenticated/alerts/')({
+export const Route = createFileRoute('/_authenticated/alerts')({
   component: AlertsRoute,
   search: { middlewares: alertSearchMiddlewares },
   validateSearch: alertsSearchSchema,

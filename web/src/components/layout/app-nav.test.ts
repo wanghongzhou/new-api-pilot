@@ -3,10 +3,13 @@ import { readFileSync } from 'node:fs'
 
 import { resolveAlertNavBadge } from './app-nav-badge'
 import { navGroups } from './app-nav-config'
-import { requiresDocumentNavigation } from './app-nav-navigation'
 
 const appNavSource = readFileSync(
   new URL('./app-nav.tsx', import.meta.url),
+  'utf8'
+)
+const routeTreeSource = readFileSync(
+  new URL('../../routeTree.gen.ts', import.meta.url),
   'utf8'
 )
 
@@ -83,15 +86,16 @@ describe('app navigation', () => {
     ])
   })
 
-  test('uses native document navigation when leaving pricing groups routes', () => {
-    expect(requiresDocumentNavigation('/pricing-groups')).toBe(true)
-    expect(requiresDocumentNavigation('/pricing-groups/')).toBe(true)
-    expect(requiresDocumentNavigation('/sites/4/pricing-groups')).toBe(true)
-    expect(requiresDocumentNavigation('/sites/4/pricing-groups/')).toBe(true)
-    expect(requiresDocumentNavigation('/model-catalog')).toBe(false)
-
-    expect(appNavSource).toContain('documentNavigation ? (')
+  test('uses native document navigation for every primary destination', () => {
     expect(appNavSource).toContain('href={item.to}')
+    expect(appNavSource).not.toContain('<Link')
     expect(appNavSource).not.toContain('reloadDocument=')
+  })
+
+  test('keeps every primary route identity equal to its public URL', () => {
+    for (const item of navGroups.flatMap((group) => group.items)) {
+      expect(routeTreeSource).toContain(`fullPath: '${item.to}'`)
+      expect(routeTreeSource).not.toContain(`fullPath: '${item.to}/'`)
+    }
   })
 })

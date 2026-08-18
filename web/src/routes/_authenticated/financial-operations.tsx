@@ -4,7 +4,7 @@ import { FinancialOperationsPage } from '@/features/financial-operations/compone
 import { financialOperationsSearchSchema } from '@/features/financial-operations/schema'
 import { buildFinancialOperationsSearch } from '@/features/financial-operations/search'
 
-export const Route = createFileRoute('/_authenticated/financial-operations/')({
+export const Route = createFileRoute('/_authenticated/financial-operations')({
   component: GlobalFinancialOperationsRoute,
   validateSearch: financialOperationsSearchSchema,
 })

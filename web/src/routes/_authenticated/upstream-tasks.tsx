@@ -4,7 +4,7 @@ import { UpstreamTasksPage } from '@/features/upstream-tasks/components/upstream
 import { upstreamTaskSearchSchema } from '@/features/upstream-tasks/schema'
 import { buildUpstreamTaskSearch } from '@/features/upstream-tasks/search'
 
-export const Route = createFileRoute('/_authenticated/upstream-tasks/')({
+export const Route = createFileRoute('/_authenticated/upstream-tasks')({
   component: GlobalUpstreamTasksRoute,
   validateSearch: upstreamTaskSearchSchema,
 })

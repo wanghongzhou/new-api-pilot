@@ -4,7 +4,7 @@ import { LogsPage } from '@/features/logs/components/logs-page'
 import { logSearchSchema } from '@/features/logs/schema'
 import { buildLogSearch, mergeLogSearch } from '@/features/logs/search'
 
-export const Route = createFileRoute('/_authenticated/logs/')({
+export const Route = createFileRoute('/_authenticated/logs')({
   component: GlobalLogsRoute,
   validateSearch: logSearchSchema,
 })

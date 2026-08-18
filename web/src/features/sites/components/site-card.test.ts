@@ -91,7 +91,7 @@ test('keeps the approved card content in the grouped desktop list', async () => 
 
 test('defaults desktop site management to the grouped table view', async () => {
   const source = await readFile(
-    new URL('../../../routes/_authenticated/sites/index.tsx', import.meta.url),
+    new URL('../../../routes/_authenticated/sites_.tsx', import.meta.url),
     'utf8'
   )
 

@@ -7,7 +7,7 @@ import {
   serializeSubscriptionPlanSearch,
 } from '@/features/subscription-plans/search'
 
-export const Route = createFileRoute('/_authenticated/subscription-plans/')({
+export const Route = createFileRoute('/_authenticated/subscription-plans')({
   component: GlobalSubscriptionPlans,
   validateSearch: subscriptionPlanSearchSchema,
 })

@@ -11,26 +11,26 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedUserInventoryRouteImport } from './routes/_authenticated/user-inventory'
+import { Route as AuthenticatedUpstreamTasksRouteImport } from './routes/_authenticated/upstream-tasks'
+import { Route as AuthenticatedSystemTasksRouteImport } from './routes/_authenticated/system-tasks'
+import { Route as AuthenticatedSubscriptionPlansRouteImport } from './routes/_authenticated/subscription-plans'
+import { Route as AuthenticatedSitesRouteImport } from './routes/_authenticated/sites_'
+import { Route as AuthenticatedRankingsRouteImport } from './routes/_authenticated/rankings'
 import { Route as AuthenticatedPricingGroupsRouteImport } from './routes/_authenticated/pricing-groups'
+import { Route as AuthenticatedPerformanceHistoryRouteImport } from './routes/_authenticated/performance-history'
 import { Route as AuthenticatedModelCatalogRouteImport } from './routes/_authenticated/model-catalog'
+import { Route as AuthenticatedLogsRouteImport } from './routes/_authenticated/logs'
+import { Route as AuthenticatedFinancialOperationsRouteImport } from './routes/_authenticated/financial-operations'
+import { Route as AuthenticatedExportsRouteImport } from './routes/_authenticated/exports'
+import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedCustomersRouteImport } from './routes/_authenticated/customers_'
+import { Route as AuthenticatedChannelInventoryRouteImport } from './routes/_authenticated/channel-inventory'
 import { Route as AuthenticatedChangePasswordRouteImport } from './routes/_authenticated/change-password'
+import { Route as AuthenticatedAlertsRouteImport } from './routes/_authenticated/alerts'
+import { Route as AuthenticatedAccountsRouteImport } from './routes/_authenticated/accounts_'
 import { Route as authSignInRouteImport } from './routes/(auth)/sign-in'
-import { Route as AuthenticatedUserInventoryIndexRouteImport } from './routes/_authenticated/user-inventory/index'
-import { Route as AuthenticatedUpstreamTasksIndexRouteImport } from './routes/_authenticated/upstream-tasks/index'
-import { Route as AuthenticatedSystemTasksIndexRouteImport } from './routes/_authenticated/system-tasks/index'
-import { Route as AuthenticatedSubscriptionPlansIndexRouteImport } from './routes/_authenticated/subscription-plans/index'
-import { Route as AuthenticatedSitesIndexRouteImport } from './routes/_authenticated/sites/index'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
-import { Route as AuthenticatedRankingsIndexRouteImport } from './routes/_authenticated/rankings/index'
-import { Route as AuthenticatedPerformanceHistoryIndexRouteImport } from './routes/_authenticated/performance-history/index'
-import { Route as AuthenticatedLogsIndexRouteImport } from './routes/_authenticated/logs/index'
-import { Route as AuthenticatedFinancialOperationsIndexRouteImport } from './routes/_authenticated/financial-operations/index'
-import { Route as AuthenticatedExportsIndexRouteImport } from './routes/_authenticated/exports/index'
-import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard/index'
-import { Route as AuthenticatedCustomersIndexRouteImport } from './routes/_authenticated/customers/index'
-import { Route as AuthenticatedChannelInventoryIndexRouteImport } from './routes/_authenticated/channel-inventory/index'
-import { Route as AuthenticatedAlertsIndexRouteImport } from './routes/_authenticated/alerts/index'
-import { Route as AuthenticatedAccountsIndexRouteImport } from './routes/_authenticated/accounts/index'
 import { Route as AuthenticatedStatisticsTokensRouteImport } from './routes/_authenticated/statistics/tokens'
 import { Route as AuthenticatedStatisticsSitesRouteImport } from './routes/_authenticated/statistics/sites'
 import { Route as AuthenticatedStatisticsNodesRouteImport } from './routes/_authenticated/statistics/nodes'
@@ -71,10 +71,50 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedUserInventoryRoute =
+  AuthenticatedUserInventoryRouteImport.update({
+    id: '/user-inventory',
+    path: '/user-inventory',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedUpstreamTasksRoute =
+  AuthenticatedUpstreamTasksRouteImport.update({
+    id: '/upstream-tasks',
+    path: '/upstream-tasks',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSystemTasksRoute =
+  AuthenticatedSystemTasksRouteImport.update({
+    id: '/system-tasks',
+    path: '/system-tasks',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSubscriptionPlansRoute =
+  AuthenticatedSubscriptionPlansRouteImport.update({
+    id: '/subscription-plans',
+    path: '/subscription-plans',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSitesRoute = AuthenticatedSitesRouteImport.update({
+  id: '/sites_',
+  path: '/sites',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedRankingsRoute = AuthenticatedRankingsRouteImport.update({
+  id: '/rankings',
+  path: '/rankings',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedPricingGroupsRoute =
   AuthenticatedPricingGroupsRouteImport.update({
     id: '/pricing-groups',
     path: '/pricing-groups',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedPerformanceHistoryRoute =
+  AuthenticatedPerformanceHistoryRouteImport.update({
+    id: '/performance-history',
+    path: '/performance-history',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedModelCatalogRoute =
@@ -83,109 +123,63 @@ const AuthenticatedModelCatalogRoute =
     path: '/model-catalog',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedLogsRoute = AuthenticatedLogsRouteImport.update({
+  id: '/logs',
+  path: '/logs',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedFinancialOperationsRoute =
+  AuthenticatedFinancialOperationsRouteImport.update({
+    id: '/financial-operations',
+    path: '/financial-operations',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedExportsRoute = AuthenticatedExportsRouteImport.update({
+  id: '/exports',
+  path: '/exports',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedCustomersRoute = AuthenticatedCustomersRouteImport.update({
+  id: '/customers_',
+  path: '/customers',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedChannelInventoryRoute =
+  AuthenticatedChannelInventoryRouteImport.update({
+    id: '/channel-inventory',
+    path: '/channel-inventory',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedChangePasswordRoute =
   AuthenticatedChangePasswordRouteImport.update({
     id: '/change-password',
     path: '/change-password',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedAlertsRoute = AuthenticatedAlertsRouteImport.update({
+  id: '/alerts',
+  path: '/alerts',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAccountsRoute = AuthenticatedAccountsRouteImport.update({
+  id: '/accounts_',
+  path: '/accounts',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const authSignInRoute = authSignInRouteImport.update({
   id: '/(auth)/sign-in',
   path: '/sign-in',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedUserInventoryIndexRoute =
-  AuthenticatedUserInventoryIndexRouteImport.update({
-    id: '/user-inventory/',
-    path: '/user-inventory/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedUpstreamTasksIndexRoute =
-  AuthenticatedUpstreamTasksIndexRouteImport.update({
-    id: '/upstream-tasks/',
-    path: '/upstream-tasks/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedSystemTasksIndexRoute =
-  AuthenticatedSystemTasksIndexRouteImport.update({
-    id: '/system-tasks/',
-    path: '/system-tasks/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedSubscriptionPlansIndexRoute =
-  AuthenticatedSubscriptionPlansIndexRouteImport.update({
-    id: '/subscription-plans/',
-    path: '/subscription-plans/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedSitesIndexRoute = AuthenticatedSitesIndexRouteImport.update({
-  id: '/sites/',
-  path: '/sites/',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
 const AuthenticatedSettingsIndexRoute =
   AuthenticatedSettingsIndexRouteImport.update({
     id: '/settings/',
     path: '/settings/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedRankingsIndexRoute =
-  AuthenticatedRankingsIndexRouteImport.update({
-    id: '/rankings/',
-    path: '/rankings/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedPerformanceHistoryIndexRoute =
-  AuthenticatedPerformanceHistoryIndexRouteImport.update({
-    id: '/performance-history/',
-    path: '/performance-history/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedLogsIndexRoute = AuthenticatedLogsIndexRouteImport.update({
-  id: '/logs/',
-  path: '/logs/',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedFinancialOperationsIndexRoute =
-  AuthenticatedFinancialOperationsIndexRouteImport.update({
-    id: '/financial-operations/',
-    path: '/financial-operations/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedExportsIndexRoute =
-  AuthenticatedExportsIndexRouteImport.update({
-    id: '/exports/',
-    path: '/exports/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedDashboardIndexRoute =
-  AuthenticatedDashboardIndexRouteImport.update({
-    id: '/dashboard/',
-    path: '/dashboard/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedCustomersIndexRoute =
-  AuthenticatedCustomersIndexRouteImport.update({
-    id: '/customers/',
-    path: '/customers/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedChannelInventoryIndexRoute =
-  AuthenticatedChannelInventoryIndexRouteImport.update({
-    id: '/channel-inventory/',
-    path: '/channel-inventory/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedAlertsIndexRoute =
-  AuthenticatedAlertsIndexRouteImport.update({
-    id: '/alerts/',
-    path: '/alerts/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedAccountsIndexRoute =
-  AuthenticatedAccountsIndexRouteImport.update({
-    id: '/accounts/',
-    path: '/accounts/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedStatisticsTokensRoute =
@@ -372,9 +366,24 @@ const AuthenticatedAccountsAccountIdStatsRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/sign-in': typeof authSignInRoute
+  '/accounts': typeof AuthenticatedAccountsRoute
+  '/alerts': typeof AuthenticatedAlertsRoute
   '/change-password': typeof AuthenticatedChangePasswordRoute
+  '/channel-inventory': typeof AuthenticatedChannelInventoryRoute
+  '/customers': typeof AuthenticatedCustomersRoute
+  '/dashboard': typeof AuthenticatedDashboardRoute
+  '/exports': typeof AuthenticatedExportsRoute
+  '/financial-operations': typeof AuthenticatedFinancialOperationsRoute
+  '/logs': typeof AuthenticatedLogsRoute
   '/model-catalog': typeof AuthenticatedModelCatalogRoute
+  '/performance-history': typeof AuthenticatedPerformanceHistoryRoute
   '/pricing-groups': typeof AuthenticatedPricingGroupsRoute
+  '/rankings': typeof AuthenticatedRankingsRoute
+  '/sites': typeof AuthenticatedSitesRoute
+  '/subscription-plans': typeof AuthenticatedSubscriptionPlansRoute
+  '/system-tasks': typeof AuthenticatedSystemTasksRoute
+  '/upstream-tasks': typeof AuthenticatedUpstreamTasksRoute
+  '/user-inventory': typeof AuthenticatedUserInventoryRoute
   '/settings/system': typeof AuthenticatedSettingsSystemRoute
   '/settings/users': typeof AuthenticatedSettingsUsersRoute
   '/statistics/accounts': typeof AuthenticatedStatisticsAccountsRoute
@@ -386,22 +395,7 @@ export interface FileRoutesByFullPath {
   '/statistics/nodes': typeof AuthenticatedStatisticsNodesRoute
   '/statistics/sites': typeof AuthenticatedStatisticsSitesRoute
   '/statistics/tokens': typeof AuthenticatedStatisticsTokensRoute
-  '/accounts/': typeof AuthenticatedAccountsIndexRoute
-  '/alerts/': typeof AuthenticatedAlertsIndexRoute
-  '/channel-inventory/': typeof AuthenticatedChannelInventoryIndexRoute
-  '/customers/': typeof AuthenticatedCustomersIndexRoute
-  '/dashboard/': typeof AuthenticatedDashboardIndexRoute
-  '/exports/': typeof AuthenticatedExportsIndexRoute
-  '/financial-operations/': typeof AuthenticatedFinancialOperationsIndexRoute
-  '/logs/': typeof AuthenticatedLogsIndexRoute
-  '/performance-history/': typeof AuthenticatedPerformanceHistoryIndexRoute
-  '/rankings/': typeof AuthenticatedRankingsIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
-  '/sites/': typeof AuthenticatedSitesIndexRoute
-  '/subscription-plans/': typeof AuthenticatedSubscriptionPlansIndexRoute
-  '/system-tasks/': typeof AuthenticatedSystemTasksIndexRoute
-  '/upstream-tasks/': typeof AuthenticatedUpstreamTasksIndexRoute
-  '/user-inventory/': typeof AuthenticatedUserInventoryIndexRoute
   '/accounts/$accountId/stats': typeof AuthenticatedAccountsAccountIdStatsRoute
   '/customers/$customerId/stats': typeof AuthenticatedCustomersCustomerIdStatsRoute
   '/sites/$siteId/channel-inventory': typeof AuthenticatedSitesSiteIdChannelInventoryRoute
@@ -425,9 +419,24 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/sign-in': typeof authSignInRoute
+  '/accounts': typeof AuthenticatedAccountsRoute
+  '/alerts': typeof AuthenticatedAlertsRoute
   '/change-password': typeof AuthenticatedChangePasswordRoute
+  '/channel-inventory': typeof AuthenticatedChannelInventoryRoute
+  '/customers': typeof AuthenticatedCustomersRoute
+  '/dashboard': typeof AuthenticatedDashboardRoute
+  '/exports': typeof AuthenticatedExportsRoute
+  '/financial-operations': typeof AuthenticatedFinancialOperationsRoute
+  '/logs': typeof AuthenticatedLogsRoute
   '/model-catalog': typeof AuthenticatedModelCatalogRoute
+  '/performance-history': typeof AuthenticatedPerformanceHistoryRoute
   '/pricing-groups': typeof AuthenticatedPricingGroupsRoute
+  '/rankings': typeof AuthenticatedRankingsRoute
+  '/sites': typeof AuthenticatedSitesRoute
+  '/subscription-plans': typeof AuthenticatedSubscriptionPlansRoute
+  '/system-tasks': typeof AuthenticatedSystemTasksRoute
+  '/upstream-tasks': typeof AuthenticatedUpstreamTasksRoute
+  '/user-inventory': typeof AuthenticatedUserInventoryRoute
   '/settings/system': typeof AuthenticatedSettingsSystemRoute
   '/settings/users': typeof AuthenticatedSettingsUsersRoute
   '/statistics/accounts': typeof AuthenticatedStatisticsAccountsRoute
@@ -439,22 +448,7 @@ export interface FileRoutesByTo {
   '/statistics/nodes': typeof AuthenticatedStatisticsNodesRoute
   '/statistics/sites': typeof AuthenticatedStatisticsSitesRoute
   '/statistics/tokens': typeof AuthenticatedStatisticsTokensRoute
-  '/accounts': typeof AuthenticatedAccountsIndexRoute
-  '/alerts': typeof AuthenticatedAlertsIndexRoute
-  '/channel-inventory': typeof AuthenticatedChannelInventoryIndexRoute
-  '/customers': typeof AuthenticatedCustomersIndexRoute
-  '/dashboard': typeof AuthenticatedDashboardIndexRoute
-  '/exports': typeof AuthenticatedExportsIndexRoute
-  '/financial-operations': typeof AuthenticatedFinancialOperationsIndexRoute
-  '/logs': typeof AuthenticatedLogsIndexRoute
-  '/performance-history': typeof AuthenticatedPerformanceHistoryIndexRoute
-  '/rankings': typeof AuthenticatedRankingsIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
-  '/sites': typeof AuthenticatedSitesIndexRoute
-  '/subscription-plans': typeof AuthenticatedSubscriptionPlansIndexRoute
-  '/system-tasks': typeof AuthenticatedSystemTasksIndexRoute
-  '/upstream-tasks': typeof AuthenticatedUpstreamTasksIndexRoute
-  '/user-inventory': typeof AuthenticatedUserInventoryIndexRoute
   '/accounts/$accountId/stats': typeof AuthenticatedAccountsAccountIdStatsRoute
   '/customers/$customerId/stats': typeof AuthenticatedCustomersCustomerIdStatsRoute
   '/sites/$siteId/channel-inventory': typeof AuthenticatedSitesSiteIdChannelInventoryRoute
@@ -480,9 +474,24 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/(auth)/sign-in': typeof authSignInRoute
+  '/_authenticated/accounts_': typeof AuthenticatedAccountsRoute
+  '/_authenticated/alerts': typeof AuthenticatedAlertsRoute
   '/_authenticated/change-password': typeof AuthenticatedChangePasswordRoute
+  '/_authenticated/channel-inventory': typeof AuthenticatedChannelInventoryRoute
+  '/_authenticated/customers_': typeof AuthenticatedCustomersRoute
+  '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/exports': typeof AuthenticatedExportsRoute
+  '/_authenticated/financial-operations': typeof AuthenticatedFinancialOperationsRoute
+  '/_authenticated/logs': typeof AuthenticatedLogsRoute
   '/_authenticated/model-catalog': typeof AuthenticatedModelCatalogRoute
+  '/_authenticated/performance-history': typeof AuthenticatedPerformanceHistoryRoute
   '/_authenticated/pricing-groups': typeof AuthenticatedPricingGroupsRoute
+  '/_authenticated/rankings': typeof AuthenticatedRankingsRoute
+  '/_authenticated/sites_': typeof AuthenticatedSitesRoute
+  '/_authenticated/subscription-plans': typeof AuthenticatedSubscriptionPlansRoute
+  '/_authenticated/system-tasks': typeof AuthenticatedSystemTasksRoute
+  '/_authenticated/upstream-tasks': typeof AuthenticatedUpstreamTasksRoute
+  '/_authenticated/user-inventory': typeof AuthenticatedUserInventoryRoute
   '/_authenticated/settings/system': typeof AuthenticatedSettingsSystemRoute
   '/_authenticated/settings/users': typeof AuthenticatedSettingsUsersRoute
   '/_authenticated/statistics/accounts': typeof AuthenticatedStatisticsAccountsRoute
@@ -494,22 +503,7 @@ export interface FileRoutesById {
   '/_authenticated/statistics/nodes': typeof AuthenticatedStatisticsNodesRoute
   '/_authenticated/statistics/sites': typeof AuthenticatedStatisticsSitesRoute
   '/_authenticated/statistics/tokens': typeof AuthenticatedStatisticsTokensRoute
-  '/_authenticated/accounts/': typeof AuthenticatedAccountsIndexRoute
-  '/_authenticated/alerts/': typeof AuthenticatedAlertsIndexRoute
-  '/_authenticated/channel-inventory/': typeof AuthenticatedChannelInventoryIndexRoute
-  '/_authenticated/customers/': typeof AuthenticatedCustomersIndexRoute
-  '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
-  '/_authenticated/exports/': typeof AuthenticatedExportsIndexRoute
-  '/_authenticated/financial-operations/': typeof AuthenticatedFinancialOperationsIndexRoute
-  '/_authenticated/logs/': typeof AuthenticatedLogsIndexRoute
-  '/_authenticated/performance-history/': typeof AuthenticatedPerformanceHistoryIndexRoute
-  '/_authenticated/rankings/': typeof AuthenticatedRankingsIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
-  '/_authenticated/sites/': typeof AuthenticatedSitesIndexRoute
-  '/_authenticated/subscription-plans/': typeof AuthenticatedSubscriptionPlansIndexRoute
-  '/_authenticated/system-tasks/': typeof AuthenticatedSystemTasksIndexRoute
-  '/_authenticated/upstream-tasks/': typeof AuthenticatedUpstreamTasksIndexRoute
-  '/_authenticated/user-inventory/': typeof AuthenticatedUserInventoryIndexRoute
   '/_authenticated/accounts/$accountId/stats': typeof AuthenticatedAccountsAccountIdStatsRoute
   '/_authenticated/customers/$customerId/stats': typeof AuthenticatedCustomersCustomerIdStatsRoute
   '/_authenticated/sites/$siteId/channel-inventory': typeof AuthenticatedSitesSiteIdChannelInventoryRoute
@@ -535,9 +529,24 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/sign-in'
+    | '/accounts'
+    | '/alerts'
     | '/change-password'
+    | '/channel-inventory'
+    | '/customers'
+    | '/dashboard'
+    | '/exports'
+    | '/financial-operations'
+    | '/logs'
     | '/model-catalog'
+    | '/performance-history'
     | '/pricing-groups'
+    | '/rankings'
+    | '/sites'
+    | '/subscription-plans'
+    | '/system-tasks'
+    | '/upstream-tasks'
+    | '/user-inventory'
     | '/settings/system'
     | '/settings/users'
     | '/statistics/accounts'
@@ -549,22 +558,7 @@ export interface FileRouteTypes {
     | '/statistics/nodes'
     | '/statistics/sites'
     | '/statistics/tokens'
-    | '/accounts/'
-    | '/alerts/'
-    | '/channel-inventory/'
-    | '/customers/'
-    | '/dashboard/'
-    | '/exports/'
-    | '/financial-operations/'
-    | '/logs/'
-    | '/performance-history/'
-    | '/rankings/'
     | '/settings/'
-    | '/sites/'
-    | '/subscription-plans/'
-    | '/system-tasks/'
-    | '/upstream-tasks/'
-    | '/user-inventory/'
     | '/accounts/$accountId/stats'
     | '/customers/$customerId/stats'
     | '/sites/$siteId/channel-inventory'
@@ -588,9 +582,24 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/sign-in'
+    | '/accounts'
+    | '/alerts'
     | '/change-password'
+    | '/channel-inventory'
+    | '/customers'
+    | '/dashboard'
+    | '/exports'
+    | '/financial-operations'
+    | '/logs'
     | '/model-catalog'
+    | '/performance-history'
     | '/pricing-groups'
+    | '/rankings'
+    | '/sites'
+    | '/subscription-plans'
+    | '/system-tasks'
+    | '/upstream-tasks'
+    | '/user-inventory'
     | '/settings/system'
     | '/settings/users'
     | '/statistics/accounts'
@@ -602,22 +611,7 @@ export interface FileRouteTypes {
     | '/statistics/nodes'
     | '/statistics/sites'
     | '/statistics/tokens'
-    | '/accounts'
-    | '/alerts'
-    | '/channel-inventory'
-    | '/customers'
-    | '/dashboard'
-    | '/exports'
-    | '/financial-operations'
-    | '/logs'
-    | '/performance-history'
-    | '/rankings'
     | '/settings'
-    | '/sites'
-    | '/subscription-plans'
-    | '/system-tasks'
-    | '/upstream-tasks'
-    | '/user-inventory'
     | '/accounts/$accountId/stats'
     | '/customers/$customerId/stats'
     | '/sites/$siteId/channel-inventory'
@@ -642,9 +636,24 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/(auth)/sign-in'
+    | '/_authenticated/accounts_'
+    | '/_authenticated/alerts'
     | '/_authenticated/change-password'
+    | '/_authenticated/channel-inventory'
+    | '/_authenticated/customers_'
+    | '/_authenticated/dashboard'
+    | '/_authenticated/exports'
+    | '/_authenticated/financial-operations'
+    | '/_authenticated/logs'
     | '/_authenticated/model-catalog'
+    | '/_authenticated/performance-history'
     | '/_authenticated/pricing-groups'
+    | '/_authenticated/rankings'
+    | '/_authenticated/sites_'
+    | '/_authenticated/subscription-plans'
+    | '/_authenticated/system-tasks'
+    | '/_authenticated/upstream-tasks'
+    | '/_authenticated/user-inventory'
     | '/_authenticated/settings/system'
     | '/_authenticated/settings/users'
     | '/_authenticated/statistics/accounts'
@@ -656,22 +665,7 @@ export interface FileRouteTypes {
     | '/_authenticated/statistics/nodes'
     | '/_authenticated/statistics/sites'
     | '/_authenticated/statistics/tokens'
-    | '/_authenticated/accounts/'
-    | '/_authenticated/alerts/'
-    | '/_authenticated/channel-inventory/'
-    | '/_authenticated/customers/'
-    | '/_authenticated/dashboard/'
-    | '/_authenticated/exports/'
-    | '/_authenticated/financial-operations/'
-    | '/_authenticated/logs/'
-    | '/_authenticated/performance-history/'
-    | '/_authenticated/rankings/'
     | '/_authenticated/settings/'
-    | '/_authenticated/sites/'
-    | '/_authenticated/subscription-plans/'
-    | '/_authenticated/system-tasks/'
-    | '/_authenticated/upstream-tasks/'
-    | '/_authenticated/user-inventory/'
     | '/_authenticated/accounts/$accountId/stats'
     | '/_authenticated/customers/$customerId/stats'
     | '/_authenticated/sites/$siteId/channel-inventory'
@@ -715,11 +709,60 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/user-inventory': {
+      id: '/_authenticated/user-inventory'
+      path: '/user-inventory'
+      fullPath: '/user-inventory'
+      preLoaderRoute: typeof AuthenticatedUserInventoryRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/upstream-tasks': {
+      id: '/_authenticated/upstream-tasks'
+      path: '/upstream-tasks'
+      fullPath: '/upstream-tasks'
+      preLoaderRoute: typeof AuthenticatedUpstreamTasksRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system-tasks': {
+      id: '/_authenticated/system-tasks'
+      path: '/system-tasks'
+      fullPath: '/system-tasks'
+      preLoaderRoute: typeof AuthenticatedSystemTasksRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/subscription-plans': {
+      id: '/_authenticated/subscription-plans'
+      path: '/subscription-plans'
+      fullPath: '/subscription-plans'
+      preLoaderRoute: typeof AuthenticatedSubscriptionPlansRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/sites_': {
+      id: '/_authenticated/sites_'
+      path: '/sites'
+      fullPath: '/sites'
+      preLoaderRoute: typeof AuthenticatedSitesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/rankings': {
+      id: '/_authenticated/rankings'
+      path: '/rankings'
+      fullPath: '/rankings'
+      preLoaderRoute: typeof AuthenticatedRankingsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/pricing-groups': {
       id: '/_authenticated/pricing-groups'
       path: '/pricing-groups'
       fullPath: '/pricing-groups'
       preLoaderRoute: typeof AuthenticatedPricingGroupsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/performance-history': {
+      id: '/_authenticated/performance-history'
+      path: '/performance-history'
+      fullPath: '/performance-history'
+      preLoaderRoute: typeof AuthenticatedPerformanceHistoryRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/model-catalog': {
@@ -729,11 +772,67 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedModelCatalogRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/logs': {
+      id: '/_authenticated/logs'
+      path: '/logs'
+      fullPath: '/logs'
+      preLoaderRoute: typeof AuthenticatedLogsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/financial-operations': {
+      id: '/_authenticated/financial-operations'
+      path: '/financial-operations'
+      fullPath: '/financial-operations'
+      preLoaderRoute: typeof AuthenticatedFinancialOperationsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/exports': {
+      id: '/_authenticated/exports'
+      path: '/exports'
+      fullPath: '/exports'
+      preLoaderRoute: typeof AuthenticatedExportsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/dashboard': {
+      id: '/_authenticated/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/customers_': {
+      id: '/_authenticated/customers_'
+      path: '/customers'
+      fullPath: '/customers'
+      preLoaderRoute: typeof AuthenticatedCustomersRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/channel-inventory': {
+      id: '/_authenticated/channel-inventory'
+      path: '/channel-inventory'
+      fullPath: '/channel-inventory'
+      preLoaderRoute: typeof AuthenticatedChannelInventoryRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/change-password': {
       id: '/_authenticated/change-password'
       path: '/change-password'
       fullPath: '/change-password'
       preLoaderRoute: typeof AuthenticatedChangePasswordRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/alerts': {
+      id: '/_authenticated/alerts'
+      path: '/alerts'
+      fullPath: '/alerts'
+      preLoaderRoute: typeof AuthenticatedAlertsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/accounts_': {
+      id: '/_authenticated/accounts_'
+      path: '/accounts'
+      fullPath: '/accounts'
+      preLoaderRoute: typeof AuthenticatedAccountsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/(auth)/sign-in': {
@@ -743,116 +842,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof authSignInRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/user-inventory/': {
-      id: '/_authenticated/user-inventory/'
-      path: '/user-inventory'
-      fullPath: '/user-inventory/'
-      preLoaderRoute: typeof AuthenticatedUserInventoryIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/upstream-tasks/': {
-      id: '/_authenticated/upstream-tasks/'
-      path: '/upstream-tasks'
-      fullPath: '/upstream-tasks/'
-      preLoaderRoute: typeof AuthenticatedUpstreamTasksIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/system-tasks/': {
-      id: '/_authenticated/system-tasks/'
-      path: '/system-tasks'
-      fullPath: '/system-tasks/'
-      preLoaderRoute: typeof AuthenticatedSystemTasksIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/subscription-plans/': {
-      id: '/_authenticated/subscription-plans/'
-      path: '/subscription-plans'
-      fullPath: '/subscription-plans/'
-      preLoaderRoute: typeof AuthenticatedSubscriptionPlansIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/sites/': {
-      id: '/_authenticated/sites/'
-      path: '/sites'
-      fullPath: '/sites/'
-      preLoaderRoute: typeof AuthenticatedSitesIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/settings/': {
       id: '/_authenticated/settings/'
       path: '/settings'
       fullPath: '/settings/'
       preLoaderRoute: typeof AuthenticatedSettingsIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/rankings/': {
-      id: '/_authenticated/rankings/'
-      path: '/rankings'
-      fullPath: '/rankings/'
-      preLoaderRoute: typeof AuthenticatedRankingsIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/performance-history/': {
-      id: '/_authenticated/performance-history/'
-      path: '/performance-history'
-      fullPath: '/performance-history/'
-      preLoaderRoute: typeof AuthenticatedPerformanceHistoryIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/logs/': {
-      id: '/_authenticated/logs/'
-      path: '/logs'
-      fullPath: '/logs/'
-      preLoaderRoute: typeof AuthenticatedLogsIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/financial-operations/': {
-      id: '/_authenticated/financial-operations/'
-      path: '/financial-operations'
-      fullPath: '/financial-operations/'
-      preLoaderRoute: typeof AuthenticatedFinancialOperationsIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/exports/': {
-      id: '/_authenticated/exports/'
-      path: '/exports'
-      fullPath: '/exports/'
-      preLoaderRoute: typeof AuthenticatedExportsIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/dashboard/': {
-      id: '/_authenticated/dashboard/'
-      path: '/dashboard'
-      fullPath: '/dashboard/'
-      preLoaderRoute: typeof AuthenticatedDashboardIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/customers/': {
-      id: '/_authenticated/customers/'
-      path: '/customers'
-      fullPath: '/customers/'
-      preLoaderRoute: typeof AuthenticatedCustomersIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/channel-inventory/': {
-      id: '/_authenticated/channel-inventory/'
-      path: '/channel-inventory'
-      fullPath: '/channel-inventory/'
-      preLoaderRoute: typeof AuthenticatedChannelInventoryIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/alerts/': {
-      id: '/_authenticated/alerts/'
-      path: '/alerts'
-      fullPath: '/alerts/'
-      preLoaderRoute: typeof AuthenticatedAlertsIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/accounts/': {
-      id: '/_authenticated/accounts/'
-      path: '/accounts'
-      fullPath: '/accounts/'
-      preLoaderRoute: typeof AuthenticatedAccountsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/statistics/tokens': {
@@ -1069,9 +1063,24 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAccountsRoute: typeof AuthenticatedAccountsRoute
+  AuthenticatedAlertsRoute: typeof AuthenticatedAlertsRoute
   AuthenticatedChangePasswordRoute: typeof AuthenticatedChangePasswordRoute
+  AuthenticatedChannelInventoryRoute: typeof AuthenticatedChannelInventoryRoute
+  AuthenticatedCustomersRoute: typeof AuthenticatedCustomersRoute
+  AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedExportsRoute: typeof AuthenticatedExportsRoute
+  AuthenticatedFinancialOperationsRoute: typeof AuthenticatedFinancialOperationsRoute
+  AuthenticatedLogsRoute: typeof AuthenticatedLogsRoute
   AuthenticatedModelCatalogRoute: typeof AuthenticatedModelCatalogRoute
+  AuthenticatedPerformanceHistoryRoute: typeof AuthenticatedPerformanceHistoryRoute
   AuthenticatedPricingGroupsRoute: typeof AuthenticatedPricingGroupsRoute
+  AuthenticatedRankingsRoute: typeof AuthenticatedRankingsRoute
+  AuthenticatedSitesRoute: typeof AuthenticatedSitesRoute
+  AuthenticatedSubscriptionPlansRoute: typeof AuthenticatedSubscriptionPlansRoute
+  AuthenticatedSystemTasksRoute: typeof AuthenticatedSystemTasksRoute
+  AuthenticatedUpstreamTasksRoute: typeof AuthenticatedUpstreamTasksRoute
+  AuthenticatedUserInventoryRoute: typeof AuthenticatedUserInventoryRoute
   AuthenticatedSettingsSystemRoute: typeof AuthenticatedSettingsSystemRoute
   AuthenticatedSettingsUsersRoute: typeof AuthenticatedSettingsUsersRoute
   AuthenticatedStatisticsAccountsRoute: typeof AuthenticatedStatisticsAccountsRoute
@@ -1083,22 +1092,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedStatisticsNodesRoute: typeof AuthenticatedStatisticsNodesRoute
   AuthenticatedStatisticsSitesRoute: typeof AuthenticatedStatisticsSitesRoute
   AuthenticatedStatisticsTokensRoute: typeof AuthenticatedStatisticsTokensRoute
-  AuthenticatedAccountsIndexRoute: typeof AuthenticatedAccountsIndexRoute
-  AuthenticatedAlertsIndexRoute: typeof AuthenticatedAlertsIndexRoute
-  AuthenticatedChannelInventoryIndexRoute: typeof AuthenticatedChannelInventoryIndexRoute
-  AuthenticatedCustomersIndexRoute: typeof AuthenticatedCustomersIndexRoute
-  AuthenticatedDashboardIndexRoute: typeof AuthenticatedDashboardIndexRoute
-  AuthenticatedExportsIndexRoute: typeof AuthenticatedExportsIndexRoute
-  AuthenticatedFinancialOperationsIndexRoute: typeof AuthenticatedFinancialOperationsIndexRoute
-  AuthenticatedLogsIndexRoute: typeof AuthenticatedLogsIndexRoute
-  AuthenticatedPerformanceHistoryIndexRoute: typeof AuthenticatedPerformanceHistoryIndexRoute
-  AuthenticatedRankingsIndexRoute: typeof AuthenticatedRankingsIndexRoute
   AuthenticatedSettingsIndexRoute: typeof AuthenticatedSettingsIndexRoute
-  AuthenticatedSitesIndexRoute: typeof AuthenticatedSitesIndexRoute
-  AuthenticatedSubscriptionPlansIndexRoute: typeof AuthenticatedSubscriptionPlansIndexRoute
-  AuthenticatedSystemTasksIndexRoute: typeof AuthenticatedSystemTasksIndexRoute
-  AuthenticatedUpstreamTasksIndexRoute: typeof AuthenticatedUpstreamTasksIndexRoute
-  AuthenticatedUserInventoryIndexRoute: typeof AuthenticatedUserInventoryIndexRoute
   AuthenticatedAccountsAccountIdStatsRoute: typeof AuthenticatedAccountsAccountIdStatsRoute
   AuthenticatedCustomersCustomerIdStatsRoute: typeof AuthenticatedCustomersCustomerIdStatsRoute
   AuthenticatedSitesSiteIdChannelInventoryRoute: typeof AuthenticatedSitesSiteIdChannelInventoryRoute
@@ -1121,9 +1115,24 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAccountsRoute: AuthenticatedAccountsRoute,
+  AuthenticatedAlertsRoute: AuthenticatedAlertsRoute,
   AuthenticatedChangePasswordRoute: AuthenticatedChangePasswordRoute,
+  AuthenticatedChannelInventoryRoute: AuthenticatedChannelInventoryRoute,
+  AuthenticatedCustomersRoute: AuthenticatedCustomersRoute,
+  AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedExportsRoute: AuthenticatedExportsRoute,
+  AuthenticatedFinancialOperationsRoute: AuthenticatedFinancialOperationsRoute,
+  AuthenticatedLogsRoute: AuthenticatedLogsRoute,
   AuthenticatedModelCatalogRoute: AuthenticatedModelCatalogRoute,
+  AuthenticatedPerformanceHistoryRoute: AuthenticatedPerformanceHistoryRoute,
   AuthenticatedPricingGroupsRoute: AuthenticatedPricingGroupsRoute,
+  AuthenticatedRankingsRoute: AuthenticatedRankingsRoute,
+  AuthenticatedSitesRoute: AuthenticatedSitesRoute,
+  AuthenticatedSubscriptionPlansRoute: AuthenticatedSubscriptionPlansRoute,
+  AuthenticatedSystemTasksRoute: AuthenticatedSystemTasksRoute,
+  AuthenticatedUpstreamTasksRoute: AuthenticatedUpstreamTasksRoute,
+  AuthenticatedUserInventoryRoute: AuthenticatedUserInventoryRoute,
   AuthenticatedSettingsSystemRoute: AuthenticatedSettingsSystemRoute,
   AuthenticatedSettingsUsersRoute: AuthenticatedSettingsUsersRoute,
   AuthenticatedStatisticsAccountsRoute: AuthenticatedStatisticsAccountsRoute,
@@ -1135,26 +1144,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedStatisticsNodesRoute: AuthenticatedStatisticsNodesRoute,
   AuthenticatedStatisticsSitesRoute: AuthenticatedStatisticsSitesRoute,
   AuthenticatedStatisticsTokensRoute: AuthenticatedStatisticsTokensRoute,
-  AuthenticatedAccountsIndexRoute: AuthenticatedAccountsIndexRoute,
-  AuthenticatedAlertsIndexRoute: AuthenticatedAlertsIndexRoute,
-  AuthenticatedChannelInventoryIndexRoute:
-    AuthenticatedChannelInventoryIndexRoute,
-  AuthenticatedCustomersIndexRoute: AuthenticatedCustomersIndexRoute,
-  AuthenticatedDashboardIndexRoute: AuthenticatedDashboardIndexRoute,
-  AuthenticatedExportsIndexRoute: AuthenticatedExportsIndexRoute,
-  AuthenticatedFinancialOperationsIndexRoute:
-    AuthenticatedFinancialOperationsIndexRoute,
-  AuthenticatedLogsIndexRoute: AuthenticatedLogsIndexRoute,
-  AuthenticatedPerformanceHistoryIndexRoute:
-    AuthenticatedPerformanceHistoryIndexRoute,
-  AuthenticatedRankingsIndexRoute: AuthenticatedRankingsIndexRoute,
   AuthenticatedSettingsIndexRoute: AuthenticatedSettingsIndexRoute,
-  AuthenticatedSitesIndexRoute: AuthenticatedSitesIndexRoute,
-  AuthenticatedSubscriptionPlansIndexRoute:
-    AuthenticatedSubscriptionPlansIndexRoute,
-  AuthenticatedSystemTasksIndexRoute: AuthenticatedSystemTasksIndexRoute,
-  AuthenticatedUpstreamTasksIndexRoute: AuthenticatedUpstreamTasksIndexRoute,
-  AuthenticatedUserInventoryIndexRoute: AuthenticatedUserInventoryIndexRoute,
   AuthenticatedAccountsAccountIdStatsRoute:
     AuthenticatedAccountsAccountIdStatsRoute,
   AuthenticatedCustomersCustomerIdStatsRoute:

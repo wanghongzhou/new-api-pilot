@@ -4,7 +4,7 @@ import { UserInventoryPage } from '@/features/user-inventory/components/user-inv
 import { userInventorySearchSchema } from '@/features/user-inventory/schema'
 import { buildUserInventorySearch } from '@/features/user-inventory/search'
 
-export const Route = createFileRoute('/_authenticated/user-inventory/')({
+export const Route = createFileRoute('/_authenticated/user-inventory')({
   component: GlobalUserInventoryRoute,
   validateSearch: userInventorySearchSchema,
 })

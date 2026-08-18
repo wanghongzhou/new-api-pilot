@@ -5,7 +5,7 @@ import { accountsSearchSchema } from '@/features/accounts/schema'
 import type { AccountSearch } from '@/features/accounts/types'
 import { isIdString } from '@/lib/api-types'
 
-export const Route = createFileRoute('/_authenticated/accounts/')({
+export const Route = createFileRoute('/_authenticated/accounts_')({
   component: AccountsRoute,
   validateSearch: accountsSearchSchema,
 })

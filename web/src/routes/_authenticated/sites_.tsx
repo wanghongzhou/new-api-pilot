@@ -8,7 +8,7 @@ import {
 } from '@/features/sites/schema'
 import type { SiteSearch } from '@/features/sites/types'
 
-export const Route = createFileRoute('/_authenticated/sites/')({
+export const Route = createFileRoute('/_authenticated/sites_')({
   component: SitesRoute,
   search: { middlewares: siteSearchMiddlewares },
   validateSearch: sitesSearchSchema,

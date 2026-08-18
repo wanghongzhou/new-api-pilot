@@ -4,7 +4,7 @@ import { RankingsPage } from '@/features/rankings/components/rankings-page'
 import { rankingSearchSchema } from '@/features/rankings/schema'
 import { buildRankingSearch } from '@/features/rankings/search'
 
-export const Route = createFileRoute('/_authenticated/rankings/')({
+export const Route = createFileRoute('/_authenticated/rankings')({
   component: GlobalRankings,
   validateSearch: rankingSearchSchema,
 })

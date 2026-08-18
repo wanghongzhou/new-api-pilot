@@ -1,6 +1,6 @@
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useQuery } from '@tanstack/react-query'
-import { Link, useRouterState } from '@tanstack/react-router'
+import { useRouterState } from '@tanstack/react-router'
 import type { MouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -19,7 +19,6 @@ import { dynamicI18nKey } from '@/i18n/dynamic-keys'
 
 import { resolveAlertNavBadge } from './app-nav-badge'
 import { navGroups } from './app-nav-config'
-import { requiresDocumentNavigation } from './app-nav-navigation'
 
 export const APP_NAVIGATE_EVENT = 'pilot:navigate'
 
@@ -56,7 +55,6 @@ export function AppNav() {
                 pathname === item.to ||
                 pathname.startsWith(`${item.to}/`)
               const label = t(dynamicI18nKey('layout', item.label))
-              const documentNavigation = requiresDocumentNavigation(pathname)
               const handleNavigationClick = (
                 event: MouseEvent<HTMLAnchorElement>
               ) => {
@@ -86,19 +84,11 @@ export function AppNav() {
                   <SidebarMenuButton
                     isActive={active}
                     render={
-                      documentNavigation ? (
-                        <a
-                          aria-current={active ? 'page' : undefined}
-                          href={item.to}
-                          onClick={handleNavigationClick}
-                        />
-                      ) : (
-                        <Link
-                          aria-current={active ? 'page' : undefined}
-                          onClick={handleNavigationClick}
-                          to={item.to}
-                        />
-                      )
+                      <a
+                        aria-current={active ? 'page' : undefined}
+                        href={item.to}
+                        onClick={handleNavigationClick}
+                      />
                     }
                   >
                     <HugeiconsIcon

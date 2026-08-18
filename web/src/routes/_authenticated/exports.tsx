@@ -7,7 +7,7 @@ import { exportsSearchSchema } from '@/features/statistics/exports-schema'
 import type { StatisticsExportSearch } from '@/features/statistics/types'
 import { isIdString } from '@/lib/api-types'
 
-export const Route = createFileRoute('/_authenticated/exports/')({
+export const Route = createFileRoute('/_authenticated/exports')({
   component: ExportsRoute,
   validateSearch: exportsSearchSchema,
 })

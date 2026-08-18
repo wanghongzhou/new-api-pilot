@@ -4,7 +4,7 @@ import { CustomersPage } from '@/features/customers/components/customers-page'
 import { customersSearchSchema } from '@/features/customers/schema'
 import type { CustomerSearch } from '@/features/customers/types'
 
-export const Route = createFileRoute('/_authenticated/customers/')({
+export const Route = createFileRoute('/_authenticated/customers_')({
   component: CustomersRoute,
   validateSearch: customersSearchSchema,
 })

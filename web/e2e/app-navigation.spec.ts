@@ -25,6 +25,29 @@ const sources = [
   },
 ] as const
 
+const allPrimarySourcePaths = [
+  '/dashboard',
+  '/alerts',
+  '/sites',
+  '/customers',
+  '/accounts',
+  '/logs',
+  '/upstream-tasks',
+  '/system-tasks',
+  '/exports',
+  '/financial-operations',
+  '/statistics/global',
+  '/rankings',
+  '/performance-history',
+  '/user-inventory',
+  '/channel-inventory',
+  '/model-catalog',
+  '/pricing-groups',
+  '/subscription-plans',
+  '/settings/users',
+  '/settings/system',
+] as const
+
 test.describe.configure({ mode: 'serial' })
 
 async function login(page: Page) {
@@ -94,6 +117,30 @@ for (const source of sources) {
       )
     })
   }
+}
+
+for (const sourcePath of allPrimarySourcePaths) {
+  test(`${sourcePath} can leave through primary navigation`, async ({
+    page,
+  }) => {
+    await page.goto(sourcePath)
+
+    const destination =
+      sourcePath === '/dashboard'
+        ? { heading: '站点管理', label: '站点管理', path: '/sites' }
+        : { heading: '运营概览', label: '运营概览', path: '/dashboard' }
+    const link = await expectGlobalNavigationEntry(
+      page,
+      destination.label,
+      destination.path
+    )
+    await link.click()
+
+    await expect(page).toHaveURL(destination.path)
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+      destination.heading
+    )
+  })
 }
 
 test('brand home link independently returns from model catalog to dashboard', async ({

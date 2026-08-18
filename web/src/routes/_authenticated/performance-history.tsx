@@ -4,7 +4,7 @@ import { PerformanceHistoryPage } from '@/features/performance-history/component
 import { performanceHistorySearchSchema } from '@/features/performance-history/schema'
 import { buildPerformanceHistorySearch } from '@/features/performance-history/search'
 
-export const Route = createFileRoute('/_authenticated/performance-history/')({
+export const Route = createFileRoute('/_authenticated/performance-history')({
   component: GlobalPerformanceHistoryRoute,
   validateSearch: performanceHistorySearchSchema,
 })
