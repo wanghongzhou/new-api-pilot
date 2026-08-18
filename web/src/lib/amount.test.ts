@@ -21,6 +21,15 @@ describe('quota amount calculations', () => {
     expect(formatDecimal(result.amountCny, 6)).toBe('934.400000')
   })
 
+  test('groups the integer part of displayed amounts with commas', () => {
+    expect(
+      formatDecimal(calculateQuotaAmount('640000000000', siteRate).amountCny)
+    ).toBe('9,344,000.00')
+    expect(
+      formatDecimal(calculateQuotaAmount('640000000000', siteRate).amountUsd, 6)
+    ).toBe('1,280,000.000000')
+  })
+
   test('invalidates a cross-site total when a non-zero rate is unavailable', () => {
     const result = calculateCrossSiteQuotaAmount([
       { siteId: '1', quota: '500000', rate: siteRate },

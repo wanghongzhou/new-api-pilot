@@ -59,12 +59,17 @@ describe('SiteDetailPage information architecture', () => {
     expect(source).not.toContain('getSiteStatistics')
   })
 
-  test('labels today metrics explicitly and normalizes rate decimals', async () => {
+  test('labels the rolling 24-hour metrics explicitly and normalizes rate decimals', async () => {
     const source = await readFile(detailPagePath, 'utf8')
 
-    expect(source).toContain("t('site.dashboard.todayCount')")
-    expect(source).toContain("t('site.dashboard.todayQuota')")
-    expect(source).toContain("t('site.dashboard.todayTokens')")
+    expect(source).toContain("t('site.dashboard.last24HoursCount')")
+    expect(source).toContain("t('site.dashboard.last24HoursQuota')")
+    expect(source).toContain("t('site.dashboard.last24HoursTokens')")
+    expect(source).toContain("t('site.last24HoursDataStatus')")
+    expect(source).toContain('formatAverageTpm(site.today.avg_tpm)')
+    expect(source).toContain(
+      "scopeDescription={t('completeness.siteScopeDescription')}"
+    )
     expect(source).not.toContain("t('site.dashboard.totalCount')")
     expect(source).toContain(
       'formatDecimalDisplayValue(site.rate.quota_per_unit)'

@@ -1,5 +1,6 @@
 import { Alert02Icon, CheckmarkCircle02Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { Completeness } from '@/features/sites/types'
@@ -11,8 +12,10 @@ import { DataStatusBadge } from './data-status'
 
 export function CompletenessAlert({
   completeness,
+  scopeDescription,
 }: {
   completeness: Completeness
+  scopeDescription?: ReactNode
 }) {
   const { t } = useTranslation()
   const evaluable = completeness.expected_unit_count > 0
@@ -37,7 +40,7 @@ export function CompletenessAlert({
         {evaluable && <DataStatusBadge status={completeness.data_status} />}
       </div>
       <p className='text-muted-foreground mt-2 text-xs'>
-        {t('completeness.scopeDescription')}
+        {scopeDescription ?? t('completeness.scopeDescription')}
       </p>
       <p className='mt-2 text-sm'>
         {evaluable

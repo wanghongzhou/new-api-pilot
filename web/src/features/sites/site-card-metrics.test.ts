@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import {
   formatAverageRate,
+  formatAverageTpm,
   formatCompletenessPercent,
   formatInstanceAvailability,
   formatLatencySeconds,
@@ -15,11 +16,19 @@ import {
 } from './site-card-metrics'
 
 describe('site card average RPM and TPM formatting', () => {
-  test('keeps exactly two decimal places', () => {
+  test('keeps average RPM at exactly two decimal places', () => {
     expect(formatAverageRate('0.3382')).toBe('0.34')
     expect(formatAverageRate('39635.9910')).toBe('39635.99')
     expect(formatAverageRate('0')).toBe('0.00')
     expect(formatAverageRate(null)).toBe('0.00')
+  })
+
+  test('uses the same ten-thousand compact unit as request counts for large average TPM', () => {
+    expect(formatAverageTpm('0.3382')).toBe('0.34')
+    expect(formatAverageTpm('10000')).toBe('10000.00')
+    expect(formatAverageTpm('10001')).toBe('1万')
+    expect(formatAverageTpm('39635.9910')).toBe('4万')
+    expect(formatAverageTpm(null)).toBe('0.00')
   })
 })
 

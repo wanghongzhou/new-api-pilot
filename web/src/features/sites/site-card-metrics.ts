@@ -85,6 +85,17 @@ export function formatAverageRate(value: string | null): string {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed.toFixed(2) : '0.00'
 }
 
+export function formatAverageTpm(value: string | null): string {
+  if (value == null) return '0.00'
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed < 0) return '0.00'
+  if (parsed <= 10_000) return parsed.toFixed(2)
+  return Intl.NumberFormat('zh-CN', {
+    maximumFractionDigits: 1,
+    notation: 'compact',
+  }).format(parsed)
+}
+
 export function formatCompletenessPercent(value: number): string {
   const bounded = Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0
   if (bounded >= 1) return '100%'

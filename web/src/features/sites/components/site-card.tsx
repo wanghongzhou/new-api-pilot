@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils'
 
 import {
   formatAverageRate,
+  formatAverageTpm,
   formatCompletenessPercent,
   formatInstanceAvailability,
   formatPerformanceLatency,
@@ -263,7 +264,7 @@ export function SiteCard({
 
       <section className='grid gap-3'>
         <div className='grid grid-cols-2 gap-x-5 gap-y-4'>
-          <MetricCell label={t('site.dashboard.todayQuota')}>
+          <MetricCell label={t('site.dashboard.last24HoursQuota')}>
             <QuotaAmount
               className='justify-center'
               emphasizeAmount
@@ -274,12 +275,12 @@ export function SiteCard({
               showQuota={false}
             />
           </MetricCell>
-          <MetricCell label={t('site.dashboard.todayTokens')}>
+          <MetricCell label={t('site.dashboard.last24HoursTokens')}>
             <MetricValue compact nullLabel='0' value={site.today.token_used} />
           </MetricCell>
         </div>
         <div className='grid grid-cols-3 gap-x-5 gap-y-4'>
-          <MetricCell label={t('site.dashboard.todayCount')}>
+          <MetricCell label={t('site.dashboard.last24HoursCount')}>
             <MetricValue
               compact
               nullLabel='0'
@@ -293,7 +294,7 @@ export function SiteCard({
           </MetricCell>
           <MetricCell label={t('site.averageTpm')}>
             <span title={site.today.avg_tpm ?? undefined}>
-              {formatAverageRate(site.today.avg_tpm)}
+              {formatAverageTpm(site.today.avg_tpm)}
             </span>
           </MetricCell>
         </div>

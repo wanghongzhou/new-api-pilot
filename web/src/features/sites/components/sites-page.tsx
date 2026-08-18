@@ -43,6 +43,7 @@ import { siteListParams } from '../list-contract'
 import { siteKeys } from '../query-keys'
 import {
   formatAverageRate,
+  formatAverageTpm,
   formatCompletenessPercent,
   formatInstanceAvailability,
   formatPerformanceLatency,
@@ -403,7 +404,7 @@ export function SitesPage({
           return (
             <div className='grid min-w-64 gap-3'>
               <div className='grid grid-cols-2 gap-x-5'>
-                <ListMetric label={t('site.dashboard.todayQuota')}>
+                <ListMetric label={t('site.dashboard.last24HoursQuota')}>
                   <QuotaAmount
                     emphasizeAmount
                     inline
@@ -413,12 +414,12 @@ export function SitesPage({
                     showQuota={false}
                   />
                 </ListMetric>
-                <ListMetric label={t('site.dashboard.todayTokens')}>
+                <ListMetric label={t('site.dashboard.last24HoursTokens')}>
                   <MetricValue compact nullLabel='0' value={today.token_used} />
                 </ListMetric>
               </div>
               <div className='grid grid-cols-3 gap-x-5'>
-                <ListMetric label={t('site.dashboard.todayCount')}>
+                <ListMetric label={t('site.dashboard.last24HoursCount')}>
                   <MetricValue
                     compact
                     nullLabel='0'
@@ -432,14 +433,14 @@ export function SitesPage({
                 </ListMetric>
                 <ListMetric label={t('site.averageTpm')}>
                   <span title={today.avg_tpm ?? undefined}>
-                    {formatAverageRate(today.avg_tpm)}
+                    {formatAverageTpm(today.avg_tpm)}
                   </span>
                 </ListMetric>
               </div>
             </div>
           )
         },
-        header: t('site.todayUsage'),
+        header: t('site.last24HoursUsage'),
         id: 'usage_24h',
       },
       {

@@ -55,6 +55,8 @@ import { collectionTaskCatalog } from '../constants'
 import { siteKeys } from '../query-keys'
 import {
   formatPerformanceLatency,
+  formatAverageRate,
+  formatAverageTpm,
   formatPerformanceSuccessRate,
   formatPerformanceThroughput,
   formatPercentValue,
@@ -109,24 +111,28 @@ function DetailSummary({ site }: { site: SiteDetail }) {
         />
       </div>
       <dl className='border-border [&>div]:border-border grid overflow-hidden rounded-lg border sm:grid-cols-2 lg:grid-cols-4 [&>div]:border-b sm:[&>div]:border-r lg:[&>div:nth-child(4n)]:border-r-0'>
-        <MetricCell label={t('site.dashboard.todayCount')}>
+        <MetricCell label={t('site.dashboard.last24HoursCount')}>
           <MetricValue nullLabel='0' value={site.today.request_count} />
         </MetricCell>
-        <MetricCell label={t('site.dashboard.todayQuota')}>
+        <MetricCell label={t('site.dashboard.last24HoursQuota')}>
           <QuotaAmount
             nullLabel='0'
             quota={site.today.quota}
             rate={site.rate}
           />
         </MetricCell>
-        <MetricCell label={t('site.dashboard.todayTokens')}>
+        <MetricCell label={t('site.dashboard.last24HoursTokens')}>
           <MetricValue nullLabel='0' value={site.today.token_used} />
         </MetricCell>
         <MetricCell label={t('site.averageRpm')}>
-          <MetricValue nullLabel='0' value={site.today.avg_rpm} />
+          <span title={site.today.avg_rpm ?? undefined}>
+            {formatAverageRate(site.today.avg_rpm)}
+          </span>
         </MetricCell>
         <MetricCell label={t('site.averageTpm')}>
-          <MetricValue nullLabel='0' value={site.today.avg_tpm} />
+          <span title={site.today.avg_tpm ?? undefined}>
+            {formatAverageTpm(site.today.avg_tpm)}
+          </span>
         </MetricCell>
         <MetricCell label={t('site.activeUsers')}>
           <MetricValue nullLabel='0' value={site.today.active_users} />
@@ -147,7 +153,7 @@ function DetailSummary({ site }: { site: SiteDetail }) {
       <div className='flex flex-wrap items-center justify-between gap-3 border-b pb-4'>
         <div className='flex items-center gap-2'>
           <span className='text-muted-foreground text-sm'>
-            {t('site.todayDataStatus')}
+            {t('site.last24HoursDataStatus')}
           </span>
           <DataStatusBadge status={site.today.data_status} />
         </div>
@@ -830,7 +836,10 @@ export function SiteDetailPage({ onDeleted, siteId }: SiteDetailPageProps) {
           range={performanceRange}
         />
         <div className='grid gap-4 lg:grid-cols-2'>
-          <CompletenessAlert completeness={site.completeness} />
+          <CompletenessAlert
+            completeness={site.completeness}
+            scopeDescription={t('completeness.siteScopeDescription')}
+          />
           <BackfillProgress backfill={site.backfill} />
         </div>
         <SiteRelatedPages siteId={siteId} />

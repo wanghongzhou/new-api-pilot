@@ -172,7 +172,11 @@ export function formatDecimal(
   value: Decimal | null,
   fractionDigits = DEFAULT_AMOUNT_FRACTION_DIGITS
 ): string | null {
-  return value?.toFixed(fractionDigits) ?? null
+  const fixed = value?.toFixed(fractionDigits)
+  if (fixed == null) return null
+  const [integer = '', fraction] = fixed.split('.')
+  const groupedInteger = integer.replaceAll(/\B(?=(\d{3})+(?!\d))/g, ',')
+  return fraction == null ? groupedInteger : `${groupedInteger}.${fraction}`
 }
 
 export function decimalToChartNumber(value: Decimal | null): number | null {
