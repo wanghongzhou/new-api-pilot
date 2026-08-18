@@ -85,6 +85,14 @@ export function formatAverageRate(value: string | null): string {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed.toFixed(2) : '0.00'
 }
 
+export function formatCompletenessPercent(value: number): string {
+  const bounded = Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0
+  if (bounded >= 1) return '100%'
+
+  const percentage = Math.floor(bounded * 10_000 + 1e-8) / 100
+  return `${Number(percentage.toFixed(2))}%`
+}
+
 function formatHue(value: number) {
   return String(Number(value.toFixed(2)))
 }

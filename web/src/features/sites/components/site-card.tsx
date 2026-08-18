@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils'
 
 import {
   formatAverageRate,
+  formatCompletenessPercent,
   formatInstanceAvailability,
   formatPerformanceLatency,
   formatPerformanceSuccessRate,
@@ -103,7 +104,7 @@ function CompletenessProgress({
       <div className='flex items-center justify-between gap-3'>
         <p className='text-muted-foreground text-xs'>{label}</p>
         <p className='text-muted-foreground text-xs font-semibold tabular-nums'>
-          {percent.toFixed(0)}%
+          {formatCompletenessPercent(value)}
         </p>
       </div>
       <div

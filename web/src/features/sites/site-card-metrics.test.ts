@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import {
   formatAverageRate,
+  formatCompletenessPercent,
   formatInstanceAvailability,
   formatLatencySeconds,
   formatPerformanceLatency,
@@ -19,6 +20,22 @@ describe('site card average RPM and TPM formatting', () => {
     expect(formatAverageRate('39635.9910')).toBe('39635.99')
     expect(formatAverageRate('0')).toBe('0.00')
     expect(formatAverageRate(null)).toBe('0.00')
+  })
+})
+
+describe('site completeness formatting', () => {
+  test('reserves the 100% label for truly complete data', () => {
+    expect(formatCompletenessPercent(1)).toBe('100%')
+    expect(formatCompletenessPercent(1.1)).toBe('100%')
+    expect(formatCompletenessPercent(0.999739)).toBe('99.97%')
+    expect(formatCompletenessPercent(0.999999999)).toBe('99.99%')
+    expect(formatCompletenessPercent(0.995)).toBe('99.5%')
+  })
+
+  test('clamps invalid and negative values to zero', () => {
+    expect(formatCompletenessPercent(0)).toBe('0%')
+    expect(formatCompletenessPercent(-0.5)).toBe('0%')
+    expect(formatCompletenessPercent(Number.NaN)).toBe('0%')
   })
 })
 

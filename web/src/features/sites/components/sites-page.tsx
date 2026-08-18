@@ -43,6 +43,7 @@ import { siteListParams } from '../list-contract'
 import { siteKeys } from '../query-keys'
 import {
   formatAverageRate,
+  formatCompletenessPercent,
   formatInstanceAvailability,
   formatPerformanceLatency,
   formatPerformanceSuccessRate,
@@ -88,7 +89,7 @@ function CompletenessBar({ label, value }: { label: string; value: number }) {
       <div className='flex items-center justify-between gap-3'>
         <span className='text-muted-foreground text-xs'>{label}</span>
         <span className='text-xs font-semibold tabular-nums'>
-          {percent.toFixed(0)}%
+          {formatCompletenessPercent(value)}
         </span>
       </div>
       <div
