@@ -124,7 +124,7 @@ type upstreamRedemptionWire struct {
 
 func (wire *upstreamRedemptionWire) UnmarshalJSON(data []byte) error {
 	type alias upstreamRedemptionWire
-	return decodeDiscardingSensitive(data, (*alias)(wire), []string{"key"})
+	return decodeDiscardingSensitiveFields(data, (*alias)(wire), [][]string{{"key"}, {"count"}, {"DeletedAt"}})
 }
 
 type upstreamRedemptionPageWire struct {
@@ -320,7 +320,7 @@ func (wire *upstreamPricingResponseWire) decodeUpstreamResponse(payload []byte) 
 }
 
 var upstreamPricingEndpointTypes = map[string]struct{}{
-	"openai": {}, "openai-response": {}, "openai-response-compact": {}, "anthropic": {}, "gemini": {},
+	"0": {}, "openai": {}, "openai-response": {}, "openai-response-compact": {}, "anthropic": {}, "gemini": {},
 	"jina-rerank": {}, "image-generation": {}, "embeddings": {}, "openai-video": {},
 }
 

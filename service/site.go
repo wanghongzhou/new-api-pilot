@@ -469,6 +469,9 @@ func backfillSummaryFromRun(run model.CollectionRun) dto.BackfillSummary {
 
 func backfillCompletenessRate(run model.CollectionRun) float64 {
 	if run.TotalWindows <= 0 {
+		if run.Status == model.CollectionTaskStatusSuccess {
+			return 1
+		}
 		return 0
 	}
 	completed := run.CompletedWindows

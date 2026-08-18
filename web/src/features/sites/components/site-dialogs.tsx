@@ -72,8 +72,10 @@ import {
 import { siteKeys } from '../query-keys'
 import {
   normalizeBaseUrl,
+  siteBackfillFormSchema,
   siteBackfillSchema,
   siteFormSchema,
+  type SiteBackfillFormValues,
   type SiteFormOutput,
   type SiteFormValues,
 } from '../schema'
@@ -691,18 +693,10 @@ function AuthorizationDialog({
   )
 }
 
-const backfillFormSchema = z.object({
-  end: z.string(),
-  onlyMissing: z.boolean(),
-  start: z.string(),
-})
-
-type BackfillFormValues = z.infer<typeof backfillFormSchema>
-
 function parseOptionalHour(value: string): number | undefined {
   if (!value) return undefined
   const parsed = dayjs.tz(value, 'YYYY-MM-DDTHH:mm', BEIJING_TIMEZONE)
-  return parsed.isValid() ? parsed.startOf('hour').unix() : undefined
+  return parsed.isValid() ? parsed.unix() : undefined
 }
 
 function BackfillDialog({
@@ -722,9 +716,9 @@ function BackfillDialog({
     handleSubmit,
     register,
     setError,
-  } = useForm<BackfillFormValues>({
+  } = useForm<SiteBackfillFormValues>({
     defaultValues: { end: '', onlyMissing: true, start: '' },
-    resolver: zodResolver(backfillFormSchema),
+    resolver: zodResolver(siteBackfillFormSchema),
   })
   const submit = handleSubmit(async (values) => {
     const request = siteBackfillSchema.safeParse({
@@ -764,16 +758,32 @@ function BackfillDialog({
           </DialogDescription>
         </DialogHeader>
         <form className='grid gap-4' id='site-backfill-form' onSubmit={submit}>
-          <FormField htmlFor='backfill-start' label={t('site.backfill.start')}>
+          <FormField
+            error={
+              errors.start
+                ? t('site.backfill.hourAlignmentRequired')
+                : undefined
+            }
+            htmlFor='backfill-start'
+            label={t('site.backfill.start')}
+          >
             <Input
+              aria-invalid={Boolean(errors.start)}
               id='backfill-start'
               step={3600}
               type='datetime-local'
               {...register('start')}
             />
           </FormField>
-          <FormField htmlFor='backfill-end' label={t('site.backfill.end')}>
+          <FormField
+            error={
+              errors.end ? t('site.backfill.hourAlignmentRequired') : undefined
+            }
+            htmlFor='backfill-end'
+            label={t('site.backfill.end')}
+          >
             <Input
+              aria-invalid={Boolean(errors.end)}
               id='backfill-end'
               step={3600}
               type='datetime-local'

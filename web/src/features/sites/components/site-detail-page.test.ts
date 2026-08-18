@@ -84,6 +84,8 @@ describe('SiteDetailPage information architecture', () => {
     expect(recentCollection).toContain('page_size: 3')
     expect(recentCollection).toContain('listSiteCollectionRuns')
     expect(recentCollection).toContain("to='/sites/$siteId/collection-runs'")
+    expect(recentCollection).toContain("t('collection.taskId')")
+    expect(recentCollection).toContain('{run.id}')
     expect(recentCollection).not.toContain('FastTaskHistoryPanel')
   })
 

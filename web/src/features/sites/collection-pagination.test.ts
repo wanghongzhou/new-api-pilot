@@ -63,6 +63,8 @@ describe('site detail collection pagination', () => {
     expect(fastHistorySource).toContain("className='w-48'")
     expect(fastHistorySource).toContain("className='min-w-0 flex-1'")
     expect(fastHistorySource).toContain('renderMobileCard={(item) =>')
+    expect(fastHistorySource).toContain("accessorKey: 'request_id'")
+    expect(fastHistorySource).toContain('{item.request_id}')
     expect(fastHistorySource).not.toContain('border-t pt-5')
     expect(fastHistorySource).toContain(
       'if (search.fastPage > lastPage) onSearchChange({ fastPage: lastPage })'
@@ -99,5 +101,10 @@ describe('site detail collection pagination', () => {
   test('does not render an empty technical-detail block for safe task failures', () => {
     expect(collectionRunsSource).toContain('run.error.technical_detail && (')
     expect(collectionRunsSource).toContain('run.last_request_id && (')
+  })
+
+  test('shows stable task identifiers in durable history', () => {
+    expect(collectionRunsSource).toContain("accessorKey: 'id'")
+    expect(collectionRunsSource).toContain('{run.id}')
   })
 })

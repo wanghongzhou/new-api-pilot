@@ -671,6 +671,9 @@ function RecentCollectionActivity({ siteId }: { siteId: string }) {
                   )
                 )}
               </p>
+              <p className='text-muted-foreground text-xs'>
+                {t('collection.taskId')}: {run.id}
+              </p>
             </div>
             <div className='flex items-center gap-3'>
               <span className='text-muted-foreground text-xs'>

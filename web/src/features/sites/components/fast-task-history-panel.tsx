@@ -58,6 +58,10 @@ function FastTaskHistoryCard({ item }: { item: FastTaskHistoryItem }) {
         <StatusBadge status={item.status} />
       </div>
       <div className='mt-3 grid grid-cols-2 gap-3 text-sm'>
+        <dl className='col-span-2'>
+          <dt className='text-muted-foreground'>{t('collection.taskId')}</dt>
+          <dd className='break-all'>{item.request_id}</dd>
+        </dl>
         <dl>
           <dt className='text-muted-foreground'>{t('collection.startedAt')}</dt>
           <dd>
@@ -144,6 +148,10 @@ export function FastTaskHistoryPanel({
   }, [onSearchChange, query.data, search.fastPage, total])
   const columns = useMemo<ColumnDef<FastTaskHistoryItem, unknown>[]>(
     () => [
+      {
+        accessorKey: 'request_id',
+        header: t('collection.taskId'),
+      },
       {
         cell: ({ row }) =>
           t(

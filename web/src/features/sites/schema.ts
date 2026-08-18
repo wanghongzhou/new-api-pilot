@@ -202,6 +202,20 @@ export const siteBackfillSchema = z
     { message: 'End time must be after start time', path: ['endTimestamp'] }
   )
 
+const siteBackfillHourInputSchema = z
+  .string()
+  .refine(
+    (value) =>
+      value === '' || /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):00$/.test(value),
+    { message: 'Backfill time must be on the hour' }
+  )
+
+export const siteBackfillFormSchema = z.object({
+  end: siteBackfillHourInputSchema,
+  onlyMissing: z.boolean(),
+  start: siteBackfillHourInputSchema,
+})
+
 export const siteStatisticsEndSchema = z.object({
   statisticsEndAt: z.number().int().positive(),
 })
@@ -212,4 +226,5 @@ export type SiteAuthorizationValues = z.input<
   typeof siteAuthorizationFormSchema
 >
 export type SiteBackfillValues = z.input<typeof siteBackfillSchema>
+export type SiteBackfillFormValues = z.infer<typeof siteBackfillFormSchema>
 export type SiteStatisticsEndValues = z.input<typeof siteStatisticsEndSchema>

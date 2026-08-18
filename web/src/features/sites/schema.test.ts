@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import {
   normalizeBaseUrl,
+  siteBackfillFormSchema,
   siteDetailSearchSchema,
   siteFormSchema,
   siteSearchMiddlewares,
@@ -58,6 +59,30 @@ describe('site schemas', () => {
 
   test('normalizes numeric run deep links to bigint-safe strings', () => {
     expect(siteDetailSearchSchema.parse({ runId: 10 }).runId).toBe('10')
+  })
+
+  test('accepts only whole-hour manual backfill inputs', () => {
+    expect(
+      siteBackfillFormSchema.safeParse({
+        end: '2026-08-18T11:00',
+        onlyMissing: true,
+        start: '2026-08-18T10:00',
+      }).success
+    ).toBe(true)
+    expect(
+      siteBackfillFormSchema.safeParse({
+        end: '2026-08-18T11:00',
+        onlyMissing: true,
+        start: '2026-08-18T10:30',
+      }).success
+    ).toBe(false)
+    expect(
+      siteBackfillFormSchema.safeParse({
+        end: '2026-08-18T11:00:30',
+        onlyMissing: true,
+        start: '',
+      }).success
+    ).toBe(false)
   })
 
   test('validates independent collection history tab state', () => {

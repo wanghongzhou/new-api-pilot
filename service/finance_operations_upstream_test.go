@@ -22,7 +22,7 @@ func TestFinanceSnapshotsDiscardSensitiveFieldsAndPreserveExactNumbers(t *testin
 			_, _ = w.Write([]byte(payload))
 			return
 		}
-		payload := fmt.Sprintf(`{"success":true,"message":"","data":{"page":1,"page_size":100,"total":1,"items":[{"id":8,"user_id":0,%q:"discard-me","status":1,"name":"batch","quota":9007199254740993,"created_time":10,"redeemed_time":0,"used_user_id":0,"expired_time":20}]}}`, strings.Join([]string{"k", "ey"}, ""))
+		payload := fmt.Sprintf(`{"success":true,"message":"","data":{"page":1,"page_size":100,"total":1,"items":[{"id":8,"user_id":0,%q:"discard-me","count":3,"DeletedAt":null,"status":1,"name":"batch","quota":9007199254740993,"created_time":10,"redeemed_time":0,"used_user_id":0,"expired_time":20}]}}`, strings.Join([]string{"k", "ey"}, ""))
 		_, _ = w.Write([]byte(payload))
 	}))
 	defer server.Close()
@@ -41,6 +41,17 @@ func TestFinanceSnapshotsDiscardSensitiveFieldsAndPreserveExactNumbers(t *testin
 	}{topups, redemptions})
 	if strings.Contains(string(encoded), "discard-me") {
 		t.Fatalf("sensitive upstream values escaped sanitized DTO: %s", encoded)
+	}
+}
+
+func TestRedemptionSnapshotStillRejectsUnrecognizedFields(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"success":true,"message":"","data":{"page":1,"page_size":100,"total":1,"items":[{"id":8,"user_id":0,"status":1,"name":"batch","quota":1,"created_time":1,"redeemed_time":0,"used_user_id":0,"expired_time":0,"unexpected":"reject"}]}}`))
+	}))
+	defer server.Close()
+	client := testClientForServer(t, server, true, testClientSettings{})
+	if _, err := client.SnapshotRedemptions(context.Background(), "finance-redemption-unknown"); !errors.Is(err, ErrUpstreamResponseInvalid) {
+		t.Fatalf("unrecognized redemption field error=%v", err)
 	}
 }
 

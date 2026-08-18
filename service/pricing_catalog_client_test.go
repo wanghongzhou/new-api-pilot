@@ -51,7 +51,7 @@ func TestPricingGroupAndPricingSnapshotsUseIndependentManagementRequests(t *test
 		case "/api/group/":
 			fmt.Fprint(w, `{"success":true,"message":"","data":["vip","default"]}`)
 		case "/api/pricing":
-			fmt.Fprint(w, `{"success":true,"data":[{"model_name":"gpt-x","description":"safe","icon":"icon","tags":"chat","vendor_id":7,"quota_type":0,"model_ratio":1e-3,"model_price":2.500000000000000001,"owner_by":"openai","completion_ratio":3,"cache_ratio":0.25,"create_cache_ratio":null,"image_ratio":4,"audio_ratio":5,"audio_completion_ratio":6,"enable_groups":["vip","default"],"supported_endpoint_types":["openai-response","openai"],"billing_mode":"tiered_expr","billing_expr":"secret","pricing_version":"item-secret","unknown_private":{"token":"secret"}}],"vendors":[{"id":7,"name":"  OpenAI  ","description":"discarded","icon":"discarded"}],"group_ratio":{"vip":1.25,"default":1e-2},"usable_group":{"vip":"VIP users","default":"Default users"},"supported_endpoint":{"openai":{"path":"/v1/chat/completions","headers":{"secret":"x"}}},"auto_groups":["secret"],"pricing_version":"version-1","unknown_top_level":{"secret":"discarded"}}`)
+			fmt.Fprint(w, `{"success":true,"data":[{"model_name":"gpt-x","description":"safe","icon":"icon","tags":"chat","vendor_id":7,"quota_type":0,"model_ratio":1e-3,"model_price":2.500000000000000001,"owner_by":"openai","completion_ratio":3,"cache_ratio":0.25,"create_cache_ratio":null,"image_ratio":4,"audio_ratio":5,"audio_completion_ratio":6,"enable_groups":["vip","default"],"supported_endpoint_types":["openai-response","0","openai"],"billing_mode":"tiered_expr","billing_expr":"secret","pricing_version":"item-secret","unknown_private":{"token":"secret"}}],"vendors":[{"id":7,"name":"  OpenAI  ","description":"discarded","icon":"discarded"}],"group_ratio":{"vip":1.25,"default":1e-2},"usable_group":{"vip":"VIP users","default":"Default users"},"supported_endpoint":{"openai":{"path":"/v1/chat/completions","headers":{"secret":"x"}}},"auto_groups":["secret"],"pricing_version":"version-1","unknown_top_level":{"secret":"discarded"}}`)
 		default:
 			http.NotFound(w, r)
 		}
@@ -80,7 +80,7 @@ func TestPricingGroupAndPricingSnapshotsUseIndependentManagementRequests(t *test
 	if item.CacheRatio == nil || *item.CacheRatio != "0.25" || item.CreateCacheRatio != nil || item.AudioCompletionRatio == nil || *item.AudioCompletionRatio != "6" {
 		t.Fatalf("optional ratios=%#v", item)
 	}
-	if !reflect.DeepEqual(item.EnableGroups, []string{"default", "vip"}) || !reflect.DeepEqual(item.SupportedEndpointTypes, []string{"openai", "openai-response"}) {
+	if !reflect.DeepEqual(item.EnableGroups, []string{"default", "vip"}) || !reflect.DeepEqual(item.SupportedEndpointTypes, []string{"0", "openai", "openai-response"}) {
 		t.Fatalf("canonical lists=%#v", item)
 	}
 	if len(pricing.Groups) != 2 || pricing.Groups[0].Name != "default" || pricing.Groups[0].Ratio == nil || *pricing.Groups[0].Ratio != "0.01" || pricing.Groups[1].Description != "VIP users" {

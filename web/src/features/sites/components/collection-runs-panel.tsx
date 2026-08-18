@@ -147,6 +147,10 @@ function RunCard({
       </div>
       <div className='mt-3 grid grid-cols-2 gap-3 text-sm'>
         <dl>
+          <dt className='text-muted-foreground'>{t('collection.taskId')}</dt>
+          <dd className='break-all'>{run.id}</dd>
+        </dl>
+        <dl>
           <dt className='text-muted-foreground'>{t('collection.trigger')}</dt>
           <dd>
             {t(
@@ -566,6 +570,10 @@ export function CollectionRunsPanel({
   }, [onSearchChange, runTotal, runsQuery.data, search.runPage])
   const columns = useMemo<ColumnDef<CollectionRunItem, unknown>[]>(
     () => [
+      {
+        accessorKey: 'id',
+        header: t('collection.taskId'),
+      },
       {
         cell: ({ row }) =>
           t(

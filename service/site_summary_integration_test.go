@@ -93,6 +93,30 @@ func TestSiteListAndDetailUseLatestResourceSummaryAndDefaultMissingMetricsToZero
 		detail.Resource.DataStatus != "complete" || detail.CompletenessRate != 0.25 {
 		t.Fatalf("detail resource summary = %#v", detail.Resource)
 	}
+
+	if err := tx.Create(&model.CollectionRun{
+		SiteID: &siteID, SiteConfigVersion: site.ConfigVersion, TaskType: constant.TaskTypeUsageBackfill,
+		TargetType: "site", TargetID: site.ID, TriggerType: constant.CollectionTriggerRecovery,
+		Scope: []byte(`{"only_missing":true}`), Status: model.CollectionTaskStatusSuccess,
+		NextAttemptAt: now + 1, CreatedRequestID: "req_empty_backfill", LastRequestID: "req_empty_backfill",
+		ErrorParams: []byte(`{}`), CreatedAt: now + 1, UpdatedAt: now + 1,
+	}).Error; err != nil {
+		t.Fatalf("create successful empty backfill: %v", err)
+	}
+	page, err = sites.List(context.Background(), query)
+	if err != nil {
+		t.Fatalf("list sites with successful empty backfill: %v", err)
+	}
+	if page.Items[0].CompletenessRate != 1 {
+		t.Fatalf("list successful empty backfill completeness = %v, want 1", page.Items[0].CompletenessRate)
+	}
+	detail, err = sites.Get(context.Background(), site.ID)
+	if err != nil {
+		t.Fatalf("get site detail with successful empty backfill: %v", err)
+	}
+	if detail.CompletenessRate != 1 || detail.Backfill.Progress != 1 {
+		t.Fatalf("detail successful empty backfill completeness/progress = %v/%v, want 1/1", detail.CompletenessRate, detail.Backfill.Progress)
+	}
 }
 
 func TestStatisticsStatusAfterBackfillRepairsTerminalBackfillingState(t *testing.T) {
@@ -119,6 +143,20 @@ func TestStatisticsStatusAfterBackfillRepairsTerminalBackfillingState(t *testing
 		t.Run(test.name, func(t *testing.T) {
 			if got := statisticsStatusAfterBackfill(test.current, test.run); got != test.want {
 				t.Fatalf("statistics status = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestBackfillCompletenessRateKeepsUnmaterializedNonSuccessAtZero(t *testing.T) {
+	for _, status := range []string{
+		model.CollectionTaskStatusPending,
+		model.CollectionTaskStatusRunning,
+		model.CollectionTaskStatusFailed,
+	} {
+		t.Run(status, func(t *testing.T) {
+			if got := backfillCompletenessRate(model.CollectionRun{Status: status}); got != 0 {
+				t.Fatalf("unmaterialized %s backfill completeness = %v, want 0", status, got)
 			}
 		})
 	}
