@@ -498,7 +498,7 @@ params 的 key 由 code 固定并进入 OpenAPI fixture。下表是 `MessagePara
 | SITE_CONFIG_CHANGED | site_id、expected_config_version:number、actual_config_version:number | - |
 | DEPENDENCY_WINDOWS_MISSING | site_id、run_id、start_timestamp、end_timestamp | - |
 | WORKER_LEASE_LOST | site_id、run_id、hour_ts | - |
-| COLLECTION_EXECUTION_FAILED | - | - |
+| COLLECTION_EXECUTION_FAILED | - | failure_kind:`upstream_unavailable\|authorization_expired\|permission_denied\|rate_limited\|upstream_server_error\|response_invalid\|response_too_large\|export_disabled\|address_forbidden\|configuration_changed\|task_contract_invalid\|internal_error` |
 | EXPORT_DISK_LOW | export_id、free_bytes:string、threshold_bytes:string | - |
 | EXPORT_FILE_TOO_LARGE | export_id、file_bytes:string、limit_bytes:string | - |
 | EXPORT_SNAPSHOT_FAILED、EXPORT_WRITE_FAILED、EXPORT_EXPIRED、EXPORT_FILE_MISSING | export_id | - |
@@ -524,7 +524,7 @@ params 的 key 由 code 固定并进入 OpenAPI fixture。下表是 `MessagePara
 
 投递参数中的 null 仅用于测试消息或 delivery 尚未创建前的同步配置失败：测试 delivery 的 alert_event_id 固定 null，配置预检失败时 delivery_id 也为 null；测试发送成功使用 `NOTIFICATION_TEST_SUCCEEDED` 和非空 delivery_id；真实告警投递两个 ID 均非空。`INTERNAL_CONTRACT_ERROR.value` 只能携带不含秘密的安全枚举值，无法安全回显时省略。`make docs-check` 必须证明 registry 中每个稳定 code 在本表恰好出现一次，OpenAPI 生成 `code` 判别联合，`zh-CN` 文案和 fixture 覆盖该联合；不得放 Token、URL query、密码或 Webhook。
 
-采集任务和窗口从持久层恢复错误时必须先按本表白名单裁剪 params，再执行严格校验；已登记 code 的额外诊断字段不得进入 DTO。未知 code、缺少必填参数或参数类型非法时统一降级为无参数 `COLLECTION_EXECUTION_FAILED`。该降级不得复制原始错误码、`error_message`、URL/endpoint、请求方法、凭据或任意诊断参数，`technical_detail` 固定为空；页面以中性本地化文案和已有 request_id 提供排障入口。
+采集任务和窗口从持久层恢复错误时必须先按本表白名单裁剪 params，再执行严格校验；已登记 code 的额外诊断字段不得进入 DTO。Worker 对已知失败必须在落库前归类为 `COLLECTION_EXECUTION_FAILED.failure_kind` 或更具体的稳定 code，使页面能展示可操作的脱敏原因；禁止仅因原始错误文本不可回显就丢弃已知的授权、权限、限流、网络、上游服务、响应契约、响应大小、导出能力、地址策略、配置栅栏或内部契约分类。未知 code、缺少必填参数或参数类型非法时统一降级为无参数 `COLLECTION_EXECUTION_FAILED`。该降级不得复制原始错误码、`error_message`、URL/endpoint、请求方法、凭据或任意诊断参数，`technical_detail` 固定为空；无 `failure_kind` 的历史或未知错误由页面提示使用 request_id 查阅服务日志。
 
 前端以 code + params 通过 i18next 生成简体中文主文案，本表之外的 error_message/technical_detail 只进入“技术详情”并可复制 request_id，不作为流程分支或已本地化主文案。新增稳定码必须同时修改本 registry、`zh-CN` 文案、契约 fixture 和验收用例。
 

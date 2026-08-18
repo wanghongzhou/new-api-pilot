@@ -558,6 +558,10 @@ func (executor *Executor) executeNonWindow(ctx context.Context, claim model.Coll
 		retryable, delay, code := retryDecision(claim.Run.TaskType, attempt, err, executor.attemptPolicy)
 		delay = retryDelayWithJitter(delay, claim.Run.TaskType, claim.Run.ID, collectionClaimSiteID(claim), 0, attempt)
 		request.ErrorCode = code
+		var executionError *TaskExecutionError
+		if errors.As(err, &executionError) {
+			request.ErrorParams = append([]byte(nil), executionError.Params...)
+		}
 		if retryable {
 			next := executor.clock.Now().Add(delay).Unix()
 			request.RunStatus = model.CollectionTaskStatusPending

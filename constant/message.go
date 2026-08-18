@@ -94,8 +94,12 @@ const (
 )
 
 var MessageRegistry = map[MessageCode]MessageParamSchema{
-	MessageCollectionRetryExhausted:       required(idParam("site_id"), idParam("run_id")),
-	MessageCollectionExecutionFailed:      required(),
+	MessageCollectionRetryExhausted: required(idParam("site_id"), idParam("run_id")),
+	MessageCollectionExecutionFailed: optional(required(), enumParam("failure_kind",
+		"upstream_unavailable", "authorization_expired", "permission_denied", "rate_limited",
+		"upstream_server_error", "response_invalid", "response_too_large", "export_disabled",
+		"address_forbidden", "configuration_changed", "task_contract_invalid", "internal_error",
+	)),
 	MessageDataValidationMismatch:         required(idParam("site_id"), timestampParam("start_timestamp"), timestampParam("end_timestamp")),
 	MessageUpstreamResponseInvalid:        optional(required(idParam("site_id")), stringParam("capability_key")),
 	MessageUpstreamResponseTooLarge:       required(idParam("site_id"), decimalStringParam("response_bytes"), decimalStringParam("limit_bytes")),

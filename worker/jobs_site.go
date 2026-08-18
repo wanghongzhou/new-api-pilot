@@ -48,7 +48,7 @@ func SiteJobHandlers(runner SitePeriodicJobRunner) map[string]JobHandler {
 				ctx, currentTaskType, *run.SiteID, run.SiteConfigVersion, execution.RequestID,
 			)
 			if err != nil {
-				return JobOutcome{}, err
+				return JobOutcome{}, classifyCollectionTaskError(err)
 			}
 			if fetched < 0 || written < 0 {
 				return JobOutcome{}, fmt.Errorf("periodic site task returned invalid row counts")

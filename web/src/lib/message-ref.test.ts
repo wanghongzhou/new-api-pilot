@@ -10,7 +10,17 @@ describe('translateMessageRef metric presentation', () => {
         params: {},
         technical_detail: '',
       })
-    ).toBe('采集任务执行失败，详细原因不可安全展示')
+    ).toBe('采集任务执行失败：请提供下方请求 ID 查看服务日志')
+  })
+
+  test('renders a safe classified collection failure reason', () => {
+    expect(
+      translateMessageRef({
+        code: 'COLLECTION_EXECUTION_FAILED',
+        params: { failure_kind: 'authorization_expired' },
+        technical_detail: '',
+      })
+    ).toBe('采集任务执行失败：站点授权已失效，请重新授权')
   })
 
   test.each([

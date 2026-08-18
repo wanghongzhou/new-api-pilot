@@ -39,7 +39,7 @@ func LocalRebuildJobHandlers(builder LocalRebuildWindowBuilder) map[string]JobHa
 				}
 			}
 			if err != nil {
-				return JobOutcome{}, err
+				return JobOutcome{}, classifyCollectionTaskError(err)
 			}
 			return JobOutcome{TransactionMutation: mutation}, nil
 		})

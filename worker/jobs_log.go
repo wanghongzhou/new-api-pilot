@@ -23,7 +23,7 @@ func LogJobHandlers(collector UpstreamLogCollector) map[string]JobHandler {
 			}
 			fetched, written, err := collector.ExecuteScheduledLogTask(ctx, *run.SiteID, run.SiteConfigVersion, execution.RequestID)
 			if err != nil {
-				return JobOutcome{}, err
+				return JobOutcome{}, classifyCollectionTaskError(err)
 			}
 			if fetched < 0 || written < 0 {
 				return JobOutcome{}, model.ErrCollectionRunContract

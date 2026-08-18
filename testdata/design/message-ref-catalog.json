@@ -65,7 +65,7 @@
     {"code": "CAPABILITY_OK", "category": "capability", "required_params": {"site_id": "IdString", "capability_key": "string"}, "optional_params": {}},
     {"code": "CAPABILITY_RESPONSE_INVALID", "category": "capability", "required_params": {"site_id": "IdString", "capability_key": "string"}, "optional_params": {}},
     {"code": "CAPABILITY_UPSTREAM_UNAVAILABLE", "category": "capability", "required_params": {"site_id": "IdString", "capability_key": "string"}, "optional_params": {}},
-    {"code": "COLLECTION_EXECUTION_FAILED", "category": "collection", "required_params": {}, "optional_params": {}},
+    {"code": "COLLECTION_EXECUTION_FAILED", "category": "collection", "required_params": {}, "optional_params": {"failure_kind": "upstream_unavailable|authorization_expired|permission_denied|rate_limited|upstream_server_error|response_invalid|response_too_large|export_disabled|address_forbidden|configuration_changed|task_contract_invalid|internal_error"}},
     {"code": "COLLECTION_RETRY_EXHAUSTED", "category": "collection", "required_params": {"site_id": "IdString", "run_id": "IdString"}, "optional_params": {}},
     {"code": "CONFLICT", "category": "http", "required_params": {}, "optional_params": {}},
     {"code": "DATA_BACKFILLING", "category": "data", "required_params": {"scope_type": "string", "scope_id": "IdString|null", "progress": "number"}, "optional_params": {}},

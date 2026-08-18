@@ -1357,7 +1357,25 @@
           },
           "params": {
             "additionalProperties": false,
-            "properties": {},
+            "properties": {
+              "failure_kind": {
+                "enum": [
+                  "upstream_unavailable",
+                  "authorization_expired",
+                  "permission_denied",
+                  "rate_limited",
+                  "upstream_server_error",
+                  "response_invalid",
+                  "response_too_large",
+                  "export_disabled",
+                  "address_forbidden",
+                  "configuration_changed",
+                  "task_contract_invalid",
+                  "internal_error"
+                ],
+                "type": "string"
+              }
+            },
             "required": [],
             "type": "object"
           },

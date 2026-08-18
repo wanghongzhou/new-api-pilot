@@ -468,6 +468,27 @@ func TestCollectionTaskMessageRefKeepsOnlyStableSafeParams(t *testing.T) {
 	}
 }
 
+func TestCollectionTaskMessageRefKeepsSafeFailureClassification(t *testing.T) {
+	message := collectionTaskMessageRef(string(constant.MessageCollectionExecutionFailed), []byte(`{
+  "failure_kind":"authorization_expired",
+  "endpoint":"https://example.test/api?access_token=secret",
+  "password":"secret"
+}`))
+	if message.Code != constant.MessageCollectionExecutionFailed || message.TechnicalDetail != "" ||
+		len(message.Params) != 1 || message.Params["failure_kind"] != "authorization_expired" {
+		t.Fatalf("classified collection message = %#v", message)
+	}
+	encoded, err := common.Marshal(message)
+	if err != nil {
+		t.Fatalf("marshal classified collection message: %v", err)
+	}
+	for _, secret := range []string{"endpoint", "access_token", "password", "secret", "example.test"} {
+		if strings.Contains(string(encoded), secret) {
+			t.Fatalf("classified collection message leaked %q: %s", secret, encoded)
+		}
+	}
+}
+
 func TestCollectionTaskMessageRefUsesSafeFallbackForInvalidPersistedErrors(t *testing.T) {
 	for _, test := range []struct {
 		name string

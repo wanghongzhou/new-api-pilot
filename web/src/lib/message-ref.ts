@@ -27,7 +27,21 @@ type AccountAlertParams = {
 }
 
 export type MessageParamsByCode = {
-  COLLECTION_EXECUTION_FAILED: Record<string, never>
+  COLLECTION_EXECUTION_FAILED: {
+    failure_kind?:
+      | 'address_forbidden'
+      | 'authorization_expired'
+      | 'configuration_changed'
+      | 'export_disabled'
+      | 'internal_error'
+      | 'permission_denied'
+      | 'rate_limited'
+      | 'response_invalid'
+      | 'response_too_large'
+      | 'task_contract_invalid'
+      | 'upstream_server_error'
+      | 'upstream_unavailable'
+  }
   COLLECTION_RETRY_EXHAUSTED: { site_id: IdString; run_id: IdString }
   DATA_VALIDATION_MISMATCH: SiteRangeParams
   UPSTREAM_RESPONSE_INVALID: {
@@ -238,6 +252,14 @@ function displayMessageParams(
 ): Record<string, unknown> {
   const params = { ...raw }
   switch (code) {
+    case 'COLLECTION_EXECUTION_FAILED': {
+      const kind = params.failure_kind
+      params.failure_reason =
+        typeof kind === 'string'
+          ? i18n.t(dynamicI18nKey('site', `collection.failureReason.${kind}`))
+          : i18n.t('collection.failureReason.unknown')
+      break
+    }
     case 'ALERT_CPU_HIGH':
     case 'ALERT_MEMORY_HIGH':
     case 'ALERT_DISK_HIGH':
