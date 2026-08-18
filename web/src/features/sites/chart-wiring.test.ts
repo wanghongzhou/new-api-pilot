@@ -8,6 +8,8 @@ test('connects real resource samples and resets aligned ranges on granularity ch
   )
 
   expect(source).toContain("invalidType='link'")
+  expect(source).toContain("search.granularity === 'minute'")
+  expect(source).toContain('? { visible: false }')
   expect(source).toContain('defaultSiteResourceRange(granularity)')
   expect(source).toContain('alignSiteResourceTimestamp(')
   expect(source).toContain('hasRenderableSiteResourceValues(data)')

@@ -274,7 +274,11 @@ function ResourceTrend({
         data={{ id: 'resource-trend', values: data }}
         height={300}
         invalidType='link'
-        point={{ state: { hover: { size: 7 } }, style: { size: 4 } }}
+        point={
+          search.granularity === 'minute'
+            ? { visible: false }
+            : { state: { hover: { size: 7 } }, style: { size: 4 } }
+        }
         tooltip={{ visible: true }}
         xField='time'
         yField='value'
