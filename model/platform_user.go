@@ -141,6 +141,11 @@ func IsDuplicateKey(err error) bool {
 	return errors.As(err, &mysqlError) && mysqlError.Number == 1062
 }
 
+func IsRetryableTransactionError(err error) bool {
+	var mysqlError *mysqldriver.MySQLError
+	return errors.As(err, &mysqlError) && (mysqlError.Number == 1205 || mysqlError.Number == 1213)
+}
+
 func escapeLike(value string) string {
 	replacer := strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_")
 	return replacer.Replace(value)

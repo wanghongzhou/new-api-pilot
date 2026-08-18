@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	mysqldriver "github.com/go-sql-driver/mysql"
 	"gorm.io/gorm"
 
 	"new-api-pilot/constant"
@@ -63,6 +64,74 @@ func TestSiteCollectionRunCanonicalConstruction(t *testing.T) {
 		if _, err := CanonicalCollectionRunScope(constant.TaskTypeUsageBackfill, invalid); !errors.Is(err, ErrCollectionRunContract) {
 			t.Fatalf("invalid scope %s error = %v", invalid, err)
 		}
+	}
+}
+
+func TestCreateOrGetRunUsesNoErrorDatabaseDedupe(t *testing.T) {
+	database := openLockedSiteRunDatabase(t)
+	ctx := context.Background()
+	now := int64(1_752_400_800)
+	site := createRunnableSite(t, database, "run-no-error-dedupe", now)
+	countedDB, counter := newTestSQLCountingDB(database.GORM)
+	repository := NewSiteRepository(countedDB)
+
+	first, err := NewSiteCollectionRun(site, SiteRunSpec{
+		TaskType: constant.TaskTypeRedemptionSync, TriggerType: constant.CollectionTriggerSchedule,
+		Priority: 0, RequestID: "req_no_error_dedupe_first", Now: now,
+	})
+	if err != nil {
+		t.Fatalf("build first dedupe run: %v", err)
+	}
+	created, deduplicated, err := repository.CreateOrGetRun(ctx, &first)
+	if err != nil || deduplicated || created.ID <= 0 {
+		t.Fatalf("create first dedupe run = %#v deduplicated=%t err=%v", created, deduplicated, err)
+	}
+
+	second, err := NewSiteCollectionRun(site, SiteRunSpec{
+		TaskType: constant.TaskTypeRedemptionSync, TriggerType: constant.CollectionTriggerSchedule,
+		Priority: 0, RequestID: "req_no_error_dedupe_second", Now: now + 1,
+	})
+	if err != nil {
+		t.Fatalf("build second dedupe run: %v", err)
+	}
+	existing, deduplicated, err := repository.CreateOrGetRun(ctx, &second)
+	if err != nil || !deduplicated || existing.ID != created.ID {
+		t.Fatalf("dedupe existing run = %#v deduplicated=%t err=%v", existing, deduplicated, err)
+	}
+	if got := counter.countStatementsContaining("insert into `collection_run`", "on duplicate key update"); got != 2 {
+		t.Fatalf("no-error collection inserts = %d, want 2", got)
+	}
+	var count int64
+	if err := database.GORM.Model(&CollectionRun{}).Where("active_key = ?", *created.ActiveKey).Count(&count).Error; err != nil || count != 1 {
+		t.Fatalf("active dedupe rows = %d, err=%v", count, err)
+	}
+}
+
+func TestSiteRepositoryWithTransactionRetriesMySQLContention(t *testing.T) {
+	database := openLockedSiteRunDatabase(t)
+	repository := NewSiteRepository(database.GORM)
+	for _, number := range []uint16{1205, 1213} {
+		t.Run(fmt.Sprintf("mysql-%d", number), func(t *testing.T) {
+			attempts := 0
+			err := repository.WithTransaction(context.Background(), func(*SiteRepository) error {
+				attempts++
+				if attempts < 3 {
+					return &mysqldriver.MySQLError{Number: number, Message: "retryable transaction conflict"}
+				}
+				return nil
+			})
+			if err != nil || attempts != 3 {
+				t.Fatalf("retryable transaction attempts=%d err=%v", attempts, err)
+			}
+		})
+	}
+	attempts := 0
+	err := repository.WithTransaction(context.Background(), func(*SiteRepository) error {
+		attempts++
+		return &mysqldriver.MySQLError{Number: 1062, Message: "duplicate"}
+	})
+	if err == nil || attempts != 1 {
+		t.Fatalf("non-retryable transaction attempts=%d err=%v", attempts, err)
 	}
 }
 

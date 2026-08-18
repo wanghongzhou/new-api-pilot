@@ -482,16 +482,19 @@ func (repository *SiteRepository) CreateOrGetRun(ctx context.Context, run *Colle
 	if run == nil || ValidateCollectionRunForCreate(*run) != nil {
 		return CollectionRun{}, false, ErrCollectionRunContract
 	}
-	err := repository.db.WithContext(ctx).Create(run).Error
-	if err == nil {
+	result := repository.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(run)
+	if result.Error != nil {
+		return CollectionRun{}, false, result.Error
+	}
+	if result.RowsAffected == 1 {
 		return *run, false, nil
 	}
-	if !IsDuplicateKey(err) || run.ActiveKey == nil {
-		return CollectionRun{}, false, err
+	if result.RowsAffected != 0 || run.ActiveKey == nil {
+		return CollectionRun{}, false, ErrCollectionRunContract
 	}
 	var existing CollectionRun
 	if findErr := repository.db.WithContext(ctx).Where("active_key = ?", *run.ActiveKey).First(&existing).Error; findErr != nil {
-		return CollectionRun{}, false, err
+		return CollectionRun{}, false, findErr
 	}
 	if !sameActiveCollectionRun(existing, *run) {
 		return CollectionRun{}, false, ErrCollectionRunContract

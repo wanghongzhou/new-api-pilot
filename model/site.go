@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -68,9 +69,26 @@ func NewSiteRepository(db *gorm.DB) *SiteRepository {
 }
 
 func (repository *SiteRepository) WithTransaction(ctx context.Context, operation func(*SiteRepository) error) error {
-	return repository.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		return operation(&SiteRepository{db: tx})
-	})
+	const maximumAttempts = 3
+	var err error
+	for attempt := 0; attempt < maximumAttempts; attempt++ {
+		err = repository.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			return operation(&SiteRepository{db: tx})
+		})
+		if err == nil || !IsRetryableTransactionError(err) || attempt == maximumAttempts-1 {
+			return err
+		}
+		timer := time.NewTimer(time.Duration(1<<attempt) * 10 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+	return err
 }
 
 func (repository *SiteRepository) Create(ctx context.Context, site *Site) error {
