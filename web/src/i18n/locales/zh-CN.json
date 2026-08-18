@@ -547,6 +547,7 @@
   "site.authorization.tokenNotRotated": "使用已有 Token 不会修改远端凭据；Token 只会加密存储。",
   "site.authorization.verify": "验证并检查能力",
   "site.backToList": "返回站点列表",
+  "site.backToManagement": "返回站点管理",
   "site.backfill.description": "按北京时间整点创建补采任务；默认只补缺失窗口。",
   "site.backfill.hourAlignmentRequired": "请选择北京时间整点，分钟必须为 00。",
   "site.backfill.end": "结束时间",

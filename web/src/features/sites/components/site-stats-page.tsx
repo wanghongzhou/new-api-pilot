@@ -80,10 +80,21 @@ export function SiteStatsPage({
       header={
         <div className='grid gap-4'>
           <DetailBackLink
-            render={<Link params={{ siteId }} to='/sites/$siteId' />}
+            render={
+              <Link
+                search={{
+                  auth: [],
+                  health: [],
+                  management: [],
+                  online: [],
+                  statistics: [],
+                }}
+                to='/sites'
+              />
+            }
           >
             <HugeiconsIcon icon={ArrowLeft01Icon} strokeWidth={2} />
-            {t('site.stats.backToDetail')}
+            {t('site.backToManagement')}
           </DetailBackLink>
           <OperationsAnalyticsNavigation active='statistics' siteId={siteId} />
         </div>

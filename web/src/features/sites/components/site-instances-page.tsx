@@ -492,10 +492,21 @@ export function SiteInstancesPage({
     >
       <div className='grid min-w-0 gap-8'>
         <DetailBackLink
-          render={<Link params={{ siteId }} to='/sites/$siteId' />}
+          render={
+            <Link
+              search={{
+                auth: [],
+                health: [],
+                management: [],
+                online: [],
+                statistics: [],
+              }}
+              to='/sites'
+            />
+          }
         >
           <HugeiconsIcon icon={ArrowLeft01Icon} strokeWidth={2} />
-          {t('instance.backToSite')}
+          {t('site.backToManagement')}
         </DetailBackLink>
 
         {!validSiteId && <ErrorState title={t('instance.invalidSite')} />}
