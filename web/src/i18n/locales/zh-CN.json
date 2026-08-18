@@ -354,6 +354,7 @@
   "resource.invalidRange": "结束时间必须晚于开始时间。",
   "resource.loadError": "无法加载资源趋势",
   "resource.loading": "正在加载资源趋势",
+  "resource.missingValue": "缺失",
   "resource.metric": "资源指标",
   "resource.minuteRangeLimit": "分钟趋势最多查询最近 {{days}} 天。",
   "resource.retentionLoadError": "无法读取分钟数据留存配置，已停止分钟趋势查询。",

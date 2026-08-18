@@ -41,15 +41,24 @@ func (service *DataMaintenanceService) RunScheduledMaintenance(ctx context.Conte
 	previous := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, beijing).AddDate(0, 0, -1)
 	previousDateKey := previous.Year()*10000 + int(previous.Month())*100 + previous.Day()
 	previousStart, previousEnd := previous.Unix(), previous.AddDate(0, 0, 1).Unix()
+	currentStart := previousEnd
+	closedHourEnd := time.Date(local.Year(), local.Month(), local.Day(), local.Hour(), 0, 0, 0, beijing).Unix()
+	repairStart := currentStart
+	if local.Hour() < 3 {
+		repairStart = previousEnd - int64(time.Hour/time.Second)
+	}
 	result := ScheduledDataMaintenanceResult{}
 	var resultErr error
 	if local.Hour() >= 3 {
 		finalize, err := service.repository.FinalizeResourceDaily(ctx, previousDateKey, previousStart, previousEnd, 100, unix)
 		result.DailyFinalize = finalize
 		resultErr = errors.Join(resultErr, err)
+		if err != nil || !finalize.Complete {
+			repairStart = previousStart
+		}
 	}
-	if local.Hour() > 3 || (local.Hour() == 3 && local.Minute() >= 20) {
-		gap, err := service.repository.RepairResourceRollupGaps(ctx, previousDateKey, previousStart, previousEnd, 100, unix)
+	if closedHourEnd > repairStart {
+		gap, err := service.repository.RepairResourceRollupGaps(ctx, dateKey, repairStart, closedHourEnd, 100, unix)
 		result.GapRepair = gap
 		resultErr = errors.Join(resultErr, err)
 	}

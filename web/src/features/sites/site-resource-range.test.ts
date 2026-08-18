@@ -10,20 +10,20 @@ import {
 const now = dayjs.tz('2026-08-11 12:57:28', BEIJING_TIMEZONE).unix()
 
 describe('site resource ranges', () => {
-  test('uses the last 24 closed hours worth of minute buckets', () => {
+  test('uses the last 60 closed minute buckets', () => {
     const range = defaultSiteResourceRange('minute', now)
     expect(range.end).toBe(
       dayjs.tz('2026-08-11 12:57:00', BEIJING_TIMEZONE).unix()
     )
-    expect(range.end - range.start).toBe(24 * 60 * 60)
+    expect(range.end - range.start).toBe(60 * 60)
   })
 
-  test('uses seven days ending on a closed Beijing hour', () => {
+  test('uses the last 24 closed Beijing hours', () => {
     const range = defaultSiteResourceRange('hour', now)
     expect(range.end).toBe(
       dayjs.tz('2026-08-11 12:00:00', BEIJING_TIMEZONE).unix()
     )
-    expect(range.end - range.start).toBe(7 * 24 * 60 * 60)
+    expect(range.end - range.start).toBe(24 * 60 * 60)
   })
 
   test('uses a 30-day window aligned to Beijing day boundaries', () => {

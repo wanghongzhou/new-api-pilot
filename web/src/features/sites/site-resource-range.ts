@@ -4,8 +4,8 @@ export type SiteResourceGranularity = 'day' | 'hour' | 'minute'
 
 const defaultRangeCounts: Record<SiteResourceGranularity, number> = {
   day: 30,
-  hour: 7 * 24,
-  minute: 24 * 60,
+  hour: 24,
+  minute: 60,
 }
 
 export function alignSiteResourceTimestamp(

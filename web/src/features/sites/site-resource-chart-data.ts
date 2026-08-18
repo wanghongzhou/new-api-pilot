@@ -34,3 +34,12 @@ export function hasRenderableSiteResourceValues(
 ): boolean {
   return values.some((item) => item.value != null)
 }
+
+export function formatSiteResourceValue(
+  value: number | null,
+  missingLabel: string
+): string {
+  return value == null || !Number.isFinite(value)
+    ? missingLabel
+    : `${value.toFixed(1)}%`
+}

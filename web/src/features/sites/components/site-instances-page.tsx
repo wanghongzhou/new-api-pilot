@@ -30,6 +30,7 @@ import { getSite, getSiteResource, listSiteInstances } from '../api'
 import { siteKeys } from '../query-keys'
 import { formatPercentValue } from '../site-card-metrics'
 import {
+  formatSiteResourceValue,
   hasRenderableSiteResourceValues,
   siteResourceValue,
 } from '../site-resource-chart-data'
@@ -296,9 +297,10 @@ function ResourceTrend({
             <tr key={point.time}>
               <td>{point.time}</td>
               <td>
-                {point.value == null
-                  ? t('data.unavailableValue')
-                  : `${point.value.toFixed(1)}%`}
+                {formatSiteResourceValue(
+                  point.value,
+                  t('resource.missingValue')
+                )}
               </td>
             </tr>
           ))}

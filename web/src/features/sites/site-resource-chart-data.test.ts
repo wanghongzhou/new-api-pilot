@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import {
+  formatSiteResourceValue,
   hasRenderableSiteResourceValues,
   siteResourceValue,
 } from './site-resource-chart-data'
@@ -54,5 +55,11 @@ describe('site resource chart data', () => {
         { health: 'unavailable', time: '12:01', value: null },
       ])
     ).toBe(false)
+  })
+
+  test('labels missing table values without disguising observed zero', () => {
+    expect(formatSiteResourceValue(null, '缺失')).toBe('缺失')
+    expect(formatSiteResourceValue(Number.NaN, '缺失')).toBe('缺失')
+    expect(formatSiteResourceValue(0, '缺失')).toBe('0.0%')
   })
 })
