@@ -162,6 +162,32 @@ func TestBackfillCompletenessRateKeepsUnmaterializedNonSuccessAtZero(t *testing.
 	}
 }
 
+func TestBackfillCompletenessRatePreservesCompletedRangeDuringMissingOnlyRetry(t *testing.T) {
+	start := int64(1_780_000_000)
+	end := start + 100*3600
+	run := model.CollectionRun{
+		TaskType: constant.TaskTypeUsageBackfill,
+		Scope:    []byte(`{"only_missing":true}`), Status: model.CollectionTaskStatusFailed,
+		StartTimestamp: &start, EndTimestamp: &end,
+		TotalWindows: 1, CompletedWindows: 0, FailedWindows: 1,
+	}
+	if got := backfillCompletenessRate(run); got != 0.99 {
+		t.Fatalf("single failed retry completeness = %v, want 0.99", got)
+	}
+
+	run.TotalWindows = 3
+	run.CompletedWindows = 1
+	run.FailedWindows = 2
+	if got := backfillCompletenessRate(run); got != 0.98 {
+		t.Fatalf("partially completed retry completeness = %v, want 0.98", got)
+	}
+
+	run.Scope = []byte(`{"only_missing":false}`)
+	if got := backfillCompletenessRate(run); got != 1.0/3.0 {
+		t.Fatalf("full backfill completeness = %v, want %v", got, 1.0/3.0)
+	}
+}
+
 func TestSiteListOverviewAggregatesRolling24HoursAndUsesNaturalMinutes(t *testing.T) {
 	tx := openSiteTestTransaction(t)
 	now := int64(1_752_400_800)

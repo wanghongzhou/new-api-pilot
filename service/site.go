@@ -474,14 +474,29 @@ func backfillCompletenessRate(run model.CollectionRun) float64 {
 		}
 		return 0
 	}
-	completed := run.CompletedWindows
+	completed := int64(run.CompletedWindows)
+	total := int64(run.TotalWindows)
+	onlyMissing, err := model.UsageBackfillOnlyMissing(run.Scope)
+	if err == nil && onlyMissing && run.StartTimestamp != nil && run.EndTimestamp != nil && *run.EndTimestamp > *run.StartTimestamp {
+		expected := (*run.EndTimestamp - *run.StartTimestamp) / 3600
+		if expected > 0 {
+			incomplete := total - completed
+			if incomplete < 0 {
+				incomplete = 0
+			}
+			if incomplete > expected {
+				incomplete = expected
+			}
+			return float64(expected-incomplete) / float64(expected)
+		}
+	}
 	if completed < 0 {
 		completed = 0
 	}
-	if completed > run.TotalWindows {
-		completed = run.TotalWindows
+	if completed > total {
+		completed = total
 	}
-	return float64(completed) / float64(run.TotalWindows)
+	return float64(completed) / float64(total)
 }
 
 func statisticsStatusAfterBackfill(current string, run model.CollectionRun) string {

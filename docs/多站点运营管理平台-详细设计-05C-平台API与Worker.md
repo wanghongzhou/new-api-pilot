@@ -186,7 +186,7 @@ base_url 变化必须先调用 preflight。服务端对候选地址执行完整 
 
 `POST /api/sites/refresh` 和 `POST /api/sites/:id/refresh` 只排队探活、RPM/TPM 和实例资源三类当前状态任务，不触发历史用量、用户或通道同步。重复 disable/archive 返回当前对象；重复 enable/restore 若已有同范围任务则返回该任务并标记 deduplicated。
 
-性能健康使用上游已有 `GET /api/perf-metrics/summary?hours=N`，pilot 不修改该接口且不把滚动范围摘要增量累加。详情 `GET /api/sites/:id/performance?hours=N` 每次使用已存凭据实时请求单站上游，返回 `hours/sampled_at/data_status/request_count/success_rate/avg_latency_ms/avg_tps/models`；bigint 计数为字符串，总体比率和均值按模型 request_count 加权。`hours=24` 的成功详情结果同时写入 `site_id + config_version` 进程内缓存；站点列表只读取该缓存，缺失时先返回 `data_status=unavailable` 并受全局 4 并发限制异步刷新。成功 TTL 1 小时，失败 TTL 5 分钟；缓存不落 MySQL/Redis、进程重启后丢失。上游失败不影响站点列表、详情的本地用量或资源数据，也不触发历史补采。SiteListItem.completeness_rate 使用最新 usage_backfill 的 completed_windows/total_windows；部分回填必须立即返回非零进度，成功回填返回 1，无回填或 total_windows=0 返回 0。
+性能健康使用上游已有 `GET /api/perf-metrics/summary?hours=N`，pilot 不修改该接口且不把滚动范围摘要增量累加。详情 `GET /api/sites/:id/performance?hours=N` 每次使用已存凭据实时请求单站上游，返回 `hours/sampled_at/data_status/request_count/success_rate/avg_latency_ms/avg_tps/models`；bigint 计数为字符串，总体比率和均值按模型 request_count 加权。`hours=24` 的成功详情结果同时写入 `site_id + config_version` 进程内缓存；站点列表只读取该缓存，缺失时先返回 `data_status=unavailable` 并受全局 4 并发限制异步刷新。成功 TTL 1 小时，失败 TTL 5 分钟；缓存不落 MySQL/Redis、进程重启后丢失。上游失败不影响站点列表、详情的本地用量或资源数据，也不触发历史补采。`SiteListItem.completeness_rate` 使用最新 `usage_backfill` 的冻结范围计算：全量回填使用 `completed_windows/total_windows`；`only_missing=true` 的缺失补采或失败窗口重试必须以 `[start_timestamp,end_timestamp)` 的全部小时数为分母，并将 `total_windows-completed_windows` 视为该范围仍不完整的小时数，不能让仅含一个失败窗口的重试任务把既有完整小时从分子中清零。成功且范围内没有待补采窗口的空操作返回 1；无有效范围、无回填或尚未物化窗口的非成功任务返回 0。
 
 SiteListItem、SiteDetail 及其嵌套结构以 §33.13 为准；§15.6 只用于页面示意。
 
