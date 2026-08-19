@@ -89,6 +89,19 @@ describe('SiteDetailPage information architecture', () => {
     expect(source).toContain('visibleModels.map')
   })
 
+  test('keeps contextual configuration before recent activity and navigation', async () => {
+    const source = await readFile(detailPagePath, 'utf8')
+    const completenessIndex = source.indexOf('<CompletenessAlert')
+    const metadataIndex = source.indexOf('<SiteMetadata')
+    const activityIndex = source.indexOf('<RecentCollectionActivity')
+    const relatedIndex = source.indexOf('<SiteRelatedPages')
+
+    expect(completenessIndex).toBeGreaterThan(-1)
+    expect(metadataIndex).toBeGreaterThan(completenessIndex)
+    expect(activityIndex).toBeGreaterThan(metadataIndex)
+    expect(relatedIndex).toBeGreaterThan(activityIndex)
+  })
+
   test('loads only three recent durable collection records in the detail', async () => {
     const source = await readFile(detailPagePath, 'utf8')
     const recentCollection = source.slice(

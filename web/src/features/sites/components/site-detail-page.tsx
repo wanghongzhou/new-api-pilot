@@ -877,9 +877,9 @@ export function SiteDetailPage({ onDeleted, siteId }: SiteDetailPageProps) {
           />
           <BackfillProgress backfill={site.backfill} />
         </div>
-        <SiteRelatedPages siteId={siteId} />
         <SiteMetadata site={site} />
         <RecentCollectionActivity siteId={siteId} />
+        <SiteRelatedPages siteId={siteId} />
       </>
     )
   }
