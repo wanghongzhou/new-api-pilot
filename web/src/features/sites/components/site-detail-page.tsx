@@ -111,10 +111,10 @@ function DetailSummary({ site }: { site: SiteDetail }) {
           timestamp={site.realtime.updated_at}
         />
       </div>
-      <div className='grid gap-3 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]'>
+      <div className='grid gap-3'>
         <div className='grid gap-2'>
           <h3 className='text-sm font-semibold'>{t('site.todayUsage')}</h3>
-          <dl className='border-border [&>div]:border-border grid overflow-hidden rounded-lg border sm:grid-cols-2 lg:grid-cols-3 [&>div]:border-b sm:[&>div]:border-r lg:[&>div:nth-child(3n)]:border-r-0'>
+          <dl className='border-border [&>div]:border-border grid overflow-hidden rounded-lg border sm:grid-cols-2 lg:grid-cols-6 [&>div]:border-b sm:[&>div]:border-r lg:[&>div:nth-child(6n)]:border-r-0'>
             <MetricCell label={t('site.dashboard.last24HoursCount')}>
               <MetricValue nullLabel='0' value={site.today.request_count} />
             </MetricCell>
@@ -145,7 +145,7 @@ function DetailSummary({ site }: { site: SiteDetail }) {
         </div>
         <div className='grid gap-2'>
           <h3 className='text-sm font-semibold'>{t('site.resources')}</h3>
-          <dl className='border-border [&>div]:border-border grid h-full overflow-hidden rounded-lg border sm:grid-cols-2 [&>div]:border-b sm:[&>div:nth-child(2n)]:border-r-0'>
+          <dl className='border-border [&>div]:border-border grid overflow-hidden rounded-lg border sm:grid-cols-3 [&>div]:border-b sm:[&>div]:border-r sm:[&>div:nth-child(3n)]:border-r-0'>
             <MetricCell label={t('metric.cpu')}>
               <PercentValue value={site.resource.cpu_max_percent} />
             </MetricCell>
@@ -155,20 +155,28 @@ function DetailSummary({ site }: { site: SiteDetail }) {
             <MetricCell label={t('metric.disk')}>
               <PercentValue value={site.resource.disk_max_used_percent} />
             </MetricCell>
-            <MetricCell label={t('site.completeness')}>
-              {(site.completeness_rate * 100).toFixed(1)}%
-            </MetricCell>
-            <MetricCell label={t('instance.summary')}>
-              <span>
-                {site.resource.instance_count == null
-                  ? '-'
-                  : site.resource.instance_count}
-              </span>
-            </MetricCell>
-            <MetricCell label={t('site.resourceStatus')}>
-              <DataStatusBadge status={site.resource.data_status} />
-            </MetricCell>
           </dl>
+          <div className='text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs'>
+            <span>
+              {t('instance.summary')}:{' '}
+              {site.resource.instance_count == null
+                ? '-'
+                : site.resource.instance_count}
+            </span>
+            <span className='inline-flex items-center gap-1.5'>
+              {t('site.resourceStatus')}{' '}
+              <DataStatusBadge status={site.resource.data_status} />
+            </span>
+            <span>
+              {site.resource.updated_at == null
+                ? '-'
+                : t('site.resourceUpdatedAt', {
+                    time: fromUnixSeconds(site.resource.updated_at).format(
+                      'YYYY-MM-DD HH:mm:ss'
+                    ),
+                  })}
+            </span>
+          </div>
         </div>
       </div>
       <div className='flex flex-wrap items-center justify-between gap-3 border-b pb-4'>
