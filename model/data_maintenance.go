@@ -24,7 +24,10 @@ const (
 	MaintenanceStatusFailed   = "failed"
 )
 
-var ErrDataMaintenanceContract = errors.New("data maintenance contract is invalid")
+var (
+	ErrDataMaintenanceContract       = errors.New("data maintenance contract is invalid")
+	ErrResourceDailyInputsIncomplete = errors.New("resource daily inputs are incomplete")
+)
 
 const (
 	MaintenanceErrorSiteConfigChanged = "SITE_CONFIG_CHANGED"

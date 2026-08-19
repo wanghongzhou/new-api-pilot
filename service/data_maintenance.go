@@ -46,20 +46,22 @@ func (service *DataMaintenanceService) RunScheduledMaintenance(ctx context.Conte
 	repairStart := currentStart
 	if local.Hour() < 3 {
 		repairStart = previousEnd - int64(time.Hour/time.Second)
+	} else {
+		repairStart = previousStart
 	}
 	result := ScheduledDataMaintenanceResult{}
 	var resultErr error
-	if local.Hour() >= 3 {
-		finalize, err := service.repository.FinalizeResourceDaily(ctx, previousDateKey, previousStart, previousEnd, 100, unix)
-		result.DailyFinalize = finalize
-		resultErr = errors.Join(resultErr, err)
-		if err != nil || !finalize.Complete {
-			repairStart = previousStart
-		}
-	}
 	if closedHourEnd > repairStart {
 		gap, err := service.repository.RepairResourceRollupGaps(ctx, dateKey, repairStart, closedHourEnd, 100, unix)
 		result.GapRepair = gap
+		resultErr = errors.Join(resultErr, err)
+	}
+	if local.Hour() >= 3 && resultErr == nil && result.GapRepair.Complete {
+		finalize, err := service.repository.FinalizeResourceDaily(ctx, previousDateKey, previousStart, previousEnd, 100, unix)
+		result.DailyFinalize = finalize
+		if errors.Is(err, model.ErrResourceDailyInputsIncomplete) {
+			err = nil
+		}
 		resultErr = errors.Join(resultErr, err)
 	}
 	if local.Hour() >= 4 {

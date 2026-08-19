@@ -17,7 +17,10 @@ type scheduledMaintenanceCall struct {
 
 type scheduledMaintenanceRepository struct {
 	finalizeResult model.ResourceMaintenanceBatchResult
+	finalizeErr    error
+	repairResult   model.ResourceMaintenanceBatchResult
 	repairCalls    []scheduledMaintenanceCall
+	finalizeCalls  int
 }
 
 func (repository *scheduledMaintenanceRepository) ProcessAuthorizationPricingIntent(context.Context, int64) (model.AuthorizationPricingProcessResult, error) {
@@ -34,27 +37,46 @@ func (repository *scheduledMaintenanceRepository) CleanupMetadataDiagnosticRuns(
 
 func (repository *scheduledMaintenanceRepository) RepairResourceRollupGaps(_ context.Context, dateKey int, start, end int64, _ int, _ int64) (model.ResourceMaintenanceBatchResult, error) {
 	repository.repairCalls = append(repository.repairCalls, scheduledMaintenanceCall{dateKey: dateKey, start: start, end: end})
-	return model.ResourceMaintenanceBatchResult{}, nil
+	return repository.repairResult, nil
 }
 
 func (repository *scheduledMaintenanceRepository) FinalizeResourceDaily(context.Context, int, int64, int64, int, int64) (model.ResourceMaintenanceBatchResult, error) {
-	return repository.finalizeResult, nil
+	repository.finalizeCalls++
+	return repository.finalizeResult, repository.finalizeErr
+}
+
+func TestRunScheduledMaintenanceKeepsIncompleteDailyInputsRetryable(t *testing.T) {
+	beijing := time.FixedZone("Asia/Shanghai", 8*60*60)
+	repository := &scheduledMaintenanceRepository{
+		repairResult: model.ResourceMaintenanceBatchResult{Complete: true},
+		finalizeErr:  model.ErrResourceDailyInputsIncomplete,
+	}
+	maintenance, err := NewDataMaintenanceService(repository, testsupport.NewFakeClock(time.Date(2026, 8, 19, 9, 40, 0, 0, beijing)))
+	if err != nil {
+		t.Fatalf("create maintenance service: %v", err)
+	}
+	if _, err := maintenance.RunScheduledMaintenance(context.Background()); err != nil {
+		t.Fatalf("incomplete daily inputs must remain retryable: %v", err)
+	}
+	if repository.finalizeCalls != 1 {
+		t.Fatalf("finalize calls = %d, want 1", repository.finalizeCalls)
+	}
 }
 
 func TestRunScheduledMaintenanceRepairsClosedResourceHours(t *testing.T) {
 	beijing := time.FixedZone("Asia/Shanghai", 8*60*60)
 	tests := []struct {
-		name        string
-		now         time.Time
-		finalized   bool
-		wantStart   time.Time
-		wantEnd     time.Time
-		wantDateKey int
+		name           string
+		now            time.Time
+		repairComplete bool
+		wantStart      time.Time
+		wantEnd        time.Time
+		wantDateKey    int
 	}{
 		{
-			name: "daytime uses current day after previous day is finalized",
-			now:  time.Date(2026, 8, 18, 18, 37, 0, 0, beijing), finalized: true,
-			wantStart: time.Date(2026, 8, 18, 0, 0, 0, 0, beijing),
+			name: "daytime repairs previous day before finalization",
+			now:  time.Date(2026, 8, 18, 18, 37, 0, 0, beijing), repairComplete: true,
+			wantStart: time.Date(2026, 8, 17, 0, 0, 0, 0, beijing),
 			wantEnd:   time.Date(2026, 8, 18, 18, 0, 0, 0, beijing), wantDateKey: 20260818,
 		},
 		{
@@ -64,7 +86,7 @@ func TestRunScheduledMaintenanceRepairsClosedResourceHours(t *testing.T) {
 			wantEnd:   time.Date(2026, 8, 18, 1, 0, 0, 0, beijing), wantDateKey: 20260818,
 		},
 		{
-			name:      "unfinished previous day expands recovery range",
+			name:      "incomplete repair remains normal startup progress",
 			now:       time.Date(2026, 8, 18, 18, 37, 0, 0, beijing),
 			wantStart: time.Date(2026, 8, 17, 0, 0, 0, 0, beijing),
 			wantEnd:   time.Date(2026, 8, 18, 18, 0, 0, 0, beijing), wantDateKey: 20260818,
@@ -74,7 +96,8 @@ func TestRunScheduledMaintenanceRepairsClosedResourceHours(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			repository := &scheduledMaintenanceRepository{
-				finalizeResult: model.ResourceMaintenanceBatchResult{Complete: test.finalized},
+				repairResult:   model.ResourceMaintenanceBatchResult{Complete: test.repairComplete},
+				finalizeResult: model.ResourceMaintenanceBatchResult{Complete: true},
 			}
 			maintenance, err := NewDataMaintenanceService(repository, testsupport.NewFakeClock(test.now))
 			if err != nil {
@@ -92,6 +115,13 @@ func TestRunScheduledMaintenanceRepairsClosedResourceHours(t *testing.T) {
 			}
 			if call.end > test.now.Unix()-test.now.Unix()%3600 {
 				t.Fatalf("repair included the open current hour: end=%d now=%d", call.end, test.now.Unix())
+			}
+			wantFinalizeCalls := 0
+			if test.now.Hour() >= 3 && test.repairComplete {
+				wantFinalizeCalls = 1
+			}
+			if repository.finalizeCalls != wantFinalizeCalls {
+				t.Fatalf("finalize calls = %d, want %d", repository.finalizeCalls, wantFinalizeCalls)
 			}
 		})
 	}

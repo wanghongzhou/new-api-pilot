@@ -436,7 +436,7 @@ WHERE d.site_id=? AND d.date_key=? AND d.node_name IN ? AND (h.site_id IS NULL O
 		return err
 	}
 	if siteDailyCount != 1 || siteHourCount != siteExpectedHours || siteMismatch != 0 || instanceHourCount != instanceExpectedHours || instanceDailyCount != int64(len(nodes)) || instanceMismatch != 0 {
-		return fmt.Errorf("%w: resource daily inputs are incomplete", ErrDataMaintenanceContract)
+		return fmt.Errorf("%w: %w", ErrDataMaintenanceContract, ErrResourceDailyInputsIncomplete)
 	}
 	return nil
 }
