@@ -895,23 +895,29 @@ export function SiteDetailPage({ onDeleted, siteId }: SiteDetailPageProps) {
           <h2 className='sr-only'>{t('site.statuses')}</h2>
           <SiteStatusBadges site={site} />
         </section>
-        <DetailSummary site={site} />
-        <PerformanceHealth
-          error={performanceQuery.isError}
-          onRangeChange={setPerformanceRange}
-          pending={performanceQuery.isPending}
-          performance={performanceQuery.data}
-          range={performanceRange}
-        />
-        <div className='grid gap-4 lg:grid-cols-2'>
-          <CompletenessAlert
-            completeness={site.completeness}
-            scopeDescription={t('completeness.siteScopeDescription')}
-          />
-          <BackfillProgress backfill={site.backfill} />
+        <div className='grid items-start gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(20rem,0.85fr)]'>
+          <div className='grid min-w-0 gap-6'>
+            <DetailSummary site={site} />
+            <PerformanceHealth
+              error={performanceQuery.isError}
+              onRangeChange={setPerformanceRange}
+              pending={performanceQuery.isPending}
+              performance={performanceQuery.data}
+              range={performanceRange}
+            />
+          </div>
+          <aside className='grid min-w-0 gap-6'>
+            <section aria-label={t('site.completeness')} className='grid gap-4'>
+              <CompletenessAlert
+                completeness={site.completeness}
+                scopeDescription={t('completeness.siteScopeDescription')}
+              />
+              <BackfillProgress backfill={site.backfill} />
+            </section>
+            <SiteMetadata site={site} />
+            <RecentCollectionActivity siteId={siteId} />
+          </aside>
         </div>
-        <SiteMetadata site={site} />
-        <RecentCollectionActivity siteId={siteId} />
         <SiteRelatedPages siteId={siteId} />
       </>
     )

@@ -91,6 +91,9 @@ describe('SiteDetailPage information architecture', () => {
     expect(source).toContain('<DataTablePagination')
     expect(source).toContain('modelPageSize')
     expect(source).toContain('visibleModels.map')
+    expect(source).toContain(
+      'xl:grid-cols-[minmax(0,1.65fr)_minmax(20rem,0.85fr)]'
+    )
   })
 
   test('keeps contextual configuration before recent activity and navigation', async () => {
