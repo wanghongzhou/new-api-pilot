@@ -10,7 +10,7 @@ import {
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { BackfillProgress } from '@/components/data/backfill-progress'
@@ -26,6 +26,7 @@ import { SectionPageLayout } from '@/components/layout/section-page-layout'
 import { LoadingState } from '@/components/loading-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { DataTablePagination } from '@/components/ui/data-table-pagination'
 import { buildChannelInventorySearch } from '@/features/channel-inventory/search'
 import { entityDetailFailure } from '@/features/entity-detail-query-state'
 import { buildFinancialOperationsSearch } from '@/features/financial-operations/search'
@@ -110,46 +111,56 @@ function DetailSummary({ site }: { site: SiteDetail }) {
           timestamp={site.realtime.updated_at}
         />
       </div>
-      <dl className='border-border [&>div]:border-border grid overflow-hidden rounded-lg border sm:grid-cols-2 lg:grid-cols-4 [&>div]:border-b sm:[&>div]:border-r lg:[&>div:nth-child(4n)]:border-r-0'>
-        <MetricCell label={t('site.dashboard.last24HoursCount')}>
-          <MetricValue nullLabel='0' value={site.today.request_count} />
-        </MetricCell>
-        <MetricCell label={t('site.dashboard.last24HoursQuota')}>
-          <QuotaAmount
-            nullLabel='0'
-            quota={site.today.quota}
-            rate={site.rate}
-          />
-        </MetricCell>
-        <MetricCell label={t('site.dashboard.last24HoursTokens')}>
-          <MetricValue nullLabel='0' value={site.today.token_used} />
-        </MetricCell>
-        <MetricCell label={t('site.averageRpm')}>
-          <span title={site.today.avg_rpm ?? undefined}>
-            {formatAverageRate(site.today.avg_rpm)}
-          </span>
-        </MetricCell>
-        <MetricCell label={t('site.averageTpm')}>
-          <span title={site.today.avg_tpm ?? undefined}>
-            {formatAverageTpm(site.today.avg_tpm)}
-          </span>
-        </MetricCell>
-        <MetricCell label={t('site.activeUsers')}>
-          <MetricValue nullLabel='0' value={site.today.active_users} />
-        </MetricCell>
-        <MetricCell label={t('metric.cpu')}>
-          <PercentValue value={site.resource.cpu_max_percent} />
-        </MetricCell>
-        <MetricCell label={t('metric.memory')}>
-          <PercentValue value={site.resource.memory_max_percent} />
-        </MetricCell>
-        <MetricCell label={t('metric.disk')}>
-          <PercentValue value={site.resource.disk_max_used_percent} />
-        </MetricCell>
-        <MetricCell label={t('site.completeness')}>
-          {(site.completeness_rate * 100).toFixed(1)}%
-        </MetricCell>
-      </dl>
+      <div className='grid gap-3 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]'>
+        <div className='grid gap-2'>
+          <h3 className='text-sm font-semibold'>{t('site.todayUsage')}</h3>
+          <dl className='border-border [&>div]:border-border grid overflow-hidden rounded-lg border sm:grid-cols-2 lg:grid-cols-3 [&>div]:border-b sm:[&>div]:border-r lg:[&>div:nth-child(3n)]:border-r-0'>
+            <MetricCell label={t('site.dashboard.last24HoursCount')}>
+              <MetricValue nullLabel='0' value={site.today.request_count} />
+            </MetricCell>
+            <MetricCell label={t('site.dashboard.last24HoursQuota')}>
+              <QuotaAmount
+                nullLabel='0'
+                quota={site.today.quota}
+                rate={site.rate}
+              />
+            </MetricCell>
+            <MetricCell label={t('site.dashboard.last24HoursTokens')}>
+              <MetricValue nullLabel='0' value={site.today.token_used} />
+            </MetricCell>
+            <MetricCell label={t('site.averageRpm')}>
+              <span title={site.today.avg_rpm ?? undefined}>
+                {formatAverageRate(site.today.avg_rpm)}
+              </span>
+            </MetricCell>
+            <MetricCell label={t('site.averageTpm')}>
+              <span title={site.today.avg_tpm ?? undefined}>
+                {formatAverageTpm(site.today.avg_tpm)}
+              </span>
+            </MetricCell>
+            <MetricCell label={t('site.activeUsers')}>
+              <MetricValue nullLabel='0' value={site.today.active_users} />
+            </MetricCell>
+          </dl>
+        </div>
+        <div className='grid gap-2'>
+          <h3 className='text-sm font-semibold'>{t('site.resources')}</h3>
+          <dl className='border-border [&>div]:border-border grid overflow-hidden rounded-lg border sm:grid-cols-2 [&>div]:border-b sm:[&>div:nth-child(2n)]:border-r-0'>
+            <MetricCell label={t('metric.cpu')}>
+              <PercentValue value={site.resource.cpu_max_percent} />
+            </MetricCell>
+            <MetricCell label={t('metric.memory')}>
+              <PercentValue value={site.resource.memory_max_percent} />
+            </MetricCell>
+            <MetricCell label={t('metric.disk')}>
+              <PercentValue value={site.resource.disk_max_used_percent} />
+            </MetricCell>
+            <MetricCell label={t('site.completeness')}>
+              {(site.completeness_rate * 100).toFixed(1)}%
+            </MetricCell>
+          </dl>
+        </div>
+      </div>
       <div className='flex flex-wrap items-center justify-between gap-3 border-b pb-4'>
         <div className='flex items-center gap-2'>
           <span className='text-muted-foreground text-sm'>
@@ -188,7 +199,14 @@ function PerformanceHealth({
 }) {
   const { t } = useTranslation()
   const performanceModels = performance?.models ?? []
+  const [modelPage, setModelPage] = useState(1)
+  const [modelPageSize, setModelPageSize] = useState(10)
+  useEffect(() => setModelPage(1), [range])
   const performanceSummary = sitePerformanceDashboardSummary(performanceModels)
+  const visibleModels = performanceModels.slice(
+    (modelPage - 1) * modelPageSize,
+    modelPage * modelPageSize
+  )
   const unavailableValue = t('data.unavailableValue')
   let content: ReactNode
   if (pending && !performance) {
@@ -228,64 +246,81 @@ function PerformanceHealth({
             )}
           </MetricCell>
         </dl>
-        <div className='overflow-hidden rounded-lg border'>
-          <div className='bg-muted/40 hidden grid-cols-4 gap-3 border-b px-4 py-2 text-xs font-medium sm:grid'>
-            <span>{t('site.performance.model')}</span>
-            <span className='text-right'>
-              {t('site.performance.successRate')}
-            </span>
-            <span className='text-right'>
-              {t('site.performance.avgLatency')}
-            </span>
-            <span className='text-right'>{t('site.performance.avgTps')}</span>
-          </div>
-          {performanceModels.length === 0 ? (
-            <p className='text-muted-foreground px-4 py-6 text-center text-sm'>
-              {t('site.performance.unavailable')}
-            </p>
-          ) : (
-            <dl className='divide-y'>
-              {performanceModels.map((model) => (
-                <div
-                  className='grid grid-cols-2 gap-x-3 gap-y-2 px-4 py-3 sm:grid-cols-4'
-                  key={model.model_name}
-                >
-                  <dt
-                    className='col-span-2 truncate text-sm font-medium sm:col-span-1'
-                    title={model.model_name}
+        <div className='grid gap-3'>
+          <h3 className='text-sm font-semibold'>
+            {t('site.performance.models')}
+          </h3>
+          <div className='overflow-hidden rounded-lg border'>
+            <div className='bg-muted/40 hidden grid-cols-4 gap-3 border-b px-4 py-2 text-xs font-medium sm:grid'>
+              <span>{t('site.performance.model')}</span>
+              <span className='text-right'>
+                {t('site.performance.successRate')}
+              </span>
+              <span className='text-right'>
+                {t('site.performance.avgLatency')}
+              </span>
+              <span className='text-right'>{t('site.performance.avgTps')}</span>
+            </div>
+            {performanceModels.length === 0 ? (
+              <p className='text-muted-foreground px-4 py-6 text-center text-sm'>
+                {t('site.performance.unavailable')}
+              </p>
+            ) : (
+              <dl className='divide-y'>
+                {visibleModels.map((model) => (
+                  <div
+                    className='grid grid-cols-2 gap-x-3 gap-y-2 px-4 py-3 sm:grid-cols-4'
+                    key={model.model_name}
                   >
-                    {model.model_name}
-                  </dt>
-                  <dd className='text-sm sm:text-right'>
-                    <span className='text-muted-foreground sm:hidden'>
-                      {t('site.performance.successRate')}:{' '}
-                    </span>
-                    {formatPerformanceSuccessRate(
-                      model.success_rate,
-                      unavailableValue
-                    )}
-                  </dd>
-                  <dd className='text-sm sm:text-right'>
-                    <span className='text-muted-foreground sm:hidden'>
-                      {t('site.performance.avgLatency')}:{' '}
-                    </span>
-                    {formatPerformanceLatency(
-                      model.avg_latency_ms,
-                      unavailableValue
-                    )}
-                  </dd>
-                  <dd className='text-sm sm:text-right'>
-                    <span className='text-muted-foreground sm:hidden'>
-                      {t('site.performance.avgTps')}:{' '}
-                    </span>
-                    {formatPerformanceThroughput(
-                      model.avg_tps,
-                      unavailableValue
-                    )}
-                  </dd>
-                </div>
-              ))}
-            </dl>
+                    <dt
+                      className='col-span-2 truncate text-sm font-medium sm:col-span-1'
+                      title={model.model_name}
+                    >
+                      {model.model_name}
+                    </dt>
+                    <dd className='text-sm sm:text-right'>
+                      <span className='text-muted-foreground sm:hidden'>
+                        {t('site.performance.successRate')}:{' '}
+                      </span>
+                      {formatPerformanceSuccessRate(
+                        model.success_rate,
+                        unavailableValue
+                      )}
+                    </dd>
+                    <dd className='text-sm sm:text-right'>
+                      <span className='text-muted-foreground sm:hidden'>
+                        {t('site.performance.avgLatency')}:{' '}
+                      </span>
+                      {formatPerformanceLatency(
+                        model.avg_latency_ms,
+                        unavailableValue
+                      )}
+                    </dd>
+                    <dd className='text-sm sm:text-right'>
+                      <span className='text-muted-foreground sm:hidden'>
+                        {t('site.performance.avgTps')}:{' '}
+                      </span>
+                      {formatPerformanceThroughput(
+                        model.avg_tps,
+                        unavailableValue
+                      )}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </div>
+          {performanceModels.length > 0 && (
+            <DataTablePagination
+              onPageChange={setModelPage}
+              onPageSizeChange={(pageSize) => {
+                setModelPageSize(pageSize)
+                setModelPage(1)
+              }}
+              page={modelPage}
+              pageSize={modelPageSize}
+              total={performanceModels.length}
+            />
           )}
         </div>
       </div>

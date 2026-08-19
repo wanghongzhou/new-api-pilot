@@ -79,6 +79,16 @@ describe('SiteDetailPage information architecture', () => {
     )
   })
 
+  test('separates overview metric groups and paginates model performance rows', async () => {
+    const source = await readFile(detailPagePath, 'utf8')
+
+    expect(source).toContain("t('site.todayUsage')")
+    expect(source).toContain("t('site.resources')")
+    expect(source).toContain('<DataTablePagination')
+    expect(source).toContain('modelPageSize')
+    expect(source).toContain('visibleModels.map')
+  })
+
   test('loads only three recent durable collection records in the detail', async () => {
     const source = await readFile(detailPagePath, 'utf8')
     const recentCollection = source.slice(
