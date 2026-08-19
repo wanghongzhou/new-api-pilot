@@ -145,7 +145,7 @@ function DetailSummary({ site }: { site: SiteDetail }) {
         </div>
         <div className='grid gap-2'>
           <h3 className='text-sm font-semibold'>{t('site.resources')}</h3>
-          <dl className='border-border [&>div]:border-border grid overflow-hidden rounded-lg border sm:grid-cols-2 [&>div]:border-b sm:[&>div:nth-child(2n)]:border-r-0'>
+          <dl className='border-border [&>div]:border-border grid h-full overflow-hidden rounded-lg border sm:grid-cols-2 [&>div]:border-b sm:[&>div:nth-child(2n)]:border-r-0'>
             <MetricCell label={t('metric.cpu')}>
               <PercentValue value={site.resource.cpu_max_percent} />
             </MetricCell>
@@ -157,6 +157,16 @@ function DetailSummary({ site }: { site: SiteDetail }) {
             </MetricCell>
             <MetricCell label={t('site.completeness')}>
               {(site.completeness_rate * 100).toFixed(1)}%
+            </MetricCell>
+            <MetricCell label={t('instance.summary')}>
+              <span>
+                {site.resource.instance_count == null
+                  ? '-'
+                  : site.resource.instance_count}
+              </span>
+            </MetricCell>
+            <MetricCell label={t('site.resourceStatus')}>
+              <DataStatusBadge status={site.resource.data_status} />
             </MetricCell>
           </dl>
         </div>
@@ -226,26 +236,41 @@ function PerformanceHealth({
   } else {
     content = (
       <div className='grid gap-3'>
-        <dl className='grid overflow-hidden rounded-lg border sm:grid-cols-3 sm:divide-x'>
-          <MetricCell label={t('site.performance.successRate')}>
-            {formatPerformanceSuccessRate(
-              performanceSummary.successRate,
-              unavailableValue
-            )}
-          </MetricCell>
-          <MetricCell label={t('site.performance.avgLatency')}>
-            {formatPerformanceLatency(
-              performanceSummary.avgLatencyMs,
-              unavailableValue
-            )}
-          </MetricCell>
-          <MetricCell label={t('site.performance.avgTps')}>
-            {formatPerformanceThroughput(
-              performanceSummary.throughput,
-              unavailableValue
-            )}
-          </MetricCell>
-        </dl>
+        <div className='grid gap-2 sm:grid-cols-3'>
+          <div className='border-border flex items-center justify-between gap-3 rounded-full border px-4 py-3'>
+            <span className='text-muted-foreground text-sm'>
+              {t('site.performance.successRate')}
+            </span>
+            <span className='text-lg font-semibold tabular-nums'>
+              {formatPerformanceSuccessRate(
+                performanceSummary.successRate,
+                unavailableValue
+              )}
+            </span>
+          </div>
+          <div className='border-border flex items-center justify-between gap-3 rounded-full border px-4 py-3'>
+            <span className='text-muted-foreground text-sm'>
+              {t('site.performance.avgLatency')}
+            </span>
+            <span className='text-lg font-semibold tabular-nums'>
+              {formatPerformanceLatency(
+                performanceSummary.avgLatencyMs,
+                unavailableValue
+              )}
+            </span>
+          </div>
+          <div className='border-border flex items-center justify-between gap-3 rounded-full border px-4 py-3'>
+            <span className='text-muted-foreground text-sm'>
+              {t('site.performance.avgTps')}
+            </span>
+            <span className='text-lg font-semibold tabular-nums'>
+              {formatPerformanceThroughput(
+                performanceSummary.throughput,
+                unavailableValue
+              )}
+            </span>
+          </div>
+        </div>
         <div className='grid gap-3'>
           <h3 className='text-sm font-semibold'>
             {t('site.performance.models')}

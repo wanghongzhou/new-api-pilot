@@ -84,6 +84,8 @@ describe('SiteDetailPage information architecture', () => {
 
     expect(source).toContain("t('site.todayUsage')")
     expect(source).toContain("t('site.resources')")
+    expect(source).toContain("t('site.resourceStatus')")
+    expect(source).toContain('rounded-full border px-4 py-3')
     expect(source).toContain('<DataTablePagination')
     expect(source).toContain('modelPageSize')
     expect(source).toContain('visibleModels.map')
