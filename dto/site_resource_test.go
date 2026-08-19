@@ -22,21 +22,41 @@ func TestResourceQueryValidateBoundaries(t *testing.T) {
 			valid: true,
 		},
 		{
-			name: "one calendar year of hours",
-			query: ResourceQuery{StartTimestamp: dayStart.Unix(), EndTimestamp: dayStart.AddDate(1, 0, 0).Unix(),
+			name: "24 hours of minutes",
+			query: ResourceQuery{StartTimestamp: dayStart.Unix(), EndTimestamp: dayStart.Add(24 * time.Hour).Unix(),
+				Granularity: ResourceGranularityMinute},
+			valid: true,
+		},
+		{
+			name: "more than 24 hours of minutes",
+			query: ResourceQuery{StartTimestamp: dayStart.Unix(), EndTimestamp: dayStart.Add(24*time.Hour + time.Minute).Unix(),
+				Granularity: ResourceGranularityMinute},
+		},
+		{
+			name: "seven days of hours",
+			query: ResourceQuery{StartTimestamp: dayStart.Unix(), EndTimestamp: dayStart.AddDate(0, 0, 7).Unix(),
 				Granularity: ResourceGranularityHour},
 			valid: true,
 		},
 		{
-			name: "more than one calendar year of hours",
-			query: ResourceQuery{StartTimestamp: dayStart.Unix(), EndTimestamp: dayStart.AddDate(1, 0, 0).Add(time.Hour).Unix(),
+			name: "more than seven days of hours",
+			query: ResourceQuery{StartTimestamp: dayStart.Unix(), EndTimestamp: dayStart.AddDate(0, 0, 7).Add(time.Hour).Unix(),
 				Granularity: ResourceGranularityHour},
 		},
 		{
-			name: "five calendar years of days",
-			query: ResourceQuery{StartTimestamp: dayStart.Unix(), EndTimestamp: dayStart.AddDate(5, 0, 0).Unix(),
-				Granularity: ResourceGranularityDay},
+			name: "one clamped calendar month of days",
+			query: ResourceQuery{
+				StartTimestamp: time.Date(2024, time.January, 31, 0, 0, 0, 0, location).Unix(),
+				EndTimestamp:   time.Date(2024, time.February, 29, 0, 0, 0, 0, location).Unix(),
+				Granularity:    ResourceGranularityDay},
 			valid: true,
+		},
+		{
+			name: "more than one clamped calendar month of days",
+			query: ResourceQuery{
+				StartTimestamp: time.Date(2024, time.January, 31, 0, 0, 0, 0, location).Unix(),
+				EndTimestamp:   time.Date(2024, time.March, 1, 0, 0, 0, 0, location).Unix(),
+				Granularity:    ResourceGranularityDay},
 		},
 		{
 			name: "day not aligned in Beijing",

@@ -369,7 +369,7 @@ func validMinuteResourceRange(query dto.ResourceQuery, now int64, retentionDays 
 		return false
 	}
 	span := query.EndTimestamp - query.StartTimestamp
-	return span > 0 && span <= retentionSeconds && span/60 <= dto.ResourceMaximumBuckets
+	return span > 0 && span <= 24*60*60 && span <= retentionSeconds && span/60 <= dto.ResourceMaximumBuckets
 }
 
 func validClosedResourceRange(query dto.ResourceQuery, now int64) bool {
@@ -390,6 +390,9 @@ func validClosedResourceRange(query dto.ResourceQuery, now int64) bool {
 		return false
 	}
 	span := query.EndTimestamp - query.StartTimestamp
+	if !dto.ResourceRangeWithinLimit(query) {
+		return false
+	}
 	return query.EndTimestamp <= closedEnd && span%bucketSeconds == 0 &&
 		span/bucketSeconds > 0 && span/bucketSeconds <= dto.ResourceMaximumBuckets
 }

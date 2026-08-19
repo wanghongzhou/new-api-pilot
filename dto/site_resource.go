@@ -52,22 +52,24 @@ func (query ResourceQuery) Validate() map[string]string {
 	case ResourceGranularityMinute:
 		if query.StartTimestamp%60 != 0 || query.EndTimestamp%60 != 0 {
 			fieldErrors["range"] = "minute ranges must align to minute boundaries"
+		} else if !ResourceRangeWithinLimit(query) {
+			fieldErrors["range"] = "minute ranges must not exceed 24 hours"
 		} else if (query.EndTimestamp-query.StartTimestamp)/60 > ResourceMaximumBuckets {
 			fieldErrors["range"] = "minute ranges contain too many buckets"
 		}
 	case ResourceGranularityHour:
 		if query.StartTimestamp%3600 != 0 || query.EndTimestamp%3600 != 0 {
 			fieldErrors["range"] = "hour ranges must align to Beijing hour boundaries"
-		} else if end.After(start.AddDate(1, 0, 0)) {
-			fieldErrors["range"] = "hour ranges must not exceed 1 year"
+		} else if !ResourceRangeWithinLimit(query) {
+			fieldErrors["range"] = "hour ranges must not exceed 7 days"
 		} else if (query.EndTimestamp-query.StartTimestamp)/3600 > ResourceMaximumBuckets {
 			fieldErrors["range"] = "hour ranges contain too many buckets"
 		}
 	case ResourceGranularityDay:
 		if !resourceDayBoundary(start) || !resourceDayBoundary(end) {
 			fieldErrors["range"] = "day ranges must align to Beijing day boundaries"
-		} else if end.After(start.AddDate(5, 0, 0)) {
-			fieldErrors["range"] = "day ranges must not exceed 5 years"
+		} else if !ResourceRangeWithinLimit(query) {
+			fieldErrors["range"] = "day ranges must not exceed 1 calendar month"
 		} else if (query.EndTimestamp-query.StartTimestamp)/(24*60*60) > ResourceMaximumBuckets {
 			fieldErrors["range"] = "day ranges contain too many buckets"
 		}
@@ -75,6 +77,32 @@ func (query ResourceQuery) Validate() map[string]string {
 		fieldErrors["granularity"] = "must be minute, hour, or day"
 	}
 	return nilIfEmptyResourceErrors(fieldErrors)
+}
+
+func ResourceRangeWithinLimit(query ResourceQuery) bool {
+	span := query.EndTimestamp - query.StartTimestamp
+	switch query.Granularity {
+	case ResourceGranularityMinute:
+		return span > 0 && span <= 24*60*60
+	case ResourceGranularityHour:
+		return span > 0 && span <= 7*24*60*60
+	case ResourceGranularityDay:
+		start := time.Unix(query.StartTimestamp, 0).In(resourceLocation)
+		end := time.Unix(query.EndTimestamp, 0).In(resourceLocation)
+		return end.After(start) && !end.After(resourceCalendarMonthEnd(start))
+	default:
+		return false
+	}
+}
+
+func resourceCalendarMonthEnd(start time.Time) time.Time {
+	targetMonth := time.Date(start.Year(), start.Month()+1, 1, start.Hour(), start.Minute(), start.Second(), start.Nanosecond(), start.Location())
+	targetLastDay := targetMonth.AddDate(0, 1, -1).Day()
+	targetDay := start.Day()
+	if targetDay > targetLastDay {
+		targetDay = targetLastDay
+	}
+	return time.Date(targetMonth.Year(), targetMonth.Month(), targetDay, start.Hour(), start.Minute(), start.Second(), start.Nanosecond(), start.Location())
 }
 
 func validResourceGranularity(value string) bool {

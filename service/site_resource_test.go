@@ -169,22 +169,27 @@ func TestValidClosedResourceRangeRejectsOpenAndExcessiveBucketsBeforeAllocation(
 	hourEnd := time.Date(2025, time.July, 14, 10, 0, 0, 0, location).Unix()
 	dayEnd := time.Date(2025, time.July, 14, 0, 0, 0, 0, location).Unix()
 	tests := []struct {
+		name  string
 		query dto.ResourceQuery
 		valid bool
 	}{
-		{query: dto.ResourceQuery{StartTimestamp: hourEnd - 3600, EndTimestamp: hourEnd, Granularity: dto.ResourceGranularityHour}, valid: true},
-		{query: dto.ResourceQuery{StartTimestamp: hourEnd, EndTimestamp: hourEnd + 3600, Granularity: dto.ResourceGranularityHour}},
-		{query: dto.ResourceQuery{StartTimestamp: dayEnd - 24*60*60, EndTimestamp: dayEnd, Granularity: dto.ResourceGranularityDay}, valid: true},
-		{query: dto.ResourceQuery{StartTimestamp: dayEnd, EndTimestamp: dayEnd + 24*60*60, Granularity: dto.ResourceGranularityDay}},
-		{query: dto.ResourceQuery{
+		{name: "closed hour", query: dto.ResourceQuery{StartTimestamp: hourEnd - 3600, EndTimestamp: hourEnd, Granularity: dto.ResourceGranularityHour}, valid: true},
+		{name: "open hour", query: dto.ResourceQuery{StartTimestamp: hourEnd, EndTimestamp: hourEnd + 3600, Granularity: dto.ResourceGranularityHour}},
+		{name: "seven day hour range", query: dto.ResourceQuery{StartTimestamp: hourEnd - 7*24*60*60, EndTimestamp: hourEnd, Granularity: dto.ResourceGranularityHour}, valid: true},
+		{name: "hour range over seven days", query: dto.ResourceQuery{StartTimestamp: hourEnd - 7*24*60*60 - 3600, EndTimestamp: hourEnd, Granularity: dto.ResourceGranularityHour}},
+		{name: "closed day", query: dto.ResourceQuery{StartTimestamp: dayEnd - 24*60*60, EndTimestamp: dayEnd, Granularity: dto.ResourceGranularityDay}, valid: true},
+		{name: "open day", query: dto.ResourceQuery{StartTimestamp: dayEnd, EndTimestamp: dayEnd + 24*60*60, Granularity: dto.ResourceGranularityDay}},
+		{name: "excessive buckets", query: dto.ResourceQuery{
 			StartTimestamp: hourEnd - int64(dto.ResourceMaximumBuckets+1)*3600,
 			EndTimestamp:   hourEnd, Granularity: dto.ResourceGranularityHour,
 		}},
 	}
 	for _, test := range tests {
-		if got := validClosedResourceRange(test.query, now); got != test.valid {
-			t.Fatalf("validClosedResourceRange(%#v) = %v, want %v", test.query, got, test.valid)
-		}
+		t.Run(test.name, func(t *testing.T) {
+			if got := validClosedResourceRange(test.query, now); got != test.valid {
+				t.Fatalf("validClosedResourceRange(%#v) = %v, want %v", test.query, got, test.valid)
+			}
+		})
 	}
 }
 

@@ -37,6 +37,9 @@ import {
 import {
   alignSiteResourceTimestamp,
   defaultSiteResourceRange,
+  siteResourceRangeExceedsLimit,
+  siteResourceRangeLimitEnd,
+  siteResourceRangeLimitStart,
 } from '../site-resource-range'
 import type {
   ResourcePoint,
@@ -318,6 +321,11 @@ export function SiteInstancesPage({
   const { t } = useTranslation()
   const validSiteId = isIdString(siteId)
   const invalidRange = search.start >= search.end
+  const rangeTooLong = siteResourceRangeExceedsLimit(
+    search.start,
+    search.end,
+    search.granularity
+  )
   const settingsQuery = useQuery({
     queryFn: getSettings,
     queryKey: settingsKeys.all,
@@ -360,6 +368,7 @@ export function SiteInstancesPage({
     enabled:
       validSiteId &&
       !invalidRange &&
+      !rangeTooLong &&
       !minuteRetentionUnavailable &&
       !minuteRangeTooLong,
     queryFn: () => getSiteResource(parseIdString(siteId), resourceParams),
@@ -478,9 +487,28 @@ export function SiteInstancesPage({
     'unavailable'
   const retentionLoading =
     search.granularity === 'minute' && settingsQuery.isPending
+  const closedRangeEnd = defaultSiteResourceRange(search.granularity).end
+  const rangeStartMin = Math.max(
+    siteResourceRangeLimitStart(search.end, search.granularity),
+    search.granularity === 'minute' && minuteRetentionDays != null
+      ? closedRangeEnd - minuteRetentionDays * 24 * 60 * 60
+      : 0
+  )
+  const rangeEndMax = Math.min(
+    siteResourceRangeLimitEnd(search.start, search.granularity),
+    closedRangeEnd
+  )
   let rangeError: string | null = null
   if (invalidRange) rangeError = t('resource.invalidRange')
-  else if (retentionLoading) {
+  else if (rangeTooLong) {
+    if (search.granularity === 'minute') {
+      rangeError = t('resource.rangeLimit.minute')
+    } else if (search.granularity === 'hour') {
+      rangeError = t('resource.rangeLimit.hour')
+    } else {
+      rangeError = t('resource.rangeLimit.day')
+    }
+  } else if (retentionLoading) {
     rangeError = t('resource.retentionLoading')
   } else if (
     search.granularity === 'minute' &&
@@ -652,6 +680,7 @@ export function SiteInstancesPage({
               <span>{t('resource.start')}</span>
               <Input
                 max={fromUnixSeconds(search.end).format('YYYY-MM-DDTHH:mm')}
+                min={fromUnixSeconds(rangeStartMin).format('YYYY-MM-DDTHH:mm')}
                 onChange={(event) => {
                   const start = parseDateTime(event.target.value)
                   if (start != null) onSearchChange({ start })
@@ -663,6 +692,7 @@ export function SiteInstancesPage({
             <label className='grid gap-1 text-sm'>
               <span>{t('resource.end')}</span>
               <Input
+                max={fromUnixSeconds(rangeEndMax).format('YYYY-MM-DDTHH:mm')}
                 min={fromUnixSeconds(search.start).format('YYYY-MM-DDTHH:mm')}
                 onChange={(event) => {
                   const end = parseDateTime(event.target.value)
