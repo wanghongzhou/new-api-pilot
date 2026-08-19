@@ -84,8 +84,8 @@ func (repository *SiteRepository) ListResourceRows(
 	switch {
 	case request.Granularity == "minute" && request.NodeName == nil:
 		query = repository.db.WithContext(ctx).Raw(`SELECT minute_ts AS bucket_start, 0 AS date_key,
-       cpu_max_percent, cpu_avg_percent, memory_max_percent, memory_avg_percent,
-       disk_max_used_percent, NULL AS disk_last_used_percent,
+	       cpu_max_percent, cpu_avg_percent, memory_max_percent, memory_avg_percent,
+	       disk_max_used_percent, disk_max_used_percent AS disk_last_used_percent,
        instance_count, online_instance_count, 1 AS sample_count, 1 AS expected_sample_count,
        health_status, 'complete' AS data_status, minute_ts AS source_as_of, 0 AS is_final
 FROM site_status_minutely
@@ -105,8 +105,14 @@ WHERE site_id = ? AND node_name = ? AND minute_ts >= ? AND minute_ts < ?
 ORDER BY minute_ts ASC`, request.SiteID, *request.NodeName, request.StartTimestamp, request.EndTimestamp)
 	case request.Granularity == "hour" && request.NodeName == nil:
 		query = repository.db.WithContext(ctx).Raw(`SELECT hour_ts AS bucket_start, 0 AS date_key,
-       cpu_max_percent, cpu_avg_percent, memory_max_percent, memory_avg_percent,
-       disk_max_used_percent, NULL AS disk_last_used_percent,
+	       cpu_max_percent, cpu_avg_percent, memory_max_percent, memory_avg_percent,
+	       disk_max_used_percent,
+	       (SELECT m.disk_max_used_percent FROM site_status_minutely m
+	        WHERE m.site_id=site_status_hourly.site_id
+	          AND m.minute_ts >= site_status_hourly.hour_ts
+	          AND m.minute_ts < site_status_hourly.hour_ts + 3600
+	          AND m.disk_max_used_percent IS NOT NULL
+	        ORDER BY m.minute_ts DESC LIMIT 1) AS disk_last_used_percent,
        instance_count_max AS instance_count, online_instance_count_min AS online_instance_count,
        sample_count, expected_sample_count, health_status, data_status,
        last_calculated_at AS source_as_of, 0 AS is_final
@@ -129,8 +135,13 @@ WHERE site_id = ? AND node_name = ? AND hour_ts >= ? AND hour_ts < ?
 ORDER BY hour_ts ASC`, request.SiteID, *request.NodeName, request.StartTimestamp, request.EndTimestamp)
 	case request.Granularity == "day" && request.NodeName == nil:
 		query = repository.db.WithContext(ctx).Raw(`SELECT 0 AS bucket_start, date_key,
-       cpu_max_percent, cpu_avg_percent, memory_max_percent, memory_avg_percent,
-       disk_max_used_percent, NULL AS disk_last_used_percent,
+	       cpu_max_percent, cpu_avg_percent, memory_max_percent, memory_avg_percent,
+	       disk_max_used_percent,
+	       (SELECT h.disk_max_used_percent FROM site_status_hourly h
+	        WHERE h.site_id=site_status_daily.site_id
+	          AND CAST(DATE_FORMAT(FROM_UNIXTIME(h.hour_ts + 28800), '%Y%m%d') AS UNSIGNED)=site_status_daily.date_key
+	          AND h.disk_max_used_percent IS NOT NULL
+	        ORDER BY h.hour_ts DESC LIMIT 1) AS disk_last_used_percent,
        instance_count_max AS instance_count, online_instance_count_min AS online_instance_count,
        sample_count, expected_sample_count, health_status, data_status,
        last_calculated_at AS source_as_of, is_final

@@ -45,7 +45,7 @@ func TestSiteResourceStatusReadsAllResourceTablesAndKeepsNodeOwnershipBinary(t *
 	if err := tx.Create(&model.SiteStatusMinutely{
 		SiteID: site.ID, MinuteTS: dayStart, InstanceCount: zero, OnlineInstanceCount: zero,
 		CPUMaxPercent: nil, CPUAvgPercent: nil, MemoryMaxPercent: nil, MemoryAvgPercent: nil,
-		DiskMaxUsedPercent: nil, HealthStatus: constant.SiteHealthOK, CreatedAt: dayStart + 30,
+		DiskMaxUsedPercent: &disk, HealthStatus: constant.SiteHealthOK, CreatedAt: dayStart + 30,
 	}).Error; err != nil {
 		t.Fatalf("create site minute: %v", err)
 	}
@@ -97,11 +97,11 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1440, 0, 1440, 1440, 'complete', 1, ?)`,
 		wantDiskLast bool
 		wantFinal    bool
 	}{
-		{name: "site minute", query: resourceIntegrationQuery(dayStart, dayStart+60, "minute", nil), wantFinal: true},
+		{name: "site minute", query: resourceIntegrationQuery(dayStart, dayStart+60, "minute", nil), wantDiskLast: true, wantFinal: true},
 		{name: "instance minute", query: resourceIntegrationQuery(dayStart, dayStart+60, "minute", &nodeName), wantDiskLast: true, wantFinal: true},
-		{name: "site hour", query: resourceIntegrationQuery(dayStart, dayStart+3600, "hour", nil), wantFinal: true},
+		{name: "site hour", query: resourceIntegrationQuery(dayStart, dayStart+3600, "hour", nil), wantDiskLast: true, wantFinal: true},
 		{name: "instance hour", query: resourceIntegrationQuery(dayStart, dayStart+3600, "hour", &nodeName), wantDiskLast: true, wantFinal: true},
-		{name: "site day", query: resourceIntegrationQuery(dayStart, dayStart+24*60*60, "day", nil), wantFinal: true},
+		{name: "site day", query: resourceIntegrationQuery(dayStart, dayStart+24*60*60, "day", nil), wantDiskLast: true, wantFinal: true},
 		{name: "instance day", query: resourceIntegrationQuery(dayStart, dayStart+24*60*60, "day", &nodeName), wantDiskLast: true, wantFinal: true},
 	}
 	for _, test := range queries {
