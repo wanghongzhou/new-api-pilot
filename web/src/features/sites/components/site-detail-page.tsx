@@ -90,9 +90,13 @@ function MetricCell({
   label: string
 }) {
   return (
-    <div className='min-w-0 px-4 py-3'>
-      <dt className='text-muted-foreground text-xs'>{label}</dt>
-      <dd className='mt-1 text-lg font-semibold'>{children}</dd>
+    <div className='min-w-0 overflow-hidden px-3 py-3'>
+      <dt className='text-muted-foreground truncate text-xs' title={label}>
+        {label}
+      </dt>
+      <dd className='mt-1 min-w-0 text-base leading-tight font-semibold break-words xl:text-lg'>
+        {children}
+      </dd>
     </div>
   )
 }
@@ -114,19 +118,28 @@ function DetailSummary({ site }: { site: SiteDetail }) {
       <div className='grid gap-3'>
         <div className='grid gap-2'>
           <h3 className='text-sm font-semibold'>{t('site.todayUsage')}</h3>
-          <dl className='border-border [&>div]:border-border grid overflow-hidden rounded-lg border sm:grid-cols-2 lg:grid-cols-6 [&>div]:border-b sm:[&>div]:border-r lg:[&>div:nth-child(6n)]:border-r-0'>
+          <dl className='border-border [&>div]:border-border grid overflow-hidden rounded-lg border sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 [&>div]:border-b sm:[&>div]:border-r lg:[&>div:nth-child(3n)]:border-r-0 2xl:[&>div:nth-child(3n)]:border-r 2xl:[&>div:nth-child(6n)]:border-r-0'>
             <MetricCell label={t('site.dashboard.last24HoursCount')}>
-              <MetricValue nullLabel='0' value={site.today.request_count} />
+              <MetricValue
+                compact
+                nullLabel='0'
+                value={site.today.request_count}
+              />
             </MetricCell>
             <MetricCell label={t('site.dashboard.last24HoursQuota')}>
               <QuotaAmount
+                className='min-w-0'
                 nullLabel='0'
                 quota={site.today.quota}
                 rate={site.rate}
               />
             </MetricCell>
             <MetricCell label={t('site.dashboard.last24HoursTokens')}>
-              <MetricValue nullLabel='0' value={site.today.token_used} />
+              <MetricValue
+                compact
+                nullLabel='0'
+                value={site.today.token_used}
+              />
             </MetricCell>
             <MetricCell label={t('site.averageRpm')}>
               <span title={site.today.avg_rpm ?? undefined}>
@@ -284,7 +297,7 @@ function PerformanceHealth({
             {t('site.performance.models')}
           </h3>
           <div className='overflow-hidden rounded-lg border'>
-            <div className='bg-muted/40 hidden grid-cols-4 gap-3 border-b px-4 py-2 text-xs font-medium sm:grid'>
+            <div className='bg-muted/40 hidden grid-cols-[minmax(0,1.6fr)_repeat(3,minmax(5rem,0.75fr))] gap-3 border-b px-4 py-2 text-xs font-medium sm:grid'>
               <span>{t('site.performance.model')}</span>
               <span className='text-right'>
                 {t('site.performance.successRate')}
@@ -302,7 +315,7 @@ function PerformanceHealth({
               <dl className='divide-y'>
                 {visibleModels.map((model) => (
                   <div
-                    className='grid grid-cols-2 gap-x-3 gap-y-2 px-4 py-3 sm:grid-cols-4'
+                    className='grid min-w-0 grid-cols-2 gap-x-3 gap-y-2 px-4 py-3 sm:grid-cols-[minmax(0,1.6fr)_repeat(3,minmax(5rem,0.75fr))]'
                     key={model.model_name}
                   >
                     <dt
@@ -311,7 +324,7 @@ function PerformanceHealth({
                     >
                       {model.model_name}
                     </dt>
-                    <dd className='text-sm sm:text-right'>
+                    <dd className='min-w-0 text-sm whitespace-nowrap sm:text-right'>
                       <span className='text-muted-foreground sm:hidden'>
                         {t('site.performance.successRate')}:{' '}
                       </span>
@@ -320,7 +333,7 @@ function PerformanceHealth({
                         unavailableValue
                       )}
                     </dd>
-                    <dd className='text-sm sm:text-right'>
+                    <dd className='min-w-0 text-sm whitespace-nowrap sm:text-right'>
                       <span className='text-muted-foreground sm:hidden'>
                         {t('site.performance.avgLatency')}:{' '}
                       </span>
@@ -329,7 +342,7 @@ function PerformanceHealth({
                         unavailableValue
                       )}
                     </dd>
-                    <dd className='text-sm sm:text-right'>
+                    <dd className='min-w-0 text-sm whitespace-nowrap sm:text-right'>
                       <span className='text-muted-foreground sm:hidden'>
                         {t('site.performance.avgTps')}:{' '}
                       </span>
@@ -517,7 +530,7 @@ function SiteMetadata({ site }: { site: SiteDetail }) {
 }
 
 const relatedLinkClass =
-  'border-border hover:bg-muted flex min-h-10 items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium'
+  'border-border hover:bg-muted flex min-h-10 min-w-0 items-center gap-2 overflow-hidden rounded-md border px-3 py-2 text-sm font-medium break-words [&>svg]:shrink-0'
 
 function collectionRunBadgeVariant(
   status: 'failed' | 'pending' | 'running' | 'success'
