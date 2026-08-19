@@ -699,6 +699,10 @@ function parseOptionalHour(value: string): number | undefined {
   return parsed.isValid() ? parsed.unix() : undefined
 }
 
+function formatHourInput(value: ReturnType<typeof dayjs>): string {
+  return value.tz(BEIJING_TIMEZONE).format('YYYY-MM-DDTHH:00')
+}
+
 function BackfillDialog({
   onClose,
   onSaved,
@@ -710,6 +714,8 @@ function BackfillDialog({
 }) {
   const { t } = useTranslation()
   const [pending, setPending] = useState(false)
+  const defaultEnd = dayjs().tz(BEIJING_TIMEZONE).startOf('hour')
+  const defaultStart = defaultEnd.subtract(7, 'day')
   const {
     control,
     formState: { errors },
@@ -717,7 +723,11 @@ function BackfillDialog({
     register,
     setError,
   } = useForm<SiteBackfillFormValues>({
-    defaultValues: { end: '', onlyMissing: true, start: '' },
+    defaultValues: {
+      end: formatHourInput(defaultEnd),
+      onlyMissing: true,
+      start: formatHourInput(defaultStart),
+    },
     resolver: zodResolver(siteBackfillFormSchema),
   })
   const submit = handleSubmit(async (values) => {
