@@ -15,6 +15,53 @@ import (
 
 var a102Location = time.FixedZone("Asia/Shanghai", 8*60*60)
 
+func TestA102ResourceGapRepairReopensWhenClosedRangeExpands(t *testing.T) {
+	db := openCoreAcceptanceTransaction(t)
+	start := time.Date(2036, 8, 5, 0, 0, 0, 0, a102Location).Unix()
+	now := start + 3*60*60
+	site := createCorePendingSite(t, db, now)
+	if err := db.Model(&site).Updates(map[string]any{"monitoring_start_at": start, "config_version": 7}).Error; err != nil {
+		t.Fatal(err)
+	}
+	cpu, memory, disk := 10.0, 20.0, 30.0
+	for _, minute := range []int64{start, start + 35*60*60} {
+		if err := db.Create(&model.SiteStatusMinutely{SiteID: site.ID, MinuteTS: minute, InstanceCount: 1, OnlineInstanceCount: 1,
+			CPUMaxPercent: &cpu, CPUAvgPercent: &cpu, MemoryMaxPercent: &memory, MemoryAvgPercent: &memory,
+			DiskMaxUsedPercent: &disk, HealthStatus: "ok", CreatedAt: now}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	repository := model.NewDataMaintenanceRepository(db)
+	repairUntilComplete := func(end int64) {
+		t.Helper()
+		for attempt := 0; attempt < 100; attempt++ {
+			result, err := repository.RepairResourceRollupGaps(context.Background(), 20360805, start, end, 2, now+int64(attempt))
+			if err != nil {
+				t.Fatalf("repair through %d attempt %d: %v", end, attempt, err)
+			}
+			if result.Complete {
+				return
+			}
+		}
+		t.Fatalf("repair through %d did not complete", end)
+	}
+	repairUntilComplete(start + 60*60)
+	var count int64
+	if err := db.Table("site_status_hourly").Where("site_id=?", site.ID).Count(&count).Error; err != nil || count != 1 {
+		t.Fatalf("initial hourly count=%d err=%v", count, err)
+	}
+	repairUntilComplete(start + 36*60*60)
+	if err := db.Table("site_status_hourly").Where("site_id=?", site.ID).Count(&count).Error; err != nil || count != 36 {
+		t.Fatalf("expanded hourly count=%d err=%v", count, err)
+	}
+	var expanded struct {
+		HourTS int64 `gorm:"column:hour_ts"`
+	}
+	if err := db.Table("site_status_hourly").Select("hour_ts").Where("site_id=? AND hour_ts=?", site.ID, start+35*60*60).Take(&expanded).Error; err != nil {
+		t.Fatalf("expanded hour was not repaired: %v", err)
+	}
+}
+
 func TestA102ResourceExpectedCoverageAndFinalize(t *testing.T) {
 	db := openCoreAcceptanceTransaction(t)
 	start := time.Date(2036, 8, 5, 0, 0, 0, 0, a102Location).Unix()

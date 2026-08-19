@@ -2,6 +2,8 @@ package model
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"fmt"
 
@@ -74,6 +76,7 @@ func (repository *DataMaintenanceRepository) repairResourceRollupGapItems(ctx co
 		_ = repository.markGlobalFailure(ctx, MaintenanceResourceGapRepair, now, "REVISION_FAILED")
 		return ResourceMaintenanceBatchResult{}, err
 	}
+	revision = resourceGapBatchRevision(revision, start, end)
 	if err = repository.prepareGapState(ctx, dateKey, revision, now); err != nil {
 		return ResourceMaintenanceBatchResult{}, err
 	}
@@ -121,6 +124,7 @@ func (repository *DataMaintenanceRepository) repairResourceRollupGapItems(ctx co
 			if revisionErr != nil {
 				return revisionErr
 			}
+			latest = resourceGapBatchRevision(latest, start, end)
 			if locked.ScopeRevision != latest {
 				locked.ScopeRevision, locked.CursorKind, locked.CursorSiteID, locked.CursorNodeName, locked.CursorBucketStart = latest, "", 0, "", 0
 				locked.Status, locked.ErrorCode, locked.NextAttemptAt, locked.UpdatedAt = MaintenanceStatusPending, "", now, now
@@ -186,6 +190,14 @@ func (repository *DataMaintenanceRepository) repairResourceRollupGapItems(ctx co
 	return result, nil
 }
 
+func resourceGapBatchRevision(scopeRevision string, start, end int64) string {
+	payload := make([]byte, len(scopeRevision)+16)
+	copy(payload, scopeRevision)
+	binary.BigEndian.PutUint64(payload[len(scopeRevision):], uint64(start))
+	binary.BigEndian.PutUint64(payload[len(scopeRevision)+8:], uint64(end))
+	return fmt.Sprintf("%x", sha256.Sum256(payload))
+}
+
 func (repository *DataMaintenanceRepository) prepareGapState(ctx context.Context, dateKey int, revision string, now int64) error {
 	return repository.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var state DataMaintenanceState
@@ -238,7 +250,7 @@ SELECT l.site_id,l.node_name,g.minute_ts,g.minute_ts-MOD(g.minute_ts,3600) bucke
 (g.minute_ts>=s.monitoring_start_at AND (s.statistics_end_at IS NULL OR g.minute_ts<s.statistics_end_at) AND g.minute_ts>=l.start_minute_ts AND (l.end_minute_ts IS NULL OR g.minute_ts<l.end_minute_ts) AND NOT EXISTS(SELECT 1 FROM site_monitoring_pause p WHERE p.site_id=s.id AND p.start_minute_ts<=g.minute_ts AND (p.end_minute_ts IS NULL OR p.end_minute_ts>g.minute_ts))) expected
 FROM site_instance_lifecycle l JOIN site s ON s.id=l.site_id CROSS JOIN minute_grid g WHERE l.evidence_status='known' AND l.start_minute_ts<? AND (l.end_minute_ts IS NULL OR l.end_minute_ts>?)), computed AS (
 SELECT e.site_id,e.node_name,e.bucket_start,SUM(e.expected AND m.id IS NOT NULL) sample_count,SUM(e.expected) expected_sample_count,CASE WHEN SUM(e.expected)=0 THEN 'paused' WHEN SUM(e.expected AND m.id IS NOT NULL)=0 THEN 'missing' WHEN SUM(e.expected AND m.id IS NOT NULL)<SUM(e.expected) THEN 'partial' ELSE 'complete' END data_status FROM eligible e LEFT JOIN site_instance_status_minutely m ON m.site_id=e.site_id AND m.node_name=e.node_name AND m.minute_ts=e.minute_ts GROUP BY e.site_id,e.node_name,e.bucket_start HAVING SUM(e.covered)>0)
-SELECT /*+ SET_VAR(cte_max_recursion_depth=2000) */ ? kind,c.site_id,c.node_name,c.bucket_start FROM computed c LEFT JOIN site_instance_status_hourly h ON h.site_id=c.site_id AND h.node_name=c.node_name AND h.hour_ts=c.bucket_start WHERE (c.site_id>? OR (c.site_id=? AND (c.node_name COLLATE utf8mb4_bin>CAST(? AS CHAR) COLLATE utf8mb4_bin OR (c.node_name COLLATE utf8mb4_bin=CAST(? AS CHAR) COLLATE utf8mb4_bin AND c.bucket_start>?)))) AND (h.id IS NULL OR h.sample_count<>c.sample_count OR h.expected_sample_count<>c.expected_sample_count OR h.data_status<>c.data_status) ORDER BY c.site_id,c.node_name COLLATE utf8mb4_bin,c.bucket_start LIMIT ?`, start, end, end, start, ResourceGapKindInstanceHourly, state.CursorSiteID, state.CursorSiteID, state.CursorNodeName, state.CursorNodeName, state.CursorBucketStart, limit).Scan(&rows).Error
+SELECT /*+ SET_VAR(cte_max_recursion_depth=3000) */ ? kind,c.site_id,c.node_name,c.bucket_start FROM computed c LEFT JOIN site_instance_status_hourly h ON h.site_id=c.site_id AND h.node_name=c.node_name AND h.hour_ts=c.bucket_start WHERE (c.site_id>? OR (c.site_id=? AND (c.node_name COLLATE utf8mb4_bin>CAST(? AS CHAR) COLLATE utf8mb4_bin OR (c.node_name COLLATE utf8mb4_bin=CAST(? AS CHAR) COLLATE utf8mb4_bin AND c.bucket_start>?)))) AND (h.id IS NULL OR h.sample_count<>c.sample_count OR h.expected_sample_count<>c.expected_sample_count OR h.data_status<>c.data_status) ORDER BY c.site_id,c.node_name COLLATE utf8mb4_bin,c.bucket_start LIMIT ?`, start, end, end, start, ResourceGapKindInstanceHourly, state.CursorSiteID, state.CursorSiteID, state.CursorNodeName, state.CursorNodeName, state.CursorBucketStart, limit).Scan(&rows).Error
 		if err != nil {
 			return nil, err
 		}
@@ -252,7 +264,7 @@ SELECT /*+ SET_VAR(cte_max_recursion_depth=2000) */ ? kind,c.site_id,c.node_name
 	if state.CursorKind == ResourceGapKindSiteHourly {
 		afterSite, afterBucket = state.CursorSiteID, state.CursorBucketStart
 	}
-	err := repository.db.WithContext(ctx).Raw(`WITH RECURSIVE minute_grid AS (SELECT ? minute_ts UNION ALL SELECT minute_ts+60 FROM minute_grid WHERE minute_ts+60<?), eligible AS (SELECT s.id site_id,g.minute_ts,g.minute_ts-MOD(g.minute_ts,3600) bucket_start,(g.minute_ts>=s.monitoring_start_at AND (s.statistics_end_at IS NULL OR g.minute_ts<s.statistics_end_at)) covered,(g.minute_ts>=s.monitoring_start_at AND (s.statistics_end_at IS NULL OR g.minute_ts<s.statistics_end_at) AND NOT EXISTS(SELECT 1 FROM site_monitoring_pause p WHERE p.site_id=s.id AND p.start_minute_ts<=g.minute_ts AND (p.end_minute_ts IS NULL OR p.end_minute_ts>g.minute_ts))) expected FROM site s CROSS JOIN minute_grid g WHERE s.monitoring_start_at<? AND (s.statistics_end_at IS NULL OR s.statistics_end_at>?)), computed AS (SELECT e.site_id,e.bucket_start,SUM(e.expected AND m.id IS NOT NULL) sample_count,SUM(e.expected) expected_sample_count,CASE WHEN SUM(e.expected)=0 THEN 'paused' WHEN SUM(e.expected AND m.id IS NOT NULL)=0 THEN 'missing' WHEN SUM(e.expected AND m.id IS NOT NULL)<SUM(e.expected) THEN 'partial' ELSE 'complete' END data_status FROM eligible e LEFT JOIN site_status_minutely m ON m.site_id=e.site_id AND m.minute_ts=e.minute_ts GROUP BY e.site_id,e.bucket_start HAVING SUM(e.covered)>0) SELECT /*+ SET_VAR(cte_max_recursion_depth=2000) */ ? kind,c.site_id,'' node_name,c.bucket_start FROM computed c LEFT JOIN site_status_hourly h ON h.site_id=c.site_id AND h.hour_ts=c.bucket_start WHERE (c.site_id,c.bucket_start)>(?,?) AND (h.id IS NULL OR h.sample_count<>c.sample_count OR h.expected_sample_count<>c.expected_sample_count OR h.data_status<>c.data_status) ORDER BY c.site_id,c.bucket_start LIMIT ?`, start, end, end, start, ResourceGapKindSiteHourly, afterSite, afterBucket, limit-len(result)).Scan(&rows).Error
+	err := repository.db.WithContext(ctx).Raw(`WITH RECURSIVE minute_grid AS (SELECT ? minute_ts UNION ALL SELECT minute_ts+60 FROM minute_grid WHERE minute_ts+60<?), eligible AS (SELECT s.id site_id,g.minute_ts,g.minute_ts-MOD(g.minute_ts,3600) bucket_start,(g.minute_ts>=s.monitoring_start_at AND (s.statistics_end_at IS NULL OR g.minute_ts<s.statistics_end_at)) covered,(g.minute_ts>=s.monitoring_start_at AND (s.statistics_end_at IS NULL OR g.minute_ts<s.statistics_end_at) AND NOT EXISTS(SELECT 1 FROM site_monitoring_pause p WHERE p.site_id=s.id AND p.start_minute_ts<=g.minute_ts AND (p.end_minute_ts IS NULL OR p.end_minute_ts>g.minute_ts))) expected FROM site s CROSS JOIN minute_grid g WHERE s.monitoring_start_at<? AND (s.statistics_end_at IS NULL OR s.statistics_end_at>?)), computed AS (SELECT e.site_id,e.bucket_start,SUM(e.expected AND m.id IS NOT NULL) sample_count,SUM(e.expected) expected_sample_count,CASE WHEN SUM(e.expected)=0 THEN 'paused' WHEN SUM(e.expected AND m.id IS NOT NULL)=0 THEN 'missing' WHEN SUM(e.expected AND m.id IS NOT NULL)<SUM(e.expected) THEN 'partial' ELSE 'complete' END data_status FROM eligible e LEFT JOIN site_status_minutely m ON m.site_id=e.site_id AND m.minute_ts=e.minute_ts GROUP BY e.site_id,e.bucket_start HAVING SUM(e.covered)>0) SELECT /*+ SET_VAR(cte_max_recursion_depth=3000) */ ? kind,c.site_id,'' node_name,c.bucket_start FROM computed c LEFT JOIN site_status_hourly h ON h.site_id=c.site_id AND h.hour_ts=c.bucket_start WHERE (c.site_id,c.bucket_start)>(?,?) AND (h.id IS NULL OR h.sample_count<>c.sample_count OR h.expected_sample_count<>c.expected_sample_count OR h.data_status<>c.data_status) ORDER BY c.site_id,c.bucket_start LIMIT ?`, start, end, end, start, ResourceGapKindSiteHourly, afterSite, afterBucket, limit-len(result)).Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}

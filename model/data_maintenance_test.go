@@ -47,6 +47,17 @@ func TestResourceScopeRevisionFrozenVectors(t *testing.T) {
 	}
 }
 
+func TestResourceGapBatchRevisionIncludesRange(t *testing.T) {
+	const scope = "4eb87a819af1864dc2a3818156fd36c6b746c1c65b83b7a343fe8cfb884fa7e6"
+	first := resourceGapBatchRevision(scope, 2101521600, 2101525200)
+	if first == resourceGapBatchRevision(scope, 2101521600, 2101528800) {
+		t.Fatal("expanded gap range reused the completed batch revision")
+	}
+	if first != resourceGapBatchRevision(scope, 2101521600, 2101525200) {
+		t.Fatal("identical gap range produced an unstable batch revision")
+	}
+}
+
 func TestMaintenanceAuthorizationRequestIDIsAlwaysCollectionSafe(t *testing.T) {
 	if got := maintenanceAuthorizationRequestID(11, 7, "web_valid-1"); got != "web_valid-1" {
 		t.Fatalf("valid request id changed to %q", got)
