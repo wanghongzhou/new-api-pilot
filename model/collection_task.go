@@ -1655,17 +1655,15 @@ func (repository *CollectionTaskRepository) recalculateTaskBackfillStatuses(
 		if run.TaskType != constant.TaskTypeUsageBackfill || run.SiteID == nil || *run.SiteID != run.TargetID {
 			return nil
 		}
-		statisticsStatus := ""
-		switch run.Status {
-		case CollectionTaskStatusSuccess:
-			statisticsStatus = constant.SiteStatisticsReady
-			if run.UnavailableWindows > 0 {
-				statisticsStatus = constant.SiteStatisticsPartial
-			}
-		case CollectionTaskStatusFailed:
-			statisticsStatus = constant.SiteStatisticsPartial
-		default:
+		if run.Status != CollectionTaskStatusSuccess && run.Status != CollectionTaskStatusFailed {
 			return nil
+		}
+		statisticsStatus, err := NewSiteRepository(tx).UsageBackfillStatisticsStatus(ctx, run.TargetID, run.SiteConfigVersion)
+		if err != nil {
+			return err
+		}
+		if run.Status == CollectionTaskStatusFailed && statisticsStatus == constant.SiteStatisticsReady {
+			statisticsStatus = constant.SiteStatisticsPartial
 		}
 		return tx.WithContext(ctx).Model(&Site{}).
 			Where("id = ? AND config_version = ? AND statistics_status = ?", run.TargetID, run.SiteConfigVersion, constant.SiteStatisticsBackfilling).

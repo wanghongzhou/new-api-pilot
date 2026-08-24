@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"sync"
 	"testing"
@@ -151,6 +152,360 @@ func TestPeriodicProbeRejectsStaleSiteSnapshotWithoutWritingProbeState(t *testin
 				t.Fatalf("stale probe response wrote state: %#v", persisted)
 			}
 		})
+	}
+}
+
+func TestPeriodicProbeRecoveryBackfillsOnlyUncoveredCursorGaps(t *testing.T) {
+	tx := openSiteTestTransaction(t)
+	clock := testsupport.NewFakeClock(time.Unix(1_752_400_800, 0))
+	now := clock.Now().Unix()
+	end := floorHour(now)
+	client := authorizedTestSiteClient(now)
+	sites := newIntegrationSiteService(t, tx, clock, &testSiteClientFactory{authenticated: client, public: client})
+	repository := model.NewSiteRepository(tx)
+	statisticsStart := end - 6*3600
+	rootID := int64(1)
+	site := newTestSite(now, "https://periodic-recovery.example.test")
+	site.OnlineStatus = constant.SiteOnlineOnline
+	site.AuthStatus = constant.SiteAuthAuthorized
+	site.StatisticsStatus = constant.SiteStatisticsReady
+	site.DataExportEnabled = true
+	site.Version = "v-test"
+	site.RootUserID = &rootID
+	site.StatisticsStartAt = &statisticsStart
+	if err := repository.Create(context.Background(), &site); err != nil {
+		t.Fatalf("create recovery probe site: %v", err)
+	}
+	if err := storeReadyCapabilities(context.Background(), repository, site.ID, now); err != nil {
+		t.Fatalf("store recovery capabilities: %v", err)
+	}
+	latestComplete := end - 5*3600
+	if err := tx.Create(&model.CollectionCursor{
+		SiteID: site.ID, CursorKey: model.UsageCursorKey, LastCompleteHour: &latestComplete, UpdatedAt: now,
+	}).Error; err != nil {
+		t.Fatalf("create recovery cursor: %v", err)
+	}
+	overlapStart := end - 3*3600
+	overlapEnd := end - 2*3600
+	if created, err := repository.CreateSiteWindowRun(context.Background(), model.SiteWindowRunCreateRequest{
+		SiteID: site.ID, ExpectedConfigVersion: site.ConfigVersion,
+		TaskType: constant.TaskTypeUsageValidation, TriggerType: constant.CollectionTriggerSchedule,
+		StartTimestamp: overlapStart, EndTimestamp: overlapEnd,
+		Priority: constant.CollectionPriorityDailyValidation, RequestID: "req_periodic_existing_validation", Now: now,
+		Mode: model.SiteWindowRunStrict,
+	}); err != nil || len(created.Runs) != 1 {
+		t.Fatalf("create overlapping validation = %#v, %v", created, err)
+	}
+
+	result, err := sites.probeWithSnapshot(context.Background(), site, site.ConfigVersion, "req_periodic_recovery", true)
+	if err != nil {
+		t.Fatalf("periodic recovery probe: %v", err)
+	}
+	if result.OnlineStatus != constant.SiteOnlineOnline {
+		t.Fatalf("periodic recovery result = %#v", result)
+	}
+	var runs []model.CollectionRun
+	if err := tx.Where("site_id = ? AND task_type = ? AND trigger_type = ?", site.ID,
+		constant.TaskTypeUsageBackfill, constant.CollectionTriggerRecovery).
+		Order("start_timestamp ASC").Find(&runs).Error; err != nil {
+		t.Fatalf("list recovery runs: %v", err)
+	}
+	if len(runs) != 2 || *runs[0].StartTimestamp != end-4*3600 || *runs[0].EndTimestamp != overlapStart ||
+		*runs[1].StartTimestamp != overlapEnd || *runs[1].EndTimestamp != end {
+		t.Fatalf("recovery runs = %#v", runs)
+	}
+	persisted, err := repository.FindByID(context.Background(), site.ID)
+	if err != nil || persisted.StatisticsStatus != constant.SiteStatisticsBackfilling {
+		t.Fatalf("recovery site state = %#v, %v", persisted, err)
+	}
+	if _, err := sites.probeWithSnapshot(context.Background(), persisted, persisted.ConfigVersion, "req_periodic_recovery_repeat", true); err != nil {
+		t.Fatalf("repeat recovery probe: %v", err)
+	}
+	var repeatedCount int64
+	if err := tx.Model(&model.CollectionRun{}).Where("site_id = ? AND task_type = ? AND trigger_type = ?", site.ID,
+		constant.TaskTypeUsageBackfill, constant.CollectionTriggerRecovery).Count(&repeatedCount).Error; err != nil || repeatedCount != 2 {
+		t.Fatalf("repeated recovery run count = %d, %v", repeatedCount, err)
+	}
+}
+
+func TestPeriodicProbeRecoveryRetriesAfterCoveringValidationTerminates(t *testing.T) {
+	tx := openSiteTestTransaction(t)
+	clock := testsupport.NewFakeClock(time.Unix(1_752_400_800, 0))
+	now := clock.Now().Unix()
+	end := floorHour(now)
+	client := authorizedTestSiteClient(now)
+	sites := newIntegrationSiteService(t, tx, clock, &testSiteClientFactory{authenticated: client, public: client})
+	repository := model.NewSiteRepository(tx)
+	statisticsStart := end - 2*3600
+	site := newTestSite(now, "https://periodic-recovery-covered.example.test")
+	site.OnlineStatus = constant.SiteOnlineOnline
+	site.AuthStatus = constant.SiteAuthAuthorized
+	site.StatisticsStatus = constant.SiteStatisticsReady
+	site.DataExportEnabled = true
+	site.Version = "v-test"
+	site.StatisticsStartAt = &statisticsStart
+	if err := repository.Create(context.Background(), &site); err != nil {
+		t.Fatalf("create covered recovery site: %v", err)
+	}
+	if err := storeReadyCapabilities(context.Background(), repository, site.ID, now); err != nil {
+		t.Fatalf("store covered recovery capabilities: %v", err)
+	}
+	validation, err := repository.CreateSiteWindowRun(context.Background(), model.SiteWindowRunCreateRequest{
+		SiteID: site.ID, ExpectedConfigVersion: site.ConfigVersion,
+		TaskType: constant.TaskTypeUsageValidation, TriggerType: constant.CollectionTriggerSchedule,
+		StartTimestamp: statisticsStart, EndTimestamp: end,
+		Priority: constant.CollectionPriorityDailyValidation, RequestID: "req_periodic_covering_validation", Now: now,
+		Mode: model.SiteWindowRunStrict,
+	})
+	if err != nil || len(validation.Runs) != 1 {
+		t.Fatalf("create covering validation = %#v, %v", validation, err)
+	}
+
+	if _, err := sites.probeWithSnapshot(context.Background(), site, site.ConfigVersion, "req_periodic_covered", true); err != nil {
+		t.Fatalf("probe while validation covers gap: %v", err)
+	}
+	persisted, err := repository.FindByID(context.Background(), site.ID)
+	if err != nil || persisted.StatisticsStatus != constant.SiteStatisticsReady {
+		t.Fatalf("fully covered probe changed statistics state = %#v, %v", persisted, err)
+	}
+	var count int64
+	if err := tx.Model(&model.CollectionRun{}).Where("site_id = ? AND task_type = ?", site.ID,
+		constant.TaskTypeUsageBackfill).Count(&count).Error; err != nil || count != 0 {
+		t.Fatalf("fully covered recovery count = %d, %v", count, err)
+	}
+	if err := tx.Model(&model.CollectionRun{}).Where("id = ?", validation.Runs[0].Run.ID).Updates(map[string]any{
+		"status": model.CollectionTaskStatusFailed, "active_key": nil, "finished_at": now + 1, "updated_at": now + 1,
+	}).Error; err != nil {
+		t.Fatalf("fail covering validation: %v", err)
+	}
+	persisted, err = repository.FindByID(context.Background(), site.ID)
+	if err != nil {
+		t.Fatalf("reload covered recovery site: %v", err)
+	}
+	clock.Advance(time.Second)
+	if _, err := sites.probeWithSnapshot(context.Background(), persisted, persisted.ConfigVersion, "req_periodic_covered_retry", true); err != nil {
+		t.Fatalf("probe after covering validation failed: %v", err)
+	}
+	var recovery model.CollectionRun
+	if err := tx.Where("site_id = ? AND task_type = ? AND trigger_type = ?", site.ID,
+		constant.TaskTypeUsageBackfill, constant.CollectionTriggerRecovery).Take(&recovery).Error; err != nil {
+		t.Fatalf("find retried recovery run: %v", err)
+	}
+	if recovery.StartTimestamp == nil || recovery.EndTimestamp == nil ||
+		*recovery.StartTimestamp != statisticsStart || *recovery.EndTimestamp != end {
+		t.Fatalf("retried recovery range = %#v", recovery)
+	}
+}
+
+func TestPeriodicProbeRecoveryReconcilesSettledWindowsWithoutEmptyRuns(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		id         string
+		statuses   []string
+		wantStatus string
+		wantCursor bool
+	}{
+		{name: "complete", id: "complete", statuses: []string{model.CollectionWindowStatusComplete, model.CollectionWindowStatusComplete}, wantStatus: constant.SiteStatisticsReady, wantCursor: true},
+		{name: "unavailable barrier", id: "unavailable", statuses: []string{model.CollectionWindowStatusUnavailable, model.CollectionWindowStatusComplete}, wantStatus: constant.SiteStatisticsPartial},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			tx := openSiteTestTransaction(t)
+			clock := testsupport.NewFakeClock(time.Unix(1_752_400_800, 0))
+			now := clock.Now().Unix()
+			end := floorHour(now)
+			statisticsStart := end - 2*3600
+			client := authorizedTestSiteClient(now)
+			sites := newIntegrationSiteService(t, tx, clock, &testSiteClientFactory{authenticated: client, public: client})
+			repository := model.NewSiteRepository(tx)
+			site := newTestSite(now, "https://periodic-recovery-settled-"+test.id+".example.test")
+			site.OnlineStatus = constant.SiteOnlineOnline
+			site.AuthStatus = constant.SiteAuthAuthorized
+			site.StatisticsStatus = constant.SiteStatisticsBackfilling
+			site.DataExportEnabled = true
+			site.Version = "v-test"
+			site.StatisticsStartAt = &statisticsStart
+			if err := repository.Create(context.Background(), &site); err != nil {
+				t.Fatalf("create settled recovery site: %v", err)
+			}
+			if err := storeReadyCapabilities(context.Background(), repository, site.ID, now); err != nil {
+				t.Fatalf("store settled recovery capabilities: %v", err)
+			}
+			windows := make([]model.CollectionWindow, len(test.statuses))
+			for index, status := range test.statuses {
+				windows[index] = model.CollectionWindow{SiteID: site.ID, HourTS: statisticsStart + int64(index)*3600, Status: status, UpdatedAt: now}
+			}
+			if err := tx.Create(&windows).Error; err != nil {
+				t.Fatalf("create settled recovery windows: %v", err)
+			}
+			for attempt := 0; attempt < 2; attempt++ {
+				persisted, err := repository.FindByID(context.Background(), site.ID)
+				if err != nil {
+					t.Fatalf("load settled recovery site: %v", err)
+				}
+				if _, err := sites.probeWithSnapshot(context.Background(), persisted, persisted.ConfigVersion,
+					fmt.Sprintf("req_periodic_settled_%s_%d", test.id, attempt), true); err != nil {
+					t.Fatalf("settled recovery probe %d: %v", attempt, err)
+				}
+				clock.Advance(time.Second)
+			}
+			var count int64
+			if err := tx.Model(&model.CollectionRun{}).Where("site_id = ? AND task_type = ? AND trigger_type = ?", site.ID,
+				constant.TaskTypeUsageBackfill, constant.CollectionTriggerRecovery).Count(&count).Error; err != nil || count != 0 {
+				t.Fatalf("settled recovery run count = %d, %v", count, err)
+			}
+			persisted, err := repository.FindByID(context.Background(), site.ID)
+			if err != nil || persisted.StatisticsStatus != test.wantStatus {
+				t.Fatalf("settled recovery status = %q, %v", persisted.StatisticsStatus, err)
+			}
+			cursor, err := model.FindUsageCursor(context.Background(), tx, site.ID)
+			if err != nil {
+				t.Fatalf("read settled recovery cursor: %v", err)
+			}
+			if test.wantCursor {
+				if cursor.LastCompleteHour == nil || *cursor.LastCompleteHour != end-3600 {
+					t.Fatalf("settled complete cursor = %v, want %d", cursor.LastCompleteHour, end-3600)
+				}
+			} else if cursor.LastCompleteHour != nil {
+				t.Fatalf("unavailable barrier cursor = %v, want nil", cursor.LastCompleteHour)
+			}
+		})
+	}
+}
+
+func TestPeriodicProbeRecoveryUsesActualClockForClosedHourBoundary(t *testing.T) {
+	base := int64(1_752_400_800)
+	actual := time.Unix(floorHour(base)+3599, 0)
+	tx := openSiteTestTransaction(t)
+	clock := testsupport.NewFakeClock(actual)
+	now := actual.Unix()
+	end := floorHour(now)
+	client := authorizedTestSiteClient(now)
+	sites := newIntegrationSiteService(t, tx, clock, &testSiteClientFactory{authenticated: client, public: client})
+	repository := model.NewSiteRepository(tx)
+	statisticsStart := end - 3600
+	site := newTestSite(now, "https://periodic-recovery-boundary.example.test")
+	site.OnlineStatus = constant.SiteOnlineOnline
+	site.AuthStatus = constant.SiteAuthAuthorized
+	site.StatisticsStatus = constant.SiteStatisticsReady
+	site.DataExportEnabled = true
+	site.Version = "v-test"
+	site.StatisticsStartAt = &statisticsStart
+	site.UpdatedAt = now
+	if err := repository.Create(context.Background(), &site); err != nil {
+		t.Fatalf("create boundary recovery site: %v", err)
+	}
+	if err := storeReadyCapabilities(context.Background(), repository, site.ID, now); err != nil {
+		t.Fatalf("store boundary recovery capabilities: %v", err)
+	}
+	if _, err := sites.probeWithSnapshot(context.Background(), site, site.ConfigVersion, "req_periodic_boundary", true); err != nil {
+		t.Fatalf("boundary recovery probe: %v", err)
+	}
+	var recovery model.CollectionRun
+	if err := tx.Where("site_id = ? AND task_type = ? AND trigger_type = ?", site.ID,
+		constant.TaskTypeUsageBackfill, constant.CollectionTriggerRecovery).Take(&recovery).Error; err != nil {
+		t.Fatalf("find boundary recovery run: %v", err)
+	}
+	if recovery.EndTimestamp == nil || *recovery.EndTimestamp != end {
+		t.Fatalf("boundary recovery end = %v, want %d", recovery.EndTimestamp, end)
+	}
+	if recovery.CreatedAt != now+1 || floorHour(recovery.CreatedAt) == end {
+		t.Fatalf("boundary recovery created_at = %d, want next-hour monotonic value %d", recovery.CreatedAt, now+1)
+	}
+}
+
+func TestPeriodicProbeRecoverySkipsCompleteOrIneligibleSites(t *testing.T) {
+	tx := openSiteTestTransaction(t)
+	clock := testsupport.NewFakeClock(time.Unix(1_752_400_800, 0))
+	now := clock.Now().Unix()
+	end := floorHour(now)
+	client := authorizedTestSiteClient(now)
+	sites := newIntegrationSiteService(t, tx, clock, &testSiteClientFactory{authenticated: client, public: client})
+	repository := model.NewSiteRepository(tx)
+
+	tests := []struct {
+		name             string
+		mutate           func(*model.Site)
+		seed             bool
+		skipCapabilities bool
+	}{
+		{name: "no gap", seed: true},
+		{name: "unauthorized", mutate: func(site *model.Site) { site.AuthStatus = constant.SiteAuthUnauthorized }},
+		{name: "missing statistics start", mutate: func(site *model.Site) { site.StatisticsStartAt = nil }},
+		{name: "capabilities pending", skipCapabilities: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			statisticsStart := end - 2*3600
+			site := newTestSite(now, "https://periodic-recovery-skip-"+test.name+".example.test")
+			site.OnlineStatus = constant.SiteOnlineOffline
+			site.AuthStatus = constant.SiteAuthAuthorized
+			site.StatisticsStatus = constant.SiteStatisticsReady
+			site.DataExportEnabled = true
+			site.Version = "v-test"
+			site.StatisticsStartAt = &statisticsStart
+			if test.mutate != nil {
+				test.mutate(&site)
+			}
+			if err := repository.Create(context.Background(), &site); err != nil {
+				t.Fatalf("create skipped recovery site: %v", err)
+			}
+			if !test.skipCapabilities {
+				if err := storeReadyCapabilities(context.Background(), repository, site.ID, now); err != nil {
+					t.Fatalf("store skipped recovery capabilities: %v", err)
+				}
+			}
+			if test.seed {
+				latestComplete := end - 3600
+				if err := tx.Create(&model.CollectionCursor{
+					SiteID: site.ID, CursorKey: model.UsageCursorKey, LastCompleteHour: &latestComplete, UpdatedAt: now,
+				}).Error; err != nil {
+					t.Fatalf("seed complete recovery cursor: %v", err)
+				}
+			}
+			if _, err := sites.probeWithSnapshot(context.Background(), site, site.ConfigVersion, "req_periodic_recovery_skip", true); err != nil {
+				t.Fatalf("probe skipped recovery site: %v", err)
+			}
+			var count int64
+			if err := tx.Model(&model.CollectionRun{}).Where("site_id = ? AND task_type = ? AND trigger_type = ?", site.ID,
+				constant.TaskTypeUsageBackfill, constant.CollectionTriggerRecovery).Count(&count).Error; err != nil || count != 0 {
+				t.Fatalf("skipped recovery run count = %d, %v", count, err)
+			}
+			persisted, err := repository.FindByID(context.Background(), site.ID)
+			if err != nil || persisted.OnlineStatus != constant.SiteOnlineOnline || persisted.StatisticsStatus != constant.SiteStatisticsReady {
+				t.Fatalf("skipped recovery site state = %#v, %v", persisted, err)
+			}
+		})
+	}
+}
+
+func TestPeriodicProbeRecoveryRollsBackOnlineTransitionWhenRunCreationFails(t *testing.T) {
+	tx := openSiteTestTransaction(t)
+	clock := testsupport.NewFakeClock(time.Unix(1_752_400_800, 0))
+	now := clock.Now().Unix()
+	end := floorHour(now)
+	client := authorizedTestSiteClient(now)
+	sites := newIntegrationSiteService(t, tx, clock, &testSiteClientFactory{authenticated: client, public: client})
+	repository := model.NewSiteRepository(tx)
+	statisticsStart := end - 2*3600
+	site := newTestSite(now, "https://periodic-recovery-rollback.example.test")
+	site.OnlineStatus = constant.SiteOnlineOffline
+	site.AuthStatus = constant.SiteAuthAuthorized
+	site.StatisticsStatus = constant.SiteStatisticsReady
+	site.DataExportEnabled = true
+	site.Version = "v-test"
+	site.StatisticsStartAt = &statisticsStart
+	if err := repository.Create(context.Background(), &site); err != nil {
+		t.Fatalf("create rollback recovery site: %v", err)
+	}
+	if err := storeReadyCapabilities(context.Background(), repository, site.ID, now); err != nil {
+		t.Fatalf("store rollback recovery capabilities: %v", err)
+	}
+	if _, err := sites.probeWithSnapshot(context.Background(), site, site.ConfigVersion, "", true); err == nil {
+		t.Fatal("periodic recovery probe unexpectedly accepted invalid run request ID")
+	}
+	persisted, err := repository.FindByID(context.Background(), site.ID)
+	if err != nil || persisted.OnlineStatus != constant.SiteOnlineOffline || persisted.LastProbeAt != nil || persisted.LastProbeSuccessAt != nil {
+		t.Fatalf("failed recovery did not roll back probe transition: %#v, %v", persisted, err)
 	}
 }
 

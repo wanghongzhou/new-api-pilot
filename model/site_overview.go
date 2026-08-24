@@ -5,14 +5,15 @@ import (
 )
 
 type SiteUsageOverview struct {
-	SiteID       int64  `gorm:"column:site_id"`
-	RequestCount string `gorm:"column:request_count"`
-	Quota        string `gorm:"column:quota"`
-	TokenUsed    string `gorm:"column:token_used"`
-	ActiveUsers  int64  `gorm:"column:active_users"`
-	AvgRPM       string `gorm:"column:avg_rpm"`
-	AvgTPM       string `gorm:"column:avg_tpm"`
-	AsOf         *int64 `gorm:"column:as_of"`
+	SiteID          int64  `gorm:"column:site_id"`
+	RequestCount    string `gorm:"column:request_count"`
+	Quota           string `gorm:"column:quota"`
+	TokenUsed       string `gorm:"column:token_used"`
+	ActiveUsers     int64  `gorm:"column:active_users"`
+	AvgRPM          string `gorm:"column:avg_rpm"`
+	AvgTPM          string `gorm:"column:avg_tpm"`
+	AsOf            *int64 `gorm:"column:as_of"`
+	CompleteWindows int64  `gorm:"column:complete_windows"`
 }
 
 func (repository *SiteRepository) ListUsageOverviews(
@@ -36,7 +37,8 @@ func (repository *SiteRepository) ListUsageOverviews(
   COALESCE(a.active_users, 0) AS active_users,
   CAST(COALESCE(SUM(s.request_count) / NULLIF(?, 0), 0) AS CHAR) AS avg_rpm,
   CAST(COALESCE(SUM(s.token_used) / NULLIF(?, 0), 0) AS CHAR) AS avg_tpm,
-  MAX(s.last_calculated_at) AS as_of
+  MAX(s.last_calculated_at) AS as_of,
+  COUNT(DISTINCT w.hour_ts) AS complete_windows
 FROM collection_window AS w
 LEFT JOIN site_stat_hourly AS s
   ON s.site_id = w.site_id AND s.hour_ts = w.hour_ts

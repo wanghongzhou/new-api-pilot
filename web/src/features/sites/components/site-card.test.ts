@@ -42,6 +42,18 @@ test('uses one non-rounding completeness formatter in card and table views', asy
   expect(pageSource).not.toContain('percent.toFixed(0)')
 })
 
+test('shows the rolling usage data status in card and table views', async () => {
+  const [cardSource, pageSource] = await Promise.all([
+    readFile(new URL('./site-card.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('./sites-page.tsx', import.meta.url), 'utf8'),
+  ])
+
+  expect(cardSource).toContain(
+    '<DataStatusBadge status={site.today.data_status} />'
+  )
+  expect(pageSource).toContain('<DataStatusBadge status={today.data_status} />')
+})
+
 test('matches the new-api dashboard performance summary contract', async () => {
   const [cardSource, pageSource] = await Promise.all([
     readFile(new URL('./site-card.tsx', import.meta.url), 'utf8'),

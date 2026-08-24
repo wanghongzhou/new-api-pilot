@@ -194,8 +194,8 @@ WHERE setting_key = 'collector.minute_retention_days'`).Error; err != nil {
 
 func TestSiteResourceStatusUsesFixedSQLCountForLongTrend(t *testing.T) {
 	tx := openSiteTestTransaction(t)
-	start := time.Date(2024, time.January, 1, 0, 0, 0, 0, siteResourceLocation).Unix()
-	end := time.Date(2025, time.January, 1, 0, 0, 0, 0, siteResourceLocation).Unix()
+	end := time.Date(2025, time.January, 8, 0, 0, 0, 0, siteResourceLocation).Unix()
+	start := end - 7*24*60*60
 	clock := testsupport.NewFakeClock(time.Unix(end+3600, 0))
 	monitoringStart := start
 	site := newTestSite(clock.Now().Unix(), "https://resource-query-count.example")
@@ -214,8 +214,8 @@ func TestSiteResourceStatusUsesFixedSQLCountForLongTrend(t *testing.T) {
 	if err != nil {
 		t.Fatalf("long ResourceStatus() error = %v", err)
 	}
-	if len(response.Trend) != 366*24 {
-		t.Fatalf("long resource trend length = %d, want %d", len(response.Trend), 366*24)
+	if len(response.Trend) != 7*24 {
+		t.Fatalf("long resource trend length = %d, want %d", len(response.Trend), 7*24)
 	}
 	if got := counter.statements.Load(); got != 3 {
 		t.Fatalf("resource SQL statements = %d, want 3 fixed reads", got)

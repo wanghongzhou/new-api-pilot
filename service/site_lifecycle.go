@@ -362,6 +362,31 @@ func (service *SiteService) probeWithSnapshot(
 		}
 		current.UpdatedAt = committedAt
 		result.OnlineStatus = current.OnlineStatus
+		if err := repository.Save(ctx, &current); err != nil {
+			return err
+		}
+		if !periodic {
+			return nil
+		}
+		recoveryPending, err := service.enqueuePeriodicRecoveryBackfill(ctx, repository, current, requestID, now, committedAt)
+		if err != nil {
+			return err
+		}
+		if !recoveryPending {
+			if current.StatisticsStatus == constant.SiteStatisticsBackfilling ||
+				current.StatisticsStatus == constant.SiteStatisticsReady || current.StatisticsStatus == constant.SiteStatisticsPartial {
+				statisticsStatus, err := repository.UsageBackfillStatisticsStatus(ctx, current.ID, current.ConfigVersion)
+				if err != nil {
+					return err
+				}
+				if current.StatisticsStatus != statisticsStatus {
+					current.StatisticsStatus = statisticsStatus
+					return repository.Save(ctx, &current)
+				}
+			}
+			return nil
+		}
+		current.StatisticsStatus = constant.SiteStatisticsBackfilling
 		return repository.Save(ctx, &current)
 	})
 	if err != nil {
@@ -379,6 +404,53 @@ func (service *SiteService) probeWithSnapshot(
 		}
 	}
 	return result, nil
+}
+
+func (service *SiteService) enqueuePeriodicRecoveryBackfill(
+	ctx context.Context,
+	repository *model.SiteRepository,
+	site model.Site,
+	requestID string,
+	actualNow int64,
+	committedAt int64,
+) (bool, error) {
+	if site.ManagementStatus != constant.SiteManagementActive || site.AuthStatus != constant.SiteAuthAuthorized ||
+		site.StatisticsStartAt == nil || site.StatisticsEndAt != nil || !site.DataExportEnabled {
+		return false, nil
+	}
+	ready, err := requiredCapabilitiesReady(ctx, repository, site.ID)
+	if err != nil || !ready {
+		return false, err
+	}
+	start := *site.StatisticsStartAt
+	if _, err := repository.ReconcileUsageCursor(ctx, site.ID, start, committedAt); err != nil {
+		return false, err
+	}
+	latestComplete, err := repository.LatestCompleteHour(ctx, site.ID)
+	if err != nil {
+		return false, err
+	}
+	if latestComplete != nil && *latestComplete+3600 > start {
+		start = *latestComplete + 3600
+	}
+	end := floorHour(actualNow)
+	if start >= end {
+		return false, nil
+	}
+	scope, err := model.NewUsageBackfillRunScope(true)
+	if err != nil {
+		return false, err
+	}
+	result, err := repository.CreateSiteWindowRun(ctx, model.SiteWindowRunCreateRequest{
+		SiteID: site.ID, ExpectedConfigVersion: site.ConfigVersion,
+		TaskType: constant.TaskTypeUsageBackfill, TriggerType: constant.CollectionTriggerRecovery,
+		StartTimestamp: start, EndTimestamp: end, Scope: scope, Priority: constant.CollectionPrioritySiteRecovery,
+		RequestID: requestID, Now: committedAt, Mode: model.SiteWindowRunGaps,
+	})
+	if err != nil {
+		return false, siteRunServiceError(err)
+	}
+	return len(result.Runs) > 0, nil
 }
 
 func probeReachedUpstream(err error) bool {

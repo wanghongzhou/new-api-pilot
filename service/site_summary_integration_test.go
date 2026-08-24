@@ -14,13 +14,14 @@ import (
 
 func TestSiteListAndDetailUseLatestResourceSummaryAndDefaultMissingMetricsToZero(t *testing.T) {
 	tx := openSiteTestTransaction(t)
-	now := int64(1_752_400_800)
+	now := int64(1_752_400_830)
 	clock := testsupport.NewFakeClock(time.Unix(now, 0))
 	sites := newIntegrationSiteService(t, tx, clock, &testSiteClientFactory{
 		authenticated: authorizedTestSiteClient(now), public: authorizedTestSiteClient(now),
 	})
 	repository := model.NewSiteRepository(tx)
 	site := newTestSite(now, "https://site-summary.example")
+	site.StatisticsStatus = constant.SiteStatisticsBackfilling
 	if err := repository.Create(context.Background(), &site); err != nil {
 		t.Fatalf("create site: %v", err)
 	}
@@ -110,41 +111,16 @@ func TestSiteListAndDetailUseLatestResourceSummaryAndDefaultMissingMetricsToZero
 	if page.Items[0].CompletenessRate != 1 {
 		t.Fatalf("list successful empty backfill completeness = %v, want 1", page.Items[0].CompletenessRate)
 	}
+	if page.Items[0].StatisticsStatus != constant.SiteStatisticsBackfilling {
+		t.Fatalf("list successful latest run hid active sibling: %s", page.Items[0].StatisticsStatus)
+	}
 	detail, err = sites.Get(context.Background(), site.ID)
 	if err != nil {
 		t.Fatalf("get site detail with successful empty backfill: %v", err)
 	}
-	if detail.CompletenessRate != 1 || detail.Backfill.Progress != 1 {
-		t.Fatalf("detail successful empty backfill completeness/progress = %v/%v, want 1/1", detail.CompletenessRate, detail.Backfill.Progress)
-	}
-}
-
-func TestStatisticsStatusAfterBackfillRepairsTerminalBackfillingState(t *testing.T) {
-	base := model.CollectionRun{TaskType: constant.TaskTypeUsageBackfill, TargetType: "site"}
-	tests := []struct {
-		name    string
-		current string
-		run     model.CollectionRun
-		want    string
-	}{
-		{name: "complete", current: constant.SiteStatisticsBackfilling, run: base, want: constant.SiteStatisticsReady},
-		{name: "unavailable", current: constant.SiteStatisticsBackfilling, run: base, want: constant.SiteStatisticsPartial},
-		{name: "failed", current: constant.SiteStatisticsBackfilling, run: base, want: constant.SiteStatisticsPartial},
-		{name: "running", current: constant.SiteStatisticsBackfilling, run: base, want: constant.SiteStatisticsBackfilling},
-		{name: "preserve newer state", current: constant.SiteStatisticsError, run: base, want: constant.SiteStatisticsError},
-	}
-	tests[0].run.Status = model.CollectionTaskStatusSuccess
-	tests[1].run.Status = model.CollectionTaskStatusSuccess
-	tests[1].run.UnavailableWindows = 1
-	tests[2].run.Status = model.CollectionTaskStatusFailed
-	tests[3].run.Status = model.CollectionTaskStatusRunning
-	tests[4].run.Status = model.CollectionTaskStatusSuccess
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if got := statisticsStatusAfterBackfill(test.current, test.run); got != test.want {
-				t.Fatalf("statistics status = %q, want %q", got, test.want)
-			}
-		})
+	if detail.CompletenessRate != 1 || detail.Backfill.Progress != 1 || detail.StatisticsStatus != constant.SiteStatisticsBackfilling {
+		t.Fatalf("detail successful empty backfill completeness/progress/status = %v/%v/%s, want 1/1/backfilling",
+			detail.CompletenessRate, detail.Backfill.Progress, detail.StatisticsStatus)
 	}
 }
 
@@ -201,11 +177,11 @@ func TestSiteListOverviewAggregatesRolling24HoursAndUsesNaturalMinutes(t *testin
 		t.Fatalf("create site: %v", err)
 	}
 
-	usageStart, _ := siteListUsageRange(clock.Now())
+	usageStart, usageEnd := siteListUsageRange(clock.Now())
 	outsideRangeHour := usageStart - 3600
-	zeroRequestHour := now - 3*3600
-	firstHour := now - 2*3600
-	secondHour := now - 3600
+	zeroRequestHour := usageEnd - 3*3600
+	firstHour := usageEnd - 2*3600
+	secondHour := usageEnd - 3600
 	windowFixtures := []struct {
 		hour        int64
 		fetchedRows int64
@@ -253,7 +229,7 @@ func TestSiteListOverviewAggregatesRolling24HoursAndUsesNaturalMinutes(t *testin
 		usage.Quota == nil || *usage.Quota != "100" ||
 		usage.TokenUsed == nil || *usage.TokenUsed != "1000" ||
 		usage.ActiveUsers == nil || *usage.ActiveUsers != "2" ||
-		usage.AsOf == nil || *usage.AsOf != secondHour+3600 || usage.DataStatus != "complete" {
+		usage.AsOf == nil || *usage.AsOf != secondHour+3600 || usage.DataStatus != "partial" {
 		t.Fatalf("today usage overview = %#v", usage)
 	}
 	avgRPM, err := strconv.ParseFloat(*usage.AvgRPM, 64)
@@ -263,6 +239,24 @@ func TestSiteListOverviewAggregatesRolling24HoursAndUsesNaturalMinutes(t *testin
 	avgTPM, err := strconv.ParseFloat(*usage.AvgTPM, 64)
 	if err != nil || avgTPM < 0.694 || avgTPM > 0.695 {
 		t.Fatalf("average TPM = %q", *usage.AvgTPM)
+	}
+
+	for hour := usageStart; hour < usageEnd; hour += 3600 {
+		if hour == zeroRequestHour || hour == firstHour || hour == secondHour {
+			continue
+		}
+		if err := tx.Create(&model.CollectionWindow{
+			SiteID: site.ID, HourTS: hour, Status: model.CollectionWindowStatusComplete, UpdatedAt: now,
+		}).Error; err != nil {
+			t.Fatalf("complete remaining rolling window %d: %v", hour, err)
+		}
+	}
+	page, err = sites.List(context.Background(), dto.SiteListQuery{Page: 1, PageSize: 20, SortBy: "priority", SortOrder: "asc"})
+	if err != nil {
+		t.Fatalf("list sites with all rolling windows: %v", err)
+	}
+	if got := page.Items[0].Today.DataStatus; got != "complete" {
+		t.Fatalf("all rolling windows data status = %q, want complete", got)
 	}
 }
 
@@ -275,6 +269,7 @@ func assertZeroSiteSummary(t *testing.T, item dto.SiteListItem) {
 		item.Today.AvgRPM == nil || *item.Today.AvgRPM != "0" ||
 		item.Today.AvgTPM == nil || *item.Today.AvgTPM != "0" ||
 		item.Today.ActiveUsers == nil || *item.Today.ActiveUsers != "0" ||
+		item.Today.DataStatus != "missing" ||
 		item.Resource.InstanceCount == nil || *item.Resource.InstanceCount != 0 ||
 		item.Resource.OnlineInstanceCount == nil || *item.Resource.OnlineInstanceCount != 0 ||
 		item.Resource.CPUMaxPercent == nil || *item.Resource.CPUMaxPercent != 0 ||

@@ -201,6 +201,7 @@ type SiteWindowRunCreateMode string
 const (
 	SiteWindowRunStrict   SiteWindowRunCreateMode = "strict"
 	SiteWindowRunSchedule SiteWindowRunCreateMode = "schedule"
+	SiteWindowRunGaps     SiteWindowRunCreateMode = "gaps"
 )
 
 type SiteWindowRunCreateRequest struct {
@@ -232,10 +233,13 @@ func (repository *SiteRepository) CreateSiteWindowRun(ctx context.Context, reque
 		!constant.CollectionTaskWindowed(request.TaskType) ||
 		request.StartTimestamp <= 0 || request.EndTimestamp < request.StartTimestamp ||
 		request.StartTimestamp%3600 != 0 || request.EndTimestamp%3600 != 0 ||
-		(request.Mode != SiteWindowRunStrict && request.Mode != SiteWindowRunSchedule) {
+		(request.Mode != SiteWindowRunStrict && request.Mode != SiteWindowRunSchedule && request.Mode != SiteWindowRunGaps) {
 		return SiteWindowRunCreateResult{}, ErrCollectionRunContract
 	}
 	if request.Mode == SiteWindowRunSchedule && request.TriggerType != constant.CollectionTriggerSchedule {
+		return SiteWindowRunCreateResult{}, ErrCollectionRunContract
+	}
+	if request.Mode == SiteWindowRunGaps && request.TriggerType != constant.CollectionTriggerRecovery {
 		return SiteWindowRunCreateResult{}, ErrCollectionRunContract
 	}
 	result := SiteWindowRunCreateResult{Runs: []SiteWindowRunResult{}}
@@ -296,11 +300,20 @@ func (repository *SiteRepository) CreateSiteWindowRun(ctx context.Context, reque
 			return nil
 		}
 		for _, gap := range uncoveredSiteWindowRanges(request.StartTimestamp, request.EndTimestamp, active) {
-			created, deduplicated, err := txRepository.createSiteWindowGap(ctx, snapshot.Site, request, gap.start, gap.end)
-			if err != nil {
-				return err
+			candidateGaps := []siteWindowRange{gap}
+			if request.TaskType == constant.TaskTypeUsageBackfill {
+				candidateGaps, err = txRepository.collectableUsageBackfillRanges(ctx, request.SiteID, gap.start, gap.end)
+				if err != nil {
+					return err
+				}
 			}
-			result.Runs = append(result.Runs, SiteWindowRunResult{Run: created, Deduplicated: deduplicated})
+			for _, candidate := range candidateGaps {
+				created, deduplicated, err := txRepository.createSiteWindowGap(ctx, snapshot.Site, request, candidate.start, candidate.end)
+				if err != nil {
+					return err
+				}
+				result.Runs = append(result.Runs, SiteWindowRunResult{Run: created, Deduplicated: deduplicated})
+			}
 		}
 		return nil
 	})
@@ -308,6 +321,31 @@ func (repository *SiteRepository) CreateSiteWindowRun(ctx context.Context, reque
 		return SiteWindowRunCreateResult{}, err
 	}
 	return result, nil
+}
+
+func (repository *SiteRepository) collectableUsageBackfillRanges(ctx context.Context, siteID, start, end int64) ([]siteWindowRange, error) {
+	var settled []CollectionWindow
+	if err := repository.db.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("site_id = ? AND hour_ts >= ? AND hour_ts < ? AND status IN ?", siteID, start, end,
+			[]string{CollectionWindowStatusComplete, CollectionWindowStatusUnavailable}).
+		Order("hour_ts ASC").Find(&settled).Error; err != nil {
+		return nil, err
+	}
+	ranges := make([]siteWindowRange, 0, len(settled)+1)
+	cursor := start
+	for _, window := range settled {
+		if window.HourTS%3600 != 0 || window.HourTS < cursor || window.HourTS >= end {
+			return nil, ErrCollectionRunContract
+		}
+		if cursor < window.HourTS {
+			ranges = append(ranges, siteWindowRange{start: cursor, end: window.HourTS})
+		}
+		cursor = window.HourTS + 3600
+	}
+	if cursor < end {
+		ranges = append(ranges, siteWindowRange{start: cursor, end: end})
+	}
+	return ranges, nil
 }
 
 func (repository *SiteRepository) createSiteWindowGap(ctx context.Context, site Site, request SiteWindowRunCreateRequest, start, end int64) (CollectionRun, bool, error) {

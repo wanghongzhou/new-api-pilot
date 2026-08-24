@@ -404,7 +404,7 @@ ResourceQuery：
 
 minute 只能查询最近 retention_days；hour 最大 1 年；day 最大 5 年。响应同时返回 CPU/内存 max 与 avg、磁盘 max 与期末值，前端按指标选择，不使用含糊的统一 aggregation 参数；站点聚合没有磁盘期末值时返回 null。minute 的 max=avg=当前样本、磁盘 max=last=当前样本。时间点使用持久化 sample_count/expected_sample_count/data_status，遇到采集缺口时指标为 null 或已知部分并标记 partial，不补 0。
 
-三种粒度都只接受已闭合桶，end_timestamp 不得晚于当前分钟/北京时间整点/北京时间当日 00:00；minute 的 start 和总跨度必须同时落在实时读取的 retention_days 内。服务在任何数据库查询和切片分配前计算桶数并拒绝超过 200,000 个桶的请求；hour/day 仍分别受 1 年/5 年上限约束，支持的日历范围为 1970～9999。极远未来、时间差溢出或超量桶统一返回 VALIDATION_ERROR，不进入资源表查询。
+三种粒度都只接受已闭合桶，end_timestamp 不得晚于当前分钟/北京时间整点/北京时间当日 00:00；minute 的 start 和总跨度必须同时落在实时读取的 retention_days 内。服务在任何数据库查询和切片分配前计算桶数并拒绝超过 200,000 个桶的请求；minute/hour/day 的产品跨度上限分别为 24 小时、7 天和 1 个自然月，支持的日历范围为 1970～9999。极远未来、时间差溢出、超量桶或超过对应粒度产品跨度的请求统一返回 VALIDATION_ERROR，不进入资源表查询。合法范围内的资源读取固定为 scope、聚合行和暂停区间三类查询，SQL 次数不得随桶数线性增长。
 
 `GET /api/sites/:id/instances` 在一次查询中把 site_instance 与每个 node 最新分钟样本关联，返回 SiteInstanceItem 当前资源；不得要求前端为 N 个实例再请求 N 次状态接口。超过有效 stale 阈值或当前分钟缺失时按 DTO 返回 stale/offline/unknown 与 sampled_at，不复用旧值伪装新鲜。
 

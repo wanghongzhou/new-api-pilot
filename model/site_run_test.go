@@ -275,6 +275,69 @@ func TestCreateSiteWindowRunConcurrentDedupeOverlapAndScheduleGaps(t *testing.T)
 	if err != nil || len(covered.Runs) != 0 {
 		t.Fatalf("fully covered schedule = %#v, %v", covered, err)
 	}
+
+	recoverySite := createRunnableSite(t, database, "run-recovery-gaps", now)
+	coveredStart := start + 3600
+	coveredEnd := start + 2*3600
+	validation, err := NewSiteRepository(database.GORM).CreateSiteWindowRun(ctx, SiteWindowRunCreateRequest{
+		SiteID: recoverySite.ID, ExpectedConfigVersion: 1, TaskType: constant.TaskTypeUsageValidation,
+		TriggerType: constant.CollectionTriggerSchedule, StartTimestamp: coveredStart, EndTimestamp: coveredEnd,
+		Priority: constant.CollectionPriorityDailyValidation, RequestID: "req_recovery_validation", Now: now, Mode: SiteWindowRunStrict,
+	})
+	if err != nil || len(validation.Runs) != 1 {
+		t.Fatalf("create recovery overlap = %#v, %v", validation, err)
+	}
+	recovery, err := NewSiteRepository(database.GORM).CreateSiteWindowRun(ctx, SiteWindowRunCreateRequest{
+		SiteID: recoverySite.ID, ExpectedConfigVersion: 1, TaskType: constant.TaskTypeUsageBackfill,
+		TriggerType: constant.CollectionTriggerRecovery, StartTimestamp: start, EndTimestamp: start + 3*3600,
+		Scope: trueScope, Priority: constant.CollectionPrioritySiteRecovery, RequestID: "req_recovery_gaps", Now: now, Mode: SiteWindowRunGaps,
+	})
+	if err != nil || len(recovery.Runs) != 2 {
+		t.Fatalf("recovery gaps = %#v, %v", recovery, err)
+	}
+	if *recovery.Runs[0].Run.StartTimestamp != start || *recovery.Runs[0].Run.EndTimestamp != coveredStart ||
+		*recovery.Runs[1].Run.StartTimestamp != coveredEnd || *recovery.Runs[1].Run.EndTimestamp != start+3*3600 {
+		t.Fatalf("unexpected recovery gap ranges: %#v", recovery)
+	}
+	settledSite := createRunnableSite(t, database, "run-recovery-settled", now)
+	if err := database.GORM.Create([]CollectionWindow{
+		{SiteID: settledSite.ID, HourTS: start, Status: CollectionWindowStatusComplete, UpdatedAt: now},
+		{SiteID: settledSite.ID, HourTS: start + 2*3600, Status: CollectionWindowStatusUnavailable, UpdatedAt: now},
+	}).Error; err != nil {
+		t.Fatalf("create settled recovery windows: %v", err)
+	}
+	settledGaps, err := NewSiteRepository(database.GORM).CreateSiteWindowRun(ctx, SiteWindowRunCreateRequest{
+		SiteID: settledSite.ID, ExpectedConfigVersion: 1, TaskType: constant.TaskTypeUsageBackfill,
+		TriggerType: constant.CollectionTriggerRecovery, StartTimestamp: start, EndTimestamp: start + 4*3600,
+		Scope: trueScope, Priority: constant.CollectionPrioritySiteRecovery, RequestID: "req_recovery_settled", Now: now, Mode: SiteWindowRunGaps,
+	})
+	if err != nil || len(settledGaps.Runs) != 2 ||
+		*settledGaps.Runs[0].Run.StartTimestamp != start+3600 || *settledGaps.Runs[0].Run.EndTimestamp != start+2*3600 ||
+		*settledGaps.Runs[1].Run.StartTimestamp != start+3*3600 || *settledGaps.Runs[1].Run.EndTimestamp != start+4*3600 {
+		t.Fatalf("settled recovery gaps = %#v, %v", settledGaps, err)
+	}
+	allSettledSite := createRunnableSite(t, database, "run-recovery-all-settled", now)
+	if err := database.GORM.Create([]CollectionWindow{
+		{SiteID: allSettledSite.ID, HourTS: start, Status: CollectionWindowStatusUnavailable, UpdatedAt: now},
+		{SiteID: allSettledSite.ID, HourTS: start + 3600, Status: CollectionWindowStatusComplete, UpdatedAt: now},
+	}).Error; err != nil {
+		t.Fatalf("create all-settled recovery windows: %v", err)
+	}
+	allSettled, err := NewSiteRepository(database.GORM).CreateSiteWindowRun(ctx, SiteWindowRunCreateRequest{
+		SiteID: allSettledSite.ID, ExpectedConfigVersion: 1, TaskType: constant.TaskTypeUsageBackfill,
+		TriggerType: constant.CollectionTriggerRecovery, StartTimestamp: start, EndTimestamp: start + 2*3600,
+		Scope: trueScope, Priority: constant.CollectionPrioritySiteRecovery, RequestID: "req_recovery_all_settled", Now: now, Mode: SiteWindowRunGaps,
+	})
+	if err != nil || len(allSettled.Runs) != 0 {
+		t.Fatalf("all-settled recovery created empty work = %#v, %v", allSettled, err)
+	}
+	if _, err := NewSiteRepository(database.GORM).CreateSiteWindowRun(ctx, SiteWindowRunCreateRequest{
+		SiteID: recoverySite.ID, ExpectedConfigVersion: 1, TaskType: constant.TaskTypeUsageBackfill,
+		TriggerType: constant.CollectionTriggerManual, StartTimestamp: start, EndTimestamp: start + 3*3600,
+		Scope: trueScope, Priority: constant.CollectionPriorityManualBackfill, RequestID: "req_invalid_gap_trigger", Now: now, Mode: SiteWindowRunGaps,
+	}); !errors.Is(err, ErrCollectionRunContract) {
+		t.Fatalf("manual gaps mode error = %v, want %v", err, ErrCollectionRunContract)
+	}
 }
 
 func TestMaterializationUnavailableProgressAndFencedParentImmutability(t *testing.T) {

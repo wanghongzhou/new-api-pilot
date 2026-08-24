@@ -499,6 +499,8 @@ func TestCollectionTaskWindowOrderingNewestFirst(t *testing.T) {
 	commitSuccessfulWindows(t, repository, olderClaim, now+4)
 
 	initialSite := createRunnableSite(t, database, "run-b3a-order-initial", now)
+	initialStart := now - 3*3600
+	initialSite.StatisticsStartAt = &initialStart
 	initialSite.StatisticsStatus = constant.SiteStatisticsBackfilling
 	if err := database.GORM.Save(&initialSite).Error; err != nil {
 		t.Fatalf("mark initial site backfilling: %v", err)
@@ -517,10 +519,160 @@ func TestCollectionTaskWindowOrderingNewestFirst(t *testing.T) {
 		initialClaim.Windows[2].HourTS != now-3*3600 {
 		t.Fatalf("initial newest-first claim = %#v, %v", initialClaim.Windows, err)
 	}
+	for _, window := range initialClaim.Windows {
+		if err := database.GORM.Create(&CollectionWindow{
+			SiteID: initialSite.ID, HourTS: window.HourTS, Status: CollectionWindowStatusComplete, UpdatedAt: now + 6,
+		}).Error; err != nil {
+			t.Fatalf("create initial successful collection window %d: %v", window.HourTS, err)
+		}
+	}
 	commitSuccessfulWindows(t, repository, initialClaim, now+6)
 	if err := database.GORM.First(&initialSite, initialSite.ID).Error; err != nil ||
 		initialSite.StatisticsStatus != constant.SiteStatisticsReady {
 		t.Fatalf("initial site terminal status = %q, %v", initialSite.StatisticsStatus, err)
+	}
+}
+
+func TestUsageBackfillSiblingTerminalOrderAggregatesSiteStatus(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		firstFailed bool
+	}{
+		{name: "success then failure"},
+		{name: "failure then success", firstFailed: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			database := openLockedSiteRunDatabase(t)
+			ctx := context.Background()
+			now := int64(1_752_400_800)
+			site := createRunnableSite(t, database, "run-b3a-sibling-"+test.name, now)
+			site.StatisticsStatus = constant.SiteStatisticsBackfilling
+			if err := database.GORM.Save(&site).Error; err != nil {
+				t.Fatalf("mark sibling site backfilling: %v", err)
+			}
+			requestID := "req_b3a_sibling_terminal"
+			first := createB3AWindowRun(t, database, site, constant.TaskTypeUsageBackfill,
+				constant.CollectionTriggerRecovery, constant.CollectionPrioritySiteRecovery,
+				now-4*3600, now-3*3600, requestID, now)
+			second := createB3AWindowRun(t, database, site, constant.TaskTypeUsageBackfill,
+				constant.CollectionTriggerRecovery, constant.CollectionPrioritySiteRecovery,
+				now-2*3600, now-3600, requestID, now)
+			firstStatus := CollectionTaskStatusSuccess
+			secondStatus := CollectionTaskStatusFailed
+			if test.firstFailed {
+				firstStatus, secondStatus = secondStatus, firstStatus
+			}
+			repository := NewCollectionTaskRepository(database.GORM)
+			finish := func(run CollectionRun, status string, finishedAt int64) {
+				t.Helper()
+				run.Status = status
+				run.ActiveKey = nil
+				run.FinishedAt = &finishedAt
+				run.UpdatedAt = finishedAt
+				if err := database.GORM.Transaction(func(tx *gorm.DB) error {
+					if err := tx.Save(&run).Error; err != nil {
+						return err
+					}
+					runWindow := CollectionRunWindow{RunID: run.ID, SiteID: site.ID, HourTS: *run.StartTimestamp}
+					if err := tx.Where("run_id = ? AND hour_ts = ?", run.ID, *run.StartTimestamp).
+						Assign(map[string]any{"status": status, "updated_at": finishedAt}).FirstOrCreate(&runWindow).Error; err != nil {
+						return err
+					}
+					if status == CollectionTaskStatusSuccess {
+						window := CollectionWindow{SiteID: site.ID, HourTS: *run.StartTimestamp}
+						if err := tx.Where("site_id = ? AND hour_ts = ?", site.ID, *run.StartTimestamp).
+							Assign(map[string]any{"status": CollectionWindowStatusComplete, "updated_at": finishedAt}).FirstOrCreate(&window).Error; err != nil {
+							return err
+						}
+					}
+					return repository.recalculateTaskBackfillStatuses(ctx, tx, run, finishedAt)
+				}); err != nil {
+					t.Fatalf("finish sibling run %d: %v", run.ID, err)
+				}
+			}
+			finish(first, firstStatus, now+1)
+			var persisted Site
+			if err := database.GORM.First(&persisted, site.ID).Error; err != nil ||
+				persisted.StatisticsStatus != constant.SiteStatisticsBackfilling {
+				t.Fatalf("site status after first sibling = %q, %v", persisted.StatisticsStatus, err)
+			}
+			finish(second, secondStatus, now+2)
+			if err := database.GORM.First(&persisted, site.ID).Error; err != nil ||
+				persisted.StatisticsStatus != constant.SiteStatisticsPartial {
+				t.Fatalf("site status after sibling batch = %q, %v", persisted.StatisticsStatus, err)
+			}
+		})
+	}
+}
+
+func TestUsageBackfillConcurrentRequestsPreserveAndRepairEarlierGap(t *testing.T) {
+	database := openLockedSiteRunDatabase(t)
+	ctx := context.Background()
+	now := int64(1_752_400_800)
+	statisticsStart := now - 4*3600
+	site := createRunnableSite(t, database, "run-b3a-cross-request", now)
+	site.StatisticsStatus = constant.SiteStatisticsBackfilling
+	site.StatisticsStartAt = &statisticsStart
+	if err := database.GORM.Save(&site).Error; err != nil {
+		t.Fatalf("mark cross-request site backfilling: %v", err)
+	}
+	failed := createB3AWindowRun(t, database, site, constant.TaskTypeUsageBackfill,
+		constant.CollectionTriggerRecovery, constant.CollectionPrioritySiteRecovery,
+		now-4*3600, now-3*3600, "req_b3a_cross_failed", now)
+	later := createB3AWindowRun(t, database, site, constant.TaskTypeUsageBackfill,
+		constant.CollectionTriggerRecovery, constant.CollectionPrioritySiteRecovery,
+		now-2*3600, now-3600, "req_b3a_cross_later", now)
+	repository := NewCollectionTaskRepository(database.GORM)
+	finish := func(run CollectionRun, status, windowStatus string, finishedAt int64) {
+		t.Helper()
+		run.Status = status
+		run.ActiveKey = nil
+		run.FinishedAt = &finishedAt
+		run.UpdatedAt = finishedAt
+		if err := database.GORM.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Save(&run).Error; err != nil {
+				return err
+			}
+			runWindow := CollectionRunWindow{RunID: run.ID, SiteID: site.ID, HourTS: *run.StartTimestamp}
+			if err := tx.Where("run_id = ? AND hour_ts = ?", run.ID, *run.StartTimestamp).
+				Assign(map[string]any{"status": status, "updated_at": finishedAt}).FirstOrCreate(&runWindow).Error; err != nil {
+				return err
+			}
+			if windowStatus != "" {
+				window := CollectionWindow{SiteID: site.ID, HourTS: *run.StartTimestamp}
+				if err := tx.Where("site_id = ? AND hour_ts = ?", site.ID, *run.StartTimestamp).
+					Assign(map[string]any{"status": windowStatus, "updated_at": finishedAt}).FirstOrCreate(&window).Error; err != nil {
+					return err
+				}
+			}
+			return repository.recalculateTaskBackfillStatuses(ctx, tx, run, finishedAt)
+		}); err != nil {
+			t.Fatalf("finish cross-request run %d: %v", run.ID, err)
+		}
+	}
+	finish(failed, CollectionTaskStatusFailed, "", now+1)
+	var persisted Site
+	if err := database.GORM.First(&persisted, site.ID).Error; err != nil ||
+		persisted.StatisticsStatus != constant.SiteStatisticsBackfilling {
+		t.Fatalf("cross-request status after earlier failure = %q, %v", persisted.StatisticsStatus, err)
+	}
+	finish(later, CollectionTaskStatusSuccess, CollectionWindowStatusComplete, now+2)
+	if err := database.GORM.First(&persisted, site.ID).Error; err != nil ||
+		persisted.StatisticsStatus != constant.SiteStatisticsPartial {
+		t.Fatalf("cross-request status after later success = %q, %v", persisted.StatisticsStatus, err)
+	}
+
+	persisted.StatisticsStatus = constant.SiteStatisticsBackfilling
+	if err := database.GORM.Save(&persisted).Error; err != nil {
+		t.Fatalf("mark cross-request retry backfilling: %v", err)
+	}
+	retry := createB3AWindowRun(t, database, persisted, constant.TaskTypeUsageBackfill,
+		constant.CollectionTriggerRecovery, constant.CollectionPrioritySiteRecovery,
+		now-4*3600, now-3*3600, "req_b3a_cross_retry", now+3)
+	finish(retry, CollectionTaskStatusSuccess, CollectionWindowStatusComplete, now+4)
+	if err := database.GORM.First(&persisted, site.ID).Error; err != nil ||
+		persisted.StatisticsStatus != constant.SiteStatisticsReady {
+		t.Fatalf("cross-request status after repairing retry = %q, %v", persisted.StatisticsStatus, err)
 	}
 }
 

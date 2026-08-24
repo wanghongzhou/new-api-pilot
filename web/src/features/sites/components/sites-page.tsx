@@ -18,6 +18,7 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import { DataStatusBadge } from '@/components/data/data-status'
 import { DataViewModeToggle } from '@/components/data/data-view-mode-toggle'
 import { MetricValue } from '@/components/data/metric-value'
 import { QuotaAmount } from '@/components/data/quota-amount'
@@ -403,6 +404,9 @@ export function SitesPage({
           const today = row.original.today
           return (
             <div className='grid min-w-64 gap-3'>
+              <div className='flex justify-end'>
+                <DataStatusBadge status={today.data_status} />
+              </div>
               <div className='grid grid-cols-2 gap-x-5'>
                 <ListMetric label={t('site.dashboard.last24HoursQuota')}>
                   <QuotaAmount

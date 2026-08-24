@@ -354,10 +354,16 @@ func requiredCapabilitiesReady(ctx context.Context, repository *model.SiteReposi
 	}
 	for _, key := range constant.SiteCapabilityKeys() {
 		status, exists := statuses[key]
-		if !exists || status == constant.CapabilityStatusFailed {
+		if !exists {
 			return false, nil
 		}
-		if status == constant.CapabilityStatusSkipped && key != constant.CapabilityFlowDataConsistency {
+		if status == constant.CapabilityStatusSkipped {
+			if key == constant.CapabilityFlowDataConsistency {
+				continue
+			}
+			return false, nil
+		}
+		if status != constant.CapabilityStatusPassed {
 			return false, nil
 		}
 	}

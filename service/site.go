@@ -167,7 +167,6 @@ func (service *SiteService) List(ctx context.Context, query dto.SiteListQuery) (
 		if err := validatePersistedSite(site); err != nil {
 			return common.PageData[dto.SiteListItem]{}, err
 		}
-		site.StatisticsStatus = statisticsStatusAfterBackfill(site.StatisticsStatus, backfills[site.ID])
 		items = append(items, siteListItemFromModel(site, now, resources[site.ID], usage[site.ID], performance[site.ID], backfillCompletenessRate(backfills[site.ID])))
 	}
 	return common.NewPageData(query.Page, query.PageSize, total, items), nil
@@ -372,7 +371,6 @@ func (service *SiteService) detailFromModel(ctx context.Context, site model.Site
 	if err == nil {
 		detail.Backfill = backfillSummaryFromRun(run)
 		detail.CompletenessRate = backfillCompletenessRate(run)
-		detail.StatisticsStatus = statisticsStatusAfterBackfill(detail.StatisticsStatus, run)
 	} else if !model.IsNotFound(err) {
 		return dto.SiteDetail{}, fmt.Errorf("read site backfill: %w", err)
 	}
@@ -380,8 +378,11 @@ func (service *SiteService) detailFromModel(ctx context.Context, site model.Site
 }
 
 func siteListUsageRange(now time.Time) (int64, int64) {
-	return now.Add(-24 * time.Hour).Unix(), now.Unix()
+	end := floorHour(now.Unix())
+	return end - int64(24*time.Hour/time.Second), end
 }
+
+const siteListExpectedUsageWindows int64 = 24
 
 func siteListItemFromModel(site model.Site, now int64, resource model.SiteStatusMinutely, usage model.SiteUsageOverview, performance dto.SitePerformanceSummary, completenessRate float64) dto.SiteListItem {
 	zeroCount := 0
@@ -436,10 +437,14 @@ func siteListItemFromModel(site model.Site, now int64, resource model.SiteStatus
 	}
 	if usage.SiteID != 0 {
 		activeUsers := strconv.FormatInt(usage.ActiveUsers, 10)
+		dataStatus := "partial"
+		if usage.CompleteWindows >= siteListExpectedUsageWindows {
+			dataStatus = "complete"
+		}
 		item.Today = dto.UsageSummary{
 			RequestCount: &usage.RequestCount, Quota: &usage.Quota, TokenUsed: &usage.TokenUsed,
 			ActiveUsers: &activeUsers, AvgRPM: &usage.AvgRPM, AvgTPM: &usage.AvgTPM,
-			AsOf: usage.AsOf, DataStatus: "complete",
+			AsOf: usage.AsOf, DataStatus: dataStatus,
 		}
 	}
 	return item
@@ -501,23 +506,6 @@ func backfillCompletenessRate(run model.CollectionRun) float64 {
 		completed = total
 	}
 	return float64(completed) / float64(total)
-}
-
-func statisticsStatusAfterBackfill(current string, run model.CollectionRun) string {
-	if current != constant.SiteStatisticsBackfilling || run.TaskType != constant.TaskTypeUsageBackfill || run.TargetType != "site" {
-		return current
-	}
-	switch run.Status {
-	case model.CollectionTaskStatusSuccess:
-		if run.UnavailableWindows > 0 {
-			return constant.SiteStatisticsPartial
-		}
-		return constant.SiteStatisticsReady
-	case model.CollectionTaskStatusFailed:
-		return constant.SiteStatisticsPartial
-	default:
-		return current
-	}
 }
 
 func emptyCompleteness(site model.Site) dto.Completeness {
