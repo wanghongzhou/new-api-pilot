@@ -461,6 +461,9 @@ export function StatisticsSummary({
           timestamp={data.range.as_of}
         />
       </div>
+      <p className='text-muted-foreground text-xs' role='note'>
+        {t('statistics.settledHourNotice')}
+      </p>
       {(data.summary.is_partial || data.summary.data_status !== 'complete') && (
         <div
           className='border-warning/40 bg-warning/10 flex flex-wrap items-center justify-between gap-2 rounded-md border p-3'
