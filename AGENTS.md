@@ -1,28 +1,43 @@
 # Project conventions
 
-## Production upstream read-only red line
+## Pilot production deployment exception and upstream read-only red line
 
-- User-mandated high-priority boundary: all upstream production servers and
-  their dependent databases are strictly read-only. This includes
-  `192.243.117.139` and its upstream database nodes, including `10.26.13.3`
-  and `10.26.13.2`.
-- Never modify upstream application code, configuration, data, credentials,
-  permissions, indexes, containers, services, or system settings. Never
-  install software, restart/stop production services, create temporary files,
-  upload scripts, or write monitoring logs on these servers. Never rotate
-  upstream tokens or call upstream write APIs as part of authorization.
-- Inspection may use existing read-only interfaces, bounded SELECT/EXPLAIN
-  queries, process metrics, and log reads. Do not run unbounded full-table
-  queries or EXPLAIN ANALYZE merely to reproduce high IO. Capture all new
-  evidence and monitoring output on the local workstation or the isolated
-  Pilot validation environment, never on an upstream production server.
-- Site import, credential encryption, collector configuration, test jobs,
-  and application changes are confined to this repository and the isolated
-  Pilot environment on `192.168.8.200`. This does not authorize changes to
-  unrelated services on that shared node.
-- An investigation or repair request does not waive this boundary. If a fix
-  requires an upstream mutation, stop that mutation and report the finding;
-  only a later explicit user instruction overriding this red line can permit it.
+- The user explicitly permits deployment operations for **new-api-pilot** on
+  `192.243.117.139`. This supersedes the previous whole-server write ban only
+  for Pilot-owned resources. See detailed design section 50.1 for the boundary.
+- Pilot deployment tasks may upload deployment files, pull and replace its
+  image/container, start/stop/restart Pilot, update its own configuration,
+  create deployment logs/backups, run its schema migrations, verify health,
+  and roll back under the existing backup/upgrade procedures. Preserve Pilot
+  data and encryption keys; this is not permission to wipe data or reset secrets.
+- Verified deployment locations: the `new-api-pilot` service in the shared
+  `/root/docker/docker-compose.yml`, `/root/docker/pilot.favorais.com`, MySQL
+  schema `new-api-pilot`, and the `pilot.favorais.com` block in
+  `/root/docker/caddy/conf/conf.d/favorais.com.conf`. Recheck ownership and
+  current state before mutations. Keep deployment artifacts in Pilot-owned
+  paths or the server's designated task workspace.
+- Scope Compose operations to Pilot without recreating dependencies. Never
+  run whole-stack up/down, remove shared volumes, or run global prune. Never
+  restart shared MySQL/Redis, other applications, or the host as a Pilot fix.
+  Only the Pilot Caddy block may change; validate the full config before a
+  required graceful reload, preserving every other route. Shared Redis DB 0
+  is not Pilot-exclusive: use only verified Pilot-owned keys, never FLUSHDB
+  or FLUSHALL. Review automatic collection load before starting Pilot.
+- Upstream **new-api applications and their business data** remain strictly
+  read-only, including on `192.243.117.139`, `10.26.13.3`, and `10.26.13.2`.
+  Never modify their code, configuration, data, credentials, permissions,
+  indexes, containers, services, or system settings; never rotate upstream
+  tokens or call upstream write APIs as part of Pilot authorization.
+- Upstream investigation may read existing logs, process metrics, and bounded
+  SELECT/EXPLAIN results. Do not execute unbounded full-table queries or
+  EXPLAIN ANALYZE merely to reproduce IO. Do not create upstream investigation
+  scripts/logs on production; capture those on the workstation or isolated
+  Pilot validation environment on `192.168.8.200`.
+- This standing exception applies when a task calls for Pilot deployment; a
+  rule update or routine development validation does not itself initiate a
+  production deployment. Formal image publishing retains its separate release
+  trigger below. General repair requests do not authorize upstream mutations
+  or changes to unrelated services on either production or validation hosts.
 
 ## Overview
 
