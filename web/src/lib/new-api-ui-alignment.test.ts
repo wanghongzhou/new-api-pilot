@@ -303,9 +303,8 @@ test('site view controls follow the new-api channel toolbar pattern', async () =
     'utf8'
   )
 
-  expect(source).toContain('actions={')
-  expect(source).toContain('<DataViewModeToggle')
-  expect(source).not.toContain("<div className='flex justify-end'>")
+  expect(source).toMatch(/<SiteFilters\s+actions=\{\s*<DataViewModeToggle\b/)
+  expect(source.match(/<DataViewModeToggle\b/g)).toHaveLength(1)
 })
 
 test('site filters auto-search and faceted menus use the shared popover', async () => {

@@ -110,6 +110,7 @@
           "id": "realtime",
           "method": "GET",
           "path": "/api/log/stat",
+          "query": {"start_timestamp": "1768622340", "end_timestamp": "1768622400"},
           "response_file": "responses/log-stat.json",
           "expected_headers": {
             "Authorization": "fixture-root-token",

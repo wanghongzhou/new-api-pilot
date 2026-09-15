@@ -942,8 +942,18 @@ func (client *NewAPIClient) Instances(ctx context.Context, requestID string) ([]
 }
 
 func (client *NewAPIClient) LogStat(ctx context.Context, requestID string) (dto.UpstreamLogStat, error) {
+	// The upstream quota aggregation is unbounded without explicit timestamps,
+	// even though RPM/TPM independently cover only the last minute.
+	now := client.now().Unix()
+	if now <= 60 {
+		return dto.UpstreamLogStat{}, newUpstreamRequestError(UpstreamErrorResponseInvalid)
+	}
+	query := url.Values{
+		"start_timestamp": {strconv.FormatInt(now-60, 10)},
+		"end_timestamp":   {strconv.FormatInt(now, 10)},
+	}
 	var wire upstreamLogStatWire
-	if _, err := client.get(ctx, client.httpClient, "/api/log/stat", nil, requestID, upstreamAuthManagement, client.requestTimeout, &wire, false); err != nil {
+	if _, err := client.get(ctx, client.httpClient, "/api/log/stat", query, requestID, upstreamAuthManagement, client.requestTimeout, &wire, false); err != nil {
 		return dto.UpstreamLogStat{}, err
 	}
 	return validateLogStat(wire)

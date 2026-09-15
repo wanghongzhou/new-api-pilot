@@ -1,6 +1,6 @@
 # fixture_manifest_version=1
 d232dc1a6b83ba80f49995dadbd8afe11d7b73120f7474a2abcece7e1b46e1da  testdata/design/f01-auth.json
-044c7037cd875740a5a07fe131bab7b74389b61b4c48982bec5c23266459b1c6  testdata/design/f02-upstream/manifest.json
+97800d70aba6ebef6db579ff3b7af8d818357e410c51d00ea92cc2447cf070da  testdata/design/f02-upstream/manifest.json
 10216ecf9ff46f77ebad9982068ee21b5a229e454e6dedc48eb825981eeb60bb  testdata/design/f02-upstream/responses/channels-page-1.json
 b3cf2edf9d314bf9bf7519c1c6bbf505e5ee8219fb090656b4be099fa36538c6  testdata/design/f02-upstream/responses/data-hour-consistent.json
 bdfd1faeddeef09e98b5e8b33bab6dce7300affd0d127e2b90aeed9cb2e8e0d0  testdata/design/f02-upstream/responses/data-hour-mismatch.json
