@@ -1,5 +1,29 @@
 # Project conventions
 
+## Production upstream read-only red line
+
+- User-mandated high-priority boundary: all upstream production servers and
+  their dependent databases are strictly read-only. This includes
+  `192.243.117.139` and its upstream database nodes, including `10.26.13.3`
+  and `10.26.13.2`.
+- Never modify upstream application code, configuration, data, credentials,
+  permissions, indexes, containers, services, or system settings. Never
+  install software, restart/stop production services, create temporary files,
+  upload scripts, or write monitoring logs on these servers. Never rotate
+  upstream tokens or call upstream write APIs as part of authorization.
+- Inspection may use existing read-only interfaces, bounded SELECT/EXPLAIN
+  queries, process metrics, and log reads. Do not run unbounded full-table
+  queries or EXPLAIN ANALYZE merely to reproduce high IO. Capture all new
+  evidence and monitoring output on the local workstation or the isolated
+  Pilot validation environment, never on an upstream production server.
+- Site import, credential encryption, collector configuration, test jobs,
+  and application changes are confined to this repository and the isolated
+  Pilot environment on `192.168.8.200`. This does not authorize changes to
+  unrelated services on that shared node.
+- An investigation or repair request does not waive this boundary. If a fix
+  requires an upstream mutation, stop that mutation and report the finding;
+  only a later explicit user instruction overriding this red line can permit it.
+
 ## Overview
 
 This repository is an independent multi-site operations platform. The sibling
