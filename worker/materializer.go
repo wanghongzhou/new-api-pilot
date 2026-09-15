@@ -75,7 +75,7 @@ func (materializer *Materializer) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C():
-			if _, err := materializer.RunOnce(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			if _, err := materializer.RunOnce(ctx); fatalPollError("materializer", err) {
 				return err
 			}
 		}

@@ -128,7 +128,7 @@ func (executor *Executor) Run(admissionCtx context.Context, executionCtx context
 	if admissionCtx == nil || executionCtx == nil {
 		return fmt.Errorf("executor contexts are required")
 	}
-	if err := executor.dispatch(admissionCtx, executionCtx); err != nil && !errors.Is(err, context.Canceled) {
+	if err := executor.dispatch(admissionCtx, executionCtx); fatalPollError("executor", err) {
 		return err
 	}
 	ticker := executor.clock.NewTicker(executor.pollInterval)
@@ -139,7 +139,7 @@ func (executor *Executor) Run(admissionCtx context.Context, executionCtx context
 			executor.active.Wait()
 			return nil
 		case <-ticker.C():
-			if err := executor.dispatch(admissionCtx, executionCtx); err != nil && !errors.Is(err, context.Canceled) {
+			if err := executor.dispatch(admissionCtx, executionCtx); fatalPollError("executor", err) {
 				return err
 			}
 		}

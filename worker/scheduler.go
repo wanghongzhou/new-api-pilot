@@ -375,7 +375,7 @@ func (scheduler *Scheduler) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C():
-			if err := scheduler.RunOnce(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			if err := scheduler.RunOnce(ctx); fatalPollError("scheduler", err) {
 				return err
 			}
 		}

@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -83,7 +82,7 @@ func (reaper *Reaper) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C():
-			if _, err := reaper.RunOnce(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			if _, err := reaper.RunOnce(ctx); fatalPollError("reaper", err) {
 				return err
 			}
 		}

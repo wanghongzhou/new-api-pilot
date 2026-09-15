@@ -1480,3 +1480,9 @@ Scheduler 按设置周期 enqueue `pricing_group_sync`，授权通过后立即�
 `SystemTaskItem` 固定为 `id/site_id/site_name/remote_id/task_id/type/status/remote_created_at/remote_updated_at/collected_at/progress/result/error_present/error_code/data_status`；列表页顶层持有 `as_of`。progress 是 nullable `{total,processed,progress,remaining}`；result 是按五个 type 的判别联合。ID 和全部计数为 JSON decimal string，progress 为 0..100 integer。statistics 返回精确的 `total/active/succeeded/failed/error_present` summary、type/status/site breakdown，以及与列表相同的顶层完整性字段；API、日志、错误 params 均不得出现 active_key、locked_by、raw JSON 或 raw error。
 
 Worker 注册 `system_task_sync` required metadata queue task，独立 lease、active_key、resource concurrency、max attempts=3、site/config fence 和持久 failure state。平台设置 `system_task_terminal_retention_days` 为正整数，变更在下一次清理生效；清理只作用终态。export runtime 接受 `statistics_type=system_tasks` 和同名安全筛选，不接受 raw 字段或远端 mutation 参数。
+
+## Worker 轮询的瞬时事务冲突恢复
+
+Executor、Scheduler、Materializer、Reaper 在运行期轮询遇到 MySQL 1213（死锁）或 1205（锁等待超时）时，只结束本次轮询，等待下一正常 tick 重试，不取消正在执行的任务，也不使整个 HTTP 服务退出。记录组件名称和固定冲突分类，不记录 SQL 或数据库原始错误正文。启动期的持久初始化仍执行原有失败门禁；其他非取消错误仍上报运行时故障。重试依赖现有事务回滚、任务租约和幂等约束，不将失败误记为任务成功。
+
+回归验证必须注入瞬时冲突，证明轮询后续可恢复且取消时正常退出；同时证明普通数据库错误仍然上报，避免吞掉永久故障。
