@@ -57,6 +57,9 @@ func (service *SiteService) ExecutePeriodicSiteTask(
 type performanceHistoryClient interface {
 	PerformanceHistory(context.Context, string, int) (dto.UpstreamPerformanceHistory, error)
 }
+type incrementalPerformanceHistoryClient interface {
+	PerformanceHistoryIncremental(context.Context, string, int, []string) (dto.UpstreamPerformanceHistory, error)
+}
 
 type topupSnapshotClient interface {
 	SnapshotTopups(context.Context, string) (dto.UpstreamTopupSnapshot, error)
@@ -252,6 +255,19 @@ func (service *SiteService) executePeriodicUpstreamTasks(ctx context.Context, si
 		if site.StatisticsStartAt != nil && *site.StatisticsStartAt > overlap {
 			overlap = *site.StatisticsStartAt
 		}
+	} else if last, stateErr := service.sites.UpstreamTaskLastSuccessAt(ctx, site.ID); stateErr != nil {
+		return 0, 0, stateErr
+	} else if last != nil {
+		// The upstream task API has no updated-since cursor. Keep a bounded
+		// six-hour safety overlap for late state transitions instead of
+		// rereading the full 48-hour window on every tick.
+		overlap = now - 6*3600
+		if candidate := *last - 3600; candidate > overlap {
+			overlap = candidate
+		}
+		if site.StatisticsStartAt != nil && *site.StatisticsStartAt > overlap {
+			overlap = *site.StatisticsStartAt
+		}
 	}
 	snapshot, err := source.SnapshotUpstreamTasks(ctx, requestID, overlap, now+1, unfinished)
 	if err != nil {
@@ -373,8 +389,21 @@ func (service *SiteService) executePeriodicPerformance(ctx context.Context, site
 		if hours > 720 {
 			hours = 720
 		}
+	} else if _, incremental := client.(incrementalPerformanceHistoryClient); incremental {
+		// The upstream endpoint has no since cursor. Refresh the current two
+		// hours (including the still-moving bucket) and retain older facts.
+		hours = 2
 	}
-	history, err := historyClient.PerformanceHistory(ctx, requestID, hours)
+	var history dto.UpstreamPerformanceHistory
+	if incremental, ok := client.(incrementalPerformanceHistoryClient); ok && !backfill {
+		models, modelErr := service.sites.ListPerformanceModelNames(ctx, site.ID)
+		if modelErr != nil {
+			return 0, 0, modelErr
+		}
+		history, err = incremental.PerformanceHistoryIncremental(ctx, requestID, hours, models)
+	} else {
+		history, err = historyClient.PerformanceHistory(ctx, requestID, hours)
+	}
 	now := service.clock.Now().Unix()
 	if err != nil {
 		_ = service.sites.MarkPerformanceUnavailable(ctx, site, now, "PERFORMANCE_UPSTREAM_UNAVAILABLE")

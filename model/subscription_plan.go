@@ -90,16 +90,23 @@ func (r *SiteRepository) SyncSubscriptionPlans(ctx context.Context, site Site, a
 		written += result.RowsAffected
 	}
 	upserts := make([]SiteSubscriptionPlan, 0, len(items))
+	unchangedIDs := make([]int64, 0, len(items))
 	var upsertWritten int64
 	for _, p := range items {
 		raw, _ := json.Marshal(p)
 		sum := sha256.Sum256(raw)
 		hash := hex.EncodeToString(sum[:])
 		seen := at
-		upserts = append(upserts, SiteSubscriptionPlan{SiteID: site.ID, RemoteID: p.ID, Title: p.Title, Subtitle: p.Subtitle, PriceAmount: p.PriceAmount, Currency: p.Currency, DurationUnit: p.DurationUnit, DurationValue: p.DurationValue, CustomSeconds: p.CustomSeconds, Enabled: p.Enabled, SortOrder: p.SortOrder, TotalAmount: p.TotalAmount, QuotaResetPeriod: p.QuotaResetPeriod, QuotaResetCustomSeconds: p.QuotaResetCustomSeconds, RemoteCreatedAt: p.CreatedAt, RemoteUpdatedAt: p.UpdatedAt, SourceHash: hash, RemoteState: "normal", MissingCount: 0, ConfigVersion: site.ConfigVersion, FirstSeenAt: at, LastSeenAt: &seen, CollectedAt: at, CreatedAt: at, UpdatedAt: at})
+		row := SiteSubscriptionPlan{SiteID: site.ID, RemoteID: p.ID, Title: p.Title, Subtitle: p.Subtitle, PriceAmount: p.PriceAmount, Currency: p.Currency, DurationUnit: p.DurationUnit, DurationValue: p.DurationValue, CustomSeconds: p.CustomSeconds, Enabled: p.Enabled, SortOrder: p.SortOrder, TotalAmount: p.TotalAmount, QuotaResetPeriod: p.QuotaResetPeriod, QuotaResetCustomSeconds: p.QuotaResetCustomSeconds, RemoteCreatedAt: p.CreatedAt, RemoteUpdatedAt: p.UpdatedAt, SourceHash: hash, RemoteState: "normal", MissingCount: 0, ConfigVersion: site.ConfigVersion, FirstSeenAt: at, LastSeenAt: &seen, CollectedAt: at, CreatedAt: at, UpdatedAt: at}
 		old, found := previous[p.ID]
 		if !found || old.SourceHash != hash || old.RemoteState != "normal" {
+			if found {
+				row.FirstSeenAt, row.CreatedAt = old.FirstSeenAt, old.CreatedAt
+			}
+			upserts = append(upserts, row)
 			upsertWritten++
+		} else {
+			unchangedIDs = append(unchangedIDs, p.ID)
 		}
 	}
 	if len(upserts) > 0 {
@@ -107,6 +114,15 @@ func (r *SiteRepository) SyncSubscriptionPlans(ctx context.Context, site Site, a
 			return written, err
 		}
 		written += upsertWritten
+	}
+	for start := 0; start < len(unchangedIDs); start += 500 {
+		end := start + 500
+		if end > len(unchangedIDs) {
+			end = len(unchangedIDs)
+		}
+		if err := r.db.WithContext(ctx).Model(&SiteSubscriptionPlan{}).Where("site_id = ? AND remote_id IN ?", site.ID, unchangedIDs[start:end]).Updates(map[string]any{"last_seen_at": at, "collected_at": at}).Error; err != nil {
+			return written, err
+		}
 	}
 	state := SiteSubscriptionPlanCollectionState{SiteID: site.ID, LastSuccessAt: &at, ObservedCount: int64(len(items)), ConfigVersion: site.ConfigVersion, UpdatedAt: at}
 	err := r.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "site_id"}}, DoUpdates: clause.AssignmentColumns([]string{"last_success_at", "last_error_code", "observed_count", "config_version", "updated_at"})}).Create(&state).Error

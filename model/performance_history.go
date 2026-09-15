@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"new-api-pilot/constant"
 	"new-api-pilot/dto"
+	"reflect"
 	"sort"
 	"strconv"
 	"unicode/utf8"
@@ -118,11 +119,67 @@ func (r *SiteRepository) ApplyPerformanceHistorySnapshot(ctx context.Context, ex
 		if site.ConfigVersion != expected.ConfigVersion || site.BaseURL != expected.BaseURL || site.AuthStatus != constant.SiteAuthAuthorized || site.ManagementStatus != constant.SiteManagementActive {
 			return ErrSiteRunConfigChanged
 		}
-		if err := tx.Where("site_id=? AND bucket_ts>=? AND bucket_ts<?", site.ID, start, end).Delete(&SitePerformanceMetricBucket{}).Error; err != nil {
+		var existing []SitePerformanceMetricBucket
+		if err := tx.Where("site_id=? AND bucket_ts>=? AND bucket_ts<?", site.ID, start, end).Find(&existing).Error; err != nil {
 			return err
 		}
-		if len(rows) > 0 {
-			if err := tx.CreateInBatches(rows, 500).Error; err != nil {
+		key := func(row SitePerformanceMetricBucket) string {
+			return row.ModelName + "\x00" + row.RemoteGroup + "\x00" + strconv.FormatInt(row.BucketTS, 10)
+		}
+		incoming := make(map[string]SitePerformanceMetricBucket, len(rows))
+		for _, row := range rows {
+			incoming[key(row)] = row
+		}
+		existingByKey := make(map[string]SitePerformanceMetricBucket, len(existing))
+		for _, row := range existing {
+			existingByKey[key(row)] = row
+		}
+		changed := make([]SitePerformanceMetricBucket, 0, len(rows))
+		unchangedIDs := make([]int64, 0, len(rows))
+		for _, row := range rows {
+			old, ok := existingByKey[key(row)]
+			if !ok {
+				changed = append(changed, row)
+				continue
+			}
+			oldFacts, newFacts := old, row
+			oldFacts.ID, oldFacts.CollectedAt, oldFacts.UpdatedAt, oldFacts.CreatedAt = 0, 0, 0, 0
+			newFacts.ID, newFacts.CollectedAt, newFacts.UpdatedAt, newFacts.CreatedAt = 0, 0, 0, 0
+			if reflect.DeepEqual(oldFacts, newFacts) {
+				unchangedIDs = append(unchangedIDs, old.ID)
+			} else {
+				row.ID, row.CreatedAt = old.ID, old.CreatedAt
+				changed = append(changed, row)
+			}
+		}
+		removedIDs := make([]int64, 0)
+		for _, old := range existing {
+			if _, ok := incoming[key(old)]; !ok {
+				removedIDs = append(removedIDs, old.ID)
+			}
+		}
+		for offset := 0; offset < len(removedIDs); offset += 500 {
+			endOffset := offset + 500
+			if endOffset > len(removedIDs) {
+				endOffset = len(removedIDs)
+			}
+			if err := tx.Where("site_id=? AND id IN ?", site.ID, removedIDs[offset:endOffset]).Delete(&SitePerformanceMetricBucket{}).Error; err != nil {
+				return err
+			}
+		}
+		if len(changed) > 0 {
+			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "site_id"}, {Name: "model_name"}, {Name: "remote_group"}, {Name: "bucket_ts"}}, DoUpdates: clause.AssignmentColumns([]string{
+				"series_schema", "metric_source", "avg_ttft_ms", "avg_latency_ms", "success_rate", "avg_tps", "request_count", "success_count", "total_latency_ms", "ttft_sum_ms", "ttft_count", "output_tokens", "generation_ms", "config_version", "collected_at", "updated_at",
+			})}).CreateInBatches(changed, 500).Error; err != nil {
+				return err
+			}
+		}
+		for offset := 0; offset < len(unchangedIDs); offset += 500 {
+			endOffset := offset + 500
+			if endOffset > len(unchangedIDs) {
+				endOffset = len(unchangedIDs)
+			}
+			if err := tx.Model(&SitePerformanceMetricBucket{}).Where("site_id=? AND id IN ?", site.ID, unchangedIDs[offset:endOffset]).Updates(map[string]any{"collected_at": observedAt, "updated_at": observedAt}).Error; err != nil {
 				return err
 			}
 		}
@@ -155,6 +212,19 @@ func (r *SiteRepository) PerformanceBackfillRequired(ctx context.Context, siteID
 		return false, err
 	}
 	return state.BackfillCompletedAt == nil, nil
+}
+
+// ListPerformanceModelNames supplies the model set from the last successful
+// snapshot. It lets the worker keep the authoritative summary request while
+// asking the detail endpoint for a short rolling window on stable model sets.
+func (r *SiteRepository) ListPerformanceModelNames(ctx context.Context, siteID int64) ([]string, error) {
+	if r == nil || r.db == nil || siteID <= 0 {
+		return nil, errors.New("invalid performance model lookup")
+	}
+	var names []string
+	err := r.db.WithContext(ctx).Model(&SitePerformanceMetricBucket{}).
+		Where("site_id = ?", siteID).Distinct("model_name").Order("model_name").Pluck("model_name", &names).Error
+	return names, err
 }
 func (r *SiteRepository) MarkPerformanceUnavailable(ctx context.Context, expected Site, observedAt int64, code string) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {

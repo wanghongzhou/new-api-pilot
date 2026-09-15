@@ -63,6 +63,14 @@ type SiteUserInventoryHourly struct {
 	CollectedAt     int64  `gorm:"column:collected_at"`
 }
 
+func mapKeys(values map[int64]SiteUserObservation) []int64 {
+	keys := make([]int64, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	return keys
+}
+
 func (SiteUserInventoryHourly) TableName() string { return "site_user_inventory_hourly" }
 
 func applySiteUserInventorySnapshot(tx *gorm.DB, site Site, observedAt, hourTS int64, observations []SiteUserObservation) (int64, error) {
@@ -90,15 +98,27 @@ func applySiteUserInventorySnapshot(tx *gorm.DB, site Site, observedAt, hourTS i
 		existingByID[item.RemoteUserID] = item
 	}
 	var writes int64
+	// Build only rows whose remote facts changed.  The previous implementation
+	// issued one upsert per observed user on every complete snapshot, which made
+	// an unchanged inventory produce a full table worth of redo/undo writes.
+	changed := make([]SiteUserInventory, 0, len(observations))
 	for _, observation := range observations {
 		current, exists := existingByID[observation.RemoteUserID]
 		if exists && current.RemoteCreatedAt != observation.RemoteCreatedAt {
+			if current.RemoteState == SiteUserInventoryIdentityMismatch {
+				continue
+			}
 			if err := tx.Model(&SiteUserInventory{}).Where("id = ?", current.ID).Updates(map[string]any{
 				"remote_state": SiteUserInventoryIdentityMismatch, "config_version": site.ConfigVersion, "updated_at": observedAt,
 			}).Error; err != nil {
 				return 0, err
 			}
 			writes++
+			continue
+		}
+		if exists && current.RemoteState == SiteUserInventoryIdentityMismatch {
+			// A conflicting remote creation timestamp is intentionally sticky;
+			// never let a later snapshot silently re-attribute the identity.
 			continue
 		}
 		state := SiteUserInventoryNormal
@@ -112,34 +132,47 @@ func applySiteUserInventorySnapshot(tx *gorm.DB, site Site, observedAt, hourTS i
 			LastLoginAt: observation.LastLoginAt, RemoteState: state, MissingCount: 0, ConfigVersion: site.ConfigVersion,
 			FirstSeenAt: observedAt, LastSeenAt: &lastSeen, CreatedAt: observedAt, UpdatedAt: observedAt}
 		if exists {
-			inventory.ID, inventory.FirstSeenAt, inventory.CreatedAt = current.ID, current.FirstSeenAt, current.CreatedAt
+			// Keep immutable identity fields from the first observation.  Timestamp
+			// freshness is intentionally not treated as a business change; the
+			// collection state already records the complete snapshot as-of value.
+			inventory.FirstSeenAt, inventory.CreatedAt = current.FirstSeenAt, current.CreatedAt
+			if current.Username == inventory.Username && current.DisplayName == inventory.DisplayName &&
+				current.RemoteRole == inventory.RemoteRole && current.RemoteStatus == inventory.RemoteStatus &&
+				current.RemoteGroup == inventory.RemoteGroup && current.Quota == inventory.Quota &&
+				current.UsedQuota == inventory.UsedQuota && current.RequestCount == inventory.RequestCount &&
+				current.LastLoginAt == inventory.LastLoginAt && current.RemoteState == inventory.RemoteState &&
+				current.MissingCount == 0 && current.ConfigVersion == inventory.ConfigVersion {
+				continue
+			}
 		}
+		changed = append(changed, inventory)
+	}
+	if len(changed) > 0 {
 		if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "site_id"}, {Name: "remote_user_id"}}, DoUpdates: clause.AssignmentColumns([]string{
 			"username", "display_name", "remote_role", "remote_status", "remote_group", "quota", "used_quota", "request_count", "last_login_at",
 			"remote_state", "missing_count", "config_version", "last_seen_at", "updated_at",
-		})}).Create(&inventory).Error; err != nil {
+		})}).CreateInBatches(&changed, 500).Error; err != nil {
 			return 0, err
 		}
-		writes++
+		writes += int64(len(changed))
 	}
-	for _, current := range existing {
-		if _, exists := byID[current.RemoteUserID]; exists {
-			continue
-		}
-		if current.RemoteState == SiteUserInventoryIdentityMismatch {
-			continue
-		}
-		missing := current.MissingCount
-		if missing < math.MaxInt32 {
-			missing++
-		}
-		if err := tx.Model(&SiteUserInventory{}).Where("id = ?", current.ID).Updates(map[string]any{
-			"remote_state": SiteUserInventoryMissing, "missing_count": missing, "config_version": site.ConfigVersion, "updated_at": observedAt,
-		}).Error; err != nil {
-			return 0, err
-		}
-		writes++
+	// A complete snapshot can advance every missing row in one statement.  The
+	// identity-mismatch guard remains sticky and therefore is excluded.
+	missingQuery := tx.Model(&SiteUserInventory{}).
+		Where("site_id = ? AND remote_state <> ?", site.ID, SiteUserInventoryIdentityMismatch)
+	if len(byID) > 0 {
+		missingQuery = missingQuery.Where("remote_user_id NOT IN ?", mapKeys(byID))
 	}
+	missingResult := missingQuery.Updates(map[string]any{
+		"remote_state":   SiteUserInventoryMissing,
+		"missing_count":  gorm.Expr("LEAST(missing_count + 1, ?)", math.MaxInt32),
+		"config_version": site.ConfigVersion,
+		"updated_at":     observedAt,
+	})
+	if missingResult.Error != nil {
+		return 0, missingResult.Error
+	}
+	writes += missingResult.RowsAffected
 	hourly, err := inventoryHourlyRows(site.ID, site.ConfigVersion, hourTS, observedAt, observations, existingByID)
 	if err != nil {
 		return 0, err

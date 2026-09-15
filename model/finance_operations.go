@@ -106,16 +106,48 @@ func (r *SiteRepository) SyncTopups(ctx context.Context, site Site, observedAt i
 	if snapshot.Total == 0 && snapshot.MaxID != 0 || snapshot.Total > 0 && snapshot.MaxID != items[len(items)-1].ID {
 		return 0, errors.New("invalid topup snapshot fence")
 	}
-	if err := r.db.WithContext(ctx).Model(&SiteTopupOrder{}).Where("site_id=?", site.ID).Updates(map[string]any{"remote_state": financeStateMissing, "missing_count": gorm.Expr("missing_count+1"), "last_seen_at": nil, "updated_at": observedAt}).Error; err != nil {
+	// A snapshot is authoritative, but avoid rewriting every row and then issuing a
+	// second UPDATE for each item. Mark only the rows absent from this snapshot in
+	// one statement; present rows are refreshed in bounded batches below.
+	ids := make([]int64, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.ID)
+	}
+	missing := r.db.WithContext(ctx).Model(&SiteTopupOrder{}).Where("site_id=?", site.ID)
+	if len(ids) > 0 {
+		missing = missing.Where("remote_id NOT IN ?", ids)
+	}
+	if err := missing.Updates(map[string]any{"remote_state": financeStateMissing, "missing_count": gorm.Expr("missing_count+1"), "last_seen_at": nil, "updated_at": observedAt}).Error; err != nil {
 		return 0, err
 	}
+	var existing []SiteTopupOrder
+	if err := r.db.WithContext(ctx).Where("site_id=?", site.ID).Find(&existing).Error; err != nil {
+		return 0, err
+	}
+	byID := make(map[int64]SiteTopupOrder, len(existing))
+	for _, row := range existing {
+		byID[row.RemoteID] = row
+	}
+	changed := make([]SiteTopupOrder, 0, len(items))
 	for _, item := range items {
 		seen := observedAt
-		row := SiteTopupOrder{SiteID: site.ID, RemoteID: item.ID, RemoteUserID: item.UserID, Amount: item.Amount, Money: item.Money, PaymentMethod: item.PaymentMethod, PaymentProvider: item.PaymentProvider, CreateTime: item.CreateTime, CompleteTime: item.CompleteTime, RemoteStatus: item.Status, RemoteState: financeStateNormal, ConfigVersion: site.ConfigVersion, FirstSeenAt: observedAt, LastSeenAt: &seen, CollectedAt: observedAt, CreatedAt: observedAt, UpdatedAt: observedAt}
-		if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "site_id"}, {Name: "remote_id"}}, DoUpdates: clause.AssignmentColumns([]string{"remote_user_id", "amount", "money", "payment_method", "payment_provider", "create_time", "complete_time", "remote_status", "remote_state", "config_version", "last_seen_at", "collected_at", "updated_at"})}).Create(&row).Error; err != nil {
+		row := SiteTopupOrder{SiteID: site.ID, RemoteID: item.ID, RemoteUserID: item.UserID, Amount: item.Amount, Money: financeMoneyCanonical(item.Money), PaymentMethod: item.PaymentMethod, PaymentProvider: item.PaymentProvider, CreateTime: item.CreateTime, CompleteTime: item.CompleteTime, RemoteStatus: item.Status, RemoteState: financeStateNormal, ConfigVersion: site.ConfigVersion, FirstSeenAt: observedAt, LastSeenAt: &seen, CollectedAt: observedAt, CreatedAt: observedAt, UpdatedAt: observedAt}
+		old, ok := byID[item.ID]
+		if !ok || old.RemoteUserID != row.RemoteUserID || old.Amount != row.Amount || old.Money != row.Money || old.PaymentMethod != row.PaymentMethod || old.PaymentProvider != row.PaymentProvider || old.CreateTime != row.CreateTime || old.CompleteTime != row.CompleteTime || old.RemoteStatus != row.RemoteStatus {
+			changed = append(changed, row)
+		}
+	}
+	if len(changed) > 0 {
+		if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "site_id"}, {Name: "remote_id"}}, DoUpdates: clause.AssignmentColumns([]string{"remote_user_id", "amount", "money", "payment_method", "payment_provider", "create_time", "complete_time", "remote_status"})}).CreateInBatches(&changed, 500).Error; err != nil {
 			return 0, err
 		}
-		if err := r.db.WithContext(ctx).Model(&SiteTopupOrder{}).Where("site_id=? AND remote_id=?", site.ID, item.ID).Update("missing_count", 0).Error; err != nil {
+	}
+	for start := 0; start < len(ids); start += 500 {
+		end := start + 500
+		if end > len(ids) {
+			end = len(ids)
+		}
+		if err := r.db.WithContext(ctx).Model(&SiteTopupOrder{}).Where("site_id=? AND remote_id IN ?", site.ID, ids[start:end]).Updates(map[string]any{"remote_state": financeStateNormal, "missing_count": 0, "last_seen_at": observedAt, "collected_at": observedAt, "config_version": site.ConfigVersion, "updated_at": observedAt}).Error; err != nil {
 			return 0, err
 		}
 	}
@@ -140,16 +172,45 @@ func (r *SiteRepository) SyncRedemptions(ctx context.Context, site Site, observe
 	if snapshot.Total == 0 && snapshot.MaxID != 0 || snapshot.Total > 0 && snapshot.MaxID != items[len(items)-1].ID {
 		return 0, errors.New("invalid redemption snapshot fence")
 	}
-	if err := r.db.WithContext(ctx).Model(&SiteRedemption{}).Where("site_id=?", site.ID).Updates(map[string]any{"remote_state": financeStateMissing, "missing_count": gorm.Expr("missing_count+1"), "last_seen_at": nil, "updated_at": observedAt}).Error; err != nil {
+	ids := make([]int64, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.ID)
+	}
+	missing := r.db.WithContext(ctx).Model(&SiteRedemption{}).Where("site_id=?", site.ID)
+	if len(ids) > 0 {
+		missing = missing.Where("remote_id NOT IN ?", ids)
+	}
+	if err := missing.Updates(map[string]any{"remote_state": financeStateMissing, "missing_count": gorm.Expr("missing_count+1"), "last_seen_at": nil, "updated_at": observedAt}).Error; err != nil {
 		return 0, err
 	}
+	var existing []SiteRedemption
+	if err := r.db.WithContext(ctx).Where("site_id=?", site.ID).Find(&existing).Error; err != nil {
+		return 0, err
+	}
+	byID := make(map[int64]SiteRedemption, len(existing))
+	for _, row := range existing {
+		byID[row.RemoteID] = row
+	}
+	changed := make([]SiteRedemption, 0, len(items))
 	for _, item := range items {
 		seen := observedAt
 		row := SiteRedemption{SiteID: site.ID, RemoteID: item.ID, RemoteUserID: item.UserID, Name: item.Name, RemoteStatus: item.Status, Quota: item.Quota, CreatedTime: item.CreatedTime, RedeemedTime: item.RedeemedTime, UsedUserID: item.UsedUserID, ExpiredTime: item.ExpiredTime, RemoteState: financeStateNormal, ConfigVersion: site.ConfigVersion, FirstSeenAt: observedAt, LastSeenAt: &seen, CollectedAt: observedAt, CreatedAt: observedAt, UpdatedAt: observedAt}
-		if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "site_id"}, {Name: "remote_id"}}, DoUpdates: clause.AssignmentColumns([]string{"remote_user_id", "name", "remote_status", "quota", "created_time", "redeemed_time", "used_user_id", "expired_time", "remote_state", "config_version", "last_seen_at", "collected_at", "updated_at"})}).Create(&row).Error; err != nil {
+		old, ok := byID[item.ID]
+		if !ok || old.RemoteUserID != row.RemoteUserID || old.Name != row.Name || old.RemoteStatus != row.RemoteStatus || old.Quota != row.Quota || old.CreatedTime != row.CreatedTime || old.RedeemedTime != row.RedeemedTime || old.UsedUserID != row.UsedUserID || old.ExpiredTime != row.ExpiredTime {
+			changed = append(changed, row)
+		}
+	}
+	if len(changed) > 0 {
+		if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "site_id"}, {Name: "remote_id"}}, DoUpdates: clause.AssignmentColumns([]string{"remote_user_id", "name", "remote_status", "quota", "created_time", "redeemed_time", "used_user_id", "expired_time"})}).CreateInBatches(&changed, 500).Error; err != nil {
 			return 0, err
 		}
-		if err := r.db.WithContext(ctx).Model(&SiteRedemption{}).Where("site_id=? AND remote_id=?", site.ID, item.ID).Update("missing_count", 0).Error; err != nil {
+	}
+	for start := 0; start < len(ids); start += 500 {
+		end := start + 500
+		if end > len(ids) {
+			end = len(ids)
+		}
+		if err := r.db.WithContext(ctx).Model(&SiteRedemption{}).Where("site_id=? AND remote_id IN ?", site.ID, ids[start:end]).Updates(map[string]any{"remote_state": financeStateNormal, "missing_count": 0, "last_seen_at": observedAt, "collected_at": observedAt, "config_version": site.ConfigVersion, "updated_at": observedAt}).Error; err != nil {
 			return 0, err
 		}
 	}
@@ -180,6 +241,16 @@ func validDecimalString(value string) bool {
 	}
 	r, ok := new(big.Rat).SetString(value)
 	return ok && r.Sign() >= 0
+}
+
+// financeMoneyCanonical matches DECIMAL(38,10) storage so an unchanged
+// upstream value such as "0.1" does not look changed after a round trip.
+func financeMoneyCanonical(value string) string {
+	r, ok := new(big.Rat).SetString(value)
+	if !ok {
+		return value
+	}
+	return r.FloatString(10)
 }
 
 type TopupReadRow struct {

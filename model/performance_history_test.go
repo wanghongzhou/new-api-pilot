@@ -33,6 +33,14 @@ func TestPerformanceHistorySnapshotAverageOnlyAndConfigFence(t *testing.T) {
 	if err := db.GORM.Where("site_id=?", site.ID).Take(&row).Error; err != nil || row.MetricSource != PerformanceMetricSourceOfficialAverage || row.RequestCount != nil || row.AvgLatencyMS != "20.2500000000" {
 		t.Fatalf("average row=%+v err=%v", row, err)
 	}
+	firstID := row.ID
+	if _, err := NewSiteRepository(db.GORM).ApplyPerformanceHistorySnapshot(context.Background(), site, now+1, now-3600, now+1, history); err != nil {
+		t.Fatalf("repeat performance snapshot: %v", err)
+	}
+	var repeated SitePerformanceMetricBucket
+	if err := db.GORM.Where("site_id=?", site.ID).Take(&repeated).Error; err != nil || repeated.ID != firstID {
+		t.Fatalf("repeat snapshot replaced unchanged bucket: first=%d repeated=%d err=%v", firstID, repeated.ID, err)
+	}
 	var state SitePerformanceCollectionState
 	if err := db.GORM.First(&state, site.ID).Error; err != nil || state.CapabilityStatus != "average_only" {
 		t.Fatalf("state=%+v err=%v", state, err)

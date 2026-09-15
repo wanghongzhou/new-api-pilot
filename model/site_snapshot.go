@@ -161,13 +161,17 @@ func (repository *SiteRepository) ListCapabilities(ctx context.Context, siteID i
 
 func (repository *SiteRepository) ReplaceCapabilities(ctx context.Context, siteID int64, capabilities []SiteCapability) error {
 	keys := make([]string, 0, len(capabilities))
+	rows := make([]SiteCapability, 0, len(capabilities))
 	for index := range capabilities {
 		capabilities[index].SiteID = siteID
 		keys = append(keys, capabilities[index].CapabilityKey)
+		rows = append(rows, capabilities[index])
+	}
+	if len(rows) > 0 {
 		if err := repository.db.WithContext(ctx).Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: "site_id"}, {Name: "capability_key"}},
 			DoUpdates: clause.AssignmentColumns([]string{"status", "message_code", "message_params", "checked_at"}),
-		}).Create(&capabilities[index]).Error; err != nil {
+		}).CreateInBatches(&rows, 500).Error; err != nil {
 			return err
 		}
 	}
@@ -181,10 +185,12 @@ func (repository *SiteRepository) ReplaceCapabilities(ctx context.Context, siteI
 func (repository *SiteRepository) UpsertCapabilities(ctx context.Context, siteID int64, capabilities []SiteCapability) error {
 	for index := range capabilities {
 		capabilities[index].SiteID = siteID
+	}
+	if len(capabilities) > 0 {
 		if err := repository.db.WithContext(ctx).Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: "site_id"}, {Name: "capability_key"}},
 			DoUpdates: clause.AssignmentColumns([]string{"status", "message_code", "message_params", "checked_at"}),
-		}).Create(&capabilities[index]).Error; err != nil {
+		}).CreateInBatches(&capabilities, 500).Error; err != nil {
 			return err
 		}
 	}
@@ -199,11 +205,17 @@ func (repository *SiteRepository) SyncChannels(ctx context.Context, siteID, sync
 	if err := applySiteChannelInventorySnapshot(ctx, repository.db, siteID, syncedAt, channels); err != nil {
 		return err
 	}
-	if err := repository.db.WithContext(ctx).Model(&SiteChannel{}).Where("site_id = ?", siteID).
-		Updates(map[string]any{"remote_missing": true, "updated_at": syncedAt}).Error; err != nil {
+	var existing []SiteChannel
+	if err := repository.db.WithContext(ctx).Where("site_id = ?", siteID).Find(&existing).Error; err != nil {
 		return err
 	}
+	existingByID := make(map[int64]SiteChannel, len(existing))
+	for _, row := range existing {
+		existingByID[row.RemoteChannelID] = row
+	}
+	ids := make([]int64, 0, len(channels))
 	for index := range channels {
+		ids = append(ids, channels[index].RemoteChannelID)
 		channels[index].SiteID = siteID
 		channels[index].LastSyncedAt = syncedAt
 		channels[index].RemoteMissing = false
@@ -211,10 +223,27 @@ func (repository *SiteRepository) SyncChannels(ctx context.Context, siteID, sync
 		if channels[index].CreatedAt == 0 {
 			channels[index].CreatedAt = syncedAt
 		}
+	}
+	missingQuery := repository.db.WithContext(ctx).Model(&SiteChannel{}).Where("site_id = ?", siteID)
+	if len(ids) > 0 {
+		missingQuery = missingQuery.Where("remote_channel_id NOT IN ?", ids)
+	}
+	if err := missingQuery.Updates(map[string]any{"remote_missing": true, "updated_at": syncedAt}).Error; err != nil {
+		return err
+	}
+	changed := make([]SiteChannel, 0, len(channels))
+	for index := range channels {
+		row := channels[index]
+		if current, ok := existingByID[row.RemoteChannelID]; ok && current.Name == row.Name && !current.RemoteMissing {
+			continue
+		}
+		changed = append(changed, row)
+	}
+	if len(changed) > 0 {
 		if err := repository.db.WithContext(ctx).Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: "site_id"}, {Name: "remote_channel_id"}},
 			DoUpdates: clause.AssignmentColumns([]string{"name", "last_synced_at", "remote_missing", "updated_at"}),
-		}).Create(&channels[index]).Error; err != nil {
+		}).CreateInBatches(&changed, 500).Error; err != nil {
 			return err
 		}
 	}

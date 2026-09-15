@@ -91,6 +91,29 @@ func TestPricingGroupAndPricingSnapshotsUseIndependentManagementRequests(t *test
 	}
 }
 
+func TestPricingGroupReadUsesShortCache(t *testing.T) {
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.URL.Path != "/api/group/" {
+			http.NotFound(w, r)
+			return
+		}
+		fmt.Fprint(w, `{"success":true,"message":"","data":["default"]}`)
+	}))
+	defer server.Close()
+	client := testClientForServer(t, server, true, testClientSettings{})
+	for _, requestID := range []string{"group-cache-1", "group-cache-2"} {
+		groups, err := client.SnapshotPricingGroups(context.Background(), requestID)
+		if err != nil || len(groups.Groups) != 1 || groups.Groups[0].Name != "default" {
+			t.Fatalf("groups=%+v err=%v", groups, err)
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("expected one upstream request, got %d", calls)
+	}
+}
+
 func TestPricingSnapshotCanonicalVendorFallbacksAndInvisibleGroup(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprint(w, `{"success":true,"data":[{"model_name":"a","vendor_id":0,"quota_type":1,"model_ratio":0,"model_price":0,"owner_by":"","completion_ratio":0,"enable_groups":["all"],"supported_endpoint_types":["embeddings"]},{"model_name":"b","vendor_id":42,"quota_type":1,"model_ratio":1,"model_price":1,"owner_by":"x","completion_ratio":1,"enable_groups":[],"supported_endpoint_types":[]}],"vendors":[],"group_ratio":{},"usable_group":{},"pricing_version":"v"}`)

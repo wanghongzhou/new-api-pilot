@@ -91,13 +91,52 @@ func (r *SiteRepository) ReplaceChannelModelMappings(ctx context.Context, site S
 			}
 		}
 	}
-	if err := r.db.WithContext(ctx).Where("site_id=?", site.ID).Delete(&SiteChannelModelMapping{}).Error; err != nil {
+	// Mappings are a derived set. Replacing the whole site set on every channel
+	// poll creates a large delete/insert burst even when the upstream snapshot is
+	// unchanged. Diff against the existing keys and only write actual changes.
+	var existing []SiteChannelModelMapping
+	if err := r.db.WithContext(ctx).Where("site_id = ?", site.ID).Find(&existing).Error; err != nil {
 		return err
 	}
-	if len(rows) > 0 {
-		return r.db.WithContext(ctx).Create(&rows).Error
+	key := func(row SiteChannelModelMapping) string {
+		return strings.Join([]string{strconv.FormatInt(row.RemoteChannelID, 10), row.ModelName, row.RemoteGroup}, "\x00")
 	}
-	return nil
+	existingByKey := make(map[string]SiteChannelModelMapping, len(existing))
+	for _, row := range existing {
+		existingByKey[key(row)] = row
+	}
+	currentKeys := make(map[string]struct{}, len(rows))
+	changed := make([]SiteChannelModelMapping, 0, len(rows))
+	for _, row := range rows {
+		k := key(row)
+		currentKeys[k] = struct{}{}
+		if old, ok := existingByKey[k]; ok && old.ConfigVersion == row.ConfigVersion {
+			continue
+		}
+		changed = append(changed, row)
+	}
+	removed := make([]int64, 0)
+	for k, row := range existingByKey {
+		if _, ok := currentKeys[k]; !ok {
+			removed = append(removed, row.ID)
+		}
+	}
+	for start := 0; start < len(removed); start += 500 {
+		end := start + 500
+		if end > len(removed) {
+			end = len(removed)
+		}
+		if err := r.db.WithContext(ctx).Where("site_id = ? AND id IN ?", site.ID, removed[start:end]).Delete(&SiteChannelModelMapping{}).Error; err != nil {
+			return err
+		}
+	}
+	if len(changed) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "site_id"}, {Name: "remote_channel_id"}, {Name: "model_name"}, {Name: "remote_group"}},
+		DoUpdates: clause.AssignmentColumns([]string{"config_version", "collected_at"}),
+	}).CreateInBatches(&changed, 500).Error
 }
 func (r *SiteRepository) SyncModelCatalog(ctx context.Context, site Site, at int64, snapshot dto.UpstreamModelMetaSnapshot) (int64, error) {
 	if r == nil || r.db == nil || site.ID <= 0 || at <= 0 || snapshot.Total != int64(len(snapshot.Items)) || len(snapshot.Items) > 100000 || (len(snapshot.Items) > 0 && snapshot.MaxID != snapshot.Items[0].ID) || (len(snapshot.Items) == 0 && snapshot.MaxID != 0) {

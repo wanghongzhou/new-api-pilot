@@ -142,6 +142,8 @@ func (r *SiteRepository) syncPricingItems(ctx context.Context, site Site, at int
 		*written += int64(len(duplicateIDs))
 	}
 	seen := make(map[string]struct{}, len(items))
+	changedRows := make([]SitePricingCatalog, 0, len(items))
+	unchangedNames := make([]string, 0, len(items))
 	for _, item := range items {
 		seen[pricingKey(item)] = struct{}{}
 	}
@@ -173,18 +175,32 @@ func (r *SiteRepository) syncPricingItems(ctx context.Context, site Site, at int
 		row := SitePricingCatalog{SiteID: site.ID, ModelName: item.ModelName, VendorKey: item.VendorName, Description: item.Description, Icon: item.Icon, Tags: item.Tags, OwnerBy: item.OwnerBy, VendorID: item.VendorID, QuotaType: item.QuotaType, ModelRatio: item.ModelRatio, ModelPrice: item.ModelPrice, CompletionRatio: item.CompletionRatio, CacheRatio: item.CacheRatio, CreateCacheRatio: item.CreateCacheRatio, ImageRatio: item.ImageRatio, AudioRatio: item.AudioRatio, AudioCompletionRatio: item.AudioCompletionRatio, EnableGroupsJSON: enableJSON, SupportedEndpointTypesJSON: endpointJSON, PricingVersion: snapshot.PricingVersion, BillingMode: item.BillingMode, BillingExpr: item.BillingExpr, PricingSource: item.PricingSource, AbilityAvailable: item.AbilityAvailable, SourceHash: hash, RemoteState: "normal", ConfigVersion: site.ConfigVersion, FirstSeenAt: at, LastSeenAt: &seenAt, CollectedAt: at, CreatedAt: at, UpdatedAt: at}
 		old, ok := previous[pricingKey(item)]
 		if ok {
-			row.ID, row.FirstSeenAt, row.CreatedAt = old.ID, old.FirstSeenAt, old.CreatedAt
-			if err := r.db.WithContext(ctx).Model(&SitePricingCatalog{}).Where("id=?", old.ID).Select("*").Omit("id", "site_id", "model_name", "first_seen_at", "created_at").Updates(&row).Error; err != nil {
-				return err
-			}
 			if old.SourceHash != hash || old.RemoteState != "normal" {
+				row.FirstSeenAt, row.CreatedAt = old.FirstSeenAt, old.CreatedAt
+				changedRows = append(changedRows, row)
 				*written += 1
+			} else {
+				unchangedNames = append(unchangedNames, item.ModelName)
 			}
 		} else {
-			if err := r.db.WithContext(ctx).Create(&row).Error; err != nil {
-				return err
-			}
+			changedRows = append(changedRows, row)
 			*written += 1
+		}
+	}
+	if len(changedRows) > 0 {
+		if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "site_id"}, {Name: "model_name"}}, DoUpdates: clause.AssignmentColumns([]string{
+			"vendor_key", "description", "icon", "tags", "owner_by", "vendor_id", "quota_type", "model_ratio", "model_price", "completion_ratio", "cache_ratio", "create_cache_ratio", "image_ratio", "audio_ratio", "audio_completion_ratio", "enable_groups_json", "supported_endpoint_types_json", "pricing_version", "billing_mode", "billing_expr", "pricing_source", "ability_available", "source_hash", "remote_state", "missing_count", "config_version", "last_seen_at", "collected_at", "updated_at",
+		})}).CreateInBatches(&changedRows, 500).Error; err != nil {
+			return err
+		}
+	}
+	for start := 0; start < len(unchangedNames); start += 500 {
+		end := start + 500
+		if end > len(unchangedNames) {
+			end = len(unchangedNames)
+		}
+		if err := r.db.WithContext(ctx).Model(&SitePricingCatalog{}).Where("site_id = ? AND model_name IN ?", site.ID, unchangedNames[start:end]).Updates(map[string]any{"last_seen_at": at, "collected_at": at}).Error; err != nil {
+			return err
 		}
 	}
 	return nil
@@ -225,6 +241,7 @@ func (r *SiteRepository) syncPricingGroups(ctx context.Context, site Site, at in
 		*written += result.RowsAffected
 	}
 	rows := make([]SitePricingGroup, 0, len(groups))
+	unchangedNames := make([]string, 0, len(groups))
 	var changed int64
 	for _, g := range groups {
 		hash := pricingHash(g)
@@ -233,10 +250,16 @@ func (r *SiteRepository) syncPricingGroups(ctx context.Context, site Site, at in
 		incoming, _ := json.Marshal(g.IncomingOverrides)
 		visible, _ := json.Marshal(g.VisibleToGroups)
 		hidden, _ := json.Marshal(g.HiddenFromGroups)
-		rows = append(rows, SitePricingGroup{SiteID: site.ID, GroupName: g.Name, RatioDecimal: g.Ratio, TopupRatioDecimal: g.TopupRatio, Description: g.Description, UserSelectable: g.UserSelectable, DefaultUseAutoGroup: g.DefaultUseAutoGroup, AutoPriority: g.AutoPriority, OutgoingOverridesJSON: string(outgoing), IncomingOverridesJSON: string(incoming), VisibleToGroupsJSON: string(visible), HiddenFromGroupsJSON: string(hidden), SourceHash: hash, RemoteState: "normal", ConfigVersion: site.ConfigVersion, FirstSeenAt: at, LastSeenAt: &seenAt, CollectedAt: at, CreatedAt: at, UpdatedAt: at})
+		rowValue := SitePricingGroup{SiteID: site.ID, GroupName: g.Name, RatioDecimal: g.Ratio, TopupRatioDecimal: g.TopupRatio, Description: g.Description, UserSelectable: g.UserSelectable, DefaultUseAutoGroup: g.DefaultUseAutoGroup, AutoPriority: g.AutoPriority, OutgoingOverridesJSON: string(outgoing), IncomingOverridesJSON: string(incoming), VisibleToGroupsJSON: string(visible), HiddenFromGroupsJSON: string(hidden), SourceHash: hash, RemoteState: "normal", ConfigVersion: site.ConfigVersion, FirstSeenAt: at, LastSeenAt: &seenAt, CollectedAt: at, CreatedAt: at, UpdatedAt: at}
 		row, ok := old[g.Name]
 		if !ok || row.SourceHash != hash || row.RemoteState != "normal" {
+			if ok {
+				rowValue.FirstSeenAt, rowValue.CreatedAt = row.FirstSeenAt, row.CreatedAt
+			}
+			rows = append(rows, rowValue)
 			changed++
+		} else {
+			unchangedNames = append(unchangedNames, g.Name)
 		}
 	}
 	if len(rows) > 0 {
@@ -244,6 +267,15 @@ func (r *SiteRepository) syncPricingGroups(ctx context.Context, site Site, at in
 			return err
 		}
 		*written += changed
+	}
+	for start := 0; start < len(unchangedNames); start += 500 {
+		end := start + 500
+		if end > len(unchangedNames) {
+			end = len(unchangedNames)
+		}
+		if err := r.db.WithContext(ctx).Model(&SitePricingGroup{}).Where("site_id = ? AND group_name IN ?", site.ID, unchangedNames[start:end]).Updates(map[string]any{"last_seen_at": at, "collected_at": at}).Error; err != nil {
+			return err
+		}
 	}
 	return nil
 }

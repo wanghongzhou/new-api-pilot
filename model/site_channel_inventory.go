@@ -96,9 +96,28 @@ func applySiteChannelInventorySnapshot(ctx context.Context, db *gorm.DB, siteID,
 	if err := db.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).First(&site, siteID).Error; err != nil {
 		return err
 	}
-	if err := db.WithContext(ctx).Model(&SiteChannelInventory{}).Where("site_id = ?", siteID).
-		Updates(map[string]any{"remote_state": SiteChannelInventoryMissing, "missing_count": gorm.Expr("missing_count + 1"), "last_seen_at": nil, "updated_at": syncedAt}).Error; err != nil {
+	var existing []SiteChannelInventory
+	if err := db.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).Where("site_id = ?", siteID).Find(&existing).Error; err != nil {
 		return err
+	}
+	byRemoteID := make(map[int64]struct{}, len(channels))
+	for _, channel := range channels {
+		byRemoteID[channel.RemoteChannelID] = struct{}{}
+	}
+	missingQuery := db.WithContext(ctx).Model(&SiteChannelInventory{}).Where("site_id = ?", siteID)
+	if len(byRemoteID) > 0 {
+		ids := make([]int64, 0, len(byRemoteID))
+		for id := range byRemoteID {
+			ids = append(ids, id)
+		}
+		missingQuery = missingQuery.Where("remote_channel_id NOT IN ?", ids)
+	}
+	if result := missingQuery.Updates(map[string]any{"remote_state": SiteChannelInventoryMissing, "missing_count": gorm.Expr("LEAST(missing_count + 1, ?)", int(^uint32(0)>>1)), "last_seen_at": nil, "updated_at": syncedAt}); result.Error != nil {
+		return result.Error
+	}
+	existingByID := make(map[int64]SiteChannelInventory, len(existing))
+	for _, row := range existing {
+		existingByID[row.RemoteChannelID] = row
 	}
 	type hourlyKey struct {
 		RemoteType   int
@@ -114,6 +133,7 @@ func applySiteChannelInventorySnapshot(ctx context.Context, db *gorm.DB, siteID,
 		ResponseMax   int64
 	}
 	hourlyMetrics := make(map[hourlyKey]*hourlyMetric)
+	changed := make([]SiteChannelInventory, 0, len(channels))
 	for _, channel := range channels {
 		seen := syncedAt
 		row := SiteChannelInventory{SiteID: siteID, RemoteChannelID: channel.RemoteChannelID, Name: channel.Name,
@@ -121,13 +141,10 @@ func applySiteChannelInventorySnapshot(ctx context.Context, db *gorm.DB, siteID,
 			Balance: channel.Balance, BalanceUpdatedAt: channel.BalanceUpdatedAt, Models: channel.Models, RemoteGroup: channel.RemoteGroup,
 			UsedQuota: channel.UsedQuota, Priority: channel.Priority, Weight: channel.Weight, AutoBan: channel.AutoBan, Tag: channel.Tag,
 			RemoteState: SiteChannelInventoryNormal, ConfigVersion: site.ConfigVersion, FirstSeenAt: syncedAt, LastSeenAt: &seen, CreatedAt: syncedAt, UpdatedAt: syncedAt}
-		if err := db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "site_id"}, {Name: "remote_channel_id"}},
-			DoUpdates: clause.AssignmentColumns([]string{"name", "remote_type", "remote_status", "test_time", "response_time_ms", "balance", "balance_updated_at", "models", "remote_group", "used_quota", "priority", "weight", "auto_ban", "tag", "remote_state", "missing_count", "config_version", "last_seen_at", "updated_at"})}).
-			Create(&row).Error; err != nil {
-			return err
-		}
-		if err := db.WithContext(ctx).Model(&SiteChannelInventory{}).Where("site_id = ? AND remote_channel_id = ?", siteID, channel.RemoteChannelID).Update("missing_count", 0).Error; err != nil {
-			return err
+		if current, ok := existingByID[channel.RemoteChannelID]; ok && current.Name == row.Name && current.RemoteType == row.RemoteType && current.RemoteStatus == row.RemoteStatus && current.TestTime == row.TestTime && current.ResponseTimeMS == row.ResponseTimeMS && current.Balance == row.Balance && current.BalanceUpdatedAt == row.BalanceUpdatedAt && current.Models == row.Models && current.RemoteGroup == row.RemoteGroup && current.UsedQuota == row.UsedQuota && current.Priority == row.Priority && current.Weight == row.Weight && current.AutoBan == row.AutoBan && current.Tag == row.Tag && current.RemoteState == SiteChannelInventoryNormal && current.MissingCount == 0 && current.ConfigVersion == row.ConfigVersion {
+			// Unchanged channel facts do not need a redo-producing upsert.
+		} else {
+			changed = append(changed, row)
 		}
 		key := hourlyKey{RemoteType: channel.RemoteType, RemoteStatus: channel.RemoteStatus, RemoteGroup: channel.RemoteGroup, Tag: channel.Tag}
 		metric := hourlyMetrics[key]
@@ -144,6 +161,13 @@ func applySiteChannelInventorySnapshot(ctx context.Context, db *gorm.DB, siteID,
 		}
 		if channel.RemoteStatus == 1 {
 			metric.Available++
+		}
+	}
+	if len(changed) > 0 {
+		if err := db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "site_id"}, {Name: "remote_channel_id"}},
+			DoUpdates: clause.AssignmentColumns([]string{"name", "remote_type", "remote_status", "test_time", "response_time_ms", "balance", "balance_updated_at", "models", "remote_group", "used_quota", "priority", "weight", "auto_ban", "tag", "remote_state", "missing_count", "config_version", "last_seen_at", "updated_at"})}).
+			CreateInBatches(&changed, 500).Error; err != nil {
+			return err
 		}
 	}
 	hour := syncedAt - syncedAt%3600

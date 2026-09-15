@@ -90,6 +90,25 @@ func (r *SiteRepository) UpstreamTaskBackfillRequired(ctx context.Context, siteI
 	}
 	return state.BackfillCompletedAt == nil, nil
 }
+
+// UpstreamTaskLastSuccessAt returns the observation timestamp of the last
+// successful sync. It is intentionally separate from BackfillRequired so the
+// scheduler can advance the remote query window without rereading 48 hours on
+// every operational tick.
+func (r *SiteRepository) UpstreamTaskLastSuccessAt(ctx context.Context, siteID int64) (*int64, error) {
+	if r == nil || r.db == nil || siteID <= 0 {
+		return nil, errors.New("invalid upstream task state lookup")
+	}
+	var state SiteUpstreamTaskCollectionState
+	err := r.db.WithContext(ctx).Where("site_id = ?", siteID).Take(&state).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return state.LastSuccessAt, nil
+}
 func taskSourceHash(item dto.UpstreamTask) (string, error) {
 	payload, err := json.Marshal(item)
 	if err != nil {
@@ -108,6 +127,26 @@ func (r *SiteRepository) SyncUpstreamTasks(ctx context.Context, site Site, obser
 	items := append([]dto.UpstreamTask{}, snapshot.Items...)
 	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
 	var written int64
+	// Load the current rows once. The previous implementation issued a SELECT
+	// for every remote task and then wrote last_seen_at/collected_at even when
+	// the payload was byte-for-byte unchanged. That made each 5 minute run a
+	// large read/write amplification loop.
+	existingRows := make([]SiteUpstreamTask, 0, len(items))
+	if len(items) > 0 {
+		ids := make([]int64, 0, len(items))
+		for _, item := range items {
+			ids = append(ids, item.ID)
+		}
+		if err := r.db.WithContext(ctx).Where("site_id = ? AND remote_id IN ?", site.ID, ids).Find(&existingRows).Error; err != nil {
+			return 0, err
+		}
+	}
+	existing := make(map[int64]SiteUpstreamTask, len(existingRows))
+	for _, row := range existingRows {
+		existing[row.RemoteID] = row
+	}
+	creates := make([]SiteUpstreamTask, 0)
+	unchangedIDs := make([]int64, 0)
 	for i, item := range items {
 		if item.ID <= 0 || item.CreatedAt < 0 || item.UpdatedAt < item.CreatedAt || item.UserID < 0 || item.ChannelID < 0 || item.Quota < 0 || item.SubmitTime < 0 || item.StartTime < 0 || item.FinishTime < 0 || !validTaskText(item.TaskID, 191, true) || !validTaskText(item.Platform, 30, false) || !validTaskText(item.Group, 50, false) || !validTaskText(item.Action, 40, false) || !validTaskText(item.Status, 20, true) || !validTaskText(item.Progress, 20, false) || !validTaskText(item.Properties.Model, 255, false) || i > 0 && items[i-1].ID == item.ID {
 			return 0, errors.New("invalid upstream task observation")
@@ -116,30 +155,30 @@ func (r *SiteRepository) SyncUpstreamTasks(ctx context.Context, site Site, obser
 		if err != nil {
 			return 0, err
 		}
-		var existing SiteUpstreamTask
-		findErr := r.db.WithContext(ctx).Where("site_id=? AND remote_id=?", site.ID, item.ID).Take(&existing).Error
-		if findErr == nil {
-			if item.UpdatedAt < existing.RemoteUpdatedAt || item.UpdatedAt == existing.RemoteUpdatedAt && hash == existing.SourceHash {
-				if err := r.db.WithContext(ctx).Model(&existing).UpdateColumns(map[string]any{"last_seen_at": observedAt, "collected_at": observedAt}).Error; err != nil {
-					return 0, err
-				}
+		if current, ok := existing[item.ID]; ok {
+			if item.UpdatedAt < current.RemoteUpdatedAt || item.UpdatedAt == current.RemoteUpdatedAt && hash == current.SourceHash {
+				unchangedIDs = append(unchangedIDs, item.ID)
 				continue
 			}
 			updates := map[string]any{"remote_created_at": item.CreatedAt, "remote_updated_at": item.UpdatedAt, "task_id": item.TaskID, "platform": item.Platform, "remote_user_id": item.UserID, "remote_group": item.Group, "remote_channel_id": item.ChannelID, "quota": item.Quota, "action": item.Action, "remote_status": item.Status, "submit_time": item.SubmitTime, "start_time": item.StartTime, "finish_time": item.FinishTime, "progress": item.Progress, "model_name": item.Properties.Model, "source_hash": hash, "config_version": site.ConfigVersion, "last_seen_at": observedAt, "collected_at": observedAt, "updated_at": observedAt}
-			if err := r.db.WithContext(ctx).Model(&existing).UpdateColumns(updates).Error; err != nil {
+			if err := r.db.WithContext(ctx).Model(&current).UpdateColumns(updates).Error; err != nil {
 				return 0, err
 			}
 			written++
 			continue
 		}
-		if !errors.Is(findErr, gorm.ErrRecordNotFound) {
-			return 0, findErr
-		}
-		row := SiteUpstreamTask{SiteID: site.ID, RemoteID: item.ID, RemoteCreatedAt: item.CreatedAt, RemoteUpdatedAt: item.UpdatedAt, TaskID: item.TaskID, Platform: item.Platform, RemoteUserID: item.UserID, RemoteGroup: item.Group, RemoteChannelID: item.ChannelID, Quota: item.Quota, Action: item.Action, RemoteStatus: item.Status, SubmitTime: item.SubmitTime, StartTime: item.StartTime, FinishTime: item.FinishTime, Progress: item.Progress, ModelName: item.Properties.Model, SourceHash: hash, ConfigVersion: site.ConfigVersion, FirstSeenAt: observedAt, LastSeenAt: observedAt, CollectedAt: observedAt, CreatedAt: observedAt, UpdatedAt: observedAt}
-		if err := r.db.WithContext(ctx).Create(&row).Error; err != nil {
+		creates = append(creates, SiteUpstreamTask{SiteID: site.ID, RemoteID: item.ID, RemoteCreatedAt: item.CreatedAt, RemoteUpdatedAt: item.UpdatedAt, TaskID: item.TaskID, Platform: item.Platform, RemoteUserID: item.UserID, RemoteGroup: item.Group, RemoteChannelID: item.ChannelID, Quota: item.Quota, Action: item.Action, RemoteStatus: item.Status, SubmitTime: item.SubmitTime, StartTime: item.StartTime, FinishTime: item.FinishTime, Progress: item.Progress, ModelName: item.Properties.Model, SourceHash: hash, ConfigVersion: site.ConfigVersion, FirstSeenAt: observedAt, LastSeenAt: observedAt, CollectedAt: observedAt, CreatedAt: observedAt, UpdatedAt: observedAt})
+	}
+	if len(unchangedIDs) > 0 {
+		if err := r.db.WithContext(ctx).Model(&SiteUpstreamTask{}).Where("site_id = ? AND remote_id IN ?", site.ID, unchangedIDs).Updates(map[string]any{"last_seen_at": observedAt, "collected_at": observedAt}).Error; err != nil {
 			return 0, err
 		}
-		written++
+	}
+	if len(creates) > 0 {
+		if err := r.db.WithContext(ctx).CreateInBatches(creates, 500).Error; err != nil {
+			return 0, err
+		}
+		written += int64(len(creates))
 	}
 	state := SiteUpstreamTaskCollectionState{SiteID: site.ID, OverlapStart: overlapStart, LastSuccessAt: &observedAt, ObservedCount: int64(len(items)), ConfigVersion: site.ConfigVersion, UpdatedAt: observedAt}
 	assignments := []string{"overlap_start", "last_success_at", "last_error_code", "observed_count", "config_version", "updated_at"}

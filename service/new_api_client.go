@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -17,6 +18,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
@@ -72,6 +74,55 @@ type NewAPIClient struct {
 	maxResponseBytes int64
 	metrics          UpstreamMetricsRecorder
 	governor         UpstreamGovernor
+	cacheNamespace   uint64
+}
+
+var nextUpstreamClientNamespace atomic.Uint64
+
+// The upstream application does not attach cache headers to its management
+// APIs. Keep a very small process-wide read cache for endpoints whose source
+// is process memory or a small, slowly-changing catalogue. The key includes
+// the origin and credential fingerprint so data cannot cross sites/users.
+type upstreamReadCacheEntry struct {
+	expiresAt time.Time
+	payload   []byte
+}
+
+var upstreamReadCache = struct {
+	sync.Mutex
+	entries map[string]upstreamReadCacheEntry
+	locks   map[string]*sync.Mutex
+}{entries: make(map[string]upstreamReadCacheEntry), locks: make(map[string]*sync.Mutex)}
+
+func upstreamCacheTTL(endpoint string) time.Duration {
+	switch endpoint {
+	case "/api/option/", "/api/group/":
+		return 5 * time.Minute
+	case "/api/pricing", "/api/subscription/admin/plans":
+		return 60 * time.Second
+	default:
+		return 0
+	}
+}
+
+func (client *NewAPIClient) upstreamCacheKey(method, endpoint string, query url.Values, authMode upstreamAuthMode) string {
+	credential := "public"
+	if authMode == upstreamAuthManagement {
+		sum := sha256.Sum256([]byte(client.accessToken))
+		credential = strconv.FormatInt(client.rootUserID, 10) + ":" + fmt.Sprintf("%x", sum[:8])
+	}
+	return strconv.FormatUint(client.cacheNamespace, 10) + "|" + client.baseOrigin + "|" + credential + "|" + method + "|" + endpoint + "?" + query.Encode()
+}
+
+func upstreamCacheLock(key string) *sync.Mutex {
+	upstreamReadCache.Lock()
+	defer upstreamReadCache.Unlock()
+	if lock := upstreamReadCache.locks[key]; lock != nil {
+		return lock
+	}
+	lock := &sync.Mutex{}
+	upstreamReadCache.locks[key] = lock
+	return lock
 }
 
 func NewNewAPIClient(options NewAPIClientOptions) (*NewAPIClient, error) {
@@ -144,6 +195,7 @@ func newNewAPIClient(options NewAPIClientOptions, dependencies newAPIClientDepen
 		maxResponseBytes: maxResponseBytes,
 		metrics:          options.Metrics,
 		governor:         options.Governor,
+		cacheNamespace:   nextUpstreamClientNamespace.Add(1),
 	}, nil
 }
 
@@ -1006,6 +1058,70 @@ func (client *NewAPIClient) PerformanceHistory(ctx context.Context, requestID st
 	return dto.UpstreamPerformanceHistory{Models: models, CounterReady: counterReady && len(models) > 0}, nil
 }
 
+// PerformanceHistoryIncremental keeps the summary/model contract intact but
+// refreshes only the short rolling window supplied by the scheduler. The
+// upstream API does not expose a reliable since-cursor, so older local facts
+// are retained by the repository and only the moving buckets are replaced.
+func (client *NewAPIClient) PerformanceHistoryIncremental(ctx context.Context, requestID string, hours int, knownModels []string) (dto.UpstreamPerformanceHistory, error) {
+	if hours < 1 || hours > 720 {
+		return dto.UpstreamPerformanceHistory{}, newUpstreamRequestError(UpstreamErrorResponseInvalid)
+	}
+	summary, err := client.PerformanceSummary(ctx, requestID+"_summary", hours)
+	if err != nil {
+		return dto.UpstreamPerformanceHistory{}, err
+	}
+	// knownModels is deliberately advisory: the summary remains authoritative
+	// for additions/removals, while the local set avoids any future accidental
+	// detail request for a model that has already disappeared upstream.
+	known := make(map[string]struct{}, len(knownModels))
+	for _, name := range knownModels {
+		known[name] = struct{}{}
+	}
+	models := make([]dto.UpstreamPerformanceModel, 0, len(summary.Models))
+	byName := make(map[string]dto.UpstreamPerformanceModel, len(summary.Models))
+	for _, item := range summary.Models {
+		byName[item.ModelName] = item
+	}
+	// Preserve the local order for stable model sets, then append newly
+	// discovered models from the authoritative summary.
+	for _, name := range knownModels {
+		if item, ok := byName[name]; ok {
+			models = append(models, item)
+			delete(byName, name)
+		}
+	}
+	for _, item := range summary.Models {
+		if _, ok := byName[item.ModelName]; ok {
+			models = append(models, item)
+			delete(byName, item.ModelName)
+		}
+	}
+	if len(models) > 1000 {
+		return dto.UpstreamPerformanceHistory{}, newUpstreamResponseTooLargeError(int64(len(models)), 1000)
+	}
+	out := dto.UpstreamPerformanceHistory{Models: make([]dto.UpstreamPerformanceModelHistory, 0, len(models))}
+	counterReady := true
+	seen := map[string]struct{}{}
+	for index, item := range models {
+		if _, ok := seen[item.ModelName]; ok {
+			return dto.UpstreamPerformanceHistory{}, newUpstreamRequestError(UpstreamErrorResponseInvalid)
+		}
+		seen[item.ModelName] = struct{}{}
+		var wire upstreamPerformanceHistoryWire
+		if _, err := client.get(ctx, client.httpClient, "/api/perf-metrics", url.Values{"model": []string{item.ModelName}, "hours": []string{strconv.Itoa(hours)}}, fmt.Sprintf("%s_model_%d", requestID, index+1), upstreamAuthManagement, client.requestTimeout, &wire, false); err != nil {
+			return dto.UpstreamPerformanceHistory{}, err
+		}
+		model, ready, err := validatePerformanceHistory(wire, item.ModelName, client.now().Unix())
+		if err != nil {
+			return dto.UpstreamPerformanceHistory{}, err
+		}
+		counterReady = counterReady && ready
+		out.Models = append(out.Models, model)
+	}
+	out.CounterReady = len(out.Models) > 0 && counterReady
+	return out, nil
+}
+
 func (client *NewAPIClient) LoginAndGenerateAccessToken(ctx context.Context, requestID, username, password string) (dto.UpstreamIdentity, string, error) {
 	if !validUpstreamString(username, 1, 128) || !validUpstreamString(password, 1, 1024) {
 		return dto.UpstreamIdentity{}, "", newUpstreamRequestError(UpstreamErrorResponseInvalid)
@@ -1158,6 +1274,35 @@ func (client *NewAPIClient) do(
 	requestURL.Path = strings.TrimRight(client.baseURL.Path, "/") + endpoint
 	requestURL.RawPath = ""
 	requestURL.RawQuery = query.Encode()
+	cacheTTL := time.Duration(0)
+	cacheKey := ""
+	var cacheLock *sync.Mutex
+	if method == http.MethodGet && !tokenMutation {
+		cacheTTL = upstreamCacheTTL(endpoint)
+		if cacheTTL > 0 {
+			cacheKey = client.upstreamCacheKey(method, endpoint, query, authMode)
+			cacheLock = upstreamCacheLock(cacheKey)
+			cacheLock.Lock()
+			defer cacheLock.Unlock()
+			upstreamReadCache.Lock()
+			entry, ok := upstreamReadCache.entries[cacheKey]
+			upstreamReadCache.Unlock()
+			if ok && client.now().Before(entry.expiresAt) {
+				var decodeErr error
+				if decoder, decoderOK := destination.(upstreamResponseDecoder); decoderOK {
+					decodeErr = decoder.decodeUpstreamResponse(entry.payload)
+				} else {
+					decodeErr = decodeUpstreamEnvelope(entry.payload, destination)
+				}
+				if decodeErr == nil {
+					return int64(len(entry.payload)), nil
+				}
+				upstreamReadCache.Lock()
+				delete(upstreamReadCache.entries, cacheKey)
+				upstreamReadCache.Unlock()
+			}
+		}
+	}
 	if client.governor != nil {
 		release, acquireErr := client.governor.Acquire(ctx, client.baseOrigin, upstreamRequestClassFromContext(ctx))
 		if acquireErr != nil {
@@ -1267,6 +1412,12 @@ func (client *NewAPIClient) do(
 			return 0, newUpstreamRequestError(UpstreamErrorTokenRotationResultUnknown)
 		}
 		return 0, annotateUpstreamRequestError(decodeErr, method, endpoint, responseContentType, responseStatus, payloadSize)
+	}
+	if cacheTTL > 0 {
+		payloadCopy := append([]byte(nil), payload...)
+		upstreamReadCache.Lock()
+		upstreamReadCache.entries[cacheKey] = upstreamReadCacheEntry{expiresAt: client.now().Add(cacheTTL), payload: payloadCopy}
+		upstreamReadCache.Unlock()
 	}
 	return int64(len(payload)), nil
 }
