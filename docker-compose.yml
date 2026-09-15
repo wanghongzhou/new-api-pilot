@@ -7,6 +7,7 @@ services:
     ports:
       - '${API_PORT:-3000}:3000'
     environment:
+      BALANCE_MONITOR_TOKEN: ${BALANCE_MONITOR_TOKEN:-}
       APP_ENV: production
       PORT: '3000'
       DATABASE_DSN: ${DATABASE_DSN:?DATABASE_DSN is required}

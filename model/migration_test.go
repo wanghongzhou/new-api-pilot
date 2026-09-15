@@ -100,7 +100,7 @@ func TestMySQLMigrationAndSeeds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verify authoritative schema contract: %v", err)
 	}
-	if schemaSummary.Tables != 69 || schemaSummary.ForeignKeys != 63 {
+	if schemaSummary.Tables != 70 || schemaSummary.ForeignKeys != 63 {
 		t.Fatalf("authoritative schema summary = %#v", schemaSummary)
 	}
 	assertAlertThresholdPrecision(t, ctx, database.SQL)
@@ -527,8 +527,8 @@ func TestMySQLMigrationSourceGate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load repository migrations: %v", err)
 	}
-	if len(repository) != 1 {
-		t.Fatalf("repository migration count = %d, want 1", len(repository))
+	if len(repository) != 2 {
+		t.Fatalf("repository migration count = %d, want 2", len(repository))
 	}
 
 	t.Run("current and idempotent rerun", func(t *testing.T) {

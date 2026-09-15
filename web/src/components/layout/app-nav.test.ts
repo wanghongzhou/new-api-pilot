@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 
+import { dynamicI18nKey } from '@/i18n/dynamic-keys'
+
 import { resolveAlertNavBadge } from './app-nav-badge'
 import { navGroups } from './app-nav-config'
 
@@ -14,6 +16,14 @@ const routeTreeSource = readFileSync(
 )
 
 describe('app navigation', () => {
+  test('registers every navigation label for runtime translation', () => {
+    for (const group of navGroups) {
+      expect(dynamicI18nKey('layout', group.label)).toBe(group.label)
+      for (const item of group.items) {
+        expect(dynamicI18nKey('layout', item.label)).toBe(item.label)
+      }
+    }
+  })
   test('uses the approved concise Chinese navigation labels', () => {
     const locale = JSON.parse(
       readFileSync(
@@ -71,7 +81,7 @@ describe('app navigation', () => {
 
   test('uses a distinct icon for every navigation route', () => {
     const items = navGroups.flatMap((group) => group.items)
-    expect(new Set(items.map((item) => item.to)).size).toBe(20)
+    expect(new Set(items.map((item) => item.to)).size).toBe(21)
     expect(new Set(items.map((item) => item.icon)).size).toBe(items.length)
   })
 

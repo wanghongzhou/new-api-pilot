@@ -10,8 +10,8 @@ func TestAuthoritativeSchemaContractsLoadFlattenedInitialSchema(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AuthoritativeSchemaContracts() error = %v", err)
 	}
-	if len(contracts) != 69 {
-		t.Fatalf("authoritative table count = %d, want 69", len(contracts))
+	if len(contracts) != 70 {
+		t.Fatalf("authoritative table count = %d, want 70", len(contracts))
 	}
 	for _, table := range []string{
 		"schema_migration", "schema_migration_progress", "collection_run", "alert_delivery",

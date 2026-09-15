@@ -27,6 +27,7 @@ import { Route as AuthenticatedDashboardRouteImport } from './routes/_authentica
 import { Route as AuthenticatedCustomersRouteImport } from './routes/_authenticated/customers_'
 import { Route as AuthenticatedChannelInventoryRouteImport } from './routes/_authenticated/channel-inventory'
 import { Route as AuthenticatedChangePasswordRouteImport } from './routes/_authenticated/change-password'
+import { Route as AuthenticatedBalanceMonitorRouteImport } from './routes/_authenticated/balance-monitor'
 import { Route as AuthenticatedAlertsRouteImport } from './routes/_authenticated/alerts'
 import { Route as AuthenticatedAccountsRouteImport } from './routes/_authenticated/accounts_'
 import { Route as authSignInRouteImport } from './routes/(auth)/sign-in'
@@ -159,6 +160,12 @@ const AuthenticatedChangePasswordRoute =
   AuthenticatedChangePasswordRouteImport.update({
     id: '/change-password',
     path: '/change-password',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedBalanceMonitorRoute =
+  AuthenticatedBalanceMonitorRouteImport.update({
+    id: '/balance-monitor',
+    path: '/balance-monitor',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedAlertsRoute = AuthenticatedAlertsRouteImport.update({
@@ -368,6 +375,7 @@ export interface FileRoutesByFullPath {
   '/sign-in': typeof authSignInRoute
   '/accounts': typeof AuthenticatedAccountsRoute
   '/alerts': typeof AuthenticatedAlertsRoute
+  '/balance-monitor': typeof AuthenticatedBalanceMonitorRoute
   '/change-password': typeof AuthenticatedChangePasswordRoute
   '/channel-inventory': typeof AuthenticatedChannelInventoryRoute
   '/customers': typeof AuthenticatedCustomersRoute
@@ -421,6 +429,7 @@ export interface FileRoutesByTo {
   '/sign-in': typeof authSignInRoute
   '/accounts': typeof AuthenticatedAccountsRoute
   '/alerts': typeof AuthenticatedAlertsRoute
+  '/balance-monitor': typeof AuthenticatedBalanceMonitorRoute
   '/change-password': typeof AuthenticatedChangePasswordRoute
   '/channel-inventory': typeof AuthenticatedChannelInventoryRoute
   '/customers': typeof AuthenticatedCustomersRoute
@@ -476,6 +485,7 @@ export interface FileRoutesById {
   '/(auth)/sign-in': typeof authSignInRoute
   '/_authenticated/accounts_': typeof AuthenticatedAccountsRoute
   '/_authenticated/alerts': typeof AuthenticatedAlertsRoute
+  '/_authenticated/balance-monitor': typeof AuthenticatedBalanceMonitorRoute
   '/_authenticated/change-password': typeof AuthenticatedChangePasswordRoute
   '/_authenticated/channel-inventory': typeof AuthenticatedChannelInventoryRoute
   '/_authenticated/customers_': typeof AuthenticatedCustomersRoute
@@ -531,6 +541,7 @@ export interface FileRouteTypes {
     | '/sign-in'
     | '/accounts'
     | '/alerts'
+    | '/balance-monitor'
     | '/change-password'
     | '/channel-inventory'
     | '/customers'
@@ -584,6 +595,7 @@ export interface FileRouteTypes {
     | '/sign-in'
     | '/accounts'
     | '/alerts'
+    | '/balance-monitor'
     | '/change-password'
     | '/channel-inventory'
     | '/customers'
@@ -638,6 +650,7 @@ export interface FileRouteTypes {
     | '/(auth)/sign-in'
     | '/_authenticated/accounts_'
     | '/_authenticated/alerts'
+    | '/_authenticated/balance-monitor'
     | '/_authenticated/change-password'
     | '/_authenticated/channel-inventory'
     | '/_authenticated/customers_'
@@ -819,6 +832,13 @@ declare module '@tanstack/react-router' {
       path: '/change-password'
       fullPath: '/change-password'
       preLoaderRoute: typeof AuthenticatedChangePasswordRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/balance-monitor': {
+      id: '/_authenticated/balance-monitor'
+      path: '/balance-monitor'
+      fullPath: '/balance-monitor'
+      preLoaderRoute: typeof AuthenticatedBalanceMonitorRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/alerts': {
@@ -1065,6 +1085,7 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAccountsRoute: typeof AuthenticatedAccountsRoute
   AuthenticatedAlertsRoute: typeof AuthenticatedAlertsRoute
+  AuthenticatedBalanceMonitorRoute: typeof AuthenticatedBalanceMonitorRoute
   AuthenticatedChangePasswordRoute: typeof AuthenticatedChangePasswordRoute
   AuthenticatedChannelInventoryRoute: typeof AuthenticatedChannelInventoryRoute
   AuthenticatedCustomersRoute: typeof AuthenticatedCustomersRoute
@@ -1117,6 +1138,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAccountsRoute: AuthenticatedAccountsRoute,
   AuthenticatedAlertsRoute: AuthenticatedAlertsRoute,
+  AuthenticatedBalanceMonitorRoute: AuthenticatedBalanceMonitorRoute,
   AuthenticatedChangePasswordRoute: AuthenticatedChangePasswordRoute,
   AuthenticatedChannelInventoryRoute: AuthenticatedChannelInventoryRoute,
   AuthenticatedCustomersRoute: AuthenticatedCustomersRoute,

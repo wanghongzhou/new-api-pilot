@@ -1,4 +1,5 @@
 import {
+  Wallet01Icon,
   AiSearchIcon,
   Alert02Icon,
   Analytics01Icon,
@@ -25,6 +26,7 @@ type NavItem = {
   icon: typeof DashboardSquare01Icon
   label: string
   to:
+    | '/balance-monitor'
     | '/accounts'
     | '/alerts'
     | '/channel-inventory'
@@ -82,6 +84,11 @@ export const navGroups: ReadonlyArray<{
   {
     label: 'Operations analytics',
     items: [
+      {
+        icon: Wallet01Icon,
+        label: 'Balance and consumption',
+        to: '/balance-monitor',
+      },
       {
         icon: Money03Icon,
         label: 'Financial operations',

@@ -169,7 +169,7 @@ func (runner *MigrationRunner) apply(ctx context.Context, connection *sql.Conn, 
 	err = connection.QueryRowContext(ctx, "SELECT checksum FROM schema_migration WHERE version = ?", version).Scan(&appliedChecksum)
 	switch {
 	case err == nil:
-		if appliedChecksum != checksum {
+		if !completedMigrationChecksumMatches(version, checksum, appliedChecksum) {
 			return fmt.Errorf("%w: migration %s checksum mismatch: database=%s repository=%s",
 				ErrMigrationChecksumInvalid, version, appliedChecksum, checksum)
 		}
@@ -414,6 +414,11 @@ func isMigrationDDL(statement string) bool {
 
 func verifyMigrationDDLPostcondition(ctx context.Context, connection *sql.Conn, version string, index int) (bool, error) {
 	switch version {
+	case "0002_balance_monitor":
+		if index != 0 {
+			return false, fmt.Errorf("no postcondition for DDL statement %d", index+1)
+		}
+		return verifyMigrationTable(ctx, connection, "balance_monitor_record")
 	case "0001_initial_schema":
 		if index < 0 || index >= len(initialMigrationTableOrder) {
 			return false, fmt.Errorf("no postcondition for DDL statement %d", index+1)

@@ -1485,6 +1485,7 @@ export const DYNAMIC_I18N_REGISTRIES = {
     'statistics.asOf',
   ],
   layout: [
+    'Balance and consumption',
     'Alerts',
     'Business management',
     'Channel inventory',

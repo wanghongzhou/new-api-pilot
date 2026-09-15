@@ -1,5 +1,41 @@
 # 多站点运营管理平台 — 详细设计 04B：统计、Dashboard 与导出
 
+## 外部余额巡检（2026-09-15）
+
+### 月度余额快照接入（2026-09-15）
+
+新增独立「月度余额快照」Tab（kind=monthly），与消耗日报分开，表示某次月末余额/兑换码残值结算，不表示月消耗。按月份范围查询、分页，选择某个月后显示该份快照的总残值、不含nowcoding的残值、foxcode/其他站点/nowcoding/库存分项、账号原始余额与人民币残值，以及失败账号。页头明确归属月份、实际生成时间和生成方式（scheduled/manual/legacy）；每份快照只展示自身冻结结果，不使用当前汇率重算旧月份。旧版本明细舍入之和可能与原汇总存在尾差，页面保留原汇总。
+
+采集端在scheduler.py普通巡检收尾调用月度到期检查，每月1日缺失上月快照时复用既有residual_value计算流程生成文件；非月初不伪造历史。手动--monthly-force保持现有语义但标记manual和实际时间。每轮扫描monthly_snapshots/YYYY-MM.json，白名单转换为monthly结构，先保存SQLite记录和outbox，再推送；--monthly-check/--monthly-force生成后立即入库并尝试同步。相同月份相同内容不重复入队，修订同一月份使用更高revision，失败重试沿用原ID。单个损坏快照只报告文件错误，不阻断常规巡检推送。
+
+沿用POST /api/balance-monitor/ingest，BalanceRecord新增monthly对象，只能在kind=monthly中出现；account_id/site_id为空，day为月份首日，sampled_at为实际生成Unix秒，record_id固定hash(monthly|period)。monthly包括period、mode、grand_total_residual_yuan、total_excluding_nowcoding_residual_yuan、foxcode_residual_yuan、other_residual_yuan、redeem_code_residual_yuan、redeem_code_count、nowcoding_residual_yuan、accounts(name/raw/residual_yuan)、failed。所有金额/数量通过十进制字符串传输；限制2000个账号和2000个失败名称，验证日期、长度和金额格式，不允许任意附加字段、凭据或HTML。复用现有JSON记录表，无新增数据库迁移。
+
+GET /records?kind=monthly&start=YYYY-MM-01&end=YYYY-MM-01支持包含起止月的查询，最多120个月；不接受账号/站点过滤，以免将完整月度报告误裁成局部。页面默认最近12个月，空状态说明月初生成规则，不用今天余额补充过去月份。新增验收覆盖旧快照保真、自动入队/去重/修订、失败重试、月度参数与非法载荷、SQLite/MySQL往返一致和独立页面展示。dry-run不创建月度快照、不入库、不推送。
+
+新增只读 `/balance-monitor` 页面，独立于上游 usage 统计。balance_checker负责计算、SQLite备份及推送，Pilot仅接收、MySQL持久化和展示。包含实时、区间历史、每日日报，支持站点、账号、日期过滤、分页和详情；无修改、删除、人工修正或配置下发，不发送日报通知。
+
+### 展示职责修订（2026-09-15 用户反馈）
+
+三个Tab各自只有一张主表，移除重复的站点消耗卡片及顶部本页金额卡片。数据接口不变。金额小计仅放在对应表格页尾，明确为本页已知值，对公分列，未知值不冒充0；无数据/加载失败时不展示零小计。
+
+- 实时余额：只展示每个账号最新余额（人民币与原始单位）、采样更新时间、余额可用性；库存仅在此页显示。不得显示区间消耗卡片、余额差值或充值修正字段。每行可跳转该账号今日消耗明细。
+- 消耗明细（原“区间消耗”）：默认今天。每行代表一个账号相邻成功采样之间的实际区间，显式展示起止时间与时长；失败尝试标记失败，首次采样没有可计算区间。主表以同一人民币口径展示余额差额和充值修正后的估算消耗；原始余额及单位、充值金额、换算系数仅在计算详情弹窗展示，不把区间终点历史余额称为实时余额。若采样跨越多轮，显示真实时长及缺口，不宣称恰为15分钟。日期条件按巡检结束日期（北京时间）筛选，不把一条跨日区间默默截成选定日消耗；自然日归属看每日日报。
+- 每日日报：默认昨天。仅展示报告日期、账号、人民币日消耗、覆盖率与质量状态；不出现实时库存、实时余额或本轮差分表。详情解释跨日分摊与部分覆盖，保留实际期初/期末采样时间。
+- 切换Tab保留站点/账号，重置分页和日期默认值，避免“昨天”过滤遗留到今日明细。站点变更时清除不属于该站点的账号选择；非法日期范围在提交前明确提示。
+- 详情使用可关闭、支持Escape的对话框，切换Tab/筛选/翻页时关闭，避免旧记录悬挂页面底部。库存和账号目录随刷新动作一并更新。
+
+验收补充：实时页无消耗字段、消耗页无当前余额/库存/站点卡片，主表仅一张；初次/失败/未知差额保持空值；起止时间与实际时长、冻结换算、日期切换、分页小计与弹窗计算正确；桌面和375px布局可操作。
+
+用户确认foxcode为8500元/20张兑换码，每张425元及20亿额度，库存残值425元/张；其他沿用1:1，nowcoding对公单列。历史冻结换算系数。差值=上次成功余额-本次余额；估算消耗=差值+已确认充值。缺失/首次不显示0；未知充值标异常。北京时间自然日，零点触发，迟到收口修订，跨日按时间比例分配且注明估算。
+
+新增balance_monitor_record表：唯一(source_id,record_id)，revision控制更新顺序，kind为interval/daily/current/inventory。索引(kind,day,account_id)和(source_id,kind,site_id)。金额DECIMAL(30,10)，明细JSON；JSON bigint及decimal均为字符串。current每账号一行，inventory每来源一行；interval/daily长期保留。迁移新增表，不改写旧migration。
+
+POST `/api/balance-monitor/ingest`，schema_version=1，独立BALANCE_MONITOR_TOKEN Bearer密钥至少32字节；保留全局OriginGuard，采集端生产请求携带匹配PUBLIC_ORIGIN的Origin。单批最多200条、2MiB，所有条目验证后事务提交。source_id和record_id使用UUID/SHA256，revision十进制字符串。只接受更大revision，重试幂等，旧历史补发不能覆盖当前状态。禁止凭据或兑换码正文。未配置密钥拒绝接收。
+
+GET `/api/balance-monitor/records?kind=current|interval|daily&start=YYYY-MM-DD&end=YYYY-MM-DD&account_id=&site_id=&p=1&page_size=50`，日期含首尾日、最多366日、每页最多200；current忽略日期。GET `/api/balance-monitor/accounts` 返回最新账号目录。沿用平台viewer/admin身份。返回源采样时间和接收时间，前端显示过期/不完整，人民币汇总必须提示未知项，详情保留原始单位。
+
+验收包含金额精度、非法负估算、重复/乱序、认证、日期/分页、首次/漏采/跨日、重试补报和只读页面。Go/MySQL验证在隔离节点，不调用开发机Docker/WSL，不修改上游生产。
+
 > 上级文档：[多站点运营管理平台-概要设计.md](./多站点运营管理平台-概要设计.md)  
 > 业务功能索引：[多站点运营管理平台-详细设计-04-业务功能与平台API.md](./多站点运营管理平台-详细设计-04-业务功能与平台API.md)  
 > 详细设计索引：[多站点运营管理平台-详细设计.md](./多站点运营管理平台-详细设计.md)

@@ -138,7 +138,7 @@ func writeValidA25Run(t *testing.T) string {
 	report.EmptyDatabase.SchemaSHA256 = hash
 	report.EmptyDatabase.AppliedAtStable = true
 	report.EmptyDatabase.IdempotentSchemaStable = true
-	report.InitializedData.MigrationCount = 1
+	report.InitializedData.MigrationCount = len(repository)
 	report.InitializedData.DataRows = 5
 	report.InitializedData.DataSHA256 = strings.Repeat("c", 64)
 	report.InitializedData.DataPreserved = true

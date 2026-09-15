@@ -19,6 +19,7 @@ import (
 )
 
 type Options struct {
+	BalanceMonitorController     *controller.BalanceMonitorController
 	Config                       config.Config
 	Database                     *sql.DB
 	Readiness                    *common.Readiness
@@ -72,6 +73,7 @@ func New(options Options) (*gin.Engine, error) {
 	if options.Metrics != nil {
 		engine.Use(middleware.HTTPMetrics(options.Metrics))
 	}
+	RegisterBalanceMonitorRoutes(engine, options.BalanceMonitorController, options.IdentityResolver)
 	registerUserRoutes(engine, options.AuthController, options.UserController, options.IdentityResolver)
 	registerSiteRoutes(engine, options.SiteController, options.IdentityResolver)
 	registerCustomerRoutes(engine, options.CustomerController, options.AccountController, options.IdentityResolver)

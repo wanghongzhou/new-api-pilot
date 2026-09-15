@@ -264,7 +264,8 @@ func bootstrapApplication(
 	addApplicationReadinessChecks(readiness, options.RuntimeMode, options.Database.SQL.PingContext, redisStore.Ping)
 	identityResolver := middleware.SessionIdentityResolver{Store: sessionStore, Loader: authService}
 	engine, err := router.New(router.Options{
-		Config: options.Config, Database: options.Database.SQL, Readiness: readiness, Metrics: metrics,
+		BalanceMonitorController: controller.NewBalanceMonitorController(service.NewBalanceMonitorService(model.NewBalanceMonitorRepository(options.Database.GORM)), options.Config.BalanceMonitorToken),
+		Config:                   options.Config, Database: options.Database.SQL, Readiness: readiness, Metrics: metrics,
 		AuthController:               controller.NewAuthController(authService, userService, sessionStore),
 		UserController:               controller.NewPlatformUserController(userService),
 		SiteController:               controller.NewSiteController(siteService),

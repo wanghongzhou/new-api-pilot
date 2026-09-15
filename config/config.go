@@ -30,8 +30,9 @@ const (
 type LookupFunc func(string) (string, bool)
 
 type Config struct {
-	AppEnv string
-	Port   string
+	BalanceMonitorToken string
+	AppEnv              string
+	Port                string
 
 	DatabaseDSN          string
 	SQLMaxIdleConns      int
@@ -190,7 +191,8 @@ func LoadFrom(lookup LookupFunc) (Config, error) {
 		SessionCookieSecure:  cookieSecure,
 		ExportDir:            filepath.Clean(exportDir),
 		RedisDSN:             redisDSN, RedisDB: redisDB, RedisTimeout: time.Duration(redisTimeoutSeconds) * time.Second,
-		PublicOrigin: publicOrigin, TrustedProxies: trustedProxies,
+		BalanceMonitorToken: value(lookup, "BALANCE_MONITOR_TOKEN"),
+		PublicOrigin:        publicOrigin, TrustedProxies: trustedProxies,
 		UpstreamCAFile: value(lookup, "UPSTREAM_CA_FILE"), DingTalkAllowedHosts: dingTalkHosts,
 		MetricsAllowedCIDRs: metricsCIDRs,
 	}, nil

@@ -112,7 +112,7 @@ func ValidateMigrationVersionPrefix(
 			return fmt.Errorf("%w: applied version %q at position %d does not match repository version %q",
 				ErrMigrationSourceInvalid, applied[index].Version, index+1, repository[index].Version)
 		}
-		if applied[index].Checksum != repository[index].Checksum {
+		if !completedMigrationChecksumMatches(repository[index].Version, repository[index].Checksum, applied[index].Checksum) {
 			return fmt.Errorf("%w: migration %s checksum mismatch: database=%s repository=%s",
 				ErrMigrationChecksumInvalid, applied[index].Version,
 				applied[index].Checksum, repository[index].Checksum)
@@ -169,6 +169,15 @@ func isStrictMigrationChecksum(checksum string) bool {
 func migrationChecksum(payload []byte) string {
 	digest := sha256.Sum256(payload)
 	return hex.EncodeToString(digest[:])
+}
+
+// This exact released payload differs only in line endings. Never accept an
+// arbitrary normalized checksum or alter the persisted release history.
+const canonicalInitialChecksum = "eb22e0630b9c734b0ea6c3aba59f229216103e6fdf9834b71e384f8be3f0be07"
+const releasedMixedEOLInitialChecksum = "d9c2c2f1b2552772072621cedec1a78eaef9494b07f0840bba0a214e9fabc8ff"
+
+func completedMigrationChecksumMatches(version, repository, applied string) bool {
+	return repository == applied || (version == "0001_initial_schema" && repository == canonicalInitialChecksum && applied == releasedMixedEOLInitialChecksum)
 }
 
 func inspectMigrationTableInventory(

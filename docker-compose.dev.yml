@@ -17,6 +17,7 @@ services:
     ports:
       - '3000:3000'
     environment:
+      BALANCE_MONITOR_TOKEN: ${BALANCE_MONITOR_TOKEN:-}
       APP_ENV: development
       PORT: '3000'
       DATABASE_DSN: pilot:pilot@tcp(mysql:3306)/new_api_pilot?charset=utf8mb4&parseTime=True&loc=Asia%2FShanghai

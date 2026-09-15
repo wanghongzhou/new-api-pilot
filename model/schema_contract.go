@@ -78,7 +78,11 @@ func AuthoritativeSchemaContracts() (map[string]TableContract, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parseCreateTableContracts(statements)
+	additional, err := readMigrationStatements("0002_balance_monitor.sql")
+	if err != nil {
+		return nil, err
+	}
+	return parseCreateTableContracts(append(statements, additional...))
 }
 
 func VerifyAuthoritativeSchema(
