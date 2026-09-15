@@ -87,6 +87,11 @@ func classifyUsageExecutionError(cause error, failure *service.UsageCollectionFa
 		code = string(constant.MessageUpstreamResponseTooLarge)
 	case errors.Is(cause, service.ErrUpstreamAddressForbidden):
 		code = constant.CodeUpstreamAddressForbidden
+		// Address-policy failures are deterministic configuration/security
+		// decisions. A zero HTTP status is expected because the request is
+		// rejected before dialing; it must not be reclassified as retryable by
+		// the generic status-code handling below.
+		retryable = false
 	case errors.Is(cause, service.ErrUpstreamExportDisabled),
 		errors.Is(cause, service.ErrUpstreamCredentialOriginMismatch),
 		errors.Is(cause, service.ErrUpstreamAuthExpired),
@@ -113,7 +118,7 @@ func classifyUsageExecutionError(cause error, failure *service.UsageCollectionFa
 			code = failure.Code
 		}
 	}
-	if requestError != nil {
+	if requestError != nil && !errors.Is(cause, service.ErrUpstreamAddressForbidden) {
 		retryAfter = requestError.RetryAfter
 		if requestError.StatusCode < 200 || requestError.StatusCode >= 300 {
 			retryable = true

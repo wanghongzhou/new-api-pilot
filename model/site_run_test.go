@@ -18,6 +18,34 @@ import (
 	"new-api-pilot/constant"
 )
 
+func TestUsageBackfillIgnoresRealtimeCapabilityOnly(t *testing.T) {
+	now := int64(1_752_400_800)
+	site := Site{
+		ID: 1, ConfigVersion: 1, ManagementStatus: constant.SiteManagementActive,
+		AuthStatus: constant.SiteAuthAuthorized, DataExportEnabled: true,
+	}
+	capabilities := make([]SiteCapability, 0, len(constant.SiteCapabilityKeys()))
+	for _, key := range constant.SiteCapabilityKeys() {
+		status := constant.CapabilityStatusPassed
+		if key == constant.CapabilityFlowDataConsistency {
+			status = constant.CapabilityStatusSkipped
+		}
+		if key == constant.CapabilityRealtimeContract {
+			status = constant.CapabilityStatusFailed
+		}
+		capabilities = append(capabilities, SiteCapability{
+			SiteID: site.ID, CapabilityKey: key, Status: status, CheckedAt: now,
+		})
+	}
+	snapshot := RunnableSiteSnapshot{Site: site, Capabilities: capabilities}
+	if err := ValidateRunnableSiteSnapshotForTask(snapshot, site.ConfigVersion, constant.TaskTypeUsageBackfill); err != nil {
+		t.Fatalf("realtime capability blocked usage backfill: %v", err)
+	}
+	if err := ValidateRunnableSiteSnapshotForTask(snapshot, site.ConfigVersion, constant.TaskTypeUsageHour); !errors.Is(err, ErrSiteRunCapabilitiesPending) {
+		t.Fatalf("realtime capability did not block usage hour: %v", err)
+	}
+}
+
 func TestSiteCollectionRunCanonicalConstruction(t *testing.T) {
 	now := int64(1_752_400_800)
 	site := Site{ID: 7, ConfigVersion: 3}

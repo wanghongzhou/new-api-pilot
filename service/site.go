@@ -159,15 +159,15 @@ func (service *SiteService) List(ctx context.Context, query dto.SiteListQuery) (
 		return common.PageData[dto.SiteListItem]{}, fmt.Errorf("list site usage overviews: %w", err)
 	}
 	performance := service.listPerformanceSummaries(sites, now)
-	backfills, err := service.sites.LatestBackfillRuns(ctx, siteIDs)
+	completeness, err := service.sites.ListCollectionWindowCompleteness(ctx, siteIDs)
 	if err != nil {
-		return common.PageData[dto.SiteListItem]{}, fmt.Errorf("list latest site backfills: %w", err)
+		return common.PageData[dto.SiteListItem]{}, fmt.Errorf("list collection window completeness: %w", err)
 	}
 	for _, site := range sites {
 		if err := validatePersistedSite(site); err != nil {
 			return common.PageData[dto.SiteListItem]{}, err
 		}
-		items = append(items, siteListItemFromModel(site, now, resources[site.ID], usage[site.ID], performance[site.ID], backfillCompletenessRate(backfills[site.ID])))
+		items = append(items, siteListItemFromModel(site, now, resources[site.ID], usage[site.ID], performance[site.ID], completeness[site.ID]))
 	}
 	return common.NewPageData(query.Page, query.PageSize, total, items), nil
 }
@@ -355,8 +355,12 @@ func (service *SiteService) detailFromModel(ctx context.Context, site model.Site
 	if err != nil {
 		return dto.SiteDetail{}, fmt.Errorf("read site usage overview: %w", err)
 	}
+	completeness, err := service.sites.ListCollectionWindowCompleteness(ctx, []int64{site.ID})
+	if err != nil {
+		return dto.SiteDetail{}, fmt.Errorf("read collection window completeness: %w", err)
+	}
 	detail := dto.SiteDetail{
-		SiteListItem: siteListItemFromModel(site, now, resources[site.ID], usage[site.ID], service.listPerformanceSummaries([]model.Site{site}, now)[site.ID], 0), Remark: site.Remark, ConfigVersion: site.ConfigVersion,
+		SiteListItem: siteListItemFromModel(site, now, resources[site.ID], usage[site.ID], service.listPerformanceSummaries([]model.Site{site}, now)[site.ID], completeness[site.ID]), Remark: site.Remark, ConfigVersion: site.ConfigVersion,
 		RootCreatedAt: site.RootCreatedAt, StatisticsStartAt: site.StatisticsStartAt,
 		StatisticsStartSource: site.StatisticsStartSource, StatisticsEndAt: site.StatisticsEndAt,
 		MonitoringStartAt: site.MonitoringStartAt, LastProbeAt: site.LastProbeAt,
@@ -370,7 +374,6 @@ func (service *SiteService) detailFromModel(ctx context.Context, site model.Site
 	run, err := service.sites.LatestBackfillRun(ctx, site.ID)
 	if err == nil {
 		detail.Backfill = backfillSummaryFromRun(run)
-		detail.CompletenessRate = backfillCompletenessRate(run)
 	} else if !model.IsNotFound(err) {
 		return dto.SiteDetail{}, fmt.Errorf("read site backfill: %w", err)
 	}

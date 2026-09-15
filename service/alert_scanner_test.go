@@ -25,6 +25,32 @@ func (function alertEvaluatorFunc) Evaluate(ctx context.Context, evaluation Aler
 	return function(ctx, evaluation)
 }
 
+func TestAlertEvaluationScannerSkipsSampleConflicts(t *testing.T) {
+	now := int64(1_752_400_800)
+	snapshot := model.AlertEvaluationSnapshot{Sites: []model.AlertSiteEvaluationSnapshot{{
+		ID: 1, Name: "冲突站点", ManagementStatus: constant.SiteManagementActive,
+		AuthStatus: constant.SiteAuthAuthorized,
+	}}}
+	scanner, err := NewAlertEvaluationScanner(AlertEvaluationScannerOptions{
+		Reader: alertSnapshotReaderFunc(func(context.Context) (model.AlertEvaluationSnapshot, error) { return snapshot, nil }),
+		Evaluator: alertEvaluatorFunc(func(context.Context, AlertEvaluation) (AlertEvaluationResult, error) {
+			return AlertEvaluationResult{}, ErrAlertSampleConflict
+		}),
+		Clock:              testsupport.NewFakeClock(time.Unix(now, 0)),
+		RequestIDGenerator: func() (string, error) { return "als_conflict", nil },
+	})
+	if err != nil {
+		t.Fatalf("create scanner: %v", err)
+	}
+	result, err := scanner.RunOnce(context.Background())
+	if err != nil {
+		t.Fatalf("sample conflict must not abort scan: %v", err)
+	}
+	if result.EvaluationCount == 0 {
+		t.Fatal("expected evaluations")
+	}
+}
+
 func TestAlertEvaluationScannerCoversEveryBuiltInRule(t *testing.T) {
 	now := int64(1_752_400_800)
 	lastProbe, resourceAt, lastSeen, lastSynced := now, now, now-100, now

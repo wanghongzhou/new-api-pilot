@@ -33,6 +33,12 @@ services:
       UPSTREAM_CA_FILE: ''
       DINGTALK_ALLOWED_HOSTS: ''
       METRICS_ALLOWED_CIDRS: 127.0.0.0/8,172.16.0.0/12
+      HTTP_PROXY: ''
+      HTTPS_PROXY: ''
+      ALL_PROXY: ''
+      http_proxy: ''
+      https_proxy: ''
+      all_proxy: ''
     volumes:
       - pilot_dev_exports:/data/exports
     depends_on:

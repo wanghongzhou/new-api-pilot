@@ -30,6 +30,18 @@ type RunnableSiteSnapshot struct {
 }
 
 func ValidateRunnableSiteSnapshot(snapshot RunnableSiteSnapshot, expectedConfigVersion int) error {
+	return validateRunnableSiteSnapshot(snapshot, expectedConfigVersion, nil)
+}
+
+func ValidateRunnableSiteSnapshotForTask(snapshot RunnableSiteSnapshot, expectedConfigVersion int, taskType string) error {
+	var excluded map[string]struct{}
+	if taskType == constant.TaskTypeUsageBackfill {
+		excluded = map[string]struct{}{constant.CapabilityRealtimeContract: {}}
+	}
+	return validateRunnableSiteSnapshot(snapshot, expectedConfigVersion, excluded)
+}
+
+func validateRunnableSiteSnapshot(snapshot RunnableSiteSnapshot, expectedConfigVersion int, excluded map[string]struct{}) error {
 	site := snapshot.Site
 	if site.ID <= 0 || expectedConfigVersion <= 0 || site.ConfigVersion != expectedConfigVersion {
 		return ErrSiteRunConfigChanged
@@ -54,10 +66,21 @@ func ValidateRunnableSiteSnapshot(snapshot RunnableSiteSnapshot, expectedConfigV
 		statuses[capability.CapabilityKey] = capability.Status
 	}
 	keys := constant.SiteCapabilityKeys()
-	if len(statuses) != len(keys) {
+	known := 0
+	for _, key := range keys {
+		if _, skip := excluded[key]; !skip {
+			if _, exists := statuses[key]; exists {
+				known++
+			}
+		}
+	}
+	if known != len(keys)-len(excluded) {
 		return ErrSiteRunCapabilitiesPending
 	}
 	for _, key := range keys {
+		if _, skip := excluded[key]; skip {
+			continue
+		}
 		status, exists := statuses[key]
 		if !exists || status == constant.CapabilityStatusFailed ||
 			(status == constant.CapabilityStatusSkipped && key != constant.CapabilityFlowDataConsistency) ||

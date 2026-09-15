@@ -98,7 +98,7 @@ type AlertsSearchParams = z.output<typeof alertsSearchSchema>
 export const alertSearchMiddlewares = [
   stripSearchParams<AlertsSearchParams>({
     level: [],
-    order: 'desc',
+    order: 'asc',
     page: 1,
     pageSize: 20,
     ruleCategory: [],
@@ -107,6 +107,7 @@ export const alertSearchMiddlewares = [
     rulePage: 1,
     rulePageSize: 20,
     scope: 'global',
+    sort: 'status',
     status: [],
     tab: 'events',
     targetType: [],

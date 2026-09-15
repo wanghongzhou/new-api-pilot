@@ -101,6 +101,14 @@ func (scanner *AlertEvaluationScanner) RunOnce(ctx context.Context) (AlertScanRe
 		}
 		outcome, err := scanner.evaluator.Evaluate(ctx, evaluation)
 		if err != nil {
+			// A legacy cursor may contain a different sample identity for the
+			// same observation timestamp.  This is a data-quality conflict for
+			// one target, not a reason to terminate the whole scan/runtime.
+			// Leave the cursor untouched and continue evaluating independent
+			// targets; a later observation can establish a new identity.
+			if errors.Is(err, ErrAlertSampleConflict) {
+				continue
+			}
 			var validationErr *AlertValidationError
 			if errors.As(err, &validationErr) {
 				return result, fmt.Errorf(

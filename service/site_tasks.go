@@ -68,7 +68,7 @@ func (service *SiteService) Backfill(ctx context.Context, siteID int64, request 
 		if site.ManagementStatus != constant.SiteManagementActive || site.AuthStatus != constant.SiteAuthAuthorized || site.StatisticsEndAt != nil {
 			return ErrSiteInvalidState
 		}
-		ready, err := requiredCapabilitiesReady(ctx, repository, site.ID)
+		ready, err := requiredBackfillCapabilitiesReady(ctx, repository, site.ID)
 		if err != nil {
 			return err
 		}
@@ -344,6 +344,16 @@ func isCollectionTaskMessageCode(code constant.MessageCode) bool {
 }
 
 func requiredCapabilitiesReady(ctx context.Context, repository *model.SiteRepository, siteID int64) (bool, error) {
+	return requiredCapabilitiesReadyExcept(ctx, repository, siteID, nil)
+}
+
+// Backfill only needs historical usage contracts. Realtime log statistics are
+// an independent optional feed and must not block repairing hourly windows.
+func requiredBackfillCapabilitiesReady(ctx context.Context, repository *model.SiteRepository, siteID int64) (bool, error) {
+	return requiredCapabilitiesReadyExcept(ctx, repository, siteID, map[string]struct{}{constant.CapabilityRealtimeContract: {}})
+}
+
+func requiredCapabilitiesReadyExcept(ctx context.Context, repository *model.SiteRepository, siteID int64, excluded map[string]struct{}) (bool, error) {
 	capabilities, err := repository.ListCapabilities(ctx, siteID)
 	if err != nil {
 		return false, err
@@ -353,6 +363,9 @@ func requiredCapabilitiesReady(ctx context.Context, repository *model.SiteReposi
 		statuses[capability.CapabilityKey] = capability.Status
 	}
 	for _, key := range constant.SiteCapabilityKeys() {
+		if _, skip := excluded[key]; skip {
+			continue
+		}
 		status, exists := statuses[key]
 		if !exists {
 			return false, nil

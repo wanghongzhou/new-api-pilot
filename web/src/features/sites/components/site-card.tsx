@@ -12,7 +12,6 @@ import { Link } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
-import { DataStatusBadge } from '@/components/data/data-status'
 import { MetricValue } from '@/components/data/metric-value'
 import { QuotaAmount } from '@/components/data/quota-amount'
 import { SiteStatusBadges } from '@/components/data/site-status-badges'
@@ -264,9 +263,6 @@ export function SiteCard({
       </div>
 
       <section className='grid gap-3'>
-        <div className='flex justify-end'>
-          <DataStatusBadge status={site.today.data_status} />
-        </div>
         <div className='grid grid-cols-2 gap-x-5 gap-y-4'>
           <MetricCell label={t('site.dashboard.last24HoursQuota')}>
             <QuotaAmount

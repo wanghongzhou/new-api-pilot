@@ -32,6 +32,7 @@ func TestUsageExecutionErrorClassification(t *testing.T) {
 		{name: "network", cause: service.ErrUpstreamUnavailable, wantCode: string(constant.MessageDataUpstreamUnavailable), retryable: true},
 		{name: "timeout", cause: context.DeadlineExceeded, wantCode: string(constant.MessageDataUpstreamUnavailable), retryable: true},
 		{name: "auth", cause: service.ErrUpstreamAuthExpired, wantCode: constant.CodeUpstreamUnavailable},
+		{name: "address forbidden", cause: &service.UpstreamRequestError{Kind: service.UpstreamErrorAddressForbidden}, wantCode: constant.CodeUpstreamAddressForbidden},
 		{name: "config", cause: model.ErrSiteRunConfigChanged, wantCode: constant.CodeSiteConfigChanged},
 	}
 	for _, test := range tests {

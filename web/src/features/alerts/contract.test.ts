@@ -124,7 +124,7 @@ describe('alert frontend contract', () => {
       sort_order: 'desc',
     })
     expect(alertListParams({ ...search, sort: undefined })).toMatchObject({
-      sort_by: 'last_fired_at',
+      sort_by: 'status',
       sort_order: 'desc',
     })
   })

@@ -147,9 +147,9 @@ notification.dingtalk.enabled=false 时仍创建/恢复告警事件，但不创�
 - 事件 Tab 的顶部计数通过 `GET /api/alerts/summary` 获取，列表通过 `GET /api/alerts` 获取；
 - 顶部卡片：当前 firing 总数、Critical 数、Warning 数、今日恢复数；
 - 列表筛选：状态、级别、目标类型、站点、时间；状态、级别和目标类型为单选枚举，站点空值明确表示“全部站点”，时间使用紧凑的起止时间范围控件；筛选项全部常显，不提供展开/收起；
-- 事件表格第一列固定为规则；仅规则、状态、级别、站点、首次触发、最近触发和恢复时间允许服务端升序/降序排序，排序字段与方向写入 URL；默认 `last_fired_at desc`。当前值/阈值跨指标不可比较，目标也不提供无业务意义的排序；
+- 事件表格第一列固定为规则；仅规则、状态、级别、站点、首次触发、最近触发和恢复时间允许服务端升序/降序排序，排序字段与方向写入 URL；默认按状态升序（firing → pending → resolved），同状态内按事件 ID 倒序。当前值/阈值跨指标不可比较，目标也不提供无业务意义的排序；
 - collection 类型的 canonical target_key 继续使用 `site_id/hour_ts`（小时窗口）或 `site_id/run_id`（回填任务）作为唯一标识，但页面不得把它直接拼成“采集任务 1/时间戳”；小时窗口显示北京时间，回填任务显示任务 ID；
-- 默认按最近触发时间倒序展示，resolved 进入历史列表；用户切换其他排序后严格按所选字段与方向展示；
+- 默认按触发状态优先展示，resolved 进入历史列表；用户切换其他排序后严格按所选字段与方向展示；
 - 字段：级别、规则、站点、实例/账户、当前值、阈值、首次时间、最近时间、结束时间、结束原因；
 - 点击站点、实例或账户进入对应详情；
 - 不显示确认、负责人、处理备注和人工关闭按钮；
@@ -266,6 +266,6 @@ value_type=int 按 Go int64 解析和范围校验，不使用平台相关的 Go 
 
 本平台不采集渠道 Key，因此不得提供 `key_count`、多 Key 健康、Key 级余额或 Key 级禁用原因等虚构指标。原有任何“不得展示渠道健康和余额”的限制由本节替代：允许展示渠道级状态、余额和响应时间，但绝不读取、存储或展示 Key 及 Key 派生状态。
 
-内置规则固定为 `channel_balance_low`（`channel.balance_total`，`<=`）、`channel_response_time_high`（`channel.response_time_avg_ms`，`>=`）和 `channel_availability_low`（`channel.availability_rate`，`<=`）。三者 target_type 均为 `site`、canonical target 为 site_id，使用现有 global 基础规则与 site override 继承模型。Warning/Critical 默认阈值与连续次数以 §20.3 为准；低方向规则的 Critical 阈值必须小于 Warning，高方向规则相反。恢复使用同一阈值且必须来自后续 complete 快照，不引入迟滞。每个 complete 小时快照只形成一个 canonical sample identity；重放、五分钟兜底扫描与 post-commit hook 共享 cursor，因此不能重复累计或重复投递。
+内置规则固定为 `channel_balance_low`（`channel.balance_total`，`<=`）、`channel_response_time_high`（`channel.response_time_avg_ms`，`>=`）和 `channel_availability_low`（`channel.availability_rate`，`<=`）。三者 target_type 均为 `site`、canonical target 为 site_id，使用现有 global 基础规则与 site override 继承模型。Warning/Critical 默认阈值与连续次数以 §20.3 为准；低方向规则的 Critical 阈值必须小于 Warning，高方向规则相反。恢复使用同一阈值且必须来自后续 complete 快照，不引入迟滞。每个 complete 小时快照只形成一个 canonical sample identity；重放、五分钟兜底扫描与 post-commit hook 共享 cursor，因此不能重复累计或重复投递。若历史数据在同一观测时刻出现不同指纹，评估器记录样本冲突并跳过该条样本，不能因此阻断告警扫描器或使应用启动失败；后续观测时刻仍须正常继续评估。
 
 告警用户文案必须与比较运算符一致：`<=` 使用“达到或低于阈值”，`>=` 使用“达到或超过阈值”，不得在当前值恰等于阈值时显示数学上不成立的“低于”或“超过”。

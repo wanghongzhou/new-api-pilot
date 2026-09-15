@@ -82,7 +82,7 @@ func TestSiteListAndDetailUseLatestResourceSummaryAndDefaultMissingMetricsToZero
 	if err != nil {
 		t.Fatalf("list sites with partial backfill: %v", err)
 	}
-	if page.Items[0].CompletenessRate != 0.25 || page.Items[0].StatisticsStatus != site.StatisticsStatus {
+	if page.Items[0].CompletenessRate != 0 || page.Items[0].StatisticsStatus != site.StatisticsStatus {
 		t.Fatalf("list completeness/status = %v/%s", page.Items[0].CompletenessRate, page.Items[0].StatisticsStatus)
 	}
 
@@ -91,7 +91,7 @@ func TestSiteListAndDetailUseLatestResourceSummaryAndDefaultMissingMetricsToZero
 		t.Fatalf("get site detail: %v", err)
 	}
 	if detail.Resource.CPUMaxPercent == nil || *detail.Resource.CPUMaxPercent != cpu ||
-		detail.Resource.DataStatus != "complete" || detail.CompletenessRate != 0.25 {
+		detail.Resource.DataStatus != "complete" || detail.CompletenessRate != 0 {
 		t.Fatalf("detail resource summary = %#v", detail.Resource)
 	}
 
@@ -108,8 +108,8 @@ func TestSiteListAndDetailUseLatestResourceSummaryAndDefaultMissingMetricsToZero
 	if err != nil {
 		t.Fatalf("list sites with successful empty backfill: %v", err)
 	}
-	if page.Items[0].CompletenessRate != 1 {
-		t.Fatalf("list successful empty backfill completeness = %v, want 1", page.Items[0].CompletenessRate)
+	if page.Items[0].CompletenessRate != 0 {
+		t.Fatalf("list successful empty backfill completeness = %v, want 0", page.Items[0].CompletenessRate)
 	}
 	if page.Items[0].StatisticsStatus != constant.SiteStatisticsBackfilling {
 		t.Fatalf("list successful latest run hid active sibling: %s", page.Items[0].StatisticsStatus)
@@ -118,8 +118,8 @@ func TestSiteListAndDetailUseLatestResourceSummaryAndDefaultMissingMetricsToZero
 	if err != nil {
 		t.Fatalf("get site detail with successful empty backfill: %v", err)
 	}
-	if detail.CompletenessRate != 1 || detail.Backfill.Progress != 1 || detail.StatisticsStatus != constant.SiteStatisticsBackfilling {
-		t.Fatalf("detail successful empty backfill completeness/progress/status = %v/%v/%s, want 1/1/backfilling",
+	if detail.CompletenessRate != 0 || detail.Backfill.Progress != 1 || detail.StatisticsStatus != constant.SiteStatisticsBackfilling {
+		t.Fatalf("detail successful empty backfill completeness/progress/status = %v/%v/%s, want 0/1/backfilling",
 			detail.CompletenessRate, detail.Backfill.Progress, detail.StatisticsStatus)
 	}
 }

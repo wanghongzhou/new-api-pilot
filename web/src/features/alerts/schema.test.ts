@@ -54,7 +54,7 @@ describe('alert schemas', () => {
   test('strips inactive filters and other defaults from the browser URL', () => {
     const search = alertsSearchSchema.parse({
       level: [],
-      order: 'desc',
+      order: 'asc',
       page: 1,
       pageSize: 20,
       ruleCategory: [],

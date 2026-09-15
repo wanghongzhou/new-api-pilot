@@ -16,6 +16,41 @@ type SiteUsageOverview struct {
 	CompleteWindows int64  `gorm:"column:complete_windows"`
 }
 
+func (repository *SiteRepository) ListCollectionWindowCompleteness(
+	ctx context.Context,
+	siteIDs []int64,
+) (map[int64]float64, error) {
+	result := make(map[int64]float64, len(siteIDs))
+	if len(siteIDs) == 0 {
+		return result, nil
+	}
+	var rows []struct {
+		SiteID   int64 `gorm:"column:site_id"`
+		Complete int64 `gorm:"column:complete_windows"`
+		Expected int64 `gorm:"column:expected_windows"`
+	}
+	err := repository.db.WithContext(ctx).Table("collection_window").
+		Select("site_id, SUM(status = 'complete') AS complete_windows, COUNT(*) AS expected_windows").
+		Where("site_id IN ?", siteIDs).
+		Group("site_id").Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		complete := row.Complete
+		if complete < 0 {
+			complete = 0
+		}
+		if complete > row.Expected {
+			complete = row.Expected
+		}
+		if row.Expected > 0 {
+			result[row.SiteID] = float64(complete) / float64(row.Expected)
+		}
+	}
+	return result, nil
+}
+
 func (repository *SiteRepository) ListUsageOverviews(
 	ctx context.Context,
 	siteIDs []int64,

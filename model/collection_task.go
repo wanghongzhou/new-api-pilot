@@ -1581,7 +1581,7 @@ func (repository *CollectionTaskRepository) verifyTaskScopeLocked(
 				Order("capability_key ASC").Find(&capabilities).Error; err != nil {
 				return err
 			}
-			if err := ValidateRunnableSiteSnapshot(RunnableSiteSnapshot{Site: site, Capabilities: capabilities}, run.SiteConfigVersion); err != nil {
+			if err := ValidateRunnableSiteSnapshotForTask(RunnableSiteSnapshot{Site: site, Capabilities: capabilities}, run.SiteConfigVersion, run.TaskType); err != nil {
 				return err
 			}
 		}
