@@ -51,6 +51,17 @@ func TestUsageAggregationRebuildsSixLevelsAndRollingDaily(t *testing.T) {
 		"hour_ts = ?", []any{fixture.hours[0]}, 10, 100, 1000, 3)
 	assertAggregationRowCount(t, database.GORM, &AccountStatHourly{},
 		"account_id = ? AND hour_ts = ?", accounts[2].ID, fixture.hours[0], 0)
+	dateKey, _, _, err := UsageDateBucket(fixture.hours[0])
+	if err != nil {
+		t.Fatalf("usage date bucket: %v", err)
+	}
+	var unchangedDaily UsageFactDaily
+	if err := database.GORM.Where(
+		"site_id = ? AND remote_user_id = ? AND model_name = ? AND channel_id = ? AND use_group = ? AND token_id = ? AND node_name = ? AND date_key = ?",
+		fixture.site.ID, int64(1), "Model-B", int64(2), "", int64(0), "", dateKey,
+	).First(&unchangedDaily).Error; err != nil {
+		t.Fatalf("read unchanged daily fact: %v", err)
+	}
 
 	repeated := applyCompleteUsageAggregation(t, database, fixture, 0, now+2, hour0Facts)
 	if !repeated.Window.VerifiedOnly || repeated.Window.WrittenRows != 0 || repeated.HourlyRows != 0 || repeated.DailyRows != 0 {
@@ -64,9 +75,18 @@ func TestUsageAggregationRebuildsSixLevelsAndRollingDaily(t *testing.T) {
 		{RemoteUserID: 3, UsernameSnapshot: "third", ModelName: "Model-A", ChannelID: 2, RequestCount: 6, Quota: 60, TokenUsed: 600},
 	}
 	applyCompleteUsageAggregation(t, database, fixture, 1, now+3, hour1Facts)
-	dateKey, _, _, err := UsageDateBucket(fixture.hours[0])
-	if err != nil {
-		t.Fatalf("usage date bucket: %v", err)
+	var currentDaily UsageFactDaily
+	if err := database.GORM.Where(
+		"site_id = ? AND remote_user_id = ? AND model_name = ? AND channel_id = ? AND use_group = ? AND token_id = ? AND node_name = ? AND date_key = ?",
+		fixture.site.ID, int64(1), "Model-B", int64(2), "", int64(0), "", dateKey,
+	).First(&currentDaily).Error; err != nil {
+		t.Fatalf("read preserved daily fact: %v", err)
+	}
+	if currentDaily.ID != unchangedDaily.ID || currentDaily.CreatedAt != unchangedDaily.CreatedAt ||
+		currentDaily.UpdatedAt != unchangedDaily.UpdatedAt || currentDaily.LastCalculatedAt != unchangedDaily.LastCalculatedAt ||
+		currentDaily.RequestCount != unchangedDaily.RequestCount || currentDaily.Quota != unchangedDaily.Quota ||
+		currentDaily.TokenUsed != unchangedDaily.TokenUsed {
+		t.Fatalf("unaffected daily fact was rewritten: before=%#v after=%#v", unchangedDaily, currentDaily)
 	}
 	assertUsageAggregationMetric(t, database.GORM, &SiteStatDaily{},
 		"site_id = ? AND date_key = ?", []any{fixture.site.ID, dateKey}, 21, 210, 2100, 3)
@@ -91,6 +111,9 @@ func TestUsageAggregationRebuildsSixLevelsAndRollingDaily(t *testing.T) {
 		"site_id = ? AND hour_ts = ?", fixture.site.ID, fixture.hours[0], 0)
 	assertUsageAggregationMetric(t, database.GORM, &SiteStatDaily{},
 		"site_id = ? AND date_key = ?", []any{fixture.site.ID, dateKey}, 11, 110, 1100, 2)
+	assertAggregationRowCount(t, database.GORM, &UsageFactDaily{},
+		"site_id = ? AND remote_user_id = ? AND model_name = ? AND channel_id = ? AND date_key = ?",
+		fixture.site.ID, int64(1), "Model-B", int64(2), dateKey, 0)
 	assertUsageWindowStatus(t, database, fixture.site.ID, fixture.hours[0], CollectionWindowStatusComplete)
 
 	failedRequest := fixture.failedRequest(1, now+5, true)

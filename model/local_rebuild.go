@@ -88,7 +88,7 @@ func (mutation LocalRebuildMutation) ApplyCollectionTaskWindow(
 		return CollectionTaskWindowMutationResult{}, err
 	}
 	rebuilt, err := rebuildUsageAggregationBuckets(
-		ctx, tx, request.SiteID, request.HourTS, dateKey, dateStart, dateEnd, request.Now, options,
+		ctx, tx, request.SiteID, request.HourTS, dateKey, dateStart, dateEnd, request.Now, nil, options,
 	)
 	if err != nil {
 		return CollectionTaskWindowMutationResult{}, err

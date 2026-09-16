@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -347,6 +348,11 @@ func NewUsageAggregationCommit(
 		if err := lockUsageAggregationBuckets(ctx, tx, keys, request.Now); err != nil {
 			return UsageAggregationMutationResult{}, err
 		}
+		var previousFacts []UsageFactHourly
+		if err := tx.WithContext(ctx).Where("site_id = ? AND hour_ts = ?", request.SiteID, request.HourTS).
+			Order("id ASC").Find(&previousFacts).Error; err != nil {
+			return UsageAggregationMutationResult{}, err
+		}
 		windowResult, err := factMutation.apply(ctx, tx, lockedScope)
 		if err != nil {
 			return UsageAggregationMutationResult{}, err
@@ -360,7 +366,7 @@ func NewUsageAggregationCommit(
 		}
 		rebuilt, err := rebuildUsageAggregationBuckets(
 			ctx, tx, request.SiteID, request.HourTS, dateKey, dateStart, dateEnd, request.Now,
-			usageAggregationRebuildOptions{},
+			append(previousFacts, canonicalFacts...), usageAggregationRebuildOptions{},
 		)
 		if err != nil {
 			return UsageAggregationMutationResult{}, err
@@ -612,6 +618,7 @@ func rebuildUsageAggregationBuckets(
 	dateStart int64,
 	dateEnd int64,
 	now int64,
+	affectedFacts []UsageFactHourly,
 	options usageAggregationRebuildOptions,
 ) (UsageAggregationMutationResult, error) {
 	if tx == nil || siteID <= 0 || hourTS <= 0 || hourTS%3600 != 0 || dateKey <= 0 ||
@@ -637,7 +644,9 @@ func rebuildUsageAggregationBuckets(
 	if err != nil {
 		return UsageAggregationMutationResult{}, err
 	}
-	dailyRows, err := rebuildUsageDaily(ctx, tx, siteID, dateKey, dateStart, dateEnd, now, dateMetrics, coverage, options)
+	dailyRows, err := rebuildUsageDaily(
+		ctx, tx, siteID, dateKey, dateStart, dateEnd, now, dateMetrics, coverage, affectedFacts, options,
+	)
 	if err != nil {
 		return UsageAggregationMutationResult{}, err
 	}
@@ -1129,6 +1138,160 @@ func addUsageCoverageWindow(coverage *usageCoverage, window usageCoverageWindow,
 	}
 }
 
+type usageFactDailyKey struct {
+	RemoteUserID int64
+	ModelName    string
+	ChannelID    int64
+	UseGroup     string
+	TokenID      int64
+	NodeName     string
+}
+
+func affectedUsageFactDailyKeys(siteID, dateStart, dateEnd int64, facts []UsageFactHourly) ([]usageFactDailyKey, error) {
+	unique := make(map[usageFactDailyKey]struct{}, len(facts))
+	for _, fact := range facts {
+		if fact.SiteID != siteID || fact.HourTS < dateStart || fact.HourTS >= dateEnd {
+			return nil, ErrCollectionRunContract
+		}
+		unique[usageFactDailyKey{
+			RemoteUserID: fact.RemoteUserID, ModelName: fact.ModelName, ChannelID: fact.ChannelID,
+			UseGroup: fact.UseGroup, TokenID: fact.TokenID, NodeName: fact.NodeName,
+		}] = struct{}{}
+	}
+	keys := make([]usageFactDailyKey, 0, len(unique))
+	for key := range unique {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(left, right int) bool {
+		if keys[left].RemoteUserID != keys[right].RemoteUserID {
+			return keys[left].RemoteUserID < keys[right].RemoteUserID
+		}
+		if keys[left].ModelName != keys[right].ModelName {
+			return keys[left].ModelName < keys[right].ModelName
+		}
+		if keys[left].ChannelID != keys[right].ChannelID {
+			return keys[left].ChannelID < keys[right].ChannelID
+		}
+		if keys[left].UseGroup != keys[right].UseGroup {
+			return keys[left].UseGroup < keys[right].UseGroup
+		}
+		if keys[left].TokenID != keys[right].TokenID {
+			return keys[left].TokenID < keys[right].TokenID
+		}
+		return keys[left].NodeName < keys[right].NodeName
+	})
+	return keys, nil
+}
+
+func usageFactDailyKeyPredicate(keys []usageFactDailyKey) (string, []any) {
+	placeholders := make([]string, 0, len(keys))
+	arguments := make([]any, 0, len(keys)*6)
+	for _, key := range keys {
+		placeholders = append(placeholders, "(?,?,?,?,?,?)")
+		arguments = append(arguments, key.RemoteUserID, key.ModelName, key.ChannelID, key.UseGroup, key.TokenID, key.NodeName)
+	}
+	return strings.Join(placeholders, ","), arguments
+}
+
+func refreshUsageFactDaily(
+	ctx context.Context,
+	tx *gorm.DB,
+	siteID int64,
+	dateKey int,
+	dateStart, dateEnd, now int64,
+	isFinal, fullSweep bool,
+	affectedFacts []UsageFactHourly,
+) (int64, error) {
+	keys, err := affectedUsageFactDailyKeys(siteID, dateStart, dateEnd, affectedFacts)
+	if err != nil {
+		return 0, err
+	}
+	var rows int64
+	if fullSweep {
+		stale := tx.WithContext(ctx).Exec(`DELETE daily
+FROM usage_fact_daily AS daily
+LEFT JOIN (
+    SELECT fact.site_id, fact.remote_user_id, fact.model_name, fact.channel_id,
+           fact.use_group, fact.token_id, fact.node_name
+    FROM usage_fact_hourly AS fact FORCE INDEX (idx_usage_fact_hourly_site_time)
+    JOIN collection_window AS window_row
+      ON window_row.site_id = fact.site_id
+     AND window_row.hour_ts = fact.hour_ts
+     AND window_row.status = 'complete'
+    JOIN site AS source_site ON source_site.id = fact.site_id
+    WHERE fact.site_id = ? AND fact.hour_ts >= ? AND fact.hour_ts < ?
+      AND source_site.statistics_start_at IS NOT NULL
+      AND source_site.statistics_start_at < fact.hour_ts + 3600
+      AND (source_site.statistics_end_at IS NULL OR source_site.statistics_end_at > fact.hour_ts)
+    GROUP BY fact.site_id, fact.remote_user_id, fact.model_name, fact.channel_id,
+             fact.use_group, fact.token_id, fact.node_name
+  ) AS authoritative
+  ON authoritative.site_id = daily.site_id
+ AND authoritative.remote_user_id = daily.remote_user_id
+ AND authoritative.model_name = daily.model_name
+ AND authoritative.channel_id = daily.channel_id
+ AND authoritative.use_group = daily.use_group
+ AND authoritative.token_id = daily.token_id
+ AND authoritative.node_name = daily.node_name
+WHERE daily.site_id = ? AND daily.date_key = ? AND authoritative.site_id IS NULL`,
+			siteID, dateStart, dateEnd, siteID, dateKey)
+		if stale.Error != nil {
+			return 0, stale.Error
+		}
+		rows += stale.RowsAffected
+	}
+	const batchSize = 200
+	for offset := 0; offset < len(keys); offset += batchSize {
+		end := min(offset+batchSize, len(keys))
+		predicate, keyArguments := usageFactDailyKeyPredicate(keys[offset:end])
+		deleteArguments := append([]any{siteID, dateKey}, keyArguments...)
+		deleted := tx.WithContext(ctx).Exec(`DELETE FROM usage_fact_daily
+WHERE site_id = ? AND date_key = ?
+  AND (remote_user_id, model_name, channel_id, use_group, token_id, node_name) IN (`+predicate+`)`,
+			deleteArguments...)
+		if deleted.Error != nil {
+			return 0, deleted.Error
+		}
+		rows += deleted.RowsAffected
+		insertArguments := []any{dateKey, isFinal, now, now, now, siteID, dateStart, dateEnd}
+		insertArguments = append(insertArguments, keyArguments...)
+		inserted := tx.WithContext(ctx).Exec(`INSERT INTO usage_fact_daily
+  (site_id, remote_user_id, username_snapshot, model_name, channel_id, use_group, token_id, token_name, node_name, date_key,
+   request_count, quota, token_used, is_final, last_calculated_at, created_at, updated_at)
+SELECT fact.site_id, fact.remote_user_id,
+       COALESCE(MIN(NULLIF(fact.username_snapshot, '') COLLATE utf8mb4_bin), ''),
+       fact.model_name, fact.channel_id, fact.use_group, fact.token_id,
+       COALESCE(MIN(NULLIF(fact.token_name, '') COLLATE utf8mb4_bin), ''), fact.node_name,
+       ?, SUM(fact.request_count), SUM(fact.quota), SUM(fact.token_used),
+       ?, ?, ?, ?
+FROM usage_fact_hourly AS fact FORCE INDEX (idx_usage_fact_hourly_site_time)
+JOIN collection_window AS window_row
+  ON window_row.site_id = fact.site_id
+ AND window_row.hour_ts = fact.hour_ts
+ AND window_row.status = 'complete'
+JOIN site AS source_site ON source_site.id = fact.site_id
+WHERE fact.site_id = ? AND fact.hour_ts >= ? AND fact.hour_ts < ?
+  AND source_site.statistics_start_at IS NOT NULL
+  AND source_site.statistics_start_at < fact.hour_ts + 3600
+  AND (source_site.statistics_end_at IS NULL OR source_site.statistics_end_at > fact.hour_ts)
+  AND (fact.remote_user_id, fact.model_name, fact.channel_id, fact.use_group, fact.token_id, fact.node_name) IN (`+predicate+`)
+GROUP BY fact.site_id, fact.remote_user_id, fact.model_name, fact.channel_id, fact.use_group, fact.token_id, fact.node_name`,
+			insertArguments...)
+		if inserted.Error != nil {
+			return 0, inserted.Error
+		}
+		rows += inserted.RowsAffected
+	}
+	finality := tx.WithContext(ctx).Model(&UsageFactDaily{}).
+		Where("site_id = ? AND date_key = ? AND is_final <> ?", siteID, dateKey, isFinal).
+		Updates(map[string]any{"is_final": isFinal, "last_calculated_at": now, "updated_at": now})
+	if finality.Error != nil {
+		return 0, finality.Error
+	}
+	rows += finality.RowsAffected
+	return rows, nil
+}
+
 func rebuildUsageDaily(
 	ctx context.Context,
 	tx *gorm.DB,
@@ -1137,6 +1300,7 @@ func rebuildUsageDaily(
 	dateStart, dateEnd, now int64,
 	globalMetrics usageMetricAggregate,
 	coverage usageDailyCoverage,
+	affectedFacts []UsageFactHourly,
 	options usageAggregationRebuildOptions,
 ) (int64, error) {
 	siteCoverage, exists := coverage.bySite[siteID]
@@ -1147,11 +1311,18 @@ func rebuildUsageDaily(
 	if err != nil {
 		return 0, err
 	}
+	siteFinal := siteCoverage.final(now, dateEnd)
+	rows, err := refreshUsageFactDaily(
+		ctx, tx, siteID, dateKey, dateStart, dateEnd, now, siteFinal,
+		siteCoverage.Complete == siteCoverage.Expected, affectedFacts,
+	)
+	if err != nil {
+		return 0, err
+	}
 	deleteQueries := []struct {
 		query string
 		args  []any
 	}{
-		{query: "DELETE FROM usage_fact_daily WHERE site_id = ? AND date_key = ?", args: []any{siteID, dateKey}},
 		{query: `DELETE FROM account_stat_daily
 WHERE date_key = ? AND account_id IN (SELECT id FROM account WHERE site_id = ?)`, args: []any{dateKey, siteID}},
 		{query: "DELETE FROM customer_stat_daily WHERE site_id = ? AND date_key = ?", args: []any{siteID, dateKey}},
@@ -1166,33 +1337,12 @@ WHERE date_key = ? AND account_id IN (SELECT id FROM account WHERE site_id = ?)`
 		}
 	}
 	siteStatus := siteCoverage.status()
-	siteFinal := siteCoverage.final(now, dateEnd)
 	includePausedAccounts := usageAggregationOverrideIDs(options.includePausedAccountIDs)
 	includePausedCustomers := usageAggregationOverrideIDs(options.includePausedCustomerIDs)
 	insertQueries := []struct {
 		query string
 		args  []any
 	}{
-		{
-			query: `INSERT INTO usage_fact_daily
-  (site_id, remote_user_id, username_snapshot, model_name, channel_id, use_group, token_id, token_name, node_name, date_key,
-   request_count, quota, token_used, is_final, last_calculated_at, created_at, updated_at)
-SELECT f.site_id, f.remote_user_id,
-       COALESCE(MIN(NULLIF(f.username_snapshot, '') COLLATE utf8mb4_bin), ''),
-       f.model_name, f.channel_id, f.use_group, f.token_id,
-       COALESCE(MIN(NULLIF(f.token_name, '') COLLATE utf8mb4_bin), ''), f.node_name,
-       ?, SUM(f.request_count), SUM(f.quota), SUM(f.token_used),
-       ?, ?, ?, ?
-FROM usage_fact_hourly AS f
-JOIN collection_window AS w
-  ON w.site_id = f.site_id AND w.hour_ts = f.hour_ts AND w.status = 'complete'
-JOIN site AS s ON s.id = f.site_id
-WHERE f.site_id = ? AND f.hour_ts >= ? AND f.hour_ts < ?
-  AND s.statistics_start_at IS NOT NULL AND s.statistics_start_at < f.hour_ts + 3600
-  AND (s.statistics_end_at IS NULL OR s.statistics_end_at > f.hour_ts)
-GROUP BY f.site_id, f.remote_user_id, f.model_name, f.channel_id, f.use_group, f.token_id, f.node_name`,
-			args: []any{dateKey, siteFinal, now, now, now, siteID, dateStart, dateEnd},
-		},
 		{
 			query: `INSERT INTO account_stat_daily
   (account_id, date_key, request_count, quota, token_used, data_status, is_final,
@@ -1269,7 +1419,6 @@ GROUP BY f.site_id, f.channel_id`,
 			args: []any{dateKey, siteStatus, siteFinal, now, now, now, siteID, dateStart, dateEnd},
 		},
 	}
-	var rows int64
 	for _, statement := range insertQueries {
 		result := tx.WithContext(ctx).Exec(statement.query, statement.args...)
 		if result.Error != nil {
