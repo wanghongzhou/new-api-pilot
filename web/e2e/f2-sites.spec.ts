@@ -1468,10 +1468,8 @@ test('keeps the last successful site detail when a background refresh fails', as
   await expect.poll(() => detailCalls).toBeGreaterThanOrEqual(4)
   await expect(page.getByText('后台刷新失败')).toBeVisible()
   await expect(page.getByRole('heading', { name: '当前概览' })).toBeVisible()
-  await expect(page.getByText('128,340', { exact: true }).first()).toBeVisible()
-  await expect(
-    page.getByText('84,000,000', { exact: true }).first()
-  ).toBeVisible()
+  await expect(page.getByText('12.8万', { exact: true }).first()).toBeVisible()
+  await expect(page.getByText('8400万', { exact: true }).first()).toBeVisible()
 })
 
 test('keeps the last successful site list and labels it stale after refresh failure', async ({

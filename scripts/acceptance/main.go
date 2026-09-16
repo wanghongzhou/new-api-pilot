@@ -22,6 +22,8 @@ import (
 	"new-api-pilot/internal/a49evidence"
 	"new-api-pilot/internal/a50evidence"
 	"new-api-pilot/internal/a62evidence"
+	"new-api-pilot/internal/acceptancecatalog"
+	"new-api-pilot/internal/controlledopsevidence"
 	"new-api-pilot/internal/opsevidence"
 )
 
@@ -69,7 +71,7 @@ func main() {
 
 func run(arguments []string, stdout io.Writer, stderr io.Writer) int {
 	if len(arguments) == 0 {
-		fmt.Fprintln(stderr, "usage: acceptance <schema-version|run|docs-negative|a49-seed|a49-load|a49-report|a51-preflight|a51-seed|a51-verify|a51-report> [arguments]")
+		fmt.Fprintln(stderr, "usage: acceptance <schema-version|run|batch|docs-negative|a49-seed|a49-load|a49-report|a51-preflight|a51-seed|a51-verify|a51-report> [arguments]")
 		return 2
 	}
 	switch arguments[0] {
@@ -77,6 +79,8 @@ func run(arguments []string, stdout io.Writer, stderr io.Writer) int {
 		return runSchemaVersion(arguments[1:], stdout, stderr)
 	case "run":
 		return runCase(arguments[1:], stdout, stderr)
+	case "batch":
+		return runBatch(arguments[1:], stdout, stderr)
 	case "docs-negative":
 		return runDocsNegative(arguments[1:], stdout, stderr)
 	case "a49-seed":
@@ -163,10 +167,22 @@ func runCase(arguments []string, stdout io.Writer, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "%s evidence guard: %v\n", *acceptanceID, err)
 		return 2
 	}
+	controlledOpsEvidenceClass, err := controlledopsevidence.Classify(*acceptanceID, *evidenceRoot, commandArguments)
+	if err != nil {
+		fmt.Fprintf(stderr, "%s evidence guard: %v\n", *acceptanceID, err)
+		return 2
+	}
 	a62EvidenceClass, err := a62evidence.Classify(*acceptanceID, *evidenceRoot, commandArguments)
 	if err != nil {
 		fmt.Fprintf(stderr, "%s evidence guard: %v\n", *acceptanceID, err)
 		return 2
+	}
+	formalRoot := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(*evidenceRoot)), "./") == "artifacts/acceptance"
+	if formalRoot {
+		if err := acceptancecatalog.ValidateCanonicalCommand(*acceptanceID, commandArguments); err != nil {
+			fmt.Fprintf(stderr, "canonical runner guard: %v\n", err)
+			return 2
+		}
 	}
 	evidenceClass := a22EvidenceClass
 	if evidenceClass == "" {
@@ -183,6 +199,9 @@ func runCase(arguments []string, stdout io.Writer, stderr io.Writer) int {
 	}
 	if evidenceClass == "" {
 		evidenceClass = opsEvidenceClass
+	}
+	if evidenceClass == "" {
+		evidenceClass = controlledOpsEvidenceClass
 	}
 	if evidenceClass == "" {
 		evidenceClass = a62EvidenceClass
@@ -263,6 +282,14 @@ func runCase(arguments []string, stdout io.Writer, stderr io.Writer) int {
 	}
 	if opsEvidenceClass != "" {
 		if validationError := opsevidence.ValidateWrapperLogs(runDirectory, *acceptanceID); validationError != nil {
+			message := fmt.Sprintf("%s wrapper log validation failed: %v\n", *acceptanceID, validationError)
+			fmt.Fprint(stderr, message)
+			_ = appendAcceptanceLog(stderrPath, message)
+			exitCode = 1
+		}
+	}
+	if controlledOpsEvidenceClass != "" {
+		if validationError := controlledopsevidence.ValidateWrapperLogs(runDirectory, *acceptanceID); validationError != nil {
 			message := fmt.Sprintf("%s wrapper log validation failed: %v\n", *acceptanceID, validationError)
 			fmt.Fprint(stderr, message)
 			_ = appendAcceptanceLog(stderrPath, message)
@@ -357,6 +384,14 @@ func runCase(arguments []string, stdout io.Writer, stderr io.Writer) int {
 			exitCode = 1
 		}
 	}
+	if exitCode == 0 && controlledOpsEvidenceClass != "" {
+		if validationError := controlledopsevidence.ValidateInnerArtifacts(runDirectory, *acceptanceID, controlledOpsEvidenceClass); validationError != nil {
+			message := fmt.Sprintf("%s inner evidence validation failed: %v\n", *acceptanceID, validationError)
+			fmt.Fprint(stderr, message)
+			_ = appendAcceptanceLog(stderrPath, message)
+			exitCode = 1
+		}
+	}
 	if exitCode == 0 && a62EvidenceClass != "" {
 		if validationError := a62evidence.ValidateInnerArtifacts(runDirectory, a62EvidenceClass); validationError != nil {
 			message := fmt.Sprintf("A62 inner evidence validation failed: %v\n", validationError)
@@ -388,7 +423,7 @@ func runCase(arguments []string, stdout io.Writer, stderr io.Writer) int {
 		return 2
 	}
 	if a22EvidenceClass == "" && a25EvidenceClass == "" && a45EvidenceClass == "" &&
-		a49EvidenceClass == "" && a50EvidenceClass == "" && opsEvidenceClass == "" && a62EvidenceClass == "" {
+		a49EvidenceClass == "" && a50EvidenceClass == "" && opsEvidenceClass == "" && controlledOpsEvidenceClass == "" && a62EvidenceClass == "" {
 		if err := finalizeGenericEvidence(runDirectory, *acceptanceID, evidenceClass, fixtureSHA); err != nil {
 			fmt.Fprintf(stderr, "finalize generic evidence: %v\n", err)
 			return 2

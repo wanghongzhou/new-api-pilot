@@ -1,6 +1,15 @@
-# 部署与回滚演练记录模板
+# A74 部署与回滚受控演练
 
-适用用例：A52、A74。此文件是模板，不是已完成的验收证据。
+本手册只适用于 A74。演练只能操作隔离环境或 Pilot-owned 资源，不得修改上游 new-api 的代码、配置、数据、索引、容器或服务。正式证据通过唯一入口接收已脱敏的受控材料：
+
+```powershell
+$env:A74_CONTROLLED_INPUT = 'C:\absolute\controlled\a74-input.json'
+go run ./scripts/acceptance run -case A74 -- powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/acceptance/run-a74.ps1
+```
+
+输入 JSON 使用 schema 1、`acceptance_id=A74`、formal passing 状态、`scope=controlled_pilot_owned_isolated`、脱敏目标身份、不可变镜像/发布引用、时间线和全部 A74 assertions，并以绝对路径指向材料 ZIP。ZIP 精确包含 `deployment.json`、`rollback.json`、`monitoring.json`、`cleanup.json`、`approvals.json`；所有文件必须标记 passed/sanitized，审批人必须具名、互异且批准。
+
+缺少不可变镜像 digest、备份、故障注入、旧镜像恢复、监控观察、清理证明或审批时只能产生 blocked 失败证据并保持 `planned:`。
 
 ## 1. 演练信息
 
@@ -46,4 +55,4 @@
 - 上游版本与生产接入清单逐站满足设计约束；所有失败步骤均有明确判定和处置。
 - 证据目录包含命令及退出码、时间线、脱敏日志、数据库版本/checksum、镜像 digest、HTTP 报告、`promtool` 输出、Prometheus 规则 API、监控截图或导出、备份引用及执行/复核签字。
 
-最终结论：`<PASS/FAIL>`；未关闭问题：`<none-or-list>`；证据目录：`<evidence-path>`。
+最终结论必须由专用 validator 根据封闭 artifact 和 SHA-256 得出，不接受手工填写 `<PASS>`、通用 wrapper 或其他用例证据替代。

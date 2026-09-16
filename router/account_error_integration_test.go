@@ -45,7 +45,7 @@ func TestAccountCreateMapsRealUpstreamIdentityFailures(t *testing.T) {
 	cipher := newRouterAccountCipher(t)
 	site, customer := createRouterAccountScope(t, tx, clock.Now().Unix(), upstreamURL, cipher)
 	factory := service.NewConfiguredSiteClientFactory(service.SiteClientFactoryOptions{
-		AllowedCIDRs: []netip.Prefix{allowedPrefix},
+		AllowedCIDRs:   []netip.Prefix{allowedPrefix},
 		ConnectTimeout: service.UpstreamConnectTimeout, HeaderTimeout: service.UpstreamResponseHeaderTimeout,
 		RequestTimeout: service.UpstreamRequestTimeout, ExportTimeout: service.UpstreamExportTimeout,
 	})

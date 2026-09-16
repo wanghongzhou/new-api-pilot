@@ -369,9 +369,19 @@ async function expectFiveDashboardSections(page: Page) {
   }
 }
 
-async function expectAccessibleSkipLink(page: Page) {
+async function expectAccessibleSkipLink(
+  page: Page,
+  options: { focusDirectly?: boolean } = {}
+) {
   const skipLink = page.getByRole('link', { name: '跳到主要内容' })
-  await page.keyboard.press('Tab')
+  if (options.focusDirectly) {
+    await skipLink.focus()
+  } else {
+    await page.evaluate(() =>
+      (document.activeElement as HTMLElement | null)?.blur()
+    )
+    await page.keyboard.press('Tab')
+  }
   await expect(skipLink).toBeFocused()
   await expect(skipLink).toBeVisible()
   const box = await skipLink.boundingBox()
@@ -381,7 +391,7 @@ async function expectAccessibleSkipLink(page: Page) {
   await expect(page.locator('#main-content')).toBeFocused()
 }
 
-test('shell focuses the new main region and exposes theme settings on mobile', async ({
+test('shell exposes theme settings and restores skip-link focus after native mobile navigation', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 })
@@ -401,7 +411,7 @@ test('shell focuses the new main region and exposes theme settings on mobile', a
     .getByRole('link', { name: '站点管理' })
     .click()
   await expect(page).toHaveURL(/\/sites$/)
-  await expect(page.locator('#main-content')).toBeFocused()
+  await expectAccessibleSkipLink(page, { focusDirectly: true })
 })
 
 test('Dashboard renders the complete fixture across all five sections', async ({

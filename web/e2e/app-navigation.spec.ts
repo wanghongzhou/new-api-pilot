@@ -1,5 +1,16 @@
 import { expect, test, type Page } from '@playwright/test'
 
+import { mockAuthenticatedShell } from './helpers/auth'
+
+const admin = {
+  display_name: '导航验收管理员',
+  id: '1',
+  must_change_password: false,
+  role: 'admin' as const,
+  status: 1 as const,
+  username: 'admin',
+}
+
 const destinations = [
   {
     heading: '客户管理',
@@ -50,12 +61,40 @@ const allPrimarySourcePaths = [
 
 test.describe.configure({ mode: 'serial' })
 
-async function login(page: Page) {
-  await page.goto('/sign-in')
-  await page.getByLabel('用户名').fill('admin')
-  await page.getByRole('textbox', { name: '密码' }).fill('change-me')
-  await page.getByRole('button', { name: '登录' }).click()
-  await expect(page).toHaveURL(/\/dashboard$/)
+async function seedAuth(page: Page) {
+  await mockAuthenticatedShell(page)
+  await page.addInitScript((user) => {
+    localStorage.setItem('pilot-auth-user', JSON.stringify(user))
+    localStorage.setItem('uid', user.id)
+  }, admin)
+  await page.route('**/api/**', async (route) => {
+    const pathname = new URL(route.request().url()).pathname
+    if (pathname === '/api/user/self') {
+      await route.fulfill({
+        json: {
+          code: '',
+          data: admin,
+          message: '',
+          request_id: 'req_navigation_auth',
+          success: true,
+        },
+      })
+      return
+    }
+    if (pathname === '/api/alerts/summary') {
+      await route.fallback()
+      return
+    }
+    await route.fulfill({
+      json: {
+        code: 'SERVICE_UNAVAILABLE',
+        data: null,
+        message: '',
+        request_id: 'req_navigation_unavailable',
+        success: false,
+      },
+    })
+  })
 }
 
 function collectRuntimeErrors(page: Page) {
@@ -86,7 +125,7 @@ async function expectGlobalNavigationEntry(
   return link
 }
 
-test.beforeEach(async ({ page }) => login(page))
+test.beforeEach(async ({ page }) => seedAuth(page))
 
 for (const source of sources) {
   for (const destination of destinations) {

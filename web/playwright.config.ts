@@ -1,7 +1,20 @@
 import { defineConfig } from '@playwright/test'
 
 const configuredBaseUrl = process.env.PLAYWRIGHT_BASE_URL
-const localBaseUrl = 'http://127.0.0.1:5173'
+const configuredInternalPort = process.env.PLAYWRIGHT_INTERNAL_PORT
+const parsedInternalPort = configuredInternalPort
+  ? Number(configuredInternalPort)
+  : 5173
+if (
+  !Number.isSafeInteger(parsedInternalPort) ||
+  parsedInternalPort < 1024 ||
+  parsedInternalPort > 65535
+) {
+  throw new Error(
+    'PLAYWRIGHT_INTERNAL_PORT must be an integer from 1024 to 65535'
+  )
+}
+const localBaseUrl = `http://127.0.0.1:${parsedInternalPort}`
 const configuredWorkers = Number(process.env.PLAYWRIGHT_WORKERS)
 const workers =
   Number.isSafeInteger(configuredWorkers) && configuredWorkers > 0
@@ -65,9 +78,9 @@ export default defineConfig({
   webServer: configuredBaseUrl
     ? undefined
     : {
-        command: 'bun run dev -- --host 127.0.0.1 --port 5173',
+        command: `bun run dev -- --host 127.0.0.1 --port ${parsedInternalPort}`,
         url: localBaseUrl,
-        reuseExistingServer: !process.env.CI,
+        reuseExistingServer: !configuredInternalPort && !process.env.CI,
         timeout: 120_000,
       },
 })

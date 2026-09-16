@@ -465,7 +465,7 @@ acceptance_cases:
     requirement_id: R02
     fixture: [F02, F05]
     layer: runbook
-    test_or_runbook_path: "docs/acceptance/runbooks/deployment-rollback.md"
+    test_or_runbook_path: "docs/acceptance/runbooks/site-onboarding.md"
     owner_role: sre
     evidence_path: "planned:artifacts/acceptance/A52/"
 
@@ -649,7 +649,7 @@ acceptance_cases:
     requirement_id: R09
     fixture: [F05]
     layer: runbook
-    test_or_runbook_path: "docs/acceptance/runbooks/backup-pitr-key-recovery.md"
+    test_or_runbook_path: "docs/acceptance/runbooks/pitr-key-recovery.md"
     owner_role: sre
     evidence_path: "planned:artifacts/acceptance/A75/"
 

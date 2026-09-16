@@ -295,9 +295,9 @@ func shutdownApplication(
 	}
 	results := make(chan shutdownResult, 2)
 	go func() {
-		err := server.Shutdown(drainContext)
+		err := ignoreClosedNetworkError(server.Shutdown(drainContext))
 		if err != nil && drainContext.Err() != nil {
-			err = errors.Join(err, server.Close())
+			err = errors.Join(err, ignoreClosedNetworkError(server.Close()))
 		}
 		results <- shutdownResult{http: true, err: err}
 	}()
@@ -316,12 +316,19 @@ func shutdownApplication(
 				stopError = result.err
 			}
 		case <-hardContext.Done():
-			shutdownError = errors.Join(shutdownError, server.Close())
+			shutdownError = errors.Join(shutdownError, ignoreClosedNetworkError(server.Close()))
 			stopError = errors.Join(stopError, errApplicationShutdownTimeout, hardContext.Err())
 			return formatShutdownErrors(listenerCloseError, quiesceError, stopError, shutdownError)
 		}
 	}
 	return formatShutdownErrors(listenerCloseError, quiesceError, stopError, shutdownError)
+}
+
+func ignoreClosedNetworkError(err error) error {
+	if errors.Is(err, net.ErrClosed) {
+		return nil
+	}
+	return err
 }
 
 func formatShutdownErrors(listenerCloseError, quiesceError, stopError, shutdownError error) error {

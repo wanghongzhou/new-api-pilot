@@ -6,6 +6,7 @@
 **/.tmp
 web/playwright-report
 web/test-results
+web/test-results-full
 data
 artifacts
 docs

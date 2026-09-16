@@ -15,6 +15,8 @@ import (
 	"new-api-pilot/internal/a49evidence"
 	"new-api-pilot/internal/a50evidence"
 	"new-api-pilot/internal/a62evidence"
+	"new-api-pilot/internal/acceptancecatalog"
+	"new-api-pilot/internal/controlledopsevidence"
 	"new-api-pilot/internal/opsevidence"
 
 	"gopkg.in/yaml.v3"
@@ -177,6 +179,9 @@ func (current *checker) checkAcceptanceManifest(trace traceability) *acceptanceM
 			current.checkIntegrationContractAcceptance(path, acceptance.AcceptanceID, testPaths)
 		}
 		current.checkPlannedPath(path, acceptance.AcceptanceID, "evidence_path", acceptance.EvidencePath, true)
+		if !strings.HasPrefix(acceptance.EvidencePath, "planned:") {
+			current.checkCanonicalAcceptanceRunner(path, acceptance.AcceptanceID)
+		}
 		if acceptance.Layer == "runbook" {
 			for _, testPath := range testPaths {
 				if strings.HasPrefix(testPath, "planned:") {
@@ -192,6 +197,28 @@ func (current *checker) checkAcceptanceManifest(trace traceability) *acceptanceM
 		}
 	}
 	return &manifest
+}
+
+func (current *checker) checkCanonicalAcceptanceRunner(manifestPath, acceptanceID string) {
+	runner, ok := acceptancecatalog.Lookup(acceptanceID)
+	if !ok {
+		current.add("manifest", manifestPath, "%s has no canonical runner registry entry", acceptanceID)
+		return
+	}
+	runnerPath, err := acceptancecatalog.RunnerPath(runner)
+	if err != nil {
+		current.add("manifest", manifestPath, "%v", err)
+		return
+	}
+	resolved, err := resolveRepositoryPath(current.root, runnerPath)
+	if err != nil {
+		current.add("manifest", manifestPath, "%s canonical runner: %v", acceptanceID, err)
+		return
+	}
+	info, err := os.Lstat(resolved)
+	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		current.add("manifest", manifestPath, "%s canonical runner is missing or not a regular file: %s", acceptanceID, runnerPath)
+	}
 }
 
 func (current *checker) checkAcceptanceTestPaths(manifestPath string, acceptance acceptanceCase) []string {
@@ -367,6 +394,11 @@ func (current *checker) checkPlannedPath(manifestPath string, acceptanceID strin
 	if opsevidence.Supports(acceptanceID) && field == "evidence_path" && wantDirectory && info.IsDir() {
 		if err := opsevidence.ValidateEvidenceRoot(resolved, acceptanceID, opsevidence.FormalClass); err != nil {
 			current.add("manifest", manifestPath, "%s evidence path has no valid formal run: %v", acceptanceID, err)
+		}
+	}
+	if controlledopsevidence.Supports(acceptanceID) && field == "evidence_path" && wantDirectory && info.IsDir() {
+		if err := controlledopsevidence.ValidateEvidenceRoot(resolved, acceptanceID, controlledopsevidence.FormalClass); err != nil {
+			current.add("manifest", manifestPath, "%s evidence path has no valid controlled formal run: %v", acceptanceID, err)
 		}
 	}
 	if a62evidence.Supports(acceptanceID) && field == "evidence_path" && wantDirectory && info.IsDir() {

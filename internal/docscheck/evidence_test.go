@@ -3,9 +3,13 @@ package docscheck
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	"new-api-pilot/internal/acceptancecatalog"
 )
 
 const testFormalCommit = "0123456789abcdef0123456789abcdef01234567"
@@ -102,6 +106,31 @@ func TestFinalEvidenceGateRejectsInconsistentDurationAndLogAliases(t *testing.T)
 	}
 }
 
+func TestFinalEvidenceGateRejectsArbitrarySuccessfulCommand(t *testing.T) {
+	root := t.TempDir()
+	fixtureManifest := filepath.Join(root, "testdata", "design", "manifest.sha256")
+	if err := os.MkdirAll(filepath.Dir(fixtureManifest), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, fixtureManifest, fixtureManifestHeader+"\n")
+	fixtureSHA, err := hashFile(fixtureManifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidenceRoot := filepath.Join(root, "artifacts", "acceptance", "A03")
+	writeFormalEvidenceRun(t, evidenceRoot, "A03", fixtureSHA, formalEvidenceClass)
+	recordPath := filepath.Join(evidenceRoot, "run-1", "evidence.json")
+	record := readFormalEvidenceRecord(t, recordPath)
+	record.Command = []string{"powershell.exe", "-NoProfile", "-Command", "exit 0"}
+	writeFormalEvidenceRecord(t, recordPath, record)
+
+	current := newFinalEvidenceChecker(root)
+	current.checkFormalEvidenceRoot("manifest.yaml", "A03", evidenceRoot)
+	if !containsIssue(current.issues, "wrapper command is not canonical") {
+		t.Fatalf("arbitrary successful command was accepted: %#v", current.issues)
+	}
+}
+
 func TestFinalEvidenceGateRejectsSymlinkedEvidenceRoot(t *testing.T) {
 	root := t.TempDir()
 	fixtureManifest := filepath.Join(root, "testdata", "design", "manifest.sha256")
@@ -137,15 +166,80 @@ func writeFormalEvidenceRun(t *testing.T, root, acceptanceID, fixtureSHA, eviden
 		t.Fatal(err)
 	}
 	now := time.Date(2026, 1, 17, 12, 0, 0, 0, time.UTC)
+	runner, ok := acceptancecatalog.Lookup(acceptanceID)
+	if !ok {
+		t.Fatalf("missing canonical runner for %s", acceptanceID)
+	}
 	writeFormalEvidenceRecord(t, filepath.Join(run, "evidence.json"), formalEvidenceRecord{
 		SchemaVersion: 1, AcceptanceID: acceptanceID, Status: "passed", EvidenceClass: evidenceClass,
-		Command: []string{"go", "test", "./tests"}, WorkingDirectory: ".",
+		Command: runner.Command, WorkingDirectory: ".",
 		StartedAt: now.Format(time.RFC3339Nano), FinishedAt: now.Add(time.Second).Format(time.RFC3339Nano),
 		DurationMilliseconds: 1000, ExitCode: 0, Commit: testFormalCommit, FixtureManifestPath: "testdata/design/manifest.sha256",
 		FixtureManifestSHA: fixtureSHA, StdoutLog: "stdout.log", StderrLog: "stderr.log", RequiredNoSkip: true,
 	})
 	writeTestFile(t, filepath.Join(run, "stdout.log"), "test output\n")
 	writeTestFile(t, filepath.Join(run, "stderr.log"), "")
+	if acceptancecatalog.UsesGenericEvidenceContract(acceptanceID) {
+		files := make([]genericEvidenceEntry, 0, 3)
+		for _, name := range []string{"evidence.json", "stderr.log", "stdout.log"} {
+			path := filepath.Join(run, name)
+			info, err := os.Stat(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			digest, err := hashFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			files = append(files, genericEvidenceEntry{Path: name, SizeBytes: info.Size(), SHA256: digest})
+		}
+		manifest := genericEvidenceManifest{SchemaVersion: 1, AcceptanceID: acceptanceID, EvidenceClass: evidenceClass, FixtureManifestSHA: fixtureSHA, Files: files}
+		payload, err := json.MarshalIndent(manifest, "", "  ")
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeTestFile(t, filepath.Join(run, "run-manifest.json"), string(payload)+"\n")
+		manifestDigest, err := hashFile(filepath.Join(run, "run-manifest.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var checksums strings.Builder
+		for _, entry := range files {
+			checksums.WriteString(entry.SHA256 + "  " + entry.Path + "\n")
+		}
+		checksums.WriteString(manifestDigest + "  run-manifest.json\n")
+		writeTestFile(t, filepath.Join(run, "checksums.sha256"), checksums.String())
+	}
+}
+
+func TestFinalEvidenceGateRejectsTamperedOrExtraGenericArtifacts(t *testing.T) {
+	root := t.TempDir()
+	fixtureManifest := filepath.Join(root, "testdata", "design", "manifest.sha256")
+	if err := os.MkdirAll(filepath.Dir(fixtureManifest), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, fixtureManifest, fixtureManifestHeader+"\n")
+	fixtureSHA, err := hashFile(fixtureManifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidenceRoot := filepath.Join(root, "artifacts", "acceptance", "A01")
+	writeFormalEvidenceRun(t, evidenceRoot, "A01", fixtureSHA, formalEvidenceClass)
+	run := filepath.Join(evidenceRoot, "run-1")
+	writeTestFile(t, filepath.Join(run, "stdout.log"), "evil output\n")
+	current := newFinalEvidenceChecker(root)
+	current.checkFormalEvidenceRoot("manifest.yaml", "A01", evidenceRoot)
+	if !containsIssue(current.issues, "checksum mismatch") {
+		t.Fatalf("tampered generic artifact was accepted: %#v", current.issues)
+	}
+
+	writeFormalEvidenceRun(t, evidenceRoot, "A01", fixtureSHA, formalEvidenceClass)
+	writeTestFile(t, filepath.Join(run, "unexpected.txt"), "not inventoried\n")
+	current = newFinalEvidenceChecker(root)
+	current.checkFormalEvidenceRoot("manifest.yaml", "A01", evidenceRoot)
+	if !containsIssue(current.issues, "unexpected file") {
+		t.Fatalf("extra generic artifact was accepted: %#v", current.issues)
+	}
 }
 
 func TestFinalEvidenceGateRejectsDirtyAndDifferentCommitEvidence(t *testing.T) {
@@ -180,6 +274,110 @@ func TestFinalEvidenceGateRejectsDirtyAndDifferentCommitEvidence(t *testing.T) {
 	if !containsIssue(current.issues, "evidence commit does not match the current candidate commit") {
 		t.Fatalf("evidence for another commit was accepted: %#v", current.issues)
 	}
+}
+
+func TestEvidenceCommitAllowsOnlySingleManifestCloseoutCommit(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is unavailable in this test image")
+	}
+	t.Run("valid", func(t *testing.T) {
+		root, parent, current := createCloseoutRepository(t, "artifacts/acceptance/A49/", false)
+		if err := validateEvidenceCommit(root, "A49", parent, current); err != nil {
+			t.Fatalf("valid closeout rejected: %v", err)
+		}
+	})
+	t.Run("unrelated-file", func(t *testing.T) {
+		root, parent, current := createCloseoutRepository(t, "artifacts/acceptance/A49/", true)
+		if err := validateEvidenceCommit(root, "A49", parent, current); err == nil || !strings.Contains(err.Error(), "changed files other than") {
+			t.Fatalf("closeout with unrelated file was accepted: %v", err)
+		}
+	})
+	t.Run("rewritten-path", func(t *testing.T) {
+		root, parent, current := createCloseoutRepository(t, "artifacts/acceptance/other/", false)
+		if err := validateEvidenceCommit(root, "A49", parent, current); err == nil || !strings.Contains(err.Error(), "other than removing planned") {
+			t.Fatalf("rewritten evidence path was accepted: %v", err)
+		}
+	})
+	t.Run("not-target-case", func(t *testing.T) {
+		root, parent, current := createCloseoutRepository(t, "artifacts/acceptance/A49/", false)
+		if err := validateEvidenceCommit(root, "A52", parent, current); err == nil || !strings.Contains(err.Error(), "was not finalized") {
+			t.Fatalf("evidence for a case not finalized was accepted: %v", err)
+		}
+	})
+	t.Run("not-direct-parent", func(t *testing.T) {
+		root, parent, _ := createCloseoutRepository(t, "artifacts/acceptance/A49/", false)
+		writeTestFile(t, filepath.Join(root, "later.txt"), "later\n")
+		runGitTest(t, root, "add", "later.txt")
+		runGitTest(t, root, "commit", "-m", "later")
+		current := strings.TrimSpace(runGitTest(t, root, "rev-parse", "HEAD"))
+		if err := validateEvidenceCommit(root, "A49", parent, current); err == nil || !strings.Contains(err.Error(), "sole direct parent") {
+			t.Fatalf("non-direct ancestor evidence was accepted: %v", err)
+		}
+	})
+}
+
+func TestCloseoutRequiresGenericAndSpecializedContractsInSameRun(t *testing.T) {
+	for _, acceptanceID := range []string{"A49", "A52", "A74", "A75"} {
+		t.Run(acceptanceID, func(t *testing.T) {
+			if err := validateCloseoutSpecializedRun(t.TempDir(), acceptanceID); err == nil {
+				t.Fatal("generic-only run bypassed the specialized evidence contract")
+			}
+		})
+	}
+}
+
+func createCloseoutRepository(t *testing.T, finalizedPath string, addUnrelated bool) (string, string, string) {
+	t.Helper()
+	root := t.TempDir()
+	runGitTest(t, root, "init")
+	runGitTest(t, root, "config", "user.email", "acceptance@example.invalid")
+	runGitTest(t, root, "config", "user.name", "Acceptance Test")
+	manifestPath := filepath.Join(root, filepath.FromSlash(acceptanceManifestPath))
+	if err := os.MkdirAll(filepath.Dir(manifestPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, manifestPath, closeoutManifest("planned:artifacts/acceptance/A49/"))
+	runGitTest(t, root, "add", acceptanceManifestPath)
+	runGitTest(t, root, "commit", "-m", "candidate")
+	parent := strings.TrimSpace(runGitTest(t, root, "rev-parse", "HEAD"))
+	writeTestFile(t, manifestPath, closeoutManifest(finalizedPath))
+	if addUnrelated {
+		writeTestFile(t, filepath.Join(root, "unrelated.txt"), "changed\n")
+		runGitTest(t, root, "add", "unrelated.txt")
+	}
+	runGitTest(t, root, "add", acceptanceManifestPath)
+	runGitTest(t, root, "commit", "-m", "acceptance closeout")
+	current := strings.TrimSpace(runGitTest(t, root, "rev-parse", "HEAD"))
+	return root, parent, current
+}
+
+func closeoutManifest(evidencePath string) string {
+	return "schema_version: 1\n" +
+		"baseline:\n" +
+		"  source: docs/design.md\n" +
+		"  acceptance_range: A01-A102\n" +
+		"  release_policy: required-no-skip\n" +
+		"  product_locale: zh-CN\n" +
+		"  fixture_checksum_manifest: testdata/design/manifest.sha256\n" +
+		"fixtures: {}\n" +
+		"acceptance_cases:\n" +
+		"  - acceptance_id: A49\n" +
+		"    requirement_id: R05\n" +
+		"    fixture: [F05]\n" +
+		"    layer: operations\n" +
+		"    test_or_runbook_path: docs/acceptance/runbooks/capacity-performance.md\n" +
+		"    owner_role: platform-operator\n" +
+		"    evidence_path: " + evidencePath + "\n"
+}
+
+func runGitTest(t *testing.T, root string, arguments ...string) string {
+	t.Helper()
+	command := exec.Command("git", append([]string{"-C", root}, arguments...)...)
+	payload, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v\n%s", arguments, err, payload)
+	}
+	return string(payload)
 }
 
 func TestFinalEvidenceGateRejectsDirtyCurrentWorktree(t *testing.T) {

@@ -320,7 +320,7 @@ for (const width of [390, 768, 1024, 1440]) {
   })
 }
 
-test('restores a deep link, verifies the session once, and shows viewer read-only UI', async ({
+test('restores a deep link, verifies each native document once, and shows viewer read-only UI', async ({
   page,
 }) => {
   let selfCalls = 0
@@ -341,11 +341,12 @@ test('restores a deep link, verifies the session once, and shows viewer read-onl
   ).toBeVisible()
   await expect(page.getByRole('button', { name: '新建用户' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: '编辑用户' })).toHaveCount(0)
+  expect(selfCalls).toBe(1)
 
   await followAppNavigation(page, '/dashboard')
-  await followAppNavigation(page, '/settings/users')
-  await expect(page).toHaveURL(/\/settings\/users/)
-  expect(selfCalls).toBe(1)
+  await expect(page).toHaveURL(/\/dashboard/)
+  await expect(page.getByRole('heading', { name: '运营概览' })).toBeVisible()
+  expect(selfCalls).toBe(2)
 
   const accessibility = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa'])

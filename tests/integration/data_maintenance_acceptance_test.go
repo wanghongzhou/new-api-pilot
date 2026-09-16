@@ -238,7 +238,6 @@ func TestA102RetentionExactBoundariesAndExclusions(t *testing.T) {
 		if err := db.Model(&model.CollectionRun{}).Where("id=?", created.ID).Updates(updates).Error; err != nil {
 			t.Fatal(err)
 		}
-		created.ID = created.ID
 		return created
 	}
 	message := "private detail"

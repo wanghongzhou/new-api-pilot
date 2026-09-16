@@ -19,10 +19,21 @@ func TestAcceptanceBackendValidationUsesDockerTargets(t *testing.T) {
 		t.Fatal("makefile acceptance target is missing")
 	}
 	target := text[start:]
-	for _, required := range []string{"$(MAKE) docs-check-final-docker", "$(MAKE) test-api-docker"} {
+	for _, required := range []string{
+		"$(MAKE) docs-check-docker",
+		"$(MAKE) test-api-docker",
+		"PLAYWRIGHT_INTERNAL_PORT=4173 bun run test:e2e",
+		"powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/acceptance/run.ps1 batch -root .",
+		"$(MAKE) docs-check-final-docker",
+	} {
 		if !strings.Contains(target, required) {
 			t.Fatalf("acceptance target is missing %q", required)
 		}
+	}
+	batch := strings.Index(target, "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/acceptance/run.ps1 batch -root .")
+	final := strings.Index(target, "$(MAKE) docs-check-final-docker")
+	if batch < 0 || final < 0 || batch > final {
+		t.Fatal("acceptance must generate current clean-HEAD evidence before the final docs gate")
 	}
 	for _, forbidden := range []string{"$(MAKE) docs-check-final\n", "$(MAKE) test-api\n", "TEST_DATABASE_DSN is required"} {
 		if strings.Contains(target, forbidden) {

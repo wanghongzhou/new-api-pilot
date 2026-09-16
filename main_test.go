@@ -370,6 +370,16 @@ func TestShutdownStopsAdmissionAndQuiescesBeforeHTTPDrain(t *testing.T) {
 	}
 }
 
+func TestIgnoreClosedNetworkErrorOnlyIgnoresNetClosed(t *testing.T) {
+	if err := ignoreClosedNetworkError(fmt.Errorf("close listener: %w", net.ErrClosed)); err != nil {
+		t.Fatalf("wrapped net.ErrClosed was not ignored: %v", err)
+	}
+	want := errors.New("shutdown failed")
+	if err := ignoreClosedNetworkError(want); !errors.Is(err, want) {
+		t.Fatalf("non-close error was changed: %v", err)
+	}
+}
+
 func TestShutdownReturnsAtHardDeadlineWhenWorkIgnoresCancellation(t *testing.T) {
 	readiness := common.NewReadiness()
 	readiness.SetInitialized(true)

@@ -337,10 +337,11 @@ export function SiteInstancesPage({
     (settingsQuery.isPending ||
       settingsQuery.isError ||
       minuteRetentionDays == null)
-  const minuteRangeTooLong =
+  const closedRangeEnd = defaultSiteResourceRange(search.granularity).end
+  const minuteRetentionExceeded =
     search.granularity === 'minute' &&
     minuteRetentionDays != null &&
-    search.end - search.start > minuteRetentionDays * 24 * 60 * 60
+    search.start < closedRangeEnd - minuteRetentionDays * 24 * 60 * 60
   const resourceParams = useMemo<SiteResourceQuery>(
     () => ({
       end_timestamp: search.end,
@@ -370,7 +371,7 @@ export function SiteInstancesPage({
       !invalidRange &&
       !rangeTooLong &&
       !minuteRetentionUnavailable &&
-      !minuteRangeTooLong,
+      !minuteRetentionExceeded,
     queryFn: () => getSiteResource(parseIdString(siteId), resourceParams),
     queryKey: siteKeys.status(siteId, resourceParams),
     refetchInterval: 60_000,
@@ -487,7 +488,6 @@ export function SiteInstancesPage({
     'unavailable'
   const retentionLoading =
     search.granularity === 'minute' && settingsQuery.isPending
-  const closedRangeEnd = defaultSiteResourceRange(search.granularity).end
   const rangeStartMin = Math.max(
     siteResourceRangeLimitStart(search.end, search.granularity),
     search.granularity === 'minute' && minuteRetentionDays != null
@@ -515,7 +515,7 @@ export function SiteInstancesPage({
     (settingsQuery.isError || minuteRetentionDays == null)
   ) {
     rangeError = t('resource.retentionLoadError')
-  } else if (minuteRangeTooLong) {
+  } else if (minuteRetentionExceeded) {
     rangeError = t('resource.minuteRangeLimit', { days: minuteRetentionDays })
   }
 

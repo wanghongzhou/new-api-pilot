@@ -47,6 +47,27 @@
 2. 自动化用例按 Given/When/Then 实现，同时断言 HTTP 状态与 `code`/DTO、数据库不变量、用户可见状态及外部副作用。运行手册按模板执行并由另一角色复核。
 3. 每次验收写入独立证据目录，至少包含 commit、工作区 clean 状态、镜像 digest、fixture 版本/checksum、命令或操作记录、开始/结束时间、结果以及日志/报告路径；秘密和 Webhook 查询参数必须脱敏。
 4. `make acceptance` 汇总结果。最终门禁只接受与当前 HEAD 完全一致且 `worktree_dirty=false` 的 formal 证据，并要求执行门禁的宿主工作区无 tracked/untracked 非忽略变更；历史 commit、脏工作区、无法解析当前 Git 状态、缺证据、证据过期、路径仍为 `planned:` 或 required 用例被 skipped，均阻断发布。
+5. 每个非 `planned:` 用例必须由仓库内已注册的 canonical runner 执行；runner 必须绑定 manifest 路径、精确测试集合、fixture、隔离环境和封闭 artifact 契约。通用 wrapper 不得把任意退出码为 0 的命令当作正式语义证据，旧 evidence 中的临时命令不得作为新版本执行计划。
+6. A52、A74、A75 分别使用站点接入、部署回滚、PITR/密钥恢复的专用 runner 和 validator。缺少受控材料或独立审批时只能生成 blocked evidence 并保持 `planned:`，不得通过修改 manifest、复用其他演练或放宽校验绕过。
+
+三个受控运维用例的唯一正式入口分别为：
+
+```powershell
+go run ./scripts/acceptance run -case A52 -- powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/acceptance/run-a52.ps1
+go run ./scripts/acceptance run -case A74 -- powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/acceptance/run-a74.ps1
+go run ./scripts/acceptance run -case A75 -- powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/acceptance/run-a75.ps1
+```
+
+Windows 工作站未安装宿主 Go 时，使用 Docker 启动器执行完全相同的参数：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/acceptance/run.ps1 batch -root .
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/acceptance/run.ps1 run -case A52 -- powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/acceptance/run-a52.ps1
+```
+
+启动器只允许使用 `new-api-pilot-go-test:latest` 从当前工作树交叉编译 harness，输出到 Git 忽略的 `artifacts/.acceptance-runner/`；它不安装或调用宿主 Go，也不改变 formal evidence 中记录的 case canonical command。
+
+运行前分别通过 `A52_CONTROLLED_INPUT`、`A74_CONTROLLED_INPUT`、`A75_CONTROLLED_INPUT` 提供绝对路径的已脱敏输入 JSON。输入绑定的 ZIP、内部精确文件集合、具名独立审批、用例专属断言以及外层 artifact SHA-256 均由专用 closed-contract validator 校验；缺失输入的 canonical 命令只产生 blocked 失败证据。
 
 ## 发布与变更规则
 

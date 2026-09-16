@@ -75,10 +75,12 @@ contract-generate:
 	go run ./cmd/contractgen -root .
 
 acceptance:
-	$(MAKE) docs-check-final-docker
+	$(MAKE) docs-check-docker
 	$(MAKE) test-api-docker
 	$(MAKE) check-prometheus
 	cd $(WEB_DIR) && bun install --frozen-lockfile
 	$(MAKE) check-web
 	cd $(WEB_DIR) && bun run test:unit
-	cd $(WEB_DIR) && bun run test:e2e
+	cd $(WEB_DIR) && PLAYWRIGHT_INTERNAL_PORT=4173 bun run test:e2e
+	powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/acceptance/run.ps1 batch -root .
+	$(MAKE) docs-check-final-docker

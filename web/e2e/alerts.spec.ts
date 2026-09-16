@@ -516,7 +516,12 @@ test('supports URL filters, sorting, pagination, detail retry, and all delivery 
         .click()
       await page.getByRole('menuitem', { name: '降序', exact: true }).click()
     }
-    await expect(page).toHaveURL(new RegExp(`sort=${field}`))
+    if (field === 'status') {
+      await expect(page).toHaveURL(/order=desc/)
+      await expect(page).not.toHaveURL(/(?:\?|&)sort=/)
+    } else {
+      await expect(page).toHaveURL(new RegExp(`sort=${field}`))
+    }
   }
   await page
     .getByRole('button', { name: '下一页' })

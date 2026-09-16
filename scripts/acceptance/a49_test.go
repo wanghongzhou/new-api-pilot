@@ -11,6 +11,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"new-api-pilot/common"
+	"new-api-pilot/dto"
 )
 
 func TestA49FullAndSmokeProfiles(t *testing.T) {
@@ -277,11 +280,11 @@ func TestA49EndpointContracts(t *testing.T) {
 		t.Fatal(err)
 	}
 	tests := map[string]any{
-		"list_sites": map[string]any{"page": 1, "page_size": 20, "total": 2,
+		"list_sites": map[string]any{"page": 1, "page_size": 20, "total": "2",
 			"items": []any{map[string]any{"id": "1", "name": "站点", "management_status": "active", "statistics_status": "ready"}}},
-		"list_customers": map[string]any{"page": 1, "page_size": 20, "total": 10,
+		"list_customers": map[string]any{"page": 1, "page_size": 20, "total": "10",
 			"items": []any{map[string]any{"id": "1", "name": "客户", "status": "cooperating", "account_count": 1}}},
-		"list_accounts": map[string]any{"page": 1, "page_size": 20, "total": 10,
+		"list_accounts": map[string]any{"page": 1, "page_size": 20, "total": "10",
 			"items": []any{map[string]any{"id": "1", "site_id": "1", "customer_id": "1", "remote_user_id": "1000001", "username": "remote", "quota": "1"}}},
 		"dashboard_summary": map[string]any{
 			"today":                 map[string]any{"request_count": "1", "as_of": profile.Capacity.HourlyQueryEndUnix},
@@ -296,6 +299,15 @@ func TestA49EndpointContracts(t *testing.T) {
 			t.Fatalf("%s: %v", name, err)
 		}
 	}
+	for _, invalidTotal := range []any{2, "02", "-1", "2e0", "9223372036854775808"} {
+		payload, _ := json.Marshal(map[string]any{
+			"page": 1, "page_size": 20, "total": invalidTotal,
+			"items": []any{map[string]any{"id": "1", "name": "站点", "management_status": "active", "statistics_status": "ready"}},
+		})
+		if err := validateA49EndpointDTO("list_sites", payload, profile); err == nil {
+			t.Fatalf("site list accepted non-canonical total %#v", invalidTotal)
+		}
+	}
 	if profile.Capacity.HourlyQueryEndUnix != profile.Fixture.Clock.NowUnix-profile.Fixture.Clock.NowUnix%3600 ||
 		profile.Capacity.CollectionWindowEndUnix-profile.Capacity.HourlyQueryEndUnix != 3600 {
 		t.Fatal("F05 must keep the current hour pending after the last complete hour")
@@ -305,6 +317,24 @@ func TestA49EndpointContracts(t *testing.T) {
 	wrongPayload, _ := json.Marshal(wrongSummary)
 	if err := validateA49EndpointDTO("dashboard_summary", wrongPayload, profile); err == nil {
 		t.Fatal("dashboard statistics as_of incorrectly accepted Clock.Now instead of the last complete hour")
+	}
+}
+
+func TestA49SiteListContractMatchesBackendPageDTO(t *testing.T) {
+	fixture := filepath.Join("..", "..", "testdata", "design", "f05-ops-capacity.yaml")
+	profile, err := loadA49RunProfile(fixture, a49SmokeMode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := common.NewPageData(1, 20, int64(profile.Capacity.Sites), []dto.SiteListItem{{
+		ID: "1", Name: "站点", ManagementStatus: "active", StatisticsStatus: "ready",
+	}})
+	payload, err := json.Marshal(page)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateA49EndpointDTO("list_sites", payload, profile); err != nil {
+		t.Fatalf("current backend site page DTO was rejected: %v payload=%s", err, payload)
 	}
 }
 

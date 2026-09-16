@@ -967,8 +967,11 @@ test('blocks minute resource requests while retention is loading and resumes fro
     })
   })
 
+  const closedMinuteEnd = Math.floor(Date.now() / 60_000) * 60
+  const retainedRangeEnd = closedMinuteEnd - 60 * 60
+  const retainedRangeStart = retainedRangeEnd - 60 * 60
   await page.goto(
-    '/sites/1/status?granularity=minute&metric=cpu&aggregation=max&start=1783872000&end=1783875600'
+    `/sites/1/status?granularity=minute&metric=cpu&aggregation=max&start=${retainedRangeStart}&end=${retainedRangeEnd}`
   )
   await expect(
     page.getByText('正在读取分钟数据留存配置，分钟趋势暂时无法查询。')
@@ -1007,8 +1010,11 @@ test('fails closed when retention cannot load and uses the configured day limit'
     await route.fulfill({ json: envelope({ summary: null, trend: [] }) })
   })
 
+  const closedMinuteEnd = Math.floor(Date.now() / 60_000) * 60
+  const retainedRangeEnd = closedMinuteEnd - 2 * 24 * 60 * 60 + 60 * 60
+  const retainedRangeStart = retainedRangeEnd - 60 * 60
   await page.goto(
-    '/sites/1/status?granularity=minute&metric=cpu&aggregation=max&start=1783612800&end=1783872000'
+    `/sites/1/status?granularity=minute&metric=cpu&aggregation=max&start=${retainedRangeStart}&end=${retainedRangeEnd}`
   )
   await expect(
     page.getByText('无法读取分钟数据留存配置，已停止分钟趋势查询。')

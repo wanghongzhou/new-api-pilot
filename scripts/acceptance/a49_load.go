@@ -470,9 +470,9 @@ func validateA49EndpointDTO(name string, payload json.RawMessage, profile a49Run
 	switch name {
 	case "list_sites":
 		var page struct {
-			Page     int `json:"page"`
-			PageSize int `json:"page_size"`
-			Total    int `json:"total"`
+			Page     int    `json:"page"`
+			PageSize int    `json:"page_size"`
+			Total    string `json:"total"`
 			Items    []struct {
 				ID               string `json:"id"`
 				Name             string `json:"name"`
@@ -481,7 +481,7 @@ func validateA49EndpointDTO(name string, payload json.RawMessage, profile a49Run
 			} `json:"items"`
 		}
 		if json.Unmarshal(payload, &page) != nil || page.Page != 1 || page.PageSize != 20 ||
-			page.Total != capacity.Sites || len(page.Items) == 0 || len(page.Items) > 20 {
+			!canonicalA49Total(page.Total, capacity.Sites) || len(page.Items) == 0 || len(page.Items) > 20 {
 			return errors.New("site list page contract")
 		}
 		for _, item := range page.Items {
@@ -492,9 +492,9 @@ func validateA49EndpointDTO(name string, payload json.RawMessage, profile a49Run
 		return nil
 	case "list_customers":
 		var page struct {
-			Page     int `json:"page"`
-			PageSize int `json:"page_size"`
-			Total    int `json:"total"`
+			Page     int    `json:"page"`
+			PageSize int    `json:"page_size"`
+			Total    string `json:"total"`
 			Items    []struct {
 				ID           string `json:"id"`
 				Name         string `json:"name"`
@@ -503,7 +503,7 @@ func validateA49EndpointDTO(name string, payload json.RawMessage, profile a49Run
 			} `json:"items"`
 		}
 		if json.Unmarshal(payload, &page) != nil || page.Page != 1 || page.PageSize != 20 ||
-			page.Total != capacity.Customers || len(page.Items) == 0 || len(page.Items) > 20 {
+			!canonicalA49Total(page.Total, capacity.Customers) || len(page.Items) == 0 || len(page.Items) > 20 {
 			return errors.New("customer list page contract")
 		}
 		for _, item := range page.Items {
@@ -514,9 +514,9 @@ func validateA49EndpointDTO(name string, payload json.RawMessage, profile a49Run
 		return nil
 	case "list_accounts":
 		var page struct {
-			Page     int `json:"page"`
-			PageSize int `json:"page_size"`
-			Total    int `json:"total"`
+			Page     int    `json:"page"`
+			PageSize int    `json:"page_size"`
+			Total    string `json:"total"`
 			Items    []struct {
 				ID           string `json:"id"`
 				SiteID       string `json:"site_id"`
@@ -527,7 +527,7 @@ func validateA49EndpointDTO(name string, payload json.RawMessage, profile a49Run
 			} `json:"items"`
 		}
 		if json.Unmarshal(payload, &page) != nil || page.Page != 1 || page.PageSize != 20 ||
-			page.Total != capacity.ManagedAccounts || len(page.Items) == 0 || len(page.Items) > 20 {
+			!canonicalA49Total(page.Total, capacity.ManagedAccounts) || len(page.Items) == 0 || len(page.Items) > 20 {
 			return errors.New("account list page contract")
 		}
 		for _, item := range page.Items {
@@ -714,4 +714,12 @@ func canonicalPositiveA49ID(value string) bool {
 func canonicalNonNegativeA49Int(value string) bool {
 	parsed, err := strconv.ParseInt(value, 10, 64)
 	return err == nil && parsed >= 0 && strconv.FormatInt(parsed, 10) == value
+}
+
+func canonicalA49Total(value string, expected int) bool {
+	if expected < 0 || !canonicalNonNegativeA49Int(value) {
+		return false
+	}
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	return err == nil && parsed == int64(expected)
 }
