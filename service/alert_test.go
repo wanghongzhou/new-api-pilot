@@ -587,13 +587,20 @@ func TestAlertEvaluationReconcilesPriorValidationIdentityWithoutReplayingEvent(t
 			t.Fatalf("reconcile attempt %d = %#v, %v", attempt+1, duplicate, evaluationErr)
 		}
 	}
+	recovered := current
+	recoveredValue := "0"
+	recovered.CurrentValue = &recoveredValue
+	resolved, evaluationErr := alerts.Evaluate(context.Background(), recovered)
+	if evaluationErr != nil || resolved.Transition != "resolved" || resolved.EventID != firing.EventID {
+		t.Fatalf("same-time semantic recovery = %#v, %v", resolved, evaluationErr)
+	}
 
 	activeKey := alertActiveKey(current.RuleKey, current.TargetType, current.TargetKey)
 	var cursor model.AlertEvaluationCursor
 	if err := tx.Where("active_key = ?", activeKey).First(&cursor).Error; err != nil {
 		t.Fatalf("load reconciled cursor: %v", err)
 	}
-	if cursor.LastSampleAt != observedAt || cursor.LastSampleKey != current.SampleKey {
+	if cursor.LastSampleAt != observedAt || cursor.LastSampleKey != recovered.SampleKey {
 		t.Fatalf("reconciled cursor = %#v", cursor)
 	}
 	var eventCount, deliveryCount int64

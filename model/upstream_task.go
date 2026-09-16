@@ -137,8 +137,16 @@ func (r *SiteRepository) SyncUpstreamTasks(ctx context.Context, site Site, obser
 		for _, item := range items {
 			ids = append(ids, item.ID)
 		}
-		if err := r.db.WithContext(ctx).Where("site_id = ? AND remote_id IN ?", site.ID, ids).Find(&existingRows).Error; err != nil {
-			return 0, err
+		for start := 0; start < len(ids); start += 500 {
+			end := start + 500
+			if end > len(ids) {
+				end = len(ids)
+			}
+			var batch []SiteUpstreamTask
+			if err := r.db.WithContext(ctx).Where("site_id = ? AND remote_id IN ?", site.ID, ids[start:end]).Find(&batch).Error; err != nil {
+				return 0, err
+			}
+			existingRows = append(existingRows, batch...)
 		}
 	}
 	existing := make(map[int64]SiteUpstreamTask, len(existingRows))
@@ -146,7 +154,6 @@ func (r *SiteRepository) SyncUpstreamTasks(ctx context.Context, site Site, obser
 		existing[row.RemoteID] = row
 	}
 	creates := make([]SiteUpstreamTask, 0)
-	unchangedIDs := make([]int64, 0)
 	for i, item := range items {
 		if item.ID <= 0 || item.CreatedAt < 0 || item.UpdatedAt < item.CreatedAt || item.UserID < 0 || item.ChannelID < 0 || item.Quota < 0 || item.SubmitTime < 0 || item.StartTime < 0 || item.FinishTime < 0 || !validTaskText(item.TaskID, 191, true) || !validTaskText(item.Platform, 30, false) || !validTaskText(item.Group, 50, false) || !validTaskText(item.Action, 40, false) || !validTaskText(item.Status, 20, true) || !validTaskText(item.Progress, 20, false) || !validTaskText(item.Properties.Model, 255, false) || i > 0 && items[i-1].ID == item.ID {
 			return 0, errors.New("invalid upstream task observation")
@@ -157,7 +164,6 @@ func (r *SiteRepository) SyncUpstreamTasks(ctx context.Context, site Site, obser
 		}
 		if current, ok := existing[item.ID]; ok {
 			if item.UpdatedAt < current.RemoteUpdatedAt || item.UpdatedAt == current.RemoteUpdatedAt && hash == current.SourceHash {
-				unchangedIDs = append(unchangedIDs, item.ID)
 				continue
 			}
 			updates := map[string]any{"remote_created_at": item.CreatedAt, "remote_updated_at": item.UpdatedAt, "task_id": item.TaskID, "platform": item.Platform, "remote_user_id": item.UserID, "remote_group": item.Group, "remote_channel_id": item.ChannelID, "quota": item.Quota, "action": item.Action, "remote_status": item.Status, "submit_time": item.SubmitTime, "start_time": item.StartTime, "finish_time": item.FinishTime, "progress": item.Progress, "model_name": item.Properties.Model, "source_hash": hash, "config_version": site.ConfigVersion, "last_seen_at": observedAt, "collected_at": observedAt, "updated_at": observedAt}
@@ -168,11 +174,6 @@ func (r *SiteRepository) SyncUpstreamTasks(ctx context.Context, site Site, obser
 			continue
 		}
 		creates = append(creates, SiteUpstreamTask{SiteID: site.ID, RemoteID: item.ID, RemoteCreatedAt: item.CreatedAt, RemoteUpdatedAt: item.UpdatedAt, TaskID: item.TaskID, Platform: item.Platform, RemoteUserID: item.UserID, RemoteGroup: item.Group, RemoteChannelID: item.ChannelID, Quota: item.Quota, Action: item.Action, RemoteStatus: item.Status, SubmitTime: item.SubmitTime, StartTime: item.StartTime, FinishTime: item.FinishTime, Progress: item.Progress, ModelName: item.Properties.Model, SourceHash: hash, ConfigVersion: site.ConfigVersion, FirstSeenAt: observedAt, LastSeenAt: observedAt, CollectedAt: observedAt, CreatedAt: observedAt, UpdatedAt: observedAt})
-	}
-	if len(unchangedIDs) > 0 {
-		if err := r.db.WithContext(ctx).Model(&SiteUpstreamTask{}).Where("site_id = ? AND remote_id IN ?", site.ID, unchangedIDs).Updates(map[string]any{"last_seen_at": observedAt, "collected_at": observedAt}).Error; err != nil {
-			return 0, err
-		}
 	}
 	if len(creates) > 0 {
 		if err := r.db.WithContext(ctx).CreateInBatches(creates, 500).Error; err != nil {

@@ -108,6 +108,7 @@ type AlertCollectionEvaluationSnapshot struct {
 	HourTS            int64  `gorm:"column:hour_ts"`
 	Status            string `gorm:"column:status"`
 	LastErrorCode     string `gorm:"column:last_error_code"`
+	VerifiedAt        *int64 `gorm:"column:verified_at"`
 	UpdatedAt         int64  `gorm:"column:updated_at"`
 	SiteUpdatedAt     int64  `gorm:"column:site_updated_at"`
 }
@@ -140,6 +141,7 @@ type AlertValidationEvaluationSnapshot struct {
 	Status            string  `gorm:"column:status"`
 	ErrorCode         string  `gorm:"column:error_code"`
 	FactStatus        *string `gorm:"column:fact_status"`
+	FactVerifiedAt    *int64  `gorm:"column:fact_verified_at"`
 	UpdatedAt         int64   `gorm:"column:updated_at"`
 	SiteUpdatedAt     int64   `gorm:"column:site_updated_at"`
 }
@@ -294,11 +296,14 @@ func (repository *AlertEvaluationRepository) listCollectionWindows(ctx context.C
 	err := repository.db.WithContext(ctx).Raw(`SELECT cw.id, cw.site_id, s.name AS site_name,
 s.management_status, s.auth_status, s.data_export_enabled, s.updated_at AS site_updated_at,
 s.statistics_start_at, s.statistics_end_at,
-cw.hour_ts, cw.status, cw.last_error_code, cw.updated_at
+cw.hour_ts, cw.status, cw.last_error_code, cw.verified_at, cw.updated_at
 FROM collection_window cw
 JOIN site s ON s.id = cw.site_id
 WHERE cw.status = 'missing'
    OR cw.last_error_code = ?
+   OR (cw.status = 'complete'
+       AND (cw.verified_at IS NULL OR cw.verified_at < cw.hour_ts - MOD(cw.hour_ts + 28800, 86400) + 86400)
+       AND UNIX_TIMESTAMP() >= cw.hour_ts - MOD(cw.hour_ts + 28800, 86400) + 93600)
    OR EXISTS (
       SELECT 1 FROM alert_event e
       WHERE e.active_key IS NOT NULL AND e.site_id = cw.site_id
@@ -353,7 +358,8 @@ func (repository *AlertEvaluationRepository) listValidations(ctx context.Context
 SELECT ranked.id AS run_window_id, ranked.site_id, s.name AS site_name,
 s.management_status, s.auth_status, s.data_export_enabled, s.statistics_end_at,
 s.updated_at AS site_updated_at,
-ranked.hour_ts, ranked.status, ranked.error_code, ranked.updated_at, cw.status AS fact_status
+ranked.hour_ts, ranked.status, ranked.error_code, ranked.updated_at, cw.status AS fact_status,
+cw.verified_at AS fact_verified_at
 FROM ranked_validation ranked
 JOIN site s ON s.id = ranked.site_id
 LEFT JOIN collection_window cw ON cw.site_id = ranked.site_id AND cw.hour_ts = ranked.hour_ts

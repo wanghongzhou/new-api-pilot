@@ -1148,6 +1148,7 @@ type testSiteClient struct {
 	performance        dto.UpstreamPerformanceHistory
 	performanceErr     error
 	performanceHours   []int
+	performanceModels  [][]string
 	topups             dto.UpstreamTopupSnapshot
 	topupsErr          error
 	redemptions        dto.UpstreamRedemptionSnapshot
@@ -1233,6 +1234,11 @@ func (client *testSiteClient) PerformanceSummary(context.Context, string, int) (
 
 func (client *testSiteClient) PerformanceHistory(_ context.Context, _ string, hours int) (dto.UpstreamPerformanceHistory, error) {
 	client.performanceHours = append(client.performanceHours, hours)
+	return client.performance, client.performanceErr
+}
+func (client *testSiteClient) PerformanceHistoryIncremental(_ context.Context, _ string, hours int, models []string) (dto.UpstreamPerformanceHistory, error) {
+	client.performanceHours = append(client.performanceHours, hours)
+	client.performanceModels = append(client.performanceModels, append([]string(nil), models...))
 	return client.performance, client.performanceErr
 }
 func (client *testSiteClient) SnapshotTopups(context.Context, string) (dto.UpstreamTopupSnapshot, error) {

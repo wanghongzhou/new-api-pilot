@@ -19,7 +19,7 @@ import (
 )
 
 const maximumLogWindowRows = 10000
-const maximumLogBackfillWindowsPerRun = 96
+const maximumLogBackfillWindowsPerRun = 4
 
 type upstreamLogClient interface {
 	LogPage(context.Context, string, int64, int64, int) (dto.UpstreamLogPage, error)

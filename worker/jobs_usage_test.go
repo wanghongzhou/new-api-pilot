@@ -428,6 +428,14 @@ func TestUsageValidationSameHashUsesActualVerifiedOnlyCounts(t *testing.T) {
 	if err := database.GORM.Where("site_id = ? AND hour_ts = ?", fixture.site.ID, hour).First(&original).Error; err != nil {
 		t.Fatalf("read original validation fact: %v", err)
 	}
+	dateKey, _, _, err := model.UsageDateBucket(hour)
+	if err != nil {
+		t.Fatalf("validation date bucket: %v", err)
+	}
+	var originalDaily model.UsageFactDaily
+	if err := database.GORM.Where("site_id = ? AND date_key = ?", fixture.site.ID, dateKey).First(&originalDaily).Error; err != nil {
+		t.Fatalf("read original validation daily fact: %v", err)
+	}
 
 	validationNow := now.Add(time.Hour)
 	claim := createUsageWorkerClaim(t, database, repository, fixture.site, constant.TaskTypeUsageValidation, hour, validationNow.Unix(), "verified-check")
@@ -441,6 +449,11 @@ func TestUsageValidationSameHashUsesActualVerifiedOnlyCounts(t *testing.T) {
 	if err := database.GORM.Where("site_id = ? AND hour_ts = ?", fixture.site.ID, hour).First(&current).Error; err != nil ||
 		current.ID != original.ID || current.CollectedAt != original.CollectedAt {
 		t.Fatalf("verified-only fact = %#v, original=%#v, err=%v", current, original, err)
+	}
+	var currentDaily model.UsageFactDaily
+	if err := database.GORM.Where("site_id = ? AND date_key = ?", fixture.site.ID, dateKey).First(&currentDaily).Error; err != nil ||
+		currentDaily.ID != originalDaily.ID || currentDaily.RequestCount != originalDaily.RequestCount {
+		t.Fatalf("verified-only daily fact = %#v, original=%#v, err=%v", currentDaily, originalDaily, err)
 	}
 }
 

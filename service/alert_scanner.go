@@ -619,10 +619,24 @@ func validationFailedEvaluation(target validationEvaluationTarget, now int64, re
 		evaluation.Source = "data_mismatch"
 		return knownAlertEvaluation(evaluation, "1"), nil
 	}
+	if target.collection != nil && target.collection.Status == model.CollectionWindowStatusComplete {
+		dateEnd := validationDayEnd(target.collection.HourTS)
+		if now >= dateEnd+2*3600 &&
+			(target.collection.VerifiedAt == nil || *target.collection.VerifiedAt < dateEnd) {
+			evaluation.Source = "validation_pending"
+			return knownAlertEvaluation(evaluation, "1"), nil
+		}
+	}
 	if target.validation != nil {
 		if target.validation.Status == model.CollectionTaskStatusFailed {
 			if target.validation.ErrorCode == constant.CodeSiteConfigChanged {
 				evaluation.ResolutionReason = alertResolutionSuperseded
+				return knownAlertEvaluation(evaluation, "0"), nil
+			}
+			if target.validation.FactStatus != nil &&
+				*target.validation.FactStatus == model.CollectionWindowStatusComplete &&
+				target.validation.FactVerifiedAt != nil &&
+				*target.validation.FactVerifiedAt >= target.validation.UpdatedAt {
 				return knownAlertEvaluation(evaluation, "0"), nil
 			}
 			evaluation.Source = "execution_failed"
@@ -638,6 +652,12 @@ func validationFailedEvaluation(target validationEvaluationTarget, now int64, re
 	}
 	evaluation.State = AlertSampleUnknown
 	return evaluation, nil
+}
+
+func validationDayEnd(hourTS int64) int64 {
+	local := time.Unix(hourTS, 0).In(time.FixedZone("Asia/Shanghai", 8*60*60))
+	start := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, local.Location())
+	return start.AddDate(0, 0, 1).Unix()
 }
 
 func backfillFailedEvaluation(backfill model.AlertBackfillEvaluationSnapshot, now int64, requestID string) (AlertEvaluation, error) {

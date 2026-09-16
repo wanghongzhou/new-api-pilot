@@ -8,7 +8,6 @@ import (
 	"math/big"
 	"new-api-pilot/constant"
 	"new-api-pilot/dto"
-	"reflect"
 	"sort"
 	"strconv"
 	"unicode/utf8"
@@ -111,6 +110,7 @@ func (r *SiteRepository) ApplyPerformanceHistorySnapshot(ctx context.Context, ex
 		}
 		return rows[i].BucketTS < rows[j].BucketTS
 	})
+	var written int64
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var site Site
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&site, expected.ID).Error; err != nil {
@@ -135,19 +135,13 @@ func (r *SiteRepository) ApplyPerformanceHistorySnapshot(ctx context.Context, ex
 			existingByKey[key(row)] = row
 		}
 		changed := make([]SitePerformanceMetricBucket, 0, len(rows))
-		unchangedIDs := make([]int64, 0, len(rows))
 		for _, row := range rows {
 			old, ok := existingByKey[key(row)]
 			if !ok {
 				changed = append(changed, row)
 				continue
 			}
-			oldFacts, newFacts := old, row
-			oldFacts.ID, oldFacts.CollectedAt, oldFacts.UpdatedAt, oldFacts.CreatedAt = 0, 0, 0, 0
-			newFacts.ID, newFacts.CollectedAt, newFacts.UpdatedAt, newFacts.CreatedAt = 0, 0, 0, 0
-			if reflect.DeepEqual(oldFacts, newFacts) {
-				unchangedIDs = append(unchangedIDs, old.ID)
-			} else {
+			if !performanceBucketFactsEqual(old, row) {
 				row.ID, row.CreatedAt = old.ID, old.CreatedAt
 				changed = append(changed, row)
 			}
@@ -167,21 +161,14 @@ func (r *SiteRepository) ApplyPerformanceHistorySnapshot(ctx context.Context, ex
 				return err
 			}
 		}
+		written += int64(len(removedIDs))
 		if len(changed) > 0 {
 			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "site_id"}, {Name: "model_name"}, {Name: "remote_group"}, {Name: "bucket_ts"}}, DoUpdates: clause.AssignmentColumns([]string{
 				"series_schema", "metric_source", "avg_ttft_ms", "avg_latency_ms", "success_rate", "avg_tps", "request_count", "success_count", "total_latency_ms", "ttft_sum_ms", "ttft_count", "output_tokens", "generation_ms", "config_version", "collected_at", "updated_at",
 			})}).CreateInBatches(changed, 500).Error; err != nil {
 				return err
 			}
-		}
-		for offset := 0; offset < len(unchangedIDs); offset += 500 {
-			endOffset := offset + 500
-			if endOffset > len(unchangedIDs) {
-				endOffset = len(unchangedIDs)
-			}
-			if err := tx.Model(&SitePerformanceMetricBucket{}).Where("site_id=? AND id IN ?", site.ID, unchangedIDs[offset:endOffset]).Updates(map[string]any{"collected_at": observedAt, "updated_at": observedAt}).Error; err != nil {
-				return err
-			}
+			written += int64(len(changed))
 		}
 		now := observedAt
 		status := "average_only"
@@ -196,7 +183,31 @@ func (r *SiteRepository) ApplyPerformanceHistorySnapshot(ctx context.Context, ex
 		}
 		return tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "site_id"}}, DoUpdates: clause.AssignmentColumns(assignments)}).Create(&state).Error
 	})
-	return int64(len(rows)), err
+	return written, err
+}
+
+func performanceBucketFactsEqual(first, second SitePerformanceMetricBucket) bool {
+	return first.SiteID == second.SiteID && first.ModelName == second.ModelName && first.RemoteGroup == second.RemoteGroup &&
+		first.BucketTS == second.BucketTS && first.SeriesSchema == second.SeriesSchema && first.MetricSource == second.MetricSource &&
+		performanceDecimalEqual(first.AvgTTFTMS, second.AvgTTFTMS) && performanceDecimalEqual(first.AvgLatencyMS, second.AvgLatencyMS) &&
+		performanceDecimalEqual(first.SuccessRate, second.SuccessRate) && performanceDecimalEqual(first.AvgTPS, second.AvgTPS) &&
+		performanceOptionalInt64Equal(first.RequestCount, second.RequestCount) && performanceOptionalInt64Equal(first.SuccessCount, second.SuccessCount) &&
+		performanceOptionalInt64Equal(first.TotalLatencyMS, second.TotalLatencyMS) && performanceOptionalInt64Equal(first.TTFTSumMS, second.TTFTSumMS) &&
+		performanceOptionalInt64Equal(first.TTFTCount, second.TTFTCount) && performanceOptionalInt64Equal(first.OutputTokens, second.OutputTokens) &&
+		performanceOptionalInt64Equal(first.GenerationMS, second.GenerationMS) && first.ConfigVersion == second.ConfigVersion
+}
+
+func performanceDecimalEqual(first, second string) bool {
+	left, leftOK := new(big.Rat).SetString(first)
+	right, rightOK := new(big.Rat).SetString(second)
+	return leftOK && rightOK && left.Cmp(right) == 0
+}
+
+func performanceOptionalInt64Equal(first, second *int64) bool {
+	if first == nil || second == nil {
+		return first == nil && second == nil
+	}
+	return *first == *second
 }
 
 func (r *SiteRepository) PerformanceBackfillRequired(ctx context.Context, siteID int64) (bool, error) {

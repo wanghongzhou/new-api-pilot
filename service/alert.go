@@ -410,7 +410,9 @@ func (service *AlertService) Evaluate(ctx context.Context, evaluation AlertEvalu
 			return activeErr
 		}
 		hasActive := activeErr == nil
-		if alertEvaluationIdentityUpgrade(cursor, hasCursor, evaluation) {
+		identityUpgraded := alertEvaluationIdentityUpgrade(cursor, hasCursor, evaluation)
+		if identityUpgraded {
+			requiresMutation := hasActive && alertIdentityUpgradeRequiresMutation(active, evaluation)
 			processedAt := service.clock.Now().Unix()
 			if processedAt <= 0 {
 				return errors.New("alert evaluation clock is invalid")
@@ -419,24 +421,39 @@ func (service *AlertService) Evaluate(ctx context.Context, evaluation AlertEvalu
 			if err := repository.AdvanceEvaluationCursor(ctx, &cursor); err != nil {
 				return err
 			}
-			if hasActive {
+			if requiresMutation {
+				// The evidence identity changed at the same authoritative timestamp,
+				// and the semantic value changed with it. Continue through the normal
+				// mutation path so a recovered condition cannot remain firing forever.
+			} else if hasActive {
 				result = evaluationResult(active, "duplicate")
 			} else {
 				result.Transition = "duplicate"
 			}
-			return nil
-		}
-		duplicate, err := alertEvaluationAlreadyApplied(cursor, hasCursor, evaluation)
-		if err != nil {
-			return err
-		}
-		if duplicate {
-			if hasActive {
-				result = evaluationResult(active, "duplicate")
-			} else {
-				result.Transition = "duplicate"
+			if !requiresMutation {
+				return nil
 			}
-			return nil
+		}
+		if !identityUpgraded {
+			duplicate, err := alertEvaluationAlreadyApplied(cursor, hasCursor, evaluation)
+			if err != nil {
+				return err
+			}
+			if duplicate {
+				requiresMutation := hasActive && alertIdentityUpgradeRequiresMutation(active, evaluation)
+				if requiresMutation {
+					// A deterministic sample may acquire corrected semantics after an
+					// upgrade while keeping the same authoritative identity. Apply the
+					// changed value instead of preserving stale alert state forever.
+				} else if hasActive {
+					result = evaluationResult(active, "duplicate")
+				} else {
+					result.Transition = "duplicate"
+				}
+				if !requiresMutation {
+					return nil
+				}
+			}
 		}
 		mutationErr := func() error {
 			if evaluation.State == AlertSampleUnknown {
@@ -1101,6 +1118,21 @@ func alertEvaluationIdentityUpgrade(
 		}
 	}
 	return false
+}
+
+func alertIdentityUpgradeRequiresMutation(active model.AlertEvent, evaluation AlertEvaluation) bool {
+	if evaluation.State == AlertSampleScopeInactive {
+		return true
+	}
+	if evaluation.State != AlertSampleKnown || evaluation.CurrentValue == nil || active.CurrentValue == nil {
+		return false
+	}
+	next, _, nextValid := parseAlertDecimal(*evaluation.CurrentValue, true)
+	current, _, currentValid := parseAlertDecimal(*active.CurrentValue, true)
+	if !nextValid || !currentValid {
+		return true
+	}
+	return next.Cmp(current) != 0
 }
 
 func buildAlertMessage(

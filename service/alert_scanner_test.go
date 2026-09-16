@@ -264,6 +264,68 @@ func TestValidationEvaluationDistinguishesExecutionFailureAndRecovery(t *testing
 		t.Fatalf("build validation recovery: %v", err)
 	}
 	assertScannerValue(t, recovery, AlertSampleKnown, "0")
+
+	verifiedAfterFailure := hour + 3700
+	recoveredFromFact, err := validationFailedEvaluation(validationEvaluationTarget{
+		validation: &model.AlertValidationEvaluationSnapshot{
+			SiteID: siteID, SiteName: "站点", ManagementStatus: constant.SiteManagementActive,
+			AuthStatus: constant.SiteAuthAuthorized, DataExportEnabled: true, HourTS: hour,
+			Status: model.CollectionTaskStatusFailed, ErrorCode: "UPSTREAM_ADDRESS_FORBIDDEN",
+			FactStatus: &factComplete, FactVerifiedAt: &verifiedAfterFailure, UpdatedAt: hour + 3600,
+		},
+	}, hour+7200, "als_validation")
+	if err != nil {
+		t.Fatalf("build fact-based validation recovery: %v", err)
+	}
+	assertScannerValue(t, recoveredFromFact, AlertSampleKnown, "0")
+
+	verifiedBeforeFailure := hour + 3500
+	stillFailed, err := validationFailedEvaluation(validationEvaluationTarget{
+		validation: &model.AlertValidationEvaluationSnapshot{
+			SiteID: siteID, SiteName: "站点", ManagementStatus: constant.SiteManagementActive,
+			AuthStatus: constant.SiteAuthAuthorized, DataExportEnabled: true, HourTS: hour,
+			Status: model.CollectionTaskStatusFailed, ErrorCode: "UPSTREAM_ADDRESS_FORBIDDEN",
+			FactStatus: &factComplete, FactVerifiedAt: &verifiedBeforeFailure, UpdatedAt: hour + 3600,
+		},
+	}, hour+7200, "als_validation")
+	if err != nil {
+		t.Fatalf("build unrecovered validation failure: %v", err)
+	}
+	assertScannerValue(t, stillFailed, AlertSampleKnown, "1")
+}
+
+func TestValidationEvaluationAlertsOnPendingVerificationAndResolves(t *testing.T) {
+	location := time.FixedZone("Asia/Shanghai", 8*60*60)
+	dayStart := time.Date(2026, time.September, 10, 0, 0, 0, 0, location).Unix()
+	hour := dayStart + 8*3600
+	now := dayStart + 24*3600 + 2*3600
+	complete := model.CollectionWindowStatusComplete
+	pending, err := validationFailedEvaluation(validationEvaluationTarget{
+		collection: &model.AlertCollectionEvaluationSnapshot{
+			ID: 1, SiteID: 2, SiteName: "待复核站点", ManagementStatus: constant.SiteManagementActive,
+			AuthStatus: constant.SiteAuthAuthorized, DataExportEnabled: true,
+			HourTS: hour, Status: complete, UpdatedAt: hour + 3600,
+		},
+	}, now, "als_pending_validation")
+	if err != nil {
+		t.Fatalf("build pending validation evaluation: %v", err)
+	}
+	assertScannerValue(t, pending, AlertSampleKnown, "1")
+	if pending.Source != "validation_pending" {
+		t.Fatalf("pending validation source = %q", pending.Source)
+	}
+	verifiedAt := dayStart + 24*3600
+	resolved, err := validationFailedEvaluation(validationEvaluationTarget{
+		collection: &model.AlertCollectionEvaluationSnapshot{
+			ID: 1, SiteID: 2, SiteName: "待复核站点", ManagementStatus: constant.SiteManagementActive,
+			AuthStatus: constant.SiteAuthAuthorized, DataExportEnabled: true,
+			HourTS: hour, Status: complete, VerifiedAt: &verifiedAt, UpdatedAt: now,
+		},
+	}, now, "als_pending_validation")
+	if err != nil {
+		t.Fatalf("build resolved validation evaluation: %v", err)
+	}
+	assertScannerValue(t, resolved, AlertSampleKnown, "0")
 }
 
 func TestFenceTerminatedRunsResolveFailureAlertsWithoutRefiring(t *testing.T) {

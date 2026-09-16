@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"net/url"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -93,7 +94,10 @@ func TestSnapshotUsersRejectsInventoryOverLimitBeforeSecondPage(t *testing.T) {
 }
 
 func TestSnapshotChannelsKeepsDecimalOperationsAndNeverExposesKey(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Query().Get("id_sort") != "true" {
+			t.Fatalf("channel id_sort=%q, want true", request.URL.Query().Get("id_sort"))
+		}
 		_, _ = writer.Write([]byte(`{"success":true,"message":"","data":{"page":1,"page_size":100,"total":1,"items":[{"id":9,"name":"primary","type":1,"status":1,"key":"secret-must-not-be-decoded","test_time":10,"response_time":123,"balance":9007199254740993.123456789,"balance_updated_time":11,"models":"gpt","group":"default","used_quota":9007199254740993,"priority":7,"weight":8,"auto_ban":1,"tag":"prod"}]}}`))
 	}))
 	defer server.Close()
@@ -209,6 +213,34 @@ func TestPerformanceHistoryPreservesOfficialAverageSeriesWithoutInventingCounter
 	history, err := client.PerformanceHistory(context.Background(), "performance-history", 24)
 	if err != nil || history.CounterReady || len(history.Models) != 1 || len(history.Models[0].Groups) != 1 || history.Models[0].Groups[0].Series[0].AvgLatencyMS != "100.25" || history.Models[0].Groups[0].Series[0].SuccessRate != "0.5263157895" || history.Models[0].Groups[0].Series[0].AvgTPS != "38.7287185369" || history.Models[0].Groups[0].Series[0].Counters.RequestCount != nil {
 		t.Fatalf("performance history=%#v err=%v", history, err)
+	}
+}
+
+func TestPerformanceHistoryIncrementalUsesShortWindowAndStableKnownModelOrder(t *testing.T) {
+	requested := make([]string, 0, 3)
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Query().Get("hours") != "2" {
+			t.Fatalf("performance hours=%q, want 2", request.URL.Query().Get("hours"))
+		}
+		switch request.URL.Path {
+		case "/api/perf-metrics/summary":
+			_, _ = writer.Write([]byte(`{"success":true,"data":{"models":[{"model_name":"model-a","avg_latency_ms":1,"success_rate":100,"avg_tps":1},{"model_name":"model-c","avg_latency_ms":1,"success_rate":100,"avg_tps":1},{"model_name":"model-b","avg_latency_ms":1,"success_rate":100,"avg_tps":1}]}}`))
+		case "/api/perf-metrics":
+			modelName := request.URL.Query().Get("model")
+			requested = append(requested, modelName)
+			_, _ = fmt.Fprintf(writer, `{"success":true,"data":{"model_name":%q,"series_schema":"ts,avg_ttft_ms,avg_latency_ms,success_rate,avg_tps","groups":[]}}`, modelName)
+		default:
+			t.Fatalf("unexpected performance path %s", request.URL.Path)
+		}
+	}))
+	defer server.Close()
+	client := testClientForServer(t, server, true, testClientSettings{})
+	history, err := client.PerformanceHistoryIncremental(context.Background(), "performance-incremental", 2, []string{"model-b", "model-a", "removed-model"})
+	if err != nil {
+		t.Fatalf("incremental performance history: %v", err)
+	}
+	if len(history.Models) != 3 || !reflect.DeepEqual(requested, []string{"model-b", "model-a", "model-c"}) {
+		t.Fatalf("incremental models=%v history=%#v", requested, history)
 	}
 }
 

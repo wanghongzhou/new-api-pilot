@@ -656,10 +656,13 @@ func TestPeriodicSiteTasksCommitMetadataBehindConfigFence(t *testing.T) {
 	if _, _, err := sites.ExecutePeriodicSiteTask(context.Background(), constant.TaskTypeUpstreamTaskSync, site.ID, site.ConfigVersion, "req_periodic_upstream_task_incremental"); err != nil {
 		t.Fatalf("execute incremental upstream task: %v", err)
 	}
-	if len(client.performanceHours) != 2 || client.performanceHours[1] != 24 {
-		t.Fatalf("incremental performance hours=%v, want second call 24", client.performanceHours)
+	if len(client.performanceHours) != 2 || client.performanceHours[1] != 2 {
+		t.Fatalf("incremental performance hours=%v, want second call 2", client.performanceHours)
 	}
-	if len(client.upstreamTaskStarts) != 2 || client.upstreamTaskStarts[1] != now-48*3600 ||
+	if len(client.performanceModels) != 1 || len(client.performanceModels[0]) != 1 || client.performanceModels[0][0] != "gpt-periodic" {
+		t.Fatalf("incremental performance models=%v", client.performanceModels)
+	}
+	if len(client.upstreamTaskStarts) != 2 || client.upstreamTaskStarts[1] != now-3600 ||
 		len(client.upstreamTaskEnds) != 2 || client.upstreamTaskEnds[1] != now+1 {
 		t.Fatalf("incremental upstream task windows starts=%v ends=%v", client.upstreamTaskStarts, client.upstreamTaskEnds)
 	}

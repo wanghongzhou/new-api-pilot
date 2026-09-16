@@ -422,6 +422,7 @@ func (client *NewAPIClient) listChannelsPage(ctx context.Context, requestID stri
 	query := url.Values{
 		"p":         []string{strconv.Itoa(page)},
 		"page_size": []string{strconv.Itoa(upstreamPageSize)},
+		"id_sort":   []string{"true"},
 	}
 	var wire upstreamChannelPageWire
 	payloadSize, err := client.get(ctx, client.httpClient, "/api/channel/", query, requestID, upstreamAuthManagement, client.requestTimeout, &wire, false)
@@ -1071,12 +1072,8 @@ func (client *NewAPIClient) PerformanceHistoryIncremental(ctx context.Context, r
 		return dto.UpstreamPerformanceHistory{}, err
 	}
 	// knownModels is deliberately advisory: the summary remains authoritative
-	// for additions/removals, while the local set avoids any future accidental
-	// detail request for a model that has already disappeared upstream.
-	known := make(map[string]struct{}, len(knownModels))
-	for _, name := range knownModels {
-		known[name] = struct{}{}
-	}
+	// for additions/removals, while the local set supplies a stable request
+	// order for models that are still present.
 	models := make([]dto.UpstreamPerformanceModel, 0, len(summary.Models))
 	byName := make(map[string]dto.UpstreamPerformanceModel, len(summary.Models))
 	for _, item := range summary.Models {

@@ -335,6 +335,13 @@ func NewUsageAggregationCommit(
 		if err != nil {
 			return UsageAggregationMutationResult{}, err
 		}
+		if windowResult.VerifiedOnly {
+			dailyRows, err := refreshUsageDailyFinality(ctx, tx, request.SiteID, dateKey, dateStart, dateEnd, request.Now)
+			if err != nil {
+				return UsageAggregationMutationResult{}, err
+			}
+			return UsageAggregationMutationResult{Window: windowResult, DailyRows: dailyRows}, nil
+		}
 		rebuilt, err := rebuildUsageAggregationBuckets(
 			ctx, tx, request.SiteID, request.HourTS, dateKey, dateStart, dateEnd, request.Now,
 			usageAggregationRebuildOptions{},
@@ -345,6 +352,85 @@ func NewUsageAggregationCommit(
 		rebuilt.Window = windowResult
 		return rebuilt, nil
 	}}, nil
+}
+
+func refreshUsageDailyFinality(
+	ctx context.Context,
+	tx *gorm.DB,
+	siteID int64,
+	dateKey int,
+	dateStart, dateEnd, now int64,
+) (int64, error) {
+	coverage, err := loadUsageDailyCoverage(ctx, tx, dateStart, dateEnd)
+	if err != nil {
+		return 0, err
+	}
+	siteCoverage, exists := coverage.bySite[siteID]
+	if !exists || !siteCoverage.valid() || siteCoverage.Expected <= 0 {
+		return 0, ErrCollectionRunContract
+	}
+	accountCoverage, customerCoverage, err := loadUsageEntityCoverage(ctx, tx, coverage, siteID, usageAggregationRebuildOptions{})
+	if err != nil {
+		return 0, err
+	}
+	var rows int64
+	if siteCoverage.final(now, dateEnd) {
+		for _, update := range []struct {
+			table string
+			where string
+			args  []any
+		}{
+			{table: "usage_fact_daily", where: "site_id = ? AND date_key = ? AND is_final = 0", args: []any{siteID, dateKey}},
+			{table: "site_stat_daily", where: "site_id = ? AND date_key = ? AND is_final = 0", args: []any{siteID, dateKey}},
+			{table: "model_stat_daily", where: "site_id = ? AND date_key = ? AND is_final = 0", args: []any{siteID, dateKey}},
+			{table: "channel_stat_daily", where: "site_id = ? AND date_key = ? AND is_final = 0", args: []any{siteID, dateKey}},
+		} {
+			result := tx.WithContext(ctx).Table(update.table).Where(update.where, update.args...).Update("is_final", true)
+			if result.Error != nil {
+				return 0, result.Error
+			}
+			rows += result.RowsAffected
+		}
+	}
+	for accountID, itemCoverage := range accountCoverage {
+		if !itemCoverage.valid() {
+			return 0, ErrCollectionRunContract
+		}
+		if itemCoverage.final(now, dateEnd) {
+			result := tx.WithContext(ctx).Model(&AccountStatDaily{}).
+				Where("account_id = ? AND date_key = ? AND is_final = 0", accountID, dateKey).Update("is_final", true)
+			if result.Error != nil {
+				return 0, result.Error
+			}
+			rows += result.RowsAffected
+		}
+	}
+	for customerID, itemCoverage := range customerCoverage {
+		if !itemCoverage.valid() {
+			return 0, ErrCollectionRunContract
+		}
+		if itemCoverage.final(now, dateEnd) {
+			result := tx.WithContext(ctx).Model(&CustomerStatDaily{}).
+				Where("customer_id = ? AND site_id = ? AND date_key = ? AND is_final = 0", customerID, siteID, dateKey).
+				Update("is_final", true)
+			if result.Error != nil {
+				return 0, result.Error
+			}
+			rows += result.RowsAffected
+		}
+	}
+	if !coverage.global.valid() {
+		return 0, ErrCollectionRunContract
+	}
+	if coverage.global.final(now, dateEnd) {
+		result := tx.WithContext(ctx).Model(&GlobalStatDaily{}).
+			Where("date_key = ? AND is_final = 0", dateKey).Update("is_final", true)
+		if result.Error != nil {
+			return 0, result.Error
+		}
+		rows += result.RowsAffected
+	}
+	return rows, nil
 }
 
 func UsageDateBucket(hourTS int64) (int, int64, int64, error) {

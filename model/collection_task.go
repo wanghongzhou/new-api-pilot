@@ -33,6 +33,11 @@ type CollectionTaskRepository struct {
 	db *gorm.DB
 }
 
+type PendingValidationHour struct {
+	SiteID int64 `gorm:"column:site_id"`
+	HourTS int64 `gorm:"column:hour_ts"`
+}
+
 func NewCollectionTaskRepository(db *gorm.DB) *CollectionTaskRepository {
 	return &CollectionTaskRepository{db: db}
 }
@@ -184,6 +189,34 @@ func (repository *CollectionTaskRepository) ListSitesForScheduling(ctx context.C
 	var sites []Site
 	err := repository.db.WithContext(ctx).Order("id ASC").Find(&sites).Error
 	return sites, err
+}
+
+// ListPendingValidationHours returns only exact complete hours that have not
+// reached their Beijing natural-day verification watermark. The per-site
+// bound prevents recovery from becoming an unbounded historical replay.
+func (repository *CollectionTaskRepository) ListPendingValidationHours(
+	ctx context.Context,
+	siteIDs []int64,
+	now int64,
+	limitPerSite int,
+) ([]PendingValidationHour, error) {
+	if repository == nil || repository.db == nil || now <= 0 || limitPerSite <= 0 || limitPerSite > 744 {
+		return nil, ErrCollectionRunContract
+	}
+	if len(siteIDs) == 0 {
+		return []PendingValidationHour{}, nil
+	}
+	rows := []PendingValidationHour{}
+	err := repository.db.WithContext(ctx).Raw(`SELECT site_id,hour_ts FROM (
+  SELECT site_id,hour_ts,ROW_NUMBER() OVER (PARTITION BY site_id ORDER BY hour_ts DESC) AS row_rank
+  FROM collection_window
+  WHERE site_id IN ? AND status = 'complete'
+    AND (verified_at IS NULL OR verified_at < hour_ts - MOD(hour_ts + 28800, 86400) + 86400)
+    AND ? >= hour_ts - MOD(hour_ts + 28800, 86400) + 93600
+) ranked
+WHERE row_rank <= ?
+ORDER BY site_id ASC,hour_ts ASC`, siteIDs, now, limitPerSite).Scan(&rows).Error
+	return rows, err
 }
 
 // FindSiteForScheduling loads a current site snapshot for scheduler-owned

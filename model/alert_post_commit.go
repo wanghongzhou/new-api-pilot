@@ -294,7 +294,7 @@ WHERE s.id = ?`, siteID); err != nil {
 	if err := repository.scanRows(ctx, &snapshot.CollectionWindows, `SELECT cw.id, cw.site_id, s.name AS site_name,
 s.management_status, s.auth_status, s.data_export_enabled, s.updated_at AS site_updated_at,
 s.statistics_start_at, s.statistics_end_at,
-cw.hour_ts, cw.status, cw.last_error_code, cw.updated_at
+cw.hour_ts, cw.status, cw.last_error_code, cw.verified_at, cw.updated_at
 FROM collection_window cw
 JOIN site s ON s.id = cw.site_id
 WHERE cw.site_id = ? AND (cw.status = 'missing' OR cw.last_error_code = ? OR EXISTS (
@@ -337,7 +337,8 @@ ORDER BY r.id`, siteID, constant.TaskTypeUsageBackfill); err != nil {
 SELECT ranked.id AS run_window_id, ranked.site_id, s.name AS site_name,
 s.management_status, s.auth_status, s.data_export_enabled, s.statistics_end_at,
 s.updated_at AS site_updated_at,
-ranked.hour_ts, ranked.status, ranked.error_code, ranked.updated_at, cw.status AS fact_status
+ranked.hour_ts, ranked.status, ranked.error_code, ranked.updated_at, cw.status AS fact_status,
+cw.verified_at AS fact_verified_at
 FROM ranked_validation ranked
 JOIN site s ON s.id = ranked.site_id
 LEFT JOIN collection_window cw ON cw.site_id = ranked.site_id AND cw.hour_ts = ranked.hour_ts
@@ -363,7 +364,7 @@ func (repository *AlertEvaluationRepository) loadCommittedCollectionWindow(
 	err := repository.scanRows(ctx, &rows, `SELECT cw.id, cw.site_id, s.name AS site_name,
 s.management_status, s.auth_status, s.data_export_enabled, s.updated_at AS site_updated_at,
 s.statistics_start_at, s.statistics_end_at,
-cw.hour_ts, cw.status, cw.last_error_code, cw.updated_at
+cw.hour_ts, cw.status, cw.last_error_code, cw.verified_at, cw.updated_at
 FROM collection_window cw
 JOIN site s ON s.id = cw.site_id
 WHERE cw.id = ? AND cw.hour_ts = ? AND cw.updated_at = ?`, rowID, hourTS, observedAt)
@@ -390,7 +391,8 @@ func (repository *AlertEvaluationRepository) loadCommittedValidationWindow(
 	err := repository.scanRows(ctx, &validations, `SELECT rw.id AS run_window_id, rw.site_id, s.name AS site_name,
 s.management_status, s.auth_status, s.data_export_enabled, s.statistics_end_at,
 s.updated_at AS site_updated_at,
-rw.hour_ts, rw.status, rw.error_code, rw.updated_at, cw.status AS fact_status
+rw.hour_ts, rw.status, rw.error_code, rw.updated_at, cw.status AS fact_status,
+cw.verified_at AS fact_verified_at
 FROM collection_run_window rw
 JOIN collection_run r ON r.id = rw.run_id AND r.task_type = ?
 JOIN site s ON s.id = rw.site_id
@@ -407,7 +409,7 @@ WHERE rw.id = ? AND rw.hour_ts = ? AND rw.updated_at = ?`,
 	if err := repository.scanRows(ctx, &snapshot.CollectionWindows, `SELECT cw.id, cw.site_id, s.name AS site_name,
 s.management_status, s.auth_status, s.data_export_enabled, s.updated_at AS site_updated_at,
 s.statistics_start_at, s.statistics_end_at,
-cw.hour_ts, cw.status, cw.last_error_code, cw.updated_at
+cw.hour_ts, cw.status, cw.last_error_code, cw.verified_at, cw.updated_at
 FROM collection_window cw
 JOIN site s ON s.id = cw.site_id
 WHERE cw.site_id = ? AND cw.hour_ts = ?`, validations[0].SiteID, hourTS); err != nil {
@@ -462,7 +464,8 @@ func (repository *AlertEvaluationRepository) loadLatestValidationForHour(
 	err := repository.scanRows(ctx, rows, `SELECT rw.id AS run_window_id, rw.site_id, s.name AS site_name,
 s.management_status, s.auth_status, s.data_export_enabled, s.statistics_end_at,
 s.updated_at AS site_updated_at,
-rw.hour_ts, rw.status, rw.error_code, rw.updated_at, cw.status AS fact_status
+rw.hour_ts, rw.status, rw.error_code, rw.updated_at, cw.status AS fact_status,
+cw.verified_at AS fact_verified_at
 FROM collection_run_window rw
 JOIN collection_run r ON r.id = rw.run_id AND r.task_type = ?
 JOIN site s ON s.id = rw.site_id

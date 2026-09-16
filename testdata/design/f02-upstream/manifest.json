@@ -63,7 +63,7 @@
           "id": "channels-page-1",
           "method": "GET",
           "path": "/api/channel/",
-          "query": {"p": "1", "page_size": "100"},
+          "query": {"p": "1", "page_size": "100", "id_sort": "true"},
           "response_file": "responses/channels-page-1.json",
           "expected_headers": {
             "Authorization": "fixture-root-token",

@@ -87,6 +87,47 @@ func TestFinanceSnapshotsExactMissingAndAtomic(t *testing.T) {
 	}
 }
 
+func TestFinanceUnchangedSnapshotsDoNotRewriteFacts(t *testing.T) {
+	db := openLockedSiteRunDatabase(t)
+	now := int64(2100900500)
+	site := createRunnableSite(t, db, fmt.Sprintf("finance-unchanged-%d", time.Now().UnixNano()), now)
+	topups := dto.UpstreamTopupSnapshot{Total: 1, MaxID: 1, Items: []dto.UpstreamTopup{{
+		ID: 1, UserID: 7, Amount: 10, Money: "1", PaymentMethod: "stripe", PaymentProvider: "stripe", CreateTime: now - 10, Status: "success",
+	}}}
+	redemptions := dto.UpstreamRedemptionSnapshot{Total: 1, MaxID: 1, Items: []dto.UpstreamRedemption{{
+		ID: 1, UserID: 7, Name: "stable", Status: 1, Quota: 10, CreatedTime: now - 10,
+	}}}
+	repository := NewSiteRepository(db.GORM)
+	if _, err := repository.SyncTopups(context.Background(), site, now, topups); err != nil {
+		t.Fatalf("seed topups: %v", err)
+	}
+	if _, err := repository.SyncRedemptions(context.Background(), site, now, redemptions); err != nil {
+		t.Fatalf("seed redemptions: %v", err)
+	}
+	var originalTopup SiteTopupOrder
+	var originalRedemption SiteRedemption
+	if err := db.GORM.Where("site_id=? AND remote_id=1", site.ID).Take(&originalTopup).Error; err != nil {
+		t.Fatalf("read original topup: %v", err)
+	}
+	if err := db.GORM.Where("site_id=? AND remote_id=1", site.ID).Take(&originalRedemption).Error; err != nil {
+		t.Fatalf("read original redemption: %v", err)
+	}
+	if written, err := repository.SyncTopups(context.Background(), site, now+60, topups); err != nil || written != 0 {
+		t.Fatalf("unchanged topup written=%d err=%v", written, err)
+	}
+	if written, err := repository.SyncRedemptions(context.Background(), site, now+60, redemptions); err != nil || written != 0 {
+		t.Fatalf("unchanged redemption written=%d err=%v", written, err)
+	}
+	var currentTopup SiteTopupOrder
+	var currentRedemption SiteRedemption
+	if err := db.GORM.Where("site_id=? AND remote_id=1", site.ID).Take(&currentTopup).Error; err != nil || currentTopup.UpdatedAt != originalTopup.UpdatedAt || currentTopup.CollectedAt != originalTopup.CollectedAt {
+		t.Fatalf("unchanged topup current=%+v original=%+v err=%v", currentTopup, originalTopup, err)
+	}
+	if err := db.GORM.Where("site_id=? AND remote_id=1", site.ID).Take(&currentRedemption).Error; err != nil || currentRedemption.UpdatedAt != originalRedemption.UpdatedAt || currentRedemption.CollectedAt != originalRedemption.CollectedAt {
+		t.Fatalf("unchanged redemption current=%+v original=%+v err=%v", currentRedemption, originalRedemption, err)
+	}
+}
+
 func TestFinanceStatisticsNeverExposeCrossSiteTopupTotalsAndDeriveExpired(t *testing.T) {
 	db := openLockedSiteRunDatabase(t)
 	now := int64(2100901000)

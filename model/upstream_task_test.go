@@ -52,6 +52,8 @@ func TestUpstreamTaskTransitionIdempotencyAndRetention(t *testing.T) {
 		t.Fatal(err)
 	}
 	updatedAt := row.UpdatedAt
+	lastSeenAt := row.LastSeenAt
+	collectedAt := row.CollectedAt
 	if err := db.GORM.Transaction(func(tx *gorm.DB) error {
 		written, err := NewSiteRepository(tx).SyncUpstreamTasks(context.Background(), site, now+1, now-48*3600, initial, false)
 		if err == nil && written != 0 {
@@ -62,8 +64,12 @@ func TestUpstreamTaskTransitionIdempotencyAndRetention(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = db.GORM.Where("site_id=? AND remote_id=1", site.ID).Take(&row).Error
-	if row.UpdatedAt != updatedAt || row.LastSeenAt != now+1 {
+	if row.UpdatedAt != updatedAt || row.LastSeenAt != lastSeenAt || row.CollectedAt != collectedAt {
 		t.Fatalf("idempotent row=%+v", row)
+	}
+	var collectionState SiteUpstreamTaskCollectionState
+	if err := db.GORM.Where("site_id = ?", site.ID).Take(&collectionState).Error; err != nil || collectionState.LastSuccessAt == nil || *collectionState.LastSuccessAt != now+1 || collectionState.ObservedCount != 2 {
+		t.Fatalf("idempotent collection state=%+v err=%v", collectionState, err)
 	}
 	finished := taskFixture(1, 12, "SUCCESS")
 	finished.FinishTime = 20
