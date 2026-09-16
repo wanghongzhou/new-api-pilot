@@ -28,7 +28,7 @@ var requiredArtifacts = []string{
 	"a49-environment.json",
 	"a49-docker-stats.tsv",
 	"a49-mysql-status.tsv",
-	"a49-query-plans.txt",
+	"a49-query-observations.tsv",
 	"a49-report.json",
 	"a49-negative-guard.log",
 	"a49-migration.log",

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -197,6 +199,61 @@ func TestAccountStatisticsActiveUsersRequiresCompleteExpectedCoverage(t *testing
 		stringValue(inactive.Trend[0].ActiveUsers) != "0" || stringValue(inactive.Summary.ActiveUsers) != "0" ||
 		stringValue(inactiveItem.ActiveUsers) != "0" {
 		t.Fatalf("complete inactive account statistics = %#v", inactive)
+	}
+}
+
+func TestCustomerSingleBucketActiveUsersComeFromPreaggregatedMetrics(t *testing.T) {
+	fixture := newStatisticsServiceFixture(t)
+	if err := fixture.database.Where("hour_ts = ?", fixture.start).Delete(&model.UsageFactHourly{}).Error; err != nil {
+		t.Fatalf("delete source facts after aggregation: %v", err)
+	}
+	response, err := fixture.service.Customers(context.Background(), dto.StatisticsQuery{
+		StartTimestamp: fixture.start, EndTimestamp: fixture.start + 3600,
+		Granularity: dto.StatisticsGranularityHour, CustomerIDs: []int64{fixture.customers[0].ID},
+		Page: 1, PageSize: 20, SortBy: "bucket_start", SortOrder: "asc",
+	})
+	if err != nil {
+		t.Fatalf("query single-bucket customer statistics: %v", err)
+	}
+	if len(response.Trend) != 1 || stringValue(response.Trend[0].ActiveUsers) != "2" ||
+		stringValue(response.Summary.ActiveUsers) != "2" || len(response.Trend[0].SiteBreakdown) != 2 {
+		t.Fatalf("single-bucket customer active users = %#v", response)
+	}
+	item, ok := response.Breakdown.Items[0].(dto.CustomerStatisticsBreakdown)
+	if !ok || stringValue(item.ActiveUsers) != "2" {
+		t.Fatalf("single-bucket customer breakdown = %#v", response.Breakdown)
+	}
+}
+
+func TestModelAndChannelBreakdownActiveUsersComeFromPreaggregatedMetrics(t *testing.T) {
+	fixture := newStatisticsServiceFixture(t)
+	if err := fixture.database.Where("hour_ts = ?", fixture.start).Delete(&model.UsageFactHourly{}).Error; err != nil {
+		t.Fatalf("delete source facts after aggregation: %v", err)
+	}
+	query := dto.StatisticsQuery{
+		StartTimestamp: fixture.start, EndTimestamp: fixture.start + 3600,
+		Granularity: dto.StatisticsGranularityHour, Page: 1, PageSize: 100,
+		SortBy: "bucket_start", SortOrder: "asc",
+	}
+	query.ModelNames = []string{"Model-A"}
+	models, err := fixture.service.Models(context.Background(), query)
+	if err != nil || len(models.Breakdown.Items) == 0 {
+		t.Fatalf("query model preaggregated active users: %#v, %v", models, err)
+	}
+	modelItem, ok := models.Breakdown.Items[0].(dto.ModelStatisticsBreakdown)
+	if !ok || stringValue(modelItem.ActiveUsers) == "0" || modelItem.ActiveUsers == nil {
+		t.Fatalf("model breakdown active users = %#v", models.Breakdown)
+	}
+
+	query.ModelNames = nil
+	query.ChannelKeys = []string{fmt.Sprintf("%d:1", fixture.sites[0].ID)}
+	channels, err := fixture.service.Channels(context.Background(), query)
+	if err != nil || len(channels.Breakdown.Items) != 1 {
+		t.Fatalf("query channel preaggregated active users: %#v, %v", channels, err)
+	}
+	channelItem, ok := channels.Breakdown.Items[0].(dto.ChannelStatisticsBreakdown)
+	if !ok || stringValue(channelItem.ActiveUsers) == "0" || channelItem.ActiveUsers == nil {
+		t.Fatalf("channel breakdown active users = %#v", channels.Breakdown)
 	}
 }
 
@@ -565,6 +622,33 @@ func TestStatisticsServiceUsesFixedQueryCountForLongTrend(t *testing.T) {
 	}
 }
 
+func TestCustomerStatisticsDoesNotExpandUnfilteredCustomersIntoAccountINList(t *testing.T) {
+	fixture := newStatisticsServiceFixture(t)
+	counter := &statisticsQueryCounter{Interface: fixture.database.Logger}
+	service, err := NewStatisticsService(StatisticsServiceOptions{
+		Database: fixture.database.Session(&gorm.Session{Logger: counter}),
+		Clock:    fixture.service.clock,
+	})
+	if err != nil {
+		t.Fatalf("create recorded statistics service: %v", err)
+	}
+	query := dto.StatisticsQuery{
+		StartTimestamp: fixture.start, EndTimestamp: fixture.start + 3600,
+		Granularity: dto.StatisticsGranularityHour, Page: 1, PageSize: 20,
+		SortBy: "bucket_start", SortOrder: "asc",
+	}
+	if _, err := service.Customers(context.Background(), query); err != nil {
+		t.Fatalf("query unfiltered customer statistics: %v", err)
+	}
+	accountSQL := counter.accountLoadSQL()
+	if accountSQL == "" {
+		t.Fatalf("account dimension load SQL was not recorded: %#v", counter.querySnapshot())
+	}
+	if strings.Contains(strings.ToLower(accountSQL), "customer_id in") {
+		t.Fatalf("unfiltered customer statistics expanded customer IDs: %s", accountSQL)
+	}
+}
+
 func TestStatisticsRangeSiteBreakdownRejectsMetricOverflow(t *testing.T) {
 	builder := &statisticsResponseBuilder{
 		data: statisticsReadData{sites: []model.StatisticsSite{{ID: 1, Name: "overflow"}}},
@@ -593,6 +677,8 @@ func TestStatisticsMetricSortAlwaysPlacesUnknownRowsLast(t *testing.T) {
 type statisticsQueryCounter struct {
 	logger.Interface
 	statements atomic.Int64
+	mu         sync.Mutex
+	queries    []string
 }
 
 func (counter *statisticsQueryCounter) Trace(
@@ -602,7 +688,30 @@ func (counter *statisticsQueryCounter) Trace(
 	err error,
 ) {
 	counter.statements.Add(1)
-	counter.Interface.Trace(ctx, begin, query, err)
+	sql, rows := query()
+	counter.mu.Lock()
+	counter.queries = append(counter.queries, sql)
+	counter.mu.Unlock()
+	counter.Interface.Trace(ctx, begin, func() (string, int64) { return sql, rows }, err)
+}
+
+func (counter *statisticsQueryCounter) accountLoadSQL() string {
+	counter.mu.Lock()
+	defer counter.mu.Unlock()
+	for _, query := range counter.queries {
+		lower := strings.ToLower(query)
+		if strings.Contains(lower, "remote_user_id") && strings.Contains(lower, "statistics_paused_at") &&
+			(strings.Contains(lower, "from account") || strings.Contains(lower, "from `account`")) {
+			return query
+		}
+	}
+	return ""
+}
+
+func (counter *statisticsQueryCounter) querySnapshot() []string {
+	counter.mu.Lock()
+	defer counter.mu.Unlock()
+	return append([]string(nil), counter.queries...)
 }
 
 func newStatisticsServiceFixture(t *testing.T) statisticsServiceFixture {

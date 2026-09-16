@@ -105,3 +105,43 @@ func TestStatisticsReadCacheRejectsShortOrNonGlobalReadsAndDoesNotCacheErrors(t 
 		t.Fatalf("failed loader calls = %d, want 2", loads.Load())
 	}
 }
+
+func TestStatisticsDashboardCacheKeyCoversProjectionScopeAndNormalizedQuery(t *testing.T) {
+	query := dto.StatisticsQuery{
+		StartTimestamp: 1_750_000_000, EndTimestamp: 1_750_086_400,
+		Granularity: dto.StatisticsGranularityDay,
+		SiteIDs:     []int64{2, 1, 2}, CustomerIDs: []int64{4, 3}, AccountIDs: []int64{6, 5},
+		ModelNames: []string{"z", "a"}, ChannelKeys: []string{"2:2", "1:1"},
+		UseGroups: []string{"vip", "default"}, TokenKeys: []string{"2:20", "1:10"},
+		NodeNames: []string{"node-z", "node-a"},
+	}
+	global, ok := statisticsDashboardCacheKey(dto.StatisticsScopeGlobal, query)
+	if !ok || global == "" {
+		t.Fatal("dashboard cache key was not generated")
+	}
+	site, ok := statisticsDashboardCacheKey(dto.StatisticsScopeSite, query)
+	if !ok || site == global {
+		t.Fatal("dashboard cache key did not include scope")
+	}
+	ordinary, ok := statisticsReadCacheKey(dto.StatisticsScopeGlobal, query)
+	if ok || ordinary != "" {
+		t.Fatal("dashboard daily projection collided with the ordinary long-hour cache")
+	}
+	reordered := query
+	reordered.SiteIDs = []int64{1, 2}
+	reordered.CustomerIDs = []int64{3, 4}
+	reordered.AccountIDs = []int64{5, 6}
+	reordered.ModelNames = []string{"a", "z"}
+	reordered.ChannelKeys = []string{"1:1", "2:2"}
+	reordered.UseGroups = []string{"default", "vip"}
+	reordered.TokenKeys = []string{"1:10", "2:20"}
+	reordered.NodeNames = []string{"node-a", "node-z"}
+	if other, ok := statisticsDashboardCacheKey(dto.StatisticsScopeGlobal, reordered); !ok || other != global {
+		t.Fatal("equivalent site filter order produced a different dashboard key")
+	}
+	changed := query
+	changed.EndTimestamp++
+	if other, ok := statisticsDashboardCacheKey(dto.StatisticsScopeGlobal, changed); !ok || other == global {
+		t.Fatal("changed query produced the same dashboard key")
+	}
+}

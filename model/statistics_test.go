@@ -94,16 +94,17 @@ func TestStatisticsActiveQueryMaterializesFilteredIdentitiesOnceForAllOtherScope
 	if err != nil {
 		t.Fatalf("build model active query: %v", err)
 	}
-	if !strings.Contains(query, "WITH active_base AS") || strings.Contains(query, "site_stat_hourly") {
-		t.Fatalf("model active query did not use the identity base:\n%s", query)
+	if !strings.Contains(query, "WITH active_base AS") || strings.Contains(query, "site_stat_hourly") ||
+		strings.Contains(query, "'dimension' AS row_kind") {
+		t.Fatalf("model active query did not reserve facts for cross-dimension totals:\n%s", query)
 	}
 	if count := strings.Count(query, "usage_fact_hourly AS f"); count != 1 {
 		t.Fatalf("model active query fact scan count = %d, want 1:\n%s", count, query)
 	}
-	if !strings.Contains(query, "GROUP BY dimension_id, site_id, bucket_key, dimension_identity, total_identity") ||
-		!strings.Contains(query, "COUNT(DISTINCT dimension_identity)") ||
+	if !strings.Contains(query, "GROUP BY site_id, bucket_key, total_identity") ||
+		!strings.Contains(query, "'trend' AS row_kind") || !strings.Contains(query, "'site' AS row_kind") ||
 		!strings.Contains(query, "COUNT(DISTINCT total_identity)") {
-		t.Fatalf("model active query lost distinct aggregation levels:\n%s", query)
+		t.Fatalf("model active query lost cross-dimension distinct totals:\n%s", query)
 	}
 	if len(args) != 4 {
 		t.Fatalf("model active query args = %#v, want one set of filters", args)
@@ -116,7 +117,30 @@ func TestStatisticsActiveQueryMaterializesFilteredIdentitiesOnceForAllOtherScope
 	query, _, err = statisticsActiveQuery(request)
 	if err != nil || strings.Count(query, "usage_fact_hourly AS f") != 1 ||
 		!strings.Contains(query, "JOIN account AS a") || !strings.Contains(query, "JOIN customer AS c") ||
-		!strings.Contains(query, "a.statistics_paused_at") || !strings.Contains(query, "c.statistics_paused_at") {
+		!strings.Contains(query, "a.statistics_paused_at") || !strings.Contains(query, "c.statistics_paused_at") ||
+		strings.Contains(query, "WITH active_base AS") || strings.Contains(query, "'dimension' AS row_kind") ||
+		strings.Contains(query, "'trend' AS row_kind") || strings.Contains(query, "'site' AS row_kind") {
 		t.Fatalf("customer active query lost lifecycle filters: %v\n%s", err, query)
+	}
+	request.CustomerIDs = nil
+	query, _, err = statisticsActiveQuery(request)
+	if err != nil || strings.Contains(query, "a.customer_id IN") {
+		t.Fatalf("unfiltered customer active query expanded an all-customer filter: %v\n%s", err, query)
+	}
+}
+
+func TestStatisticsModelAndChannelActiveQueriesUsePreaggregatedDimensions(t *testing.T) {
+	for _, scope := range []string{"model", "channel"} {
+		request := StatisticsReadRequest{
+			Scope: scope, Granularity: "day", StartTimestamp: 1_700_000_000,
+			EndTimestamp: 1_700_086_400, StartDateKey: 20231115, EndDateKey: 20231116,
+			SiteIDs: []int64{1, 2},
+		}
+		query, _, err := statisticsActiveQuery(request)
+		if err != nil || strings.Contains(query, "'dimension' AS row_kind") ||
+			!strings.Contains(query, "'trend' AS row_kind") || !strings.Contains(query, "'site' AS row_kind") ||
+			!strings.Contains(query, "'summary' AS row_kind") {
+			t.Fatalf("%s active query did not reserve facts for cross-dimension totals: %v\n%s", scope, err, query)
+		}
 	}
 }

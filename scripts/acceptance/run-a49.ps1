@@ -146,6 +146,20 @@ function Write-Utf8NoBom {
     [System.IO.File]::WriteAllText($Path, $Payload, [System.Text.UTF8Encoding]::new($false))
 }
 
+function Get-A49FileSHA256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $stream = [System.IO.File]::OpenRead($Path)
+    $algorithm = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        return ([BitConverter]::ToString($algorithm.ComputeHash($stream))).Replace('-', '').ToLowerInvariant()
+    }
+    finally {
+        $algorithm.Dispose()
+        $stream.Dispose()
+    }
+}
+
 function Remove-RunDockerResource {
     param([Parameter(Mandatory = $true)][string[]]$Arguments)
     try {
@@ -297,7 +311,7 @@ function Write-A49ArtifactInventory {
     $required = @(
         'a49-seed-report.json', 'a49-load-results.jsonl', 'a49-load-metadata.json',
         'a49-app.log', 'a49-environment.json', 'a49-docker-stats.tsv',
-        'a49-mysql-status.tsv', 'a49-query-plans.txt', 'a49-report.json',
+		'a49-mysql-status.tsv', 'a49-query-observations.tsv', 'a49-report.json',
         'a49-negative-guard.log', 'a49-migration.log', 'a49-loader.log',
         'a49-load.log', 'a49-report.log', 'a49-image-build.log'
     )
@@ -314,7 +328,7 @@ function Write-A49ArtifactInventory {
         $files += [ordered]@{
             path = $relative
             size_bytes = [int64]$info.Length
-            sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+            sha256 = Get-A49FileSHA256 -Path $path
         }
     }
     $inventory = [ordered]@{
@@ -392,7 +406,13 @@ try {
     $appImage = "new-api-pilot-a49-$runToken`:local"
     $runLabel = "new-api-pilot.acceptance-run=$runToken"
     $viewerPassword = New-A49Password
-    $databaseDSN = "root:@tcp(mysql-a49:3306)/${databaseName}?charset=utf8mb4&parseTime=True&loc=Asia%2FShanghai"
+    # A49 must observe the SQL actually executed by the application. The Go
+    # MySQL driver's default server-side prepare path records EXECUTE events
+    # without a useful digest text on MySQL 8.4, so this isolated capacity
+    # environment interpolates bound values client-side. The application still
+    # executes the same bound query shape, while performance_schema can bind
+    # the evidence to the real statement instead of a handwritten surrogate.
+    $databaseDSN = "root:@tcp(mysql-a49:3306)/${databaseName}?charset=utf8mb4&parseTime=True&loc=Asia%2FShanghai&interpolateParams=true"
     foreach ($key in @($containers.Keys)) {
         $containers[$key] = "new-api-pilot-a49-$runToken-$key"
     }
@@ -446,7 +466,8 @@ try {
         '--health-interval', '2s', '--health-timeout', '2s', '--health-retries', '75', '--health-start-period', '10s',
         $mysqlImage, '--character-set-server=utf8mb4', '--collation-server=utf8mb4_unicode_ci',
         "--innodb-buffer-pool-size=$mysqlBufferPool",
-        '--innodb-redo-log-capacity=2G', '--default-time-zone=+08:00', '--skip-log-bin'
+		'--innodb-redo-log-capacity=2G', '--default-time-zone=+08:00', '--skip-log-bin',
+		'--performance-schema-max-digest-length=8192', '--performance-schema-max-sql-text-length=8192'
     ))
     $healthDeadline = [DateTimeOffset]::UtcNow.AddSeconds($mysqlHealthTimeoutSeconds)
     while ($true) {
@@ -596,16 +617,67 @@ try {
     $mysqlStatus = Invoke-Docker -Arguments @('exec', $containers.mysql, 'mysql', '-uroot', '-N', '-e',
         "SHOW GLOBAL STATUS WHERE Variable_name IN ('Threads_connected','Threads_running','Questions','Slow_queries','Created_tmp_disk_tables','Innodb_buffer_pool_reads','Innodb_row_lock_waits');") -TimeoutSeconds 120
     Write-Utf8NoBom -Path (Join-Path $evidenceDirectory 'a49-mysql-status.tsv') -Payload $mysqlStatus.Stdout
-    $explain = Invoke-Docker -Arguments @('exec', $containers.mysql, 'mysql', '-uroot', $databaseName, '-e',
-        "EXPLAIN SELECT * FROM account WHERE managed_status='active' ORDER BY updated_at DESC,id DESC LIMIT 20; EXPLAIN SELECT site_id,hour_ts,SUM(request_count) FROM site_stat_hourly WHERE hour_ts>=1765983600 AND hour_ts<1768662000 GROUP BY site_id,hour_ts; EXPLAIN SELECT customer_id,site_id,SUM(request_count) FROM customer_stat_daily WHERE date_key>=20251219 AND date_key<20260118 GROUP BY customer_id,site_id; EXPLAIN WITH active_identity AS (SELECT f.site_id,f.remote_user_id FROM usage_fact_hourly AS f FORCE INDEX (idx_usage_fact_hourly_time_user) JOIN collection_window AS w ON w.site_id=f.site_id AND w.hour_ts=f.hour_ts AND w.status='complete' JOIN site AS s ON s.id=f.site_id WHERE f.hour_ts>=1765983600 AND f.hour_ts<1765987200 AND f.remote_user_id>0 AND f.site_id BETWEEN 1 AND 50 AND s.statistics_start_at IS NOT NULL AND s.statistics_start_at<f.hour_ts+3600 AND (s.statistics_end_at IS NULL OR s.statistics_end_at>f.hour_ts) GROUP BY f.site_id,f.remote_user_id UNION SELECT f.site_id,f.remote_user_id FROM usage_fact_daily AS f FORCE INDEX (idx_usage_fact_daily_date_user) WHERE f.date_key>=20251218 AND f.date_key<20260117 AND f.remote_user_id>0 AND f.site_id BETWEEN 1 AND 50 GROUP BY f.site_id,f.remote_user_id UNION SELECT f.site_id,f.remote_user_id FROM usage_fact_hourly AS f FORCE INDEX (idx_usage_fact_hourly_time_user) JOIN collection_window AS w ON w.site_id=f.site_id AND w.hour_ts=f.hour_ts AND w.status='complete' JOIN site AS s ON s.id=f.site_id WHERE f.hour_ts>=1768579200 AND f.hour_ts<1768662000 AND f.remote_user_id>0 AND f.site_id BETWEEN 1 AND 50 AND s.statistics_start_at IS NOT NULL AND s.statistics_start_at<f.hour_ts+3600 AND (s.statistics_end_at IS NULL OR s.statistics_end_at>f.hour_ts) GROUP BY f.site_id,f.remote_user_id) SELECT COUNT(*) FROM active_identity;") -TimeoutSeconds 120
-    if ($explain.ExitCode -ne 0 -or $explain.TimedOut) {
-        throw 'A49 query-plan capture failed.'
-    }
-    if ($explain.Stdout -notmatch 'idx_usage_fact_hourly_time_user' -or
-        $explain.Stdout -notmatch 'idx_usage_fact_daily_date_user') {
-        throw 'A49 exact active-user query did not use both hourly-boundary and daily-identity indexes.'
-    }
-    Write-Utf8NoBom -Path (Join-Path $evidenceDirectory 'a49-query-plans.txt') -Payload $explain.Stdout
+	$statementEvidence = Invoke-Docker -Arguments @('exec', $containers.mysql, 'mysql', '-uroot', '-N', '-B', '-e',
+		"SELECT DIGEST,DIGEST_TEXT,COUNT_STAR,SUM_ROWS_EXAMINED,SUM_ROWS_SENT,SUM_CREATED_TMP_DISK_TABLES FROM performance_schema.events_statements_summary_by_digest WHERE SCHEMA_NAME='$databaseName' AND (DIGEST_TEXT LIKE 'SELECT %' OR DIGEST_TEXT LIKE 'WITH %') ORDER BY COUNT_STAR DESC;") -TimeoutSeconds 120
+	if ($statementEvidence.ExitCode -ne 0 -or $statementEvidence.TimedOut) {
+		throw 'A49 actual application statement capture failed.'
+	}
+	$observationHeader = "digest`tdigest_text`tcount_star`tsum_rows_examined`tsum_rows_sent`tsum_created_tmp_disk_tables`n"
+	Write-Utf8NoBom -Path (Join-Path $evidenceDirectory 'a49-query-observations.tsv') -Payload ($observationHeader + $statementEvidence.Stdout)
+	$statementRows = @()
+	foreach ($line in ($statementEvidence.Stdout -split "`r?`n")) {
+		if ([string]::IsNullOrWhiteSpace($line)) { continue }
+		$fields = $line.Split("`t")
+		if ($fields.Count -ne 6) { throw 'A49 statement observation row is malformed.' }
+		$countStar = [int64]0
+		$rowsExamined = [int64]0
+		$rowsSent = [int64]0
+		$tmpDiskTables = [int64]0
+		if (-not [int64]::TryParse($fields[2], [ref]$countStar) -or $countStar -le 0 -or
+			-not [int64]::TryParse($fields[3], [ref]$rowsExamined) -or $rowsExamined -lt 0 -or
+			-not [int64]::TryParse($fields[4], [ref]$rowsSent) -or $rowsSent -lt 0 -or
+			-not [int64]::TryParse($fields[5], [ref]$tmpDiskTables) -or $tmpDiskTables -lt 0) {
+			throw 'A49 statement observation counters are invalid.'
+		}
+		$statementRows += [pscustomobject]@{
+			Digest = $fields[0]
+			Text = $fields[1]
+			Count = $countStar
+			RowsExamined = $rowsExamined
+			RowsSent = $rowsSent
+			TmpDiskTables = $tmpDiskTables
+		}
+	}
+	$activeStatements = @($statementRows | Where-Object { $_.Text -match 'active_identity' })
+	$metricStatements = @($statementRows | Where-Object {
+		$_.Text -match 'FROM\s+`site_stat_hourly`\s+AS\s+`st`' -and $_.Text -match 'GROUP BY'
+	})
+	if ($activeStatements.Count -ne 1 -or $metricStatements.Count -lt 1 -or
+		$activeStatements[0].Text -notmatch 'idx_usage_fact_hourly_time_user' -or
+		$activeStatements[0].Text -notmatch 'idx_usage_fact_daily_date_user' -or
+		$activeStatements[0].Text -match 'site_active') {
+		throw 'A49 actual application statements do not satisfy the bounded aggregate/identity query contract.'
+	}
+	$seedReport = Get-Content -LiteralPath (Join-Path $evidenceDirectory 'a49-seed-report.json') -Raw | ConvertFrom-Json
+	$dailyFactRows = [int64]$seedReport.actual_rows.usage_fact_daily
+	$hourlyFactRows = [int64]$seedReport.actual_rows.usage_fact_hourly
+	$siteHourlyRows = [int64]$seedReport.actual_rows.site_stat_hourly
+	if ($dailyFactRows -le 0 -or $hourlyFactRows -le 0 -or $siteHourlyRows -le 0) {
+		throw 'A49 seed row counts required for statement bounds are invalid.'
+	}
+	$activeAverageRowsExamined = [double]$activeStatements[0].RowsExamined / [double]$activeStatements[0].Count
+	$activeRowsExaminedLimit = [double](($dailyFactRows * 4) + [Math]::Ceiling($hourlyFactRows / 5.0) + ($siteHourlyRows * 2))
+	if ($activeStatements[0].TmpDiskTables -ne 0 -or $activeAverageRowsExamined -gt $activeRowsExaminedLimit) {
+		throw "A49 active identity statement exceeded its bounded read contract: avg_rows_examined=$activeAverageRowsExamined limit=$activeRowsExaminedLimit tmp_disk_tables=$($activeStatements[0].TmpDiskTables)."
+	}
+	$metricCount = [int64](($metricStatements | Measure-Object -Property Count -Sum).Sum)
+	$metricRowsExamined = [int64](($metricStatements | Measure-Object -Property RowsExamined -Sum).Sum)
+	$metricTmpDiskTables = [int64](($metricStatements | Measure-Object -Property TmpDiskTables -Sum).Sum)
+	$metricAverageRowsExamined = [double]$metricRowsExamined / [double]$metricCount
+	$metricRowsExaminedLimit = [double](($siteHourlyRows * 4) + 1000)
+	if ($metricTmpDiskTables -ne 0 -or $metricAverageRowsExamined -gt $metricRowsExaminedLimit) {
+		throw "A49 metric statements exceeded their bounded read contract: avg_rows_examined=$metricAverageRowsExamined limit=$metricRowsExaminedLimit tmp_disk_tables=$metricTmpDiskTables."
+	}
 
     $versionParts = $dockerVersion.Stdout.Trim().Split('|')
     $appImageID = (Invoke-Docker -Arguments @('image', 'inspect', '--format', '{{.Id}}', $appImage) -TimeoutSeconds 30).Stdout.Trim()

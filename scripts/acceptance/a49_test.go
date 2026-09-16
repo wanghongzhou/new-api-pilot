@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -73,7 +74,8 @@ func TestA49RunnerStaticSafetyContract(t *testing.T) {
 		"Get-A49RepositoryRelativePath", "GetFullPath", "OrdinalIgnoreCase",
 		"Get-A49GitState", "Invoke-A49GitProcess", "rev-list", "--all", "--count",
 		"GOPROXY=$goModuleProxy", "GOSUMDB=$goSumDatabase", "https://goproxy.cn,https://mirrors.aliyun.com/goproxy/,direct",
-		"idx_usage_fact_hourly_time_user", "idx_usage_fact_daily_date_user", "WITH active_identity AS",
+		"idx_usage_fact_hourly_time_user", "idx_usage_fact_daily_date_user", "performance_schema.events_statements_summary_by_digest",
+		"a49-query-observations.tsv", "SUM_ROWS_EXAMINED", "SUM_CREATED_TMP_DISK_TABLES",
 	} {
 		if !strings.Contains(staticContract, required) {
 			t.Fatalf("runner is missing %q", required)
@@ -81,6 +83,7 @@ func TestA49RunnerStaticSafetyContract(t *testing.T) {
 	}
 	for _, forbidden := range []string{
 		"docker system prune", "docker volume prune", "docker network prune", "--publish", "{{json .}}", "GetRelativePath", "& git",
+		"EXPLAIN WITH active_identity", "a49-query-plans.txt",
 	} {
 		if strings.Contains(strings.ToLower(text), strings.ToLower(forbidden)) {
 			t.Fatalf("runner contains forbidden global/network mutation %q", forbidden)
@@ -287,6 +290,19 @@ func TestA49EndpointContracts(t *testing.T) {
 			"items": []any{map[string]any{"id": "1", "name": "客户", "status": "cooperating", "account_count": 1}}},
 		"list_accounts": map[string]any{"page": 1, "page_size": 20, "total": "10",
 			"items": []any{map[string]any{"id": "1", "site_id": "1", "customer_id": "1", "remote_user_id": "1000001", "username": "remote", "quota": "1"}}},
+		"hourly_global_31d": func() any {
+			points := make([]any, 0, (profile.Capacity.HourlyQueryEndUnix-profile.Capacity.HourlyQueryStartUnix)/3600)
+			for bucket := profile.Capacity.HourlyQueryStartUnix; bucket < profile.Capacity.HourlyQueryEndUnix; bucket += 3600 {
+				breakdown := make([]any, 0, profile.Capacity.Sites)
+				for site := 1; site <= profile.Capacity.Sites; site++ {
+					breakdown = append(breakdown, map[string]any{"site_id": strconv.Itoa(site)})
+				}
+				points = append(points, map[string]any{"bucket_start": bucket, "data_status": "complete", "site_breakdown": breakdown})
+			}
+			return map[string]any{"scope": "global", "granularity": "hour",
+				"range":   map[string]any{"start_timestamp": profile.Capacity.HourlyQueryStartUnix, "end_timestamp": profile.Capacity.HourlyQueryEndUnix, "timezone": "Asia/Shanghai"},
+				"summary": map[string]any{"request_count": "1", "active_users": strconv.Itoa(profile.Capacity.RemoteUsers), "data_status": "complete"}, "trend": points}
+		}(),
 		"dashboard_summary": map[string]any{
 			"today":                 map[string]any{"request_count": "1", "as_of": profile.Capacity.HourlyQueryEndUnix},
 			"active_accounts_today": "10", "site_count": 2, "customer_count": 10, "managed_account_count": 10,
@@ -319,6 +335,38 @@ func TestA49EndpointContracts(t *testing.T) {
 	if err := validateA49EndpointDTO("dashboard_summary", wrongPayload, profile); err == nil {
 		t.Fatal("dashboard statistics as_of incorrectly accepted Clock.Now instead of the last complete hour")
 	}
+	hourly := tests["hourly_global_31d"]
+	invalidHourly, _ := json.Marshal(hourly)
+	var invalidMap map[string]any
+	_ = json.Unmarshal(invalidHourly, &invalidMap)
+	invalidMap["summary"].(map[string]any)["active_users"] = "39"
+	if err := validateA49EndpointDTO("hourly_global_31d", mustJSONA49(invalidMap), profile); err == nil {
+		t.Fatal("hourly statistics accepted an inexact summary active_users")
+	}
+	duplicateMap := map[string]any{}
+	_ = json.Unmarshal(mustJSONA49(hourly), &duplicateMap)
+	trend := duplicateMap["trend"].([]any)
+	trend = append(trend, trend[0])
+	duplicateMap["trend"] = trend
+	if err := validateA49EndpointDTO("hourly_global_31d", mustJSONA49(duplicateMap), profile); err == nil {
+		t.Fatal("hourly statistics accepted a duplicate bucket")
+	}
+	duplicateSiteMap := map[string]any{}
+	_ = json.Unmarshal(mustJSONA49(hourly), &duplicateSiteMap)
+	firstPoint := duplicateSiteMap["trend"].([]any)[0].(map[string]any)
+	sites := firstPoint["site_breakdown"].([]any)
+	sites[len(sites)-1] = sites[0]
+	if err := validateA49EndpointDTO("hourly_global_31d", mustJSONA49(duplicateSiteMap), profile); err == nil {
+		t.Fatal("hourly statistics accepted a duplicate site within one bucket")
+	}
+}
+
+func mustJSONA49(value any) []byte {
+	payload, err := json.Marshal(value)
+	if err != nil {
+		panic(err)
+	}
+	return payload
 }
 
 func TestA49SiteListContractMatchesBackendPageDTO(t *testing.T) {
@@ -377,6 +425,15 @@ func TestA49ReportGatesEveryEndpointAndComposite(t *testing.T) {
 	failed := buildA49FinalReport(profile, inputs.dataset, inputs.access, inputs.seed, inputs.load, inputs.environment, true)
 	if failed.Passed || failed.Endpoints["list_sites"].Checks["client_p95"] {
 		t.Fatal("strict list P95 threshold did not fail at exactly 1s")
+	}
+
+	inputs = newPassingA49ReportInputs(profile)
+	cold := inputs.dataset.records["hourly_global_31d"]["preflight"]
+	cold[0].DurationNanos = int64(time.Duration(profile.Capacity.Targets.Hourly31DP95Seconds * float64(time.Second)))
+	inputs.dataset.records["hourly_global_31d"]["preflight"] = cold
+	failed = buildA49FinalReport(profile, inputs.dataset, inputs.access, inputs.seed, inputs.load, inputs.environment, true)
+	if failed.Passed || failed.Endpoints["hourly_global_31d"].Checks["cold_read_client"] {
+		t.Fatal("cold hourly read was diluted by cached warmup/sample results")
 	}
 }
 
@@ -563,6 +620,16 @@ func newPassingA49ReportInputs(profile a49RunProfile) a49ReportTestInputs {
 	sequence := 0
 	for _, endpoint := range definitions {
 		result.dataset.records[endpoint.Name] = make(map[string][]a49RawRecord)
+		if endpoint.Name == "hourly_global_31d" {
+			sequence++
+			requestID := fmt.Sprintf("a49_test_%d", sequence)
+			result.dataset.records[endpoint.Name]["preflight"] = []a49RawRecord{{
+				SchemaVersion: evidenceSchemaVersion, Kind: "request", Phase: "preflight", Scenario: endpoint.Scenario,
+				Endpoint: endpoint.Name, RequestID: requestID, ViewerNumber: 1, StatusCode: 200,
+				Success: true, DurationNanos: int64(10 * time.Millisecond),
+			}}
+			result.access[requestID] = a49AccessRecord{Status: 200, Duration: 5, Count: 1}
+		}
 		for _, phase := range []string{"warmup", "sample"} {
 			for viewer := 1; viewer <= profile.Capacity.ConcurrentReadUsers; viewer++ {
 				sequence++

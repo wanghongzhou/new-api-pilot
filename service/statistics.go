@@ -226,10 +226,10 @@ func (service *StatisticsService) query(
 	normalized.Normalize()
 	if key, ok := statisticsReadCacheKey(scope, normalized); ok && service != nil && service.readCache != nil {
 		return service.readCache.load(ctx, key, func() (dto.StatisticsResponse, error) {
-			return service.queryInternal(ctx, scope, normalized, false)
+			return service.queryInternal(ctx, scope, normalized, false, false)
 		})
 	}
-	return service.queryInternal(ctx, scope, normalized, false)
+	return service.queryInternal(ctx, scope, normalized, false, false)
 }
 
 // ExportSnapshot uses the exact statistics read and response builder while
@@ -240,7 +240,38 @@ func (service *StatisticsService) ExportSnapshot(
 	scope string,
 	query dto.StatisticsQuery,
 ) (dto.StatisticsResponse, error) {
-	return service.queryInternal(ctx, scope, query, true)
+	return service.queryInternal(ctx, scope, query, true, false)
+}
+
+func (service *StatisticsService) DashboardGlobal(ctx context.Context, query dto.StatisticsQuery) (dto.StatisticsResponse, error) {
+	return service.dashboardQuery(ctx, dto.StatisticsScopeGlobal, query)
+}
+
+func (service *StatisticsService) DashboardSites(ctx context.Context, query dto.StatisticsQuery) (dto.StatisticsResponse, error) {
+	return service.dashboardQuery(ctx, dto.StatisticsScopeSite, query)
+}
+
+func (service *StatisticsService) DashboardCustomers(ctx context.Context, query dto.StatisticsQuery) (dto.StatisticsResponse, error) {
+	return service.dashboardQuery(ctx, dto.StatisticsScopeCustomer, query)
+}
+
+func (service *StatisticsService) DashboardModels(ctx context.Context, query dto.StatisticsQuery) (dto.StatisticsResponse, error) {
+	return service.dashboardQuery(ctx, dto.StatisticsScopeModel, query)
+}
+
+func (service *StatisticsService) DashboardChannels(ctx context.Context, query dto.StatisticsQuery) (dto.StatisticsResponse, error) {
+	return service.dashboardQuery(ctx, dto.StatisticsScopeChannel, query)
+}
+
+func (service *StatisticsService) dashboardQuery(ctx context.Context, scope string, query dto.StatisticsQuery) (dto.StatisticsResponse, error) {
+	query.Normalize()
+	key, ok := statisticsDashboardCacheKey(scope, query)
+	if !ok || service == nil || service.readCache == nil {
+		return service.queryInternal(ctx, scope, query, false, true)
+	}
+	return service.readCache.load(ctx, key, func() (dto.StatisticsResponse, error) {
+		return service.queryInternal(ctx, scope, query, false, true)
+	})
 }
 
 func (service *StatisticsService) queryInternal(
@@ -248,6 +279,7 @@ func (service *StatisticsService) queryInternal(
 	scope string,
 	query dto.StatisticsQuery,
 	unpaginated bool,
+	metricsOnly bool,
 ) (dto.StatisticsResponse, error) {
 	if service == nil || service.repository == nil || service.clock == nil {
 		return dto.StatisticsResponse{}, ErrStatisticsRead
@@ -280,17 +312,20 @@ func (service *StatisticsService) queryInternal(
 			if len(query.CustomerIDs) > 0 && len(data.customers) == 0 {
 				sites = nil
 			} else {
-				request.CustomerIDs = statisticsCustomerIDs(data.customers)
-				request.SiteIDs = statisticsSiteIDs(sites)
-				data.accounts, err = service.repository.LoadAccounts(ctx, request)
+				accountRequest := request
+				if len(query.CustomerIDs) > 0 {
+					accountRequest.CustomerIDs = statisticsCustomerIDs(data.customers)
+				}
+				accountRequest.SiteIDs = statisticsSiteIDs(sites)
+				data.accounts, err = service.repository.LoadAccounts(ctx, accountRequest)
 			}
 		}
 		sites = statisticsSitesForAccounts(sites, data.accounts)
 	case dto.StatisticsScopeAccount:
-		request.SiteIDs = statisticsSiteIDs(sites)
-		data.accounts, err = service.repository.LoadAccounts(ctx, request)
+		accountRequest := request
+		accountRequest.SiteIDs = statisticsSiteIDs(sites)
+		data.accounts, err = service.repository.LoadAccounts(ctx, accountRequest)
 		if err == nil {
-			request.AccountIDs = statisticsAccountIDs(data.accounts)
 			data.customers, err = service.repository.LoadCustomers(ctx, statisticsAccountCustomerIDs(data.accounts))
 		}
 		sites = statisticsSitesForAccounts(sites, data.accounts)
@@ -308,7 +343,7 @@ func (service *StatisticsService) queryInternal(
 	request.SiteIDs = statisticsSiteIDs(sites)
 	if len(request.SiteIDs) > 0 {
 		data.metrics, err = service.repository.LoadMetricRows(ctx, request)
-		if err == nil {
+		if err == nil && !metricsOnly && !statisticsMetricOnlyActiveUsers(scope, query.Granularity, len(buckets)) {
 			data.active, err = service.repository.LoadActiveRows(ctx, request)
 		}
 		windowEnd := minInt64(query.EndTimestamp, floorHour(service.clock.Now().Unix()))
@@ -330,6 +365,11 @@ func (service *StatisticsService) queryInternal(
 		return dto.StatisticsResponse{}, errors.Join(ErrStatisticsRead, err)
 	}
 	return response, nil
+}
+
+func statisticsMetricOnlyActiveUsers(scope, granularity string, bucketCount int) bool {
+	return scope == dto.StatisticsScopeCustomer && bucketCount == 1 &&
+		(granularity == dto.StatisticsGranularityHour || granularity == dto.StatisticsGranularityDay)
 }
 
 type statisticsReadData struct {
@@ -1060,7 +1100,9 @@ func (builder *statisticsResponseBuilder) loadMetrics() error {
 			return err
 		}
 		builder.siteMetrics[siteKey] = current
-		if (builder.scope == dto.StatisticsScopeGlobal || builder.scope == dto.StatisticsScopeSite) &&
+		if (builder.scope == dto.StatisticsScopeGlobal || builder.scope == dto.StatisticsScopeSite ||
+			builder.scope == dto.StatisticsScopeCustomer || builder.scope == dto.StatisticsScopeModel ||
+			builder.scope == dto.StatisticsScopeChannel) &&
 			(builder.query.Granularity == dto.StatisticsGranularityHour || builder.query.Granularity == dto.StatisticsGranularityDay) {
 			activeUsers, parseErr := statisticsParseMetric(row.ActiveUsers)
 			if parseErr != nil {
@@ -1071,16 +1113,25 @@ func (builder *statisticsResponseBuilder) loadMetrics() error {
 				return model.ErrStatisticsReadContract
 			}
 			builder.dimensionActive[dimensionKey] = active
-			active, ok = statisticsCheckedAdd(builder.trendActive[bucketStart], activeUsers)
-			if !ok {
-				return model.ErrStatisticsReadContract
+			if builder.scope != dto.StatisticsScopeModel && builder.scope != dto.StatisticsScopeChannel {
+				active, ok = statisticsCheckedAdd(builder.trendActive[bucketStart], activeUsers)
+				if !ok {
+					return model.ErrStatisticsReadContract
+				}
+				builder.trendActive[bucketStart] = active
+				active, ok = statisticsCheckedAdd(builder.siteActive[siteKey], activeUsers)
+				if !ok {
+					return model.ErrStatisticsReadContract
+				}
+				builder.siteActive[siteKey] = active
 			}
-			builder.trendActive[bucketStart] = active
-			active, ok = statisticsCheckedAdd(builder.siteActive[siteKey], activeUsers)
-			if !ok {
-				return model.ErrStatisticsReadContract
+			if builder.scope == dto.StatisticsScopeCustomer && len(builder.buckets) == 1 {
+				active, ok = statisticsCheckedAdd(builder.summaryActive, activeUsers)
+				if !ok {
+					return model.ErrStatisticsReadContract
+				}
+				builder.summaryActive = active
 			}
-			builder.siteActive[siteKey] = active
 		}
 		if err := builder.summaryMetrics.add(value); err != nil {
 			return err

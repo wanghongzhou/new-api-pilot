@@ -6,6 +6,7 @@ import (
 	"math"
 	"math/big"
 	"strconv"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -16,6 +17,15 @@ import (
 )
 
 const dashboardCurrentSnapshotMaxAgeSeconds int64 = 120
+
+const dashboardActiveAccountsTodayQuery = `SELECT
+  (SELECT COUNT(DISTINCT d.account_id)
+     FROM account_stat_daily d
+     JOIN account a ON a.id = d.account_id
+    WHERE d.date_key = ? AND a.managed_status = 'active'
+      AND (d.request_count > 0 OR d.quota > 0 OR d.token_used > 0)) AS active_count,
+  EXISTS(SELECT 1 FROM collection_window w
+          WHERE w.hour_ts >= ? AND w.hour_ts < ? AND w.status = 'complete') AS has_complete_usage`
 
 type DashboardReaderOptions struct {
 	Database *gorm.DB
@@ -144,20 +154,17 @@ func (reader *DashboardReader) readDashboardActiveAccounts(
 	now int64,
 	snapshot *DashboardRealtimeSnapshot,
 ) error {
-	start, _ := dashboardTodayRange(reader.clock.Now())
+	current := time.Unix(now, 0)
+	start, _ := dashboardTodayRange(current)
+	dateKey := beijingDateKey(current)
 	type activeAccountCount struct {
 		Count            int64 `gorm:"column:active_count"`
 		HasCompleteUsage bool  `gorm:"column:has_complete_usage"`
 	}
 	var value activeAccountCount
-	if err := reader.database.WithContext(ctx).Raw(`SELECT
-	  (SELECT COUNT(DISTINCT a.id)
-	     FROM usage_fact_hourly f
-	     JOIN account a ON a.site_id = f.site_id AND a.remote_user_id = f.remote_user_id
-	    WHERE f.hour_ts >= ? AND f.hour_ts < ? AND a.managed_status = 'active') AS active_count,
-  EXISTS(SELECT 1 FROM collection_window w
-          WHERE w.hour_ts >= ? AND w.hour_ts < ? AND w.status = 'complete') AS has_complete_usage`,
-		start, now, start, now).Scan(&value).Error; err != nil {
+	if err := reader.database.WithContext(ctx).Raw(
+		dashboardActiveAccountsTodayQuery, dateKey, start, now,
+	).Scan(&value).Error; err != nil {
 		return err
 	}
 	if value.HasCompleteUsage {

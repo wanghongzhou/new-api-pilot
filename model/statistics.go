@@ -436,7 +436,8 @@ func (repository *StatisticsRepository) LoadMetricRows(ctx context.Context, requ
 		dimensionName = "COALESCE(MIN(NULLIF(st.token_name, '') COLLATE utf8mb4_bin), '')"
 	}
 	activeUsers := "'0'"
-	if (request.Scope == "global" || request.Scope == "site") &&
+	if (request.Scope == "global" || request.Scope == "site" || request.Scope == "customer" ||
+		request.Scope == "model" || request.Scope == "channel") &&
 		(request.Granularity == "hour" || request.Granularity == "day") {
 		activeUsers = "CAST(SUM(st.active_users) AS CHAR)"
 	}
@@ -487,6 +488,38 @@ func statisticsActiveQuery(request StatisticsReadRequest) (string, []any, error)
 	if (request.Scope == "global" || request.Scope == "site") &&
 		(request.Granularity == "hour" || request.Granularity == "day") {
 		return statisticsSiteAggregateActiveQuery(request, from, totalIdentity, where, args)
+	}
+	if request.Scope == "customer" && (request.Granularity == "hour" || request.Granularity == "day") {
+		totalKey := "CAST(CONCAT_WS(':', " + totalIdentity + ") AS BINARY)"
+		query := fmt.Sprintf(`SELECT 'summary' AS row_kind, '' AS dimension_id, 0 AS site_id, 0 AS bucket_key,
+  CAST(COUNT(DISTINCT %s) AS CHAR) AS active_users
+FROM %s
+WHERE %s`, totalKey, from, where)
+		return query, args, nil
+	}
+	if (request.Scope == "model" || request.Scope == "channel") &&
+		(request.Granularity == "hour" || request.Granularity == "day") {
+		totalKey := "CAST(CONCAT_WS(':', " + totalIdentity + ") AS BINARY)"
+		query := fmt.Sprintf(`WITH active_base AS (
+  SELECT f.site_id AS site_id, %s AS bucket_key, %s AS total_identity
+  FROM %s
+  WHERE %s
+  GROUP BY site_id, bucket_key, total_identity
+)
+SELECT 'trend' AS row_kind, '' AS dimension_id, 0 AS site_id, bucket_key,
+  CAST(COUNT(DISTINCT total_identity) AS CHAR) AS active_users
+FROM active_base
+GROUP BY bucket_key
+UNION ALL
+SELECT 'site' AS row_kind, '' AS dimension_id, site_id, bucket_key,
+  CAST(COUNT(DISTINCT total_identity) AS CHAR) AS active_users
+FROM active_base
+GROUP BY site_id, bucket_key
+UNION ALL
+SELECT 'summary' AS row_kind, '' AS dimension_id, 0 AS site_id, 0 AS bucket_key,
+  CAST(COUNT(DISTINCT total_identity) AS CHAR) AS active_users
+FROM active_base`, bucket, totalKey, from, where)
+		return query, args, nil
 	}
 	totalKey := "CAST(CONCAT_WS(':', " + totalIdentity + ") AS BINARY)"
 	query := fmt.Sprintf(`WITH active_base AS (

@@ -19,6 +19,12 @@ func TestSiteListAndDetailUseLatestResourceSummaryAndDefaultMissingMetricsToZero
 	sites := newIntegrationSiteService(t, tx, clock, &testSiteClientFactory{
 		authenticated: authorizedTestSiteClient(now), public: authorizedTestSiteClient(now),
 	})
+	if sites.usageOverviewCache.now().Equal(clock.Now()) {
+		t.Fatal("site usage cache expiry was bound to the business clock")
+	}
+	// Production cache expiry uses the wall clock. This test injects the fake
+	// clock directly into the cache so it can exercise expiry deterministically.
+	sites.usageOverviewCache.now = clock.Now
 	repository := model.NewSiteRepository(tx)
 	site := newTestSite(now, "https://site-summary.example")
 	site.StatisticsStatus = constant.SiteStatisticsBackfilling
@@ -171,6 +177,11 @@ func TestSiteListOverviewAggregatesRolling24HoursAndUsesNaturalMinutes(t *testin
 	sites := newIntegrationSiteService(t, tx, clock, &testSiteClientFactory{
 		authenticated: authorizedTestSiteClient(now), public: authorizedTestSiteClient(now),
 	})
+	if sites.usageOverviewCache.now().Equal(clock.Now()) {
+		t.Fatal("site usage cache expiry was bound to the business clock")
+	}
+	cacheNow := clock.Now()
+	sites.usageOverviewCache.now = func() time.Time { return cacheNow }
 	repository := model.NewSiteRepository(tx)
 	site := newTestSite(now, "https://site-usage-overview.example")
 	if err := repository.Create(context.Background(), &site); err != nil {
@@ -251,6 +262,7 @@ func TestSiteListOverviewAggregatesRolling24HoursAndUsesNaturalMinutes(t *testin
 			t.Fatalf("complete remaining rolling window %d: %v", hour, err)
 		}
 	}
+	cacheNow = cacheNow.Add(siteUsageOverviewCacheTTL + time.Second)
 	page, err = sites.List(context.Background(), dto.SiteListQuery{Page: 1, PageSize: 20, SortBy: "priority", SortOrder: "asc"})
 	if err != nil {
 		t.Fatalf("list sites with all rolling windows: %v", err)

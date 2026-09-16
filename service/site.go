@@ -28,6 +28,7 @@ type SiteService struct {
 	maintenance          DataMaintenanceNotifier
 	performanceCache     *sitePerformanceCache
 	performanceRefreshes chan struct{}
+	usageOverviewCache   *siteUsageOverviewCache
 }
 
 type SiteServiceOptions struct {
@@ -51,6 +52,7 @@ func NewSiteService(options SiteServiceOptions) (*SiteService, error) {
 	if len(options.PreflightSecret) < 32 {
 		return nil, errors.New("site preflight secret must contain at least 32 bytes")
 	}
+	usageOverviewCache := newSiteUsageOverviewCache()
 	return &SiteService{
 		sites: options.Repository, clients: options.ClientFactory, cipher: options.Cipher,
 		clock:           options.Clock,
@@ -58,6 +60,7 @@ func NewSiteService(options SiteServiceOptions) (*SiteService, error) {
 		maintenance:          options.Maintenance,
 		performanceCache:     newSitePerformanceCache(),
 		performanceRefreshes: make(chan struct{}, 4),
+		usageOverviewCache:   usageOverviewCache,
 	}, nil
 }
 
@@ -154,7 +157,7 @@ func (service *SiteService) List(ctx context.Context, query dto.SiteListQuery) (
 	nowTime := service.clock.Now()
 	now := nowTime.Unix()
 	usageStart, usageEnd := siteListUsageRange(nowTime)
-	usage, err := service.sites.ListUsageOverviews(ctx, siteIDs, usageStart, usageEnd)
+	usage, err := service.listUsageOverviews(ctx, siteIDs, usageStart, usageEnd)
 	if err != nil {
 		return common.PageData[dto.SiteListItem]{}, fmt.Errorf("list site usage overviews: %w", err)
 	}
@@ -170,6 +173,20 @@ func (service *SiteService) List(ctx context.Context, query dto.SiteListQuery) (
 		items = append(items, siteListItemFromModel(site, now, resources[site.ID], usage[site.ID], performance[site.ID], completeness[site.ID]))
 	}
 	return common.NewPageData(query.Page, query.PageSize, total, items), nil
+}
+
+func (service *SiteService) listUsageOverviews(
+	ctx context.Context,
+	siteIDs []int64,
+	startTimestamp, endTimestamp int64,
+) (map[int64]model.SiteUsageOverview, error) {
+	key, ok := siteUsageOverviewCacheKey(siteIDs, startTimestamp, endTimestamp)
+	if !ok || service == nil || service.usageOverviewCache == nil {
+		return service.sites.ListUsageOverviews(ctx, siteIDs, startTimestamp, endTimestamp)
+	}
+	return service.usageOverviewCache.load(ctx, key, func() (map[int64]model.SiteUsageOverview, error) {
+		return service.sites.ListUsageOverviews(ctx, siteIDs, startTimestamp, endTimestamp)
+	})
 }
 
 func (service *SiteService) Update(ctx context.Context, id int64, request dto.SiteUpdateRequest) (dto.SiteDetail, error) {
@@ -351,7 +368,7 @@ func (service *SiteService) detailFromModel(ctx context.Context, site model.Site
 		return dto.SiteDetail{}, fmt.Errorf("read latest site resource: %w", err)
 	}
 	usageStart, usageEnd := siteListUsageRange(nowTime)
-	usage, err := service.sites.ListUsageOverviews(ctx, []int64{site.ID}, usageStart, usageEnd)
+	usage, err := service.listUsageOverviews(ctx, []int64{site.ID}, usageStart, usageEnd)
 	if err != nil {
 		return dto.SiteDetail{}, fmt.Errorf("read site usage overview: %w", err)
 	}

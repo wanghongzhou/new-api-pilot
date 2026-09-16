@@ -53,6 +53,8 @@ full 运行前置资源：
 
 错误、超时、非 2xx、envelope 错误和 DTO 错误都计入 attempts 和 client 延迟总体，不得从 percentile 中剔除。
 
+在任何 warmup 之前，首个 viewer 必须对 `hourly_global_31d` 执行一次真实冷读。该请求的 client 延迟和同 request ID 的服务端 access-log 延迟都必须严格低于 3 秒；后续短缓存命中不能替代该门禁。响应还必须证明 `summary.active_users` 精确等于固定画像的远端用户总数，并逐桶验证 `site_breakdown` 恰好包含全部站点且 site_id 不重复。
+
 ## 4. percentile 与服务端日志
 
 P50/P95/P99 使用 nearest-rank：对全部延迟升序排序，取从 1 开始的 `ceil(p × n)` 位。client 延迟包含连接复用、完整响应体读取和契约解码；server 延迟来自应用 access log 的 `duration_ms`。
@@ -85,7 +87,7 @@ go run ./scripts/acceptance run -case A49 -evidence-root artifacts/smoke -- powe
 - `a49-load-metadata.json`、`a49-report.json`；
 - `a49-app.log`：完整 request ID/access log；
 - `a49-environment.json`、应用镜像构建日志、Docker stats 时间线；
-- MySQL 状态和关键查询计划；
+- MySQL 状态，以及 `a49-query-observations.tsv` 中从 `performance_schema` 捕获的真实应用 statement digest、执行次数、扫描/返回行数和磁盘临时表计数；禁止用验收脚本手写等价 SQL 的 EXPLAIN 替代；
 - `a49-artifacts.json`：固定证据文件的相对路径、字节数和 SHA-256；
 - `a49-cleanup.json`：最终 Docker label sweep 的结果，容器、网络、卷和镜像残留必须全部为空。
 

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"sort"
 	"sync"
 	"time"
 
@@ -10,7 +11,7 @@ import (
 )
 
 const (
-	statisticsReadCacheTTL        = 5 * time.Second
+	statisticsReadCacheTTL        = 30 * time.Second
 	statisticsReadCacheMaxEntries = 128
 	statisticsReadCacheMinRange   = 7 * 24 * time.Hour
 )
@@ -46,6 +47,7 @@ func statisticsReadCacheKey(scope string, query dto.StatisticsQuery) (string, bo
 		query.EndTimestamp-query.StartTimestamp < int64(statisticsReadCacheMinRange/time.Second) {
 		return "", false
 	}
+	query = normalizeStatisticsCacheQuery(query)
 	payload, err := json.Marshal(struct {
 		Scope string              `json:"scope"`
 		Query dto.StatisticsQuery `json:"query"`
@@ -54,6 +56,40 @@ func statisticsReadCacheKey(scope string, query dto.StatisticsQuery) (string, bo
 		return "", false
 	}
 	return string(payload), true
+}
+
+func statisticsDashboardCacheKey(scope string, query dto.StatisticsQuery) (string, bool) {
+	query = normalizeStatisticsCacheQuery(query)
+	payload, err := json.Marshal(struct {
+		Projection string              `json:"projection"`
+		Scope      string              `json:"scope"`
+		Query      dto.StatisticsQuery `json:"query"`
+	}{Projection: "dashboard_metrics", Scope: scope, Query: query})
+	if err != nil {
+		return "", false
+	}
+	return string(payload), true
+}
+
+func normalizeStatisticsCacheQuery(query dto.StatisticsQuery) dto.StatisticsQuery {
+	query.Normalize()
+	query.SiteIDs = append([]int64(nil), query.SiteIDs...)
+	query.CustomerIDs = append([]int64(nil), query.CustomerIDs...)
+	query.AccountIDs = append([]int64(nil), query.AccountIDs...)
+	query.ModelNames = append([]string(nil), query.ModelNames...)
+	query.ChannelKeys = append([]string(nil), query.ChannelKeys...)
+	query.UseGroups = append([]string(nil), query.UseGroups...)
+	query.TokenKeys = append([]string(nil), query.TokenKeys...)
+	query.NodeNames = append([]string(nil), query.NodeNames...)
+	sort.Slice(query.SiteIDs, func(i, j int) bool { return query.SiteIDs[i] < query.SiteIDs[j] })
+	sort.Slice(query.CustomerIDs, func(i, j int) bool { return query.CustomerIDs[i] < query.CustomerIDs[j] })
+	sort.Slice(query.AccountIDs, func(i, j int) bool { return query.AccountIDs[i] < query.AccountIDs[j] })
+	sort.Strings(query.ModelNames)
+	sort.Strings(query.ChannelKeys)
+	sort.Strings(query.UseGroups)
+	sort.Strings(query.TokenKeys)
+	sort.Strings(query.NodeNames)
+	return query
 }
 
 func (cache *statisticsReadCache) load(

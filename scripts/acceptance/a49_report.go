@@ -46,14 +46,15 @@ type a49PhaseMetrics struct {
 }
 
 type a49EndpointMetrics struct {
-	Scenario              string          `json:"scenario"`
-	ThresholdMilliseconds float64         `json:"threshold_milliseconds"`
-	Warmup                a49PhaseMetrics `json:"warmup"`
-	Sample                a49PhaseMetrics `json:"sample"`
-	MinimumSuccessful     int64           `json:"minimum_successful"`
-	MaximumErrorRate      float64         `json:"maximum_error_rate"`
-	Checks                map[string]bool `json:"checks"`
-	Passed                bool            `json:"passed"`
+	Scenario              string           `json:"scenario"`
+	ThresholdMilliseconds float64          `json:"threshold_milliseconds"`
+	ColdRead              *a49PhaseMetrics `json:"cold_read,omitempty"`
+	Warmup                a49PhaseMetrics  `json:"warmup"`
+	Sample                a49PhaseMetrics  `json:"sample"`
+	MinimumSuccessful     int64            `json:"minimum_successful"`
+	MaximumErrorRate      float64          `json:"maximum_error_rate"`
+	Checks                map[string]bool  `json:"checks"`
+	Passed                bool             `json:"passed"`
 }
 
 type a49FinalReport struct {
@@ -393,6 +394,16 @@ func buildA49FinalReport(
 				sample.ServerLogRecords == sample.Attempts
 			checks["server_p95"] = sample.Server != nil && sample.Server.P95Milliseconds < threshold
 		}
+		var coldRead *a49PhaseMetrics
+		if endpoint.Name == "hourly_global_31d" {
+			metrics := calculateA49PhaseMetrics(dataset.records[endpoint.Name]["preflight"], access, false)
+			coldRead = &metrics
+			checks["cold_read_single_success"] = metrics.Attempts == 1 && metrics.Successful == 1 && metrics.Errors == 0
+			checks["cold_read_client"] = metrics.Client.MaxMilliseconds < threshold
+			checks["cold_read_access_log"] = metrics.Server != nil && metrics.ServerLogRecords == 1 &&
+				metrics.ServerLogMissing == 0 && metrics.ServerStatusMismatch == 0 && metrics.ServerLogDuplicates == 0
+			checks["cold_read_server"] = metrics.Server != nil && metrics.Server.MaxMilliseconds < threshold
+		}
 		passed := true
 		for check, value := range checks {
 			if !value {
@@ -401,7 +412,7 @@ func buildA49FinalReport(
 			}
 		}
 		report.Endpoints[endpoint.Name] = a49EndpointMetrics{
-			Scenario: endpoint.Scenario, ThresholdMilliseconds: threshold, Warmup: warmup, Sample: sample,
+			Scenario: endpoint.Scenario, ThresholdMilliseconds: threshold, ColdRead: coldRead, Warmup: warmup, Sample: sample,
 			MinimumSuccessful: int64(profile.Capacity.MinimumSuccessfulRequestsPerEndpoint),
 			MaximumErrorRate:  profile.Capacity.MaximumErrorRate, Checks: checks, Passed: passed,
 		}

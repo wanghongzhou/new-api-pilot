@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -60,16 +61,31 @@ func TestDashboardReaderMySQLCurrentCoverageEntitiesHealthAndAlerts(t *testing.T
 		{SiteID: sites[0].ID, CustomerID: customers[0].ID, RemoteUserID: 102, RemoteCreatedAt: today,
 			Username: "archived", RemoteState: model.AccountRemoteStateNormal, ManagedStatus: model.AccountManagedStatusArchived,
 			CreatedAt: today, UpdatedAt: now.Unix()},
+		{SiteID: sites[0].ID, CustomerID: customers[0].ID, RemoteUserID: 103, RemoteCreatedAt: today,
+			Username: "inactive-placeholder", RemoteState: model.AccountRemoteStateNormal, ManagedStatus: model.AccountManagedStatusActive,
+			CreatedAt: today, UpdatedAt: now.Unix()},
 	}
 	if err := database.Create(&accounts).Error; err != nil {
 		t.Fatalf("create dashboard accounts: %v", err)
 	}
-	facts := []model.UsageFactHourly{
-		{SiteID: sites[0].ID, RemoteUserID: 101, ModelName: "model", HourTS: today, RequestCount: 1, CollectedAt: now.Unix()},
-		{SiteID: sites[0].ID, RemoteUserID: 102, ModelName: "model", HourTS: today, RequestCount: 1, CollectedAt: now.Unix()},
+	dailyStats := []model.AccountStatDaily{
+		{AccountID: accounts[0].ID, DateKey: beijingDateKey(now), RequestCount: 1, DataStatus: model.UsageAggregationStatusPartial,
+			LastCalculatedAt: now.Unix(), CreatedAt: now.Unix(), UpdatedAt: now.Unix()},
+		{AccountID: accounts[1].ID, DateKey: beijingDateKey(now), RequestCount: 1, DataStatus: model.UsageAggregationStatusPartial,
+			LastCalculatedAt: now.Unix(), CreatedAt: now.Unix(), UpdatedAt: now.Unix()},
+		{AccountID: accounts[2].ID, DateKey: beijingDateKey(now), DataStatus: model.UsageAggregationStatusPartial,
+			LastCalculatedAt: now.Unix(), CreatedAt: now.Unix(), UpdatedAt: now.Unix()},
 	}
-	if err := database.Create(&facts).Error; err != nil {
-		t.Fatalf("create dashboard usage facts: %v", err)
+	if err := database.Create(&dailyStats).Error; err != nil {
+		t.Fatalf("create dashboard account daily stats: %v", err)
+	}
+	reader := &DashboardReader{database: database, clock: clock}
+	withoutCompleteWindow := DashboardRealtimeSnapshot{}
+	if err := reader.readDashboardActiveAccounts(context.Background(), now.Unix(), &withoutCompleteWindow); err != nil {
+		t.Fatalf("read dashboard active accounts before complete window: %v", err)
+	}
+	if withoutCompleteWindow.ActiveAccountsToday != nil {
+		t.Fatalf("active accounts before complete window = %v", *withoutCompleteWindow.ActiveAccountsToday)
 	}
 	if err := database.Create(&model.CollectionWindow{
 		SiteID: sites[0].ID, HourTS: today, Status: model.CollectionWindowStatusComplete, UpdatedAt: now.Unix(),
@@ -118,7 +134,7 @@ func TestDashboardReaderMySQLCurrentCoverageEntitiesHealthAndAlerts(t *testing.T
 		t.Fatalf("create dashboard alert event: %v", err)
 	}
 
-	reader, err := NewDashboardReader(DashboardReaderOptions{Database: database, Alerts: alertService, Clock: clock})
+	reader, err = NewDashboardReader(DashboardReaderOptions{Database: database, Alerts: alertService, Clock: clock})
 	if err != nil {
 		t.Fatalf("create dashboard reader: %v", err)
 	}
@@ -127,7 +143,7 @@ func TestDashboardReaderMySQLCurrentCoverageEntitiesHealthAndAlerts(t *testing.T
 		t.Fatalf("read dashboard realtime: %v", err)
 	}
 	if snapshot.SiteCount != 3 || snapshot.OnlineSiteCount != 1 || snapshot.OfflineSiteCount != 1 ||
-		snapshot.CustomerCount != 2 || snapshot.ManagedAccountCount != 1 || dashboardString(snapshot.ActiveAccountsToday) != "1" ||
+		snapshot.CustomerCount != 2 || snapshot.ManagedAccountCount != 2 || dashboardString(snapshot.ActiveAccountsToday) != "1" ||
 		dashboardString(snapshot.RPM) != "9007199254740993" || dashboardString(snapshot.TPM) != "17" ||
 		snapshot.RealtimeCompleteSiteCount != 1 || snapshot.RealtimeExpectedSiteCount != 2 ||
 		snapshot.RealtimeDataStatus != model.UsageAggregationStatusPartial || len(snapshot.StaleSiteIDs) != 1 ||
@@ -145,5 +161,17 @@ func TestDashboardReaderMySQLCurrentCoverageEntitiesHealthAndAlerts(t *testing.T
 	if err != nil || alerts.Summary.FiringCount != 1 || alerts.Summary.CriticalCount != 1 ||
 		len(alerts.Latest) != 1 || alerts.Latest[0].ID != strconv.FormatInt(event.ID, 10) {
 		t.Fatalf("dashboard alerts = %#v, %v", alerts, err)
+	}
+}
+
+func TestDashboardActiveAccountsTodayQueryUsesDailyRollup(t *testing.T) {
+	lower := strings.ToLower(dashboardActiveAccountsTodayQuery)
+	for _, required := range []string{"account_stat_daily", "d.date_key = ?", "d.request_count > 0", "d.quota > 0", "d.token_used > 0", "a.managed_status = 'active'", "collection_window"} {
+		if !strings.Contains(lower, required) {
+			t.Fatalf("dashboard active accounts query missing %q: %s", required, dashboardActiveAccountsTodayQuery)
+		}
+	}
+	if strings.Contains(lower, "usage_fact_hourly") {
+		t.Fatalf("dashboard active accounts query scans usage_fact_hourly: %s", dashboardActiveAccountsTodayQuery)
 	}
 }

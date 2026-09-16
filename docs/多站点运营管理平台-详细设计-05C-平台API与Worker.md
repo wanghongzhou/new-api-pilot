@@ -320,7 +320,9 @@ TrendPoint 的完整字段以 §33.13 为准。跨站 scope 的每个时间桶�
 
 `summary.active_users` 是整个左闭右开范围内 `(site_id,remote_user_id)` 的精确 `COUNT DISTINCT`，不能相加 bucket active_users。`hour` 查询将范围按北京时间自然日切分：首尾非完整自然日从 `usage_fact_hourly JOIN collection_window(status='complete')` 读取精确边界小时身份；位于两者之间的完整自然日从 `usage_fact_daily` 读取身份；两部分 `UNION` 后再按 `(site_id,remote_user_id)` 去重。daily 路径必须具备以 `date_key` 起始并覆盖 `site_id,remote_user_id` 的读取索引，边界 hourly 路径必须使用现有站点/小时/远端用户覆盖索引；查询计划不得对 31 天全部 `usage_fact_hourly` 做范围扫描，也不得把这 31 天小时事实物化为临时表后再 filesort。站点筛选必须下推到两条身份分支，只有对应 expected 窗口 complete 的身份才可见；partial/missing 继续由 completeness 表达，不能为提速改变精确值或把未知变成 0。
 
-范围不少于 7 天的全局 `hour` 读取使用进程内 5 秒只读缓存，key 必须包含归一化后的全部查询参数，并对同 key 的并发 miss 做 single-flight 合并；只缓存成功响应，不缓存错误，超时/取消只影响对应 flight。该缓存只削峰相同只读请求，TTL 到期后必须重新读取本地汇总与身份事实，导出事务不得复用此缓存；缓存不能替代上述覆盖索引和首次请求的 3 秒容量目标。
+客户、模型、通道的 `hour/day` breakdown active_users 必须随 request/quota/token 从 `customer_stat_*`、`model_stat_*`、`channel_stat_*` 同批读取。客户下的账户身份互斥，因此同一桶的客户行可无重叠派生 trend/site；单小时或单日 summary 也可直接由该桶汇总，跨多桶 summary 仍按账户身份精确去重。模型/通道的用户可能跨维度重复，只允许用预聚合值填充各维度 breakdown，trend/site/summary 仍对日身份事实去重。服务为构造维度加载全部客户或账户时，数据库查询参数必须保留“调用方未筛选”的空集合语义，禁止再把全量 ID 展开为 `IN (...)`。
+
+范围不少于 7 天的全局 `hour` 读取使用进程内 30 秒只读缓存，key 必须包含归一化后的全部查询参数；ID 与字符串筛选均按无序集合排序，使仅顺序不同的等价请求共享同一 key，并对同 key 的并发 miss 做 single-flight 合并。只缓存成功响应，不缓存错误，超时/取消只影响对应 flight；TTL 必须使用进程墙钟，不能绑定可被冻结或回拨的业务 Clock。该缓存只削峰相同只读请求，TTL 到期后必须重新读取本地汇总与身份事实，导出事务不得复用此缓存；缓存不能替代上述覆盖索引和首次请求的 3 秒容量目标。
 
 为上述只读路径新增索引时只能追加前向 migration，保留既有 `usage_fact_hourly`、`usage_fact_daily`、统计汇总、collection_window、游标和任务历史，禁止删除重建、截断或先清空再回填历史表。该优化不改变事实唯一源和汇总重建规则，也不要求重新采集上游历史；升级后现存历史立即可查询，migration 失败则整体启动失败并按既有停机升级/备份流程回滚，不能留下“新 schema + 丢失历史”的中间状态。
 
@@ -333,7 +335,9 @@ TrendPoint 的完整字段以 §33.13 为准。跨站 scope 的每个时间桶�
 | GET | /api/dashboard/top | UserAuth | type + metric + limit<=20 | RankingItem[] |
 | GET | /api/dashboard/health | UserAuth | 无 | DashboardHealth |
 
-summary、trend、top 是小时业务数据，health 是 60 秒当前数据。Dashboard 的 summary/trend/top 必须读取本地小时预聚合或其有界派生结果，不得在页面请求中回扫 30 天小时事实。DashboardSummary.active_accounts_today 只统计纳管账户，不等同于 global_stat 的全部远端 active_users。DashboardSummary 的 RPM/TPM 同时返回 realtime_complete_site_count、realtime_expected_site_count、stale_site_ids 和 data_status；存在过期站点时为 partial，没有有效站点时数值为 null。前端并行请求四个接口；任一失败不阻塞其他区块。
+summary、trend、top 是小时业务数据，health 是 60 秒当前数据。Dashboard 的 summary/trend/top 必须读取本地小时/日预聚合或其有界派生结果，不得在页面请求中回扫 30 天小时事实。DashboardSummary.active_accounts_today 只统计纳管账户，不等同于 global_stat 的全部远端 active_users；它从今日 `account_stat_daily` 中读取已有非零结算指标的纳管账户，并以 collection_window 的 complete 存在性决定是否可见，不得再扫描今日 `usage_fact_hourly`。当天尚未结束时 daily 行按完整性契约通常仍为 `partial`，因此不能用 `data_status='complete'` 排除已经完成结算小时产生的今日活动；同时必须排除仅为表达缺口而生成的零值 partial 占位行。DashboardSummary 的 RPM/TPM 同时返回 realtime_complete_site_count、realtime_expected_site_count、stale_site_ids 和 data_status；存在过期站点时为 partial，没有有效站点时数值为 null。前端并行请求四个接口；任一失败不阻塞其他区块。
+
+Dashboard 内部统计读取使用 metrics-only 投影：trend/health 的逐日 active_users 取 `global_stat_daily`，top 仅计算其消费的 request_count/quota 排名，不为未暴露字段执行范围身份去重。相同规范化参数的并发 Dashboard 读取必须以墙钟短 TTL 成功缓存和 single-flight 合并，错误不缓存；普通 `/api/statistics/*` 仍返回完整 active_users 契约，不得因 Dashboard 投影而降级。站点列表滚动 24 小时 usage overview 的 active_users 必须在每个站点范围内跨小时按 remote_user_id 精确去重，不能相加小时桶，也不能误用覆盖范围之外的整日汇总；查询按排序后的 site_ids 和整点左闭右开范围命中 `(site_id,hour_ts)` 有界覆盖索引，不得退化为无站点/无时间谓词的全表扫描。相同站点集合与范围使用墙钟短 TTL single-flight 且只缓存成功结果，避免同页并发重复扫描身份事实；固定业务 Clock 的容量验收不得让缓存永久有效。
 
 ### 33.8 导出
 
@@ -1292,6 +1296,8 @@ site disable/enable/manual/schedule/recovery 通过 trigger_type 和 priority �
 | 40 | 新账户/客户本地重建 |
 
 同优先级按窗口时间倒序执行，使最新数据优先可见；首次全历史回填的站点内部仍按时间正序推进连续游标。长范围任务分片让出后重新参与优先级排序，不能持续占住 Worker。
+
+`user_sync` 与 `channel_sync` 的 pinned 上游接口都只提供分页完整列表，没有可证明删除/缺失的可靠 `updated_at`、`since` 或 cursor。两者的“无游标”是明确的完整快照契约：必须使用固定唯一排序、分页行数上限、重复 ID 拒绝、首尾 total/最大 ID fence 和 config_version fence，整轮成功后才对本地差集推进 missing；禁止根据非权威更新时间臆造增量游标。完整快照不等于全量重写，提交仍只 upsert 新增或实际变化行，并批量更新已由本轮完整差集证明的缺失行。
 
 ### 34.3 重试
 

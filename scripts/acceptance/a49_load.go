@@ -324,6 +324,12 @@ func (runner *a49LoadRunner) preflight(stdout io.Writer) error {
 		if !record.Success {
 			return fmt.Errorf("endpoint %s failed (%s)", endpoint.Name, record.ErrorClass)
 		}
+		if endpoint.Name == "hourly_global_31d" {
+			threshold := time.Duration(runner.profile.Capacity.Targets.Hourly31DP95Seconds * float64(time.Second))
+			if time.Duration(record.DurationNanos) >= threshold {
+				return fmt.Errorf("endpoint %s cold read took %s, must be below %s", endpoint.Name, time.Duration(record.DurationNanos), threshold)
+			}
+		}
 	}
 	fmt.Fprintln(stdout, "A49 fixed-clock/non-empty DTO preflight passed")
 	return nil
@@ -549,20 +555,45 @@ func validateA49EndpointDTO(name string, payload json.RawMessage, profile a49Run
 			} `json:"range"`
 			Summary struct {
 				RequestCount *string `json:"request_count"`
+				ActiveUsers  *string `json:"active_users"`
 				DataStatus   string  `json:"data_status"`
 			} `json:"summary"`
 			Trend []struct {
-				BucketStart int64  `json:"bucket_start"`
-				DataStatus  string `json:"data_status"`
+				BucketStart   int64  `json:"bucket_start"`
+				DataStatus    string `json:"data_status"`
+				SiteBreakdown []struct {
+					SiteID string `json:"site_id"`
+				} `json:"site_breakdown"`
 			} `json:"trend"`
 		}
 		expectedPoints := int((capacity.HourlyQueryEndUnix - capacity.HourlyQueryStartUnix) / 3600)
 		if json.Unmarshal(payload, &statistics) != nil || statistics.Scope != "global" || statistics.Granularity != "hour" ||
 			statistics.Range.StartTimestamp != capacity.HourlyQueryStartUnix || statistics.Range.EndTimestamp != capacity.HourlyQueryEndUnix ||
 			statistics.Range.Timezone != "Asia/Shanghai" || statistics.Summary.RequestCount == nil ||
+			statistics.Summary.ActiveUsers == nil || *statistics.Summary.ActiveUsers != strconv.Itoa(capacity.RemoteUsers) ||
 			!canonicalNonNegativeA49Int(*statistics.Summary.RequestCount) || statistics.Summary.DataStatus == "" ||
 			len(statistics.Trend) != expectedPoints || statistics.Trend[0].BucketStart != capacity.HourlyQueryStartUnix {
 			return errors.New("31-day hourly statistics contract")
+		}
+		seenBuckets := make(map[int64]struct{}, len(statistics.Trend))
+		for _, point := range statistics.Trend {
+			if _, duplicate := seenBuckets[point.BucketStart]; duplicate {
+				return errors.New("31-day hourly statistics duplicate bucket")
+			}
+			seenBuckets[point.BucketStart] = struct{}{}
+			if len(point.SiteBreakdown) != capacity.Sites {
+				return errors.New("31-day hourly statistics site breakdown cardinality")
+			}
+			seenSites := make(map[string]struct{}, len(point.SiteBreakdown))
+			for _, site := range point.SiteBreakdown {
+				if !canonicalPositiveA49ID(site.SiteID) {
+					return errors.New("31-day hourly statistics site breakdown ID")
+				}
+				if _, duplicate := seenSites[site.SiteID]; duplicate {
+					return errors.New("31-day hourly statistics duplicate site bucket")
+				}
+				seenSites[site.SiteID] = struct{}{}
+			}
 		}
 		return nil
 	case "dashboard_summary":

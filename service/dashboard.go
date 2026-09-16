@@ -28,6 +28,14 @@ type DashboardStatisticsReader interface {
 	Channels(context.Context, dto.StatisticsQuery) (dto.StatisticsResponse, error)
 }
 
+type dashboardProjectedStatisticsReader interface {
+	DashboardGlobal(context.Context, dto.StatisticsQuery) (dto.StatisticsResponse, error)
+	DashboardSites(context.Context, dto.StatisticsQuery) (dto.StatisticsResponse, error)
+	DashboardCustomers(context.Context, dto.StatisticsQuery) (dto.StatisticsResponse, error)
+	DashboardModels(context.Context, dto.StatisticsQuery) (dto.StatisticsResponse, error)
+	DashboardChannels(context.Context, dto.StatisticsQuery) (dto.StatisticsResponse, error)
+}
+
 type DashboardSiteHealthSnapshot struct {
 	SiteID           int64
 	SiteName         string
@@ -116,7 +124,7 @@ func (service *DashboardService) Summary(ctx context.Context) (dto.DashboardSumm
 		return dto.DashboardSummary{}, ErrDashboardRead
 	}
 	start, end := dashboardTodayRange(service.clock.Now())
-	statistics, err := service.statistics.Global(ctx, dashboardStatisticsQuery(start, end, 1, "bucket_start"))
+	statistics, err := dashboardGlobalStatistics(ctx, service.statistics, dashboardStatisticsQuery(start, end, 1, "bucket_start"))
 	if err != nil {
 		return dto.DashboardSummary{}, errors.Join(ErrDashboardRead, err)
 	}
@@ -181,7 +189,7 @@ func (service *DashboardService) Trend(
 		return nil, ErrDashboardInvalid
 	}
 	start, end := dashboardDayRange(service.clock.Now(), query.Days)
-	statistics, err := service.statistics.Global(ctx, dashboardStatisticsQuery(start, end, 1, "bucket_start"))
+	statistics, err := dashboardGlobalStatistics(ctx, service.statistics, dashboardStatisticsQuery(start, end, 1, "bucket_start"))
 	if err != nil {
 		return nil, errors.Join(ErrDashboardRead, err)
 	}
@@ -210,13 +218,13 @@ func (service *DashboardService) Top(
 	)
 	switch query.Type {
 	case dto.DashboardTopTypeSite:
-		statistics, err = service.statistics.Sites(ctx, statisticsQuery)
+		statistics, err = dashboardSiteStatistics(ctx, service.statistics, statisticsQuery)
 	case dto.DashboardTopTypeCustomer:
-		statistics, err = service.statistics.Customers(ctx, statisticsQuery)
+		statistics, err = dashboardCustomerStatistics(ctx, service.statistics, statisticsQuery)
 	case dto.DashboardTopTypeModel:
-		statistics, err = service.statistics.Models(ctx, statisticsQuery)
+		statistics, err = dashboardModelStatistics(ctx, service.statistics, statisticsQuery)
 	case dto.DashboardTopTypeChannel:
-		statistics, err = service.statistics.Channels(ctx, statisticsQuery)
+		statistics, err = dashboardChannelStatistics(ctx, service.statistics, statisticsQuery)
 	default:
 		return nil, ErrDashboardInvalid
 	}
@@ -236,7 +244,7 @@ func (service *DashboardService) Health(ctx context.Context) (dto.DashboardHealt
 	}
 	today, _ := dashboardTodayRange(service.clock.Now())
 	yesterday := time.Unix(today, 0).In(dashboardLocation).AddDate(0, 0, -1).Unix()
-	statistics, err := service.statistics.Global(ctx, dashboardStatisticsQuery(yesterday, today, 1, "bucket_start"))
+	statistics, err := dashboardGlobalStatistics(ctx, service.statistics, dashboardStatisticsQuery(yesterday, today, 1, "bucket_start"))
 	if err != nil {
 		return dto.DashboardHealth{}, errors.Join(ErrDashboardRead, err)
 	}
@@ -281,6 +289,41 @@ func (service *DashboardService) Health(ctx context.Context) (dto.DashboardHealt
 		Completeness: statistics.Completeness, LatestAlerts: latest, Sites: items,
 		AsOf: point.AsOf, IsFinal: point.IsFinal, Reason: reason,
 	}, nil
+}
+
+func dashboardGlobalStatistics(ctx context.Context, reader DashboardStatisticsReader, query dto.StatisticsQuery) (dto.StatisticsResponse, error) {
+	if projected, ok := reader.(dashboardProjectedStatisticsReader); ok {
+		return projected.DashboardGlobal(ctx, query)
+	}
+	return reader.Global(ctx, query)
+}
+
+func dashboardSiteStatistics(ctx context.Context, reader DashboardStatisticsReader, query dto.StatisticsQuery) (dto.StatisticsResponse, error) {
+	if projected, ok := reader.(dashboardProjectedStatisticsReader); ok {
+		return projected.DashboardSites(ctx, query)
+	}
+	return reader.Sites(ctx, query)
+}
+
+func dashboardCustomerStatistics(ctx context.Context, reader DashboardStatisticsReader, query dto.StatisticsQuery) (dto.StatisticsResponse, error) {
+	if projected, ok := reader.(dashboardProjectedStatisticsReader); ok {
+		return projected.DashboardCustomers(ctx, query)
+	}
+	return reader.Customers(ctx, query)
+}
+
+func dashboardModelStatistics(ctx context.Context, reader DashboardStatisticsReader, query dto.StatisticsQuery) (dto.StatisticsResponse, error) {
+	if projected, ok := reader.(dashboardProjectedStatisticsReader); ok {
+		return projected.DashboardModels(ctx, query)
+	}
+	return reader.Models(ctx, query)
+}
+
+func dashboardChannelStatistics(ctx context.Context, reader DashboardStatisticsReader, query dto.StatisticsQuery) (dto.StatisticsResponse, error) {
+	if projected, ok := reader.(dashboardProjectedStatisticsReader); ok {
+		return projected.DashboardChannels(ctx, query)
+	}
+	return reader.Channels(ctx, query)
 }
 
 func (service *DashboardService) ready() bool {
