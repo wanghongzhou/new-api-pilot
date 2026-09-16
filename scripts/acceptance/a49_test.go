@@ -73,6 +73,7 @@ func TestA49RunnerStaticSafetyContract(t *testing.T) {
 		"Get-A49RepositoryRelativePath", "GetFullPath", "OrdinalIgnoreCase",
 		"Get-A49GitState", "Invoke-A49GitProcess", "rev-list", "--all", "--count",
 		"GOPROXY=$goModuleProxy", "GOSUMDB=$goSumDatabase", "https://goproxy.cn,https://mirrors.aliyun.com/goproxy/,direct",
+		"idx_usage_fact_hourly_time_user", "idx_usage_fact_daily_date_user", "WITH active_identity AS",
 	} {
 		if !strings.Contains(staticContract, required) {
 			t.Fatalf("runner is missing %q", required)

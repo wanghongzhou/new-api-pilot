@@ -76,6 +76,11 @@ func TestAuthoritativeSchemaContractsLoadFlattenedInitialSchema(t *testing.T) {
 			t.Errorf("usage_fact_hourly contract is missing the 0006 capacity index %s", name)
 		}
 	}
+	dailyIdentityIndex, exists := contracts["usage_fact_daily"].Indexes["idx_usage_fact_daily_date_user"]
+	if !exists || dailyIdentityIndex.Unique ||
+		!reflect.DeepEqual(dailyIdentityIndex.Columns, []string{"date_key", "site_id", "remote_user_id"}) {
+		t.Errorf("usage_fact_daily identity range index = %#v", dailyIdentityIndex)
+	}
 	logColumns := make(map[string]ColumnContract)
 	for _, column := range contracts["upstream_log_fact"].Columns {
 		logColumns[column.Name] = column

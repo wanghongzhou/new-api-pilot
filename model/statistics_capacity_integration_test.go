@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -153,20 +154,35 @@ func TestStatisticsCapacityIndexesSupportAllActiveQueryPlans(t *testing.T) {
 	if err := tx.Create(&account).Error; err != nil {
 		t.Fatalf("create statistics capacity plan account: %v", err)
 	}
+	location := time.FixedZone("Asia/Shanghai", 8*60*60)
+	globalRequest := StatisticsReadRequest{
+		Scope: "global", Granularity: "hour", SiteIDs: []int64{site.ID},
+		StartTimestamp: time.Date(2032, 7, 1, 23, 0, 0, 0, location).Unix(),
+		EndTimestamp:   time.Date(2032, 7, 3, 1, 0, 0, 0, location).Unix(),
+	}
+	globalQuery, globalArgs, err := statisticsActiveQuery(globalRequest)
+	if err != nil {
+		t.Fatalf("build global hybrid active query: %v", err)
+	}
+	statement := tx.Session(&gorm.Session{DryRun: true}).Raw(globalQuery, globalArgs...).Statement
+	if statement.Error != nil {
+		t.Fatalf("bind global hybrid active query: %v", statement.Error)
+	}
+	var globalPlan string
+	if err := tx.WithContext(ctx).Raw("EXPLAIN FORMAT=JSON "+statement.SQL.String(), statement.Vars...).Row().Scan(&globalPlan); err != nil {
+		t.Fatalf("explain global hybrid active query: %v", err)
+	}
+	for _, index := range []string{"idx_usage_fact_hourly_time_user", "idx_usage_fact_daily_date_user"} {
+		if !strings.Contains(globalPlan, `"key": "`+index+`"`) {
+			t.Fatalf("global hybrid active query plan does not use %s:\n%s", index, globalPlan)
+		}
+	}
 
 	tests := []struct {
 		name  string
 		index string
 		read  StatisticsReadRequest
 	}{
-		{
-			name: "global", index: "idx_usage_fact_hourly_time_user",
-			read: StatisticsReadRequest{Scope: "global", Granularity: "hour", StartTimestamp: 1752000000, EndTimestamp: 1752003600},
-		},
-		{
-			name: "site", index: "idx_usage_fact_hourly_time_user",
-			read: StatisticsReadRequest{Scope: "site", Granularity: "hour", StartTimestamp: 1752000000, EndTimestamp: 1752003600},
-		},
 		{
 			name: "customer", index: "idx_usage_fact_hourly_time_user",
 			read: StatisticsReadRequest{Scope: "customer", Granularity: "hour", StartTimestamp: 1752000000, EndTimestamp: 1752003600, CustomerIDs: []int64{customer.ID}},
@@ -210,5 +226,37 @@ func TestStatisticsCapacityIndexesSupportAllActiveQueryPlans(t *testing.T) {
 				t.Fatalf("active query plan is not covering for %s:\n%s", test.index, plan)
 			}
 		})
+	}
+	boundaryHours := []int64{globalRequest.StartTimestamp, globalRequest.EndTimestamp - 3600}
+	for _, hour := range boundaryHours {
+		if err := tx.Create(&CollectionWindow{
+			SiteID: site.ID, HourTS: hour, Status: CollectionWindowStatusComplete,
+			FetchedRows: 2, FactRows: 2, SourceHash: strings.Repeat("a", 64), UpdatedAt: hour,
+		}).Error; err != nil {
+			t.Fatalf("create hybrid summary window: %v", err)
+		}
+	}
+	for index, userID := range []int64{101, 102, 101, 104} {
+		hour := boundaryHours[index/2]
+		if err := tx.Exec(`INSERT INTO usage_fact_hourly
+  (site_id,remote_user_id,username_snapshot,model_name,channel_id,hour_ts,request_count,quota,token_used,collected_at)
+VALUES (?,?,?,?,?,?,?,?,?,?)`, site.ID, userID, "hybrid", "model-hour", 1, hour, 1, 1, 1, hour).Error; err != nil {
+			t.Fatalf("create hybrid hourly identity: %v", err)
+		}
+	}
+	for index, userID := range []int64{101, 101, 103} {
+		if err := tx.Exec(`INSERT INTO usage_fact_daily
+  (site_id,remote_user_id,username_snapshot,model_name,channel_id,date_key,request_count,quota,token_used,is_final,last_calculated_at,created_at,updated_at)
+VALUES (?,?,?,?,?,?,?,?,?,1,?,?,?)`, site.ID, userID, "hybrid", "model-daily-"+strconv.Itoa(index), 1,
+			20320702, 1, 1, 1, globalRequest.EndTimestamp, globalRequest.EndTimestamp, globalRequest.EndTimestamp).Error; err != nil {
+			t.Fatalf("create hybrid daily identity: %v", err)
+		}
+	}
+	rows, err := NewStatisticsRepository(tx).LoadActiveRows(ctx, globalRequest)
+	if err != nil {
+		t.Fatalf("load hybrid summary identities: %v", err)
+	}
+	if len(rows) != 1 || rows[0].RowKind != "summary" || rows[0].ActiveUsers != "4" {
+		t.Fatalf("hybrid summary rows = %#v, want four exact identities", rows)
 	}
 }

@@ -593,8 +593,8 @@ func TestMySQLMigrationSourceGate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load repository migrations: %v", err)
 	}
-	if len(repository) != 6 {
-		t.Fatalf("repository migration count = %d, want 6", len(repository))
+	if len(repository) != 7 {
+		t.Fatalf("repository migration count = %d, want 7", len(repository))
 	}
 
 	t.Run("current and idempotent rerun", func(t *testing.T) {

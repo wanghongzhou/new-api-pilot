@@ -27,6 +27,7 @@ var (
 type StatisticsService struct {
 	repository *model.StatisticsRepository
 	clock      common.Clock
+	readCache  *statisticsReadCache
 }
 
 type StatisticsServiceOptions struct {
@@ -38,7 +39,10 @@ func NewStatisticsService(options StatisticsServiceOptions) (*StatisticsService,
 	if options.Database == nil || options.Clock == nil {
 		return nil, errors.New("statistics service dependencies are required")
 	}
-	return &StatisticsService{repository: model.NewStatisticsRepository(options.Database), clock: options.Clock}, nil
+	return &StatisticsService{
+		repository: model.NewStatisticsRepository(options.Database), clock: options.Clock,
+		readCache: newStatisticsReadCache(),
+	}, nil
 }
 
 func (service *StatisticsService) Global(ctx context.Context, query dto.StatisticsQuery) (dto.StatisticsResponse, error) {
@@ -218,7 +222,14 @@ func (service *StatisticsService) query(
 	scope string,
 	query dto.StatisticsQuery,
 ) (dto.StatisticsResponse, error) {
-	return service.queryInternal(ctx, scope, query, false)
+	normalized := query
+	normalized.Normalize()
+	if key, ok := statisticsReadCacheKey(scope, normalized); ok && service != nil && service.readCache != nil {
+		return service.readCache.load(ctx, key, func() (dto.StatisticsResponse, error) {
+			return service.queryInternal(ctx, scope, normalized, false)
+		})
+	}
+	return service.queryInternal(ctx, scope, normalized, false)
 }
 
 // ExportSnapshot uses the exact statistics read and response builder while
@@ -1049,6 +1060,28 @@ func (builder *statisticsResponseBuilder) loadMetrics() error {
 			return err
 		}
 		builder.siteMetrics[siteKey] = current
+		if (builder.scope == dto.StatisticsScopeGlobal || builder.scope == dto.StatisticsScopeSite) &&
+			(builder.query.Granularity == dto.StatisticsGranularityHour || builder.query.Granularity == dto.StatisticsGranularityDay) {
+			activeUsers, parseErr := statisticsParseMetric(row.ActiveUsers)
+			if parseErr != nil {
+				return parseErr
+			}
+			active, ok := statisticsCheckedAdd(builder.dimensionActive[dimensionKey], activeUsers)
+			if !ok {
+				return model.ErrStatisticsReadContract
+			}
+			builder.dimensionActive[dimensionKey] = active
+			active, ok = statisticsCheckedAdd(builder.trendActive[bucketStart], activeUsers)
+			if !ok {
+				return model.ErrStatisticsReadContract
+			}
+			builder.trendActive[bucketStart] = active
+			active, ok = statisticsCheckedAdd(builder.siteActive[siteKey], activeUsers)
+			if !ok {
+				return model.ErrStatisticsReadContract
+			}
+			builder.siteActive[siteKey] = active
+		}
 		if err := builder.summaryMetrics.add(value); err != nil {
 			return err
 		}

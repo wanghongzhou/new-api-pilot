@@ -316,6 +316,14 @@ StatisticsResponse：
 
 TrendPoint 的完整字段以 §33.13 为准。跨站 scope 的每个时间桶必须返回该桶自己的 site_breakdown，不能只返回全范围分项，否则前端无法逐桶换算金额。SiteQuotaBreakdown 包含 site_id、site_name、quota、quota_per_unit、usd_exchange_rate、rate_source、rate_updated_at、data_status；rate_source 为 site/fallback/unavailable，后端不返回落库金额。
 
+全局 `hour` 查询必须把 `site_stat_hourly` 作为站点桶的唯一来源，并按 `(site_id,hour_ts)` 唯一消费。数据库结果不得同时以 `dimension`、`site` 两个类别返回同一站点桶；service 只从这一份站点桶派生全局维度、trend 和 `site_breakdown`，因此 50 站点 × 31 天最多读取并组装一次对应站点小时集合。`day/month/year` 同理优先读取 `site_stat_daily`/`global_stat_daily` 及其动态聚合，不得为请求数、quota、token 或逐桶 active_users 回扫小时事实。
+
+`summary.active_users` 是整个左闭右开范围内 `(site_id,remote_user_id)` 的精确 `COUNT DISTINCT`，不能相加 bucket active_users。`hour` 查询将范围按北京时间自然日切分：首尾非完整自然日从 `usage_fact_hourly JOIN collection_window(status='complete')` 读取精确边界小时身份；位于两者之间的完整自然日从 `usage_fact_daily` 读取身份；两部分 `UNION` 后再按 `(site_id,remote_user_id)` 去重。daily 路径必须具备以 `date_key` 起始并覆盖 `site_id,remote_user_id` 的读取索引，边界 hourly 路径必须使用现有站点/小时/远端用户覆盖索引；查询计划不得对 31 天全部 `usage_fact_hourly` 做范围扫描，也不得把这 31 天小时事实物化为临时表后再 filesort。站点筛选必须下推到两条身份分支，只有对应 expected 窗口 complete 的身份才可见；partial/missing 继续由 completeness 表达，不能为提速改变精确值或把未知变成 0。
+
+范围不少于 7 天的全局 `hour` 读取使用进程内 5 秒只读缓存，key 必须包含归一化后的全部查询参数，并对同 key 的并发 miss 做 single-flight 合并；只缓存成功响应，不缓存错误，超时/取消只影响对应 flight。该缓存只削峰相同只读请求，TTL 到期后必须重新读取本地汇总与身份事实，导出事务不得复用此缓存；缓存不能替代上述覆盖索引和首次请求的 3 秒容量目标。
+
+为上述只读路径新增索引时只能追加前向 migration，保留既有 `usage_fact_hourly`、`usage_fact_daily`、统计汇总、collection_window、游标和任务历史，禁止删除重建、截断或先清空再回填历史表。该优化不改变事实唯一源和汇总重建规则，也不要求重新采集上游历史；升级后现存历史立即可查询，migration 失败则整体启动失败并按既有停机升级/备份流程回滚，不能留下“新 schema + 丢失历史”的中间状态。
+
 ### 33.7 Dashboard
 
 | 方法 | 路径 | 权限 | 查询 | data |
@@ -325,7 +333,7 @@ TrendPoint 的完整字段以 §33.13 为准。跨站 scope 的每个时间桶�
 | GET | /api/dashboard/top | UserAuth | type + metric + limit<=20 | RankingItem[] |
 | GET | /api/dashboard/health | UserAuth | 无 | DashboardHealth |
 
-summary、trend、top 是小时业务数据，health 是 60 秒当前数据。DashboardSummary.active_accounts_today 只统计纳管账户，不等同于 global_stat 的全部远端 active_users。DashboardSummary 的 RPM/TPM 同时返回 realtime_complete_site_count、realtime_expected_site_count、stale_site_ids 和 data_status；存在过期站点时为 partial，没有有效站点时数值为 null。前端并行请求四个接口；任一失败不阻塞其他区块。
+summary、trend、top 是小时业务数据，health 是 60 秒当前数据。Dashboard 的 summary/trend/top 必须读取本地小时预聚合或其有界派生结果，不得在页面请求中回扫 30 天小时事实。DashboardSummary.active_accounts_today 只统计纳管账户，不等同于 global_stat 的全部远端 active_users。DashboardSummary 的 RPM/TPM 同时返回 realtime_complete_site_count、realtime_expected_site_count、stale_site_ids 和 data_status；存在过期站点时为 partial，没有有效站点时数值为 null。前端并行请求四个接口；任一失败不阻塞其他区块。
 
 ### 33.8 导出
 

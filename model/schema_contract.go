@@ -119,6 +119,9 @@ func AuthoritativeSchemaContracts() (map[string]TableContract, error) {
 		contract.Indexes[index] = IndexContract{Columns: []string{"site_id", "remote_status", "remote_state", "remote_id"}}
 		contracts[table] = contract
 	}
+	dailyFacts := contracts["usage_fact_daily"]
+	dailyFacts.Indexes["idx_usage_fact_daily_date_user"] = IndexContract{Columns: []string{"date_key", "site_id", "remote_user_id"}}
+	contracts["usage_fact_daily"] = dailyFacts
 	return contracts, nil
 }
 

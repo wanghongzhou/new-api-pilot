@@ -48,7 +48,7 @@ func TestStatisticsQuerySourcesPreserveDailyIdentityAndExactChannelPairs(t *test
 	}
 }
 
-func TestStatisticsActiveQueryUsesAggregateRowsAndOneFactSummaryScan(t *testing.T) {
+func TestStatisticsActiveQueryUsesDailyIdentityAndBoundaryHoursForExactSummary(t *testing.T) {
 	request := StatisticsReadRequest{
 		Scope: "global", Granularity: "hour", StartTimestamp: 1_752_000_000, EndTimestamp: 1_754_678_400,
 		SiteIDs: []int64{1, 2, 3},
@@ -57,25 +57,30 @@ func TestStatisticsActiveQueryUsesAggregateRowsAndOneFactSummaryScan(t *testing.
 	if err != nil {
 		t.Fatalf("build global active query: %v", err)
 	}
-	if !strings.Contains(query, "WITH site_active AS") || !strings.Contains(query, "FROM site_stat_hourly AS st") {
-		t.Fatalf("global active query did not use hourly aggregate rows:\n%s", query)
+	if !strings.Contains(query, "WITH active_identity AS") ||
+		!strings.Contains(query, "FROM usage_fact_daily AS f FORCE INDEX (idx_usage_fact_daily_date_user)") {
+		t.Fatalf("global active query did not use daily identities:\n%s", query)
 	}
-	if count := strings.Count(query, "usage_fact_hourly AS f"); count != 1 {
-		t.Fatalf("global active query fact scan count = %d, want 1:\n%s", count, query)
+	if count := strings.Count(query, "usage_fact_hourly AS f FORCE INDEX (idx_usage_fact_hourly_time_user)"); count != 2 {
+		t.Fatalf("global active query hourly boundary count = %d, want 2:\n%s", count, query)
 	}
-	if !strings.Contains(query, "COUNT(DISTINCT CAST(CONCAT_WS(':', f.site_id, f.remote_user_id) AS BINARY))") {
-		t.Fatalf("global summary lost site-scoped distinct identity:\n%s", query)
+	if strings.Contains(query, "WITH site_active AS") || strings.Contains(query, "'dimension' AS row_kind") ||
+		strings.Contains(query, "'trend' AS row_kind") || strings.Contains(query, "'site' AS row_kind") {
+		t.Fatalf("global active query still returns duplicated bucket rows:\n%s", query)
 	}
-	if len(args) != 6 {
-		t.Fatalf("global active query args = %#v, want aggregate and fact filters once each", args)
+	if !strings.Contains(query, "CAST(COUNT(*) AS CHAR)") || !strings.Contains(query, "\nUNION\n") {
+		t.Fatalf("global summary lost exact union identity count:\n%s", query)
+	}
+	if len(args) != 9 {
+		t.Fatalf("global active query args = %#v, want two hourly boundaries and one daily range", args)
 	}
 
 	request.Granularity = "day"
 	request.StartDateKey = 20250701
 	request.EndDateKey = 20250801
 	query, _, err = statisticsActiveQuery(request)
-	if err != nil || !strings.Contains(query, "FROM site_stat_daily AS st") ||
-		strings.Count(query, "usage_fact_daily AS f") != 1 {
+	if err != nil || strings.Contains(query, "site_stat_daily") ||
+		strings.Count(query, "usage_fact_daily AS f") != 1 || strings.Contains(query, "usage_fact_hourly AS f") {
 		t.Fatalf("daily global active query = %v\n%s", err, query)
 	}
 }

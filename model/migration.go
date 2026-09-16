@@ -415,6 +415,11 @@ func isMigrationDDL(statement string) bool {
 
 func verifyMigrationDDLPostcondition(ctx context.Context, connection *sql.Conn, version string, index int) (bool, error) {
 	switch version {
+	case "0007_statistics_daily_identity_index":
+		if index != 0 {
+			return false, fmt.Errorf("no postcondition for DDL statement %d", index+1)
+		}
+		return verifyMigrationIndex(ctx, connection, "usage_fact_daily", "idx_usage_fact_daily_date_user", []string{"date_key", "site_id", "remote_user_id"})
 	case "0005_finance_incremental_lookup_indexes":
 		switch index {
 		case 0:

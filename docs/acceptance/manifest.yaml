@@ -252,7 +252,7 @@ acceptance_cases:
     layer: integration
     test_or_runbook_path: "tests/integration/migration_acceptance_test.go"
     owner_role: backend
-    evidence_path: "artifacts/acceptance/A25/"
+    evidence_path: "planned:artifacts/acceptance/A25/"
 
   - acceptance_id: A26
     requirement_id: R10

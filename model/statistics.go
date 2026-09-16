@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -127,6 +128,7 @@ type StatisticsMetricRow struct {
 	RequestCount     string `gorm:"column:request_count"`
 	Quota            string `gorm:"column:quota"`
 	TokenUsed        string `gorm:"column:token_used"`
+	ActiveUsers      string `gorm:"column:active_users"`
 	LastCalculatedAt int64  `gorm:"column:last_calculated_at"`
 }
 
@@ -433,11 +435,17 @@ func (repository *StatisticsRepository) LoadMetricRows(ctx context.Context, requ
 	if request.Scope == "token" {
 		dimensionName = "COALESCE(MIN(NULLIF(st.token_name, '') COLLATE utf8mb4_bin), '')"
 	}
+	activeUsers := "'0'"
+	if (request.Scope == "global" || request.Scope == "site") &&
+		(request.Granularity == "hour" || request.Granularity == "day") {
+		activeUsers = "CAST(SUM(st.active_users) AS CHAR)"
+	}
 	selectSQL := fmt.Sprintf(`%s AS dimension_id, %s AS dimension_name, %s AS site_id, %s AS bucket_key,
 		CAST(SUM(st.request_count) AS CHAR) AS request_count,
 		CAST(SUM(st.quota) AS CHAR) AS quota,
 		CAST(SUM(st.token_used) AS CHAR) AS token_used,
-		MAX(%s) AS last_calculated_at`, dimension, dimensionName, siteColumn, bucket, calculatedColumn)
+		%s AS active_users,
+		MAX(%s) AS last_calculated_at`, dimension, dimensionName, siteColumn, bucket, activeUsers, calculatedColumn)
 	query := repository.db.WithContext(ctx).Table(from).Select(selectSQL)
 	if request.Granularity == "hour" {
 		query = query.Where(rangeColumn+" >= ? AND "+rangeColumn+" < ?", request.StartTimestamp, request.EndTimestamp)
@@ -514,51 +522,89 @@ func statisticsSiteAggregateActiveQuery(
 	factFrom, totalIdentity, factWhere string,
 	factArgs []any,
 ) (string, []any, error) {
-	table := "site_stat_hourly"
-	rangeColumn := "hour_ts"
-	start, end := any(request.StartTimestamp), any(request.EndTimestamp)
-	if request.Granularity == "day" {
-		table = "site_stat_daily"
-		rangeColumn = "date_key"
-		start, end = request.StartDateKey, request.EndDateKey
-	}
-	statWhere := "st." + rangeColumn + " >= ? AND st." + rangeColumn + " < ?"
-	statArgs := []any{start, end}
-	if len(request.SiteIDs) > 0 {
-		statWhere += " AND st.site_id IN ?"
-		statArgs = append(statArgs, request.SiteIDs)
-	}
-	statDimension := "CAST(st.site_id AS CHAR)"
-	if request.Scope == "global" {
-		statDimension = "'global'"
+	if request.Granularity == "hour" {
+		return statisticsHourlySummaryActiveQuery(request)
 	}
 	totalKey := "CAST(CONCAT_WS(':', " + totalIdentity + ") AS BINARY)"
-	query := fmt.Sprintf(`WITH site_active AS (
-  SELECT st.site_id, st.%s AS bucket_key, st.active_users
-  FROM %s AS st
-  WHERE %s
-)
-SELECT 'dimension' AS row_kind, %s AS dimension_id, site_id, bucket_key,
-  CAST(active_users AS CHAR) AS active_users
-FROM site_active AS st
-UNION ALL
-SELECT 'trend' AS row_kind, '' AS dimension_id, 0 AS site_id, bucket_key,
-  CAST(SUM(active_users) AS CHAR) AS active_users
-FROM site_active
-GROUP BY bucket_key
-UNION ALL
-SELECT 'site' AS row_kind, '' AS dimension_id, site_id, bucket_key,
-  CAST(active_users AS CHAR) AS active_users
-FROM site_active
-UNION ALL
-SELECT 'summary' AS row_kind, '' AS dimension_id, 0 AS site_id, 0 AS bucket_key,
+	query := fmt.Sprintf(`SELECT 'summary' AS row_kind, '' AS dimension_id, 0 AS site_id, 0 AS bucket_key,
   CAST(COUNT(DISTINCT %s) AS CHAR) AS active_users
 FROM %s
-WHERE %s`, rangeColumn, table, statWhere, statDimension, totalKey, factFrom, factWhere)
-	allArgs := make([]any, 0, len(statArgs)+len(factArgs))
-	allArgs = append(allArgs, statArgs...)
-	allArgs = append(allArgs, factArgs...)
-	return query, allArgs, nil
+WHERE %s`, totalKey, factFrom, factWhere)
+	return query, factArgs, nil
+}
+
+func statisticsHourlySummaryActiveQuery(request StatisticsReadRequest) (string, []any, error) {
+	if request.StartTimestamp <= 0 || request.EndTimestamp <= request.StartTimestamp {
+		return "", nil, ErrStatisticsReadContract
+	}
+	location := time.FixedZone("Asia/Shanghai", 8*60*60)
+	start := time.Unix(request.StartTimestamp, 0).In(location)
+	end := time.Unix(request.EndTimestamp, 0).In(location)
+	startMidnight := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, location)
+	fullStart := startMidnight
+	if start.Unix() != startMidnight.Unix() {
+		fullStart = startMidnight.AddDate(0, 0, 1)
+	}
+	fullEnd := time.Date(end.Year(), end.Month(), end.Day(), 0, 0, 0, 0, location)
+
+	parts := make([]string, 0, 3)
+	args := make([]any, 0, 8)
+	appendHourly := func(rangeStart, rangeEnd int64) {
+		if rangeEnd <= rangeStart {
+			return
+		}
+		where := `f.hour_ts >= ? AND f.hour_ts < ?
+  AND f.remote_user_id > 0
+  AND s.statistics_start_at IS NOT NULL AND s.statistics_start_at < f.hour_ts + 3600
+  AND (s.statistics_end_at IS NULL OR s.statistics_end_at > f.hour_ts)`
+		args = append(args, rangeStart, rangeEnd)
+		if len(request.SiteIDs) > 0 {
+			where += "\n  AND f.site_id IN ?"
+			args = append(args, request.SiteIDs)
+		}
+		parts = append(parts, `SELECT f.site_id, f.remote_user_id
+FROM usage_fact_hourly AS f FORCE INDEX (idx_usage_fact_hourly_time_user)
+JOIN collection_window AS w
+  ON w.site_id = f.site_id AND w.hour_ts = f.hour_ts AND w.status = 'complete'
+JOIN site AS s ON s.id = f.site_id
+WHERE `+where+`
+GROUP BY f.site_id, f.remote_user_id`)
+	}
+
+	prefixEnd := request.EndTimestamp
+	if fullStart.Unix() < prefixEnd {
+		prefixEnd = fullStart.Unix()
+	}
+	appendHourly(request.StartTimestamp, prefixEnd)
+	if fullStart.Before(fullEnd) {
+		startDateKey := fullStart.Year()*10000 + int(fullStart.Month())*100 + fullStart.Day()
+		endDateKey := fullEnd.Year()*10000 + int(fullEnd.Month())*100 + fullEnd.Day()
+		where := "f.date_key >= ? AND f.date_key < ? AND f.remote_user_id > 0"
+		args = append(args, startDateKey, endDateKey)
+		if len(request.SiteIDs) > 0 {
+			where += " AND f.site_id IN ?"
+			args = append(args, request.SiteIDs)
+		}
+		parts = append(parts, `SELECT f.site_id, f.remote_user_id
+FROM usage_fact_daily AS f FORCE INDEX (idx_usage_fact_daily_date_user)
+WHERE `+where+`
+GROUP BY f.site_id, f.remote_user_id`)
+	}
+	suffixStart := request.StartTimestamp
+	if fullEnd.Unix() > suffixStart {
+		suffixStart = fullEnd.Unix()
+	}
+	appendHourly(suffixStart, request.EndTimestamp)
+	if len(parts) == 0 {
+		return "", nil, ErrStatisticsReadContract
+	}
+	query := `WITH active_identity AS (
+` + strings.Join(parts, "\nUNION\n") + `
+)
+SELECT 'summary' AS row_kind, '' AS dimension_id, 0 AS site_id, 0 AS bucket_key,
+  CAST(COUNT(*) AS CHAR) AS active_users
+FROM active_identity`
+	return query, args, nil
 }
 
 func (repository *StatisticsRepository) LoadFallbackRates(ctx context.Context) (StatisticsFallbackRates, error) {
