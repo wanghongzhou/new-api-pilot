@@ -192,11 +192,11 @@ func DesignFixturePath(parts ...string) string {
 }
 
 type upstreamManifest struct {
-	SchemaVersion   int                         `json:"schema_version"`
-	FixtureID       string                      `json:"fixture_id"`
-	Description     string                      `json:"description"`
-	FixedNowUnix    int64                       `json:"fixed_now_unix"`
-	Scenarios       map[string]upstreamScenario `json:"scenarios"`
+	SchemaVersion int                         `json:"schema_version"`
+	FixtureID     string                      `json:"fixture_id"`
+	Description   string                      `json:"description"`
+	FixedNowUnix  int64                       `json:"fixed_now_unix"`
+	Scenarios     map[string]upstreamScenario `json:"scenarios"`
 }
 
 type upstreamScenario struct {
@@ -215,6 +215,7 @@ type upstreamRoute struct {
 	RequiredHeaders  []string          `json:"required_headers"`
 	ForbiddenHeaders []string          `json:"forbidden_headers"`
 	Disconnect       bool              `json:"disconnect"`
+	ExpectedHits     int               `json:"expected_hits"`
 }
 
 type loadedUpstreamRoute struct {
@@ -249,6 +250,9 @@ func loadUpstreamRoutes(t testing.TB, fixtureDir string, definitions []upstreamR
 	for _, definition := range definitions {
 		if definition.ID == "" || definition.Method == "" || definition.Path == "" {
 			t.Fatalf("F02 route must have id, method, and path: %+v", definition)
+		}
+		if definition.ExpectedHits < 0 {
+			t.Fatalf("F02 route %q expected_hits must be non-negative", definition.ID)
 		}
 		identity := definition.Method + " " + definition.Path + "?" + encodeQuery(definition.Query)
 		if _, exists := identities[identity]; exists {

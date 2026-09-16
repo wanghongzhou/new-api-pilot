@@ -163,7 +163,7 @@ func TestAlertPostCommitCoordinatorUsesBoundedDetachedContextAndContainsHookFail
 	}
 }
 
-func TestRapidResourceUpsertsShareCanonicalSampleAndCountOnce(t *testing.T) {
+func TestRapidResourceUpsertsApplySameIdentitySemanticCorrection(t *testing.T) {
 	tx := openAlertTestTransaction(t)
 	now := int64(1_752_400_800)
 	clock := testsupport.NewFakeClock(time.Unix(now, 0))
@@ -208,15 +208,13 @@ func TestRapidResourceUpsertsShareCanonicalSampleAndCountOnce(t *testing.T) {
 	if err := tx.Where("rule_key = 'cpu_high' AND site_id = ?", site.ID).Take(&event).Error; err != nil {
 		t.Fatalf("load resource event: %v", err)
 	}
-	if event.Status != dto.AlertStatusFiring || event.ConsecutiveCount != 1 ||
-		event.CurrentValue == nil || *event.CurrentValue == "10.0000" {
+	if event.Status != dto.AlertStatusResolved || event.ConsecutiveCount != 1 ||
+		event.CurrentValue == nil || *event.CurrentValue != "10.0000000000" {
 		t.Fatalf("resource event after same-minute upsert = %#v", event)
 	}
 	var cursor model.AlertEvaluationCursor
-	if event.ActiveKey == nil {
-		t.Fatal("resource event has no active key")
-	}
-	if err := tx.Where("active_key = ?", *event.ActiveKey).Take(&cursor).Error; err != nil {
+	activeKey := alertActiveKey("cpu_high", "instance", strconv.FormatInt(site.ID, 10)+"/node-a")
+	if err := tx.Where("active_key = ?", activeKey).Take(&cursor).Error; err != nil {
 		t.Fatalf("load resource cursor: %v", err)
 	}
 	if cursor.LastSampleAt != minute || !strings.HasPrefix(cursor.LastSampleKey, "v1:resource:") {

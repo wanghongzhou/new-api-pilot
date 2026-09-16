@@ -112,6 +112,28 @@ type SiteInstanceResourceState struct {
 	PriorTwoNonOnline bool
 }
 
+func sameOptionalInt64(left, right *int64) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
+}
+
+func sameSiteInstanceCurrent(left, right SiteInstance) bool {
+	return left.Hostname == right.Hostname &&
+		left.IsMaster == right.IsMaster &&
+		left.RuntimeVersion == right.RuntimeVersion &&
+		left.GOOS == right.GOOS &&
+		left.GOARCH == right.GOARCH &&
+		left.UpstreamStatus == right.UpstreamStatus &&
+		sameOptionalInt64(left.UpstreamStaleAfterSeconds, right.UpstreamStaleAfterSeconds) &&
+		left.CurrentStatus == right.CurrentStatus &&
+		left.FirstSeenAt == right.FirstSeenAt &&
+		sameOptionalInt64(left.StartedAt, right.StartedAt) &&
+		sameOptionalInt64(left.LastSeenAt, right.LastSeenAt) &&
+		sameOptionalInt64(left.RetiredAt, right.RetiredAt)
+}
+
 type SiteInstanceSnapshot struct {
 	SiteInstance
 	SampleStatus    *string  `gorm:"column:sample_status"`
@@ -300,15 +322,17 @@ func (repository *SiteRepository) SyncInstances(ctx context.Context, writes []Si
 				}
 			}
 		}
-		if err := repository.db.WithContext(ctx).Clauses(clause.OnConflict{
-			Columns: []clause.Column{{Name: "site_id"}, {Name: "node_name"}},
-			DoUpdates: clause.AssignmentColumns([]string{
-				"hostname", "is_master", "runtime_version", "goos", "goarch", "upstream_status",
-				"upstream_stale_after_seconds", "current_status", "started_at", "last_seen_at",
-				"last_synced_at", "updated_at", "retired_at",
-			}),
-		}).Create(instance).Error; err != nil {
-			return err
+		if errors.Is(existingErr, gorm.ErrRecordNotFound) || !sameSiteInstanceCurrent(existing, *instance) {
+			if err := repository.db.WithContext(ctx).Clauses(clause.OnConflict{
+				Columns: []clause.Column{{Name: "site_id"}, {Name: "node_name"}},
+				DoUpdates: clause.AssignmentColumns([]string{
+					"hostname", "is_master", "runtime_version", "goos", "goarch", "upstream_status",
+					"upstream_stale_after_seconds", "current_status", "started_at", "last_seen_at",
+					"last_synced_at", "updated_at", "retired_at",
+				}),
+			}).Create(instance).Error; err != nil {
+				return err
+			}
 		}
 		sample := &writes[index].Sample
 		if err := repository.db.WithContext(ctx).Clauses(clause.OnConflict{

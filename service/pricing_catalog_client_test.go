@@ -102,8 +102,12 @@ func TestPricingGroupReadUsesShortCache(t *testing.T) {
 		fmt.Fprint(w, `{"success":true,"message":"","data":["default"]}`)
 	}))
 	defer server.Close()
-	client := testClientForServer(t, server, true, testClientSettings{})
-	for _, requestID := range []string{"group-cache-1", "group-cache-2"} {
+	clients := []*NewAPIClient{
+		testClientForServer(t, server, true, testClientSettings{}),
+		testClientForServer(t, server, true, testClientSettings{}),
+	}
+	for index, requestID := range []string{"group-cache-1", "group-cache-2"} {
+		client := clients[index]
 		groups, err := client.SnapshotPricingGroups(context.Background(), requestID)
 		if err != nil || len(groups.Groups) != 1 || groups.Groups[0].Name != "default" {
 			t.Fatalf("groups=%+v err=%v", groups, err)

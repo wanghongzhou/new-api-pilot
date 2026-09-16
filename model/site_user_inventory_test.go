@@ -37,10 +37,18 @@ func TestSiteUserInventorySnapshotAtomicStatesAndHourly(t *testing.T) {
 	if len(hourly) != 2 || hourly[0].ActiveUserCount+hourly[1].ActiveUserCount != 1 || hourly[0].NewUserCount+hourly[1].NewUserCount != 1 {
 		t.Fatalf("hourly inventory = %+v", hourly)
 	}
+	originalCollectedAt := hourly[0].CollectedAt
+	if written, err := repository.ApplySiteUserSnapshot(context.Background(), site, now+1, hour, initial); err != nil || written != 0 {
+		t.Fatalf("unchanged inventory snapshot written=%d err=%v", written, err)
+	}
+	var unchangedHourly SiteUserInventoryHourly
+	if err := database.GORM.Where("site_id = ? AND hour_ts = ?", site.ID, hour).Order("remote_role").Take(&unchangedHourly).Error; err != nil || unchangedHourly.CollectedAt != originalCollectedAt {
+		t.Fatalf("unchanged hourly inventory was rewritten: %+v err=%v", unchangedHourly, err)
+	}
 
 	conflict := initial[0]
 	conflict.RemoteCreatedAt++
-	if _, err := repository.ApplySiteUserSnapshot(context.Background(), site, now+1, hour, []SiteUserObservation{conflict}); err != nil {
+	if _, err := repository.ApplySiteUserSnapshot(context.Background(), site, now+2, hour, []SiteUserObservation{conflict}); err != nil {
 		t.Fatalf("conflict inventory snapshot: %v", err)
 	}
 	inventory = nil
@@ -52,7 +60,7 @@ func TestSiteUserInventorySnapshotAtomicStatesAndHourly(t *testing.T) {
 	}
 
 	duplicate := []SiteUserObservation{initial[0], initial[0]}
-	if _, err := repository.ApplySiteUserSnapshot(context.Background(), site, now+2, hour, duplicate); err == nil {
+	if _, err := repository.ApplySiteUserSnapshot(context.Background(), site, now+3, hour, duplicate); err == nil {
 		t.Fatal("duplicate remote user IDs were accepted")
 	}
 	var count int64

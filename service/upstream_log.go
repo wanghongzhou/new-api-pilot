@@ -223,6 +223,8 @@ func (service *UpstreamLogService) collectWindow(ctx context.Context, siteID int
 
 	page := 1
 	var total int64 = -1
+	var firstHeadCreatedAt int64
+	var firstHeadID int64
 	seen := map[string]model.UpstreamLogFact{}
 	for {
 		result, pageErr := client.LogPage(ctx, requestID, start, end-1, page)
@@ -231,6 +233,10 @@ func (service *UpstreamLogService) collectWindow(ctx context.Context, siteID int
 		}
 		if total < 0 {
 			total = result.Total
+			if len(result.Items) > 0 {
+				firstHeadCreatedAt = result.Items[0].CreatedAt
+				firstHeadID = result.Items[0].ID
+			}
 		} else if total != result.Total {
 			return fetched, int64(len(seen)), ErrUpstreamResponseInvalid
 		}
@@ -258,6 +264,13 @@ func (service *UpstreamLogService) collectWindow(ctx context.Context, siteID int
 			return fetched, int64(len(seen)), ErrUpstreamResponseInvalid
 		}
 		page++
+	}
+	fence, fenceErr := client.LogPage(ctx, requestID+"_fence", start, end-1, 1)
+	if fenceErr != nil {
+		return fetched, int64(len(seen)), fenceErr
+	}
+	if fence.Total != total || total == 0 && len(fence.Items) != 0 || total > 0 && (len(fence.Items) == 0 || fence.Items[0].CreatedAt != firstHeadCreatedAt || fence.Items[0].ID != firstHeadID) {
+		return fetched, int64(len(seen)), ErrUpstreamResponseInvalid
 	}
 	facts := make([]model.UpstreamLogFact, 0, len(seen))
 	for _, fact := range seen {

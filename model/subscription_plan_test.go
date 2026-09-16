@@ -45,9 +45,21 @@ func TestSyncSubscriptionPlansUsesBoundedBatchSQLAtLargeCardinality(t *testing.T
 	if counts.Query != 1 || counts.Create > 4 || counts.Update != 0 {
 		t.Fatalf("initial plan sync SQL counts=%+v, want one read and bounded batch writes", counts)
 	}
+	var original SiteSubscriptionPlan
+	if err := database.GORM.Where("site_id=? AND remote_id=1", site.ID).Take(&original).Error; err != nil {
+		t.Fatal(err)
+	}
+	written, err = NewSiteRepository(database.GORM).SyncSubscriptionPlans(context.Background(), site, now+1, dto.UpstreamSubscriptionPlanSnapshot{Items: items})
+	if err != nil || written != 0 {
+		t.Fatalf("unchanged plan sync written=%d err=%v", written, err)
+	}
+	var unchanged SiteSubscriptionPlan
+	if err := database.GORM.Where("site_id=? AND remote_id=1", site.ID).Take(&unchanged).Error; err != nil || unchanged.UpdatedAt != original.UpdatedAt || unchanged.CollectedAt != original.CollectedAt {
+		t.Fatalf("unchanged plan was rewritten: before=%+v after=%+v err=%v", original, unchanged, err)
+	}
 
 	secondCounted, secondCounter := newTestSQLCountingDB(database.GORM)
-	written, err = NewSiteRepository(secondCounted).SyncSubscriptionPlans(context.Background(), site, now+1, dto.UpstreamSubscriptionPlanSnapshot{Items: items[:1]})
+	written, err = NewSiteRepository(secondCounted).SyncSubscriptionPlans(context.Background(), site, now+2, dto.UpstreamSubscriptionPlanSnapshot{Items: items[:1]})
 	if err != nil || written != itemCount-1 {
 		t.Fatalf("missing transition written=%d err=%v", written, err)
 	}

@@ -164,7 +164,7 @@ func TestCollectWindowContinuesPastOverlappingPagesUntilAllStableRowsArrive(t *t
 		t.Fatalf("store log token: %v", err)
 	}
 	fetched, written, err := service.collectWindow(context.Background(), site.ID, site.ConfigVersion, start, end, "log-overlap")
-	if err != nil || fetched != 5 || written != 4 || client.calls != 3 {
+	if err != nil || fetched != 5 || written != 4 || client.calls != 4 {
 		t.Fatalf("overlap collection fetched=%d written=%d calls=%d err=%v", fetched, written, client.calls, err)
 	}
 	var count int64
@@ -186,6 +186,21 @@ func TestCollectWindowContinuesPastOverlappingPagesUntilAllStableRowsArrive(t *t
 	}
 	if err := tx.Model(&model.UpstreamLogFact{}).Where("site_id = ?", site.ID).Count(&count).Error; err != nil || count != 4 {
 		t.Fatalf("failed overlap collection changed facts count=%d err=%v", count, err)
+	}
+	client.calls = 0
+	client.pageOneCalls = 0
+	driftedHead := rows[0]
+	driftedHead.ID = 99
+	client.fencePage = &dto.UpstreamLogPage{Page: 1, PageSize: 2, Total: 4, Items: []dto.UpstreamLogRow{driftedHead, rows[1]}}
+	client.pages = map[int]dto.UpstreamLogPage{
+		1: {Page: 1, PageSize: 2, Total: 4, Items: []dto.UpstreamLogRow{rows[0], rows[1]}},
+		2: {Page: 2, PageSize: 2, Total: 4, Items: []dto.UpstreamLogRow{rows[2], rows[3]}},
+	}
+	if _, _, err := service.collectWindow(context.Background(), site.ID, site.ConfigVersion, start, end, "log-fence-drift"); !errors.Is(err, ErrUpstreamResponseInvalid) {
+		t.Fatalf("head fence drift error=%v", err)
+	}
+	if err := tx.Model(&model.UpstreamLogFact{}).Where("site_id = ?", site.ID).Count(&count).Error; err != nil || count != 4 {
+		t.Fatalf("fence drift changed facts count=%d err=%v", count, err)
 	}
 }
 
@@ -311,8 +326,10 @@ func TestScheduledLogTaskRepairsDowntimeGapBeforeRecentOverlap(t *testing.T) {
 
 type overlappingLogClient struct {
 	*testSiteClient
-	pages map[int]dto.UpstreamLogPage
-	calls int
+	pages        map[int]dto.UpstreamLogPage
+	fencePage    *dto.UpstreamLogPage
+	calls        int
+	pageOneCalls int
 }
 
 type historyLogClient struct {
@@ -321,12 +338,21 @@ type historyLogClient struct {
 }
 
 func (client *historyLogClient) LogPage(_ context.Context, _ string, start, end int64, _ int) (dto.UpstreamLogPage, error) {
-	client.windows = append(client.windows, [2]int64{start, end})
+	window := [2]int64{start, end}
+	if len(client.windows) == 0 || client.windows[len(client.windows)-1] != window {
+		client.windows = append(client.windows, window)
+	}
 	return dto.UpstreamLogPage{Page: 1, PageSize: 100, Total: 0, Items: []dto.UpstreamLogRow{}}, nil
 }
 
 func (client *overlappingLogClient) LogPage(_ context.Context, _ string, _, _ int64, page int) (dto.UpstreamLogPage, error) {
 	client.calls++
+	if page == 1 {
+		client.pageOneCalls++
+		if client.pageOneCalls > 1 && client.fencePage != nil {
+			return *client.fencePage, nil
+		}
+	}
 	return client.pages[page], nil
 }
 

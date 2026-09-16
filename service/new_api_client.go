@@ -33,6 +33,7 @@ const (
 	UpstreamExportTimeout         = 120 * time.Second
 	UpstreamMaxIdleConnections    = 100
 	UpstreamMaxIdlePerHost        = 10
+	performanceDetailParallelism  = 8
 	upstreamPageSize              = 100
 )
 
@@ -74,25 +75,29 @@ type NewAPIClient struct {
 	maxResponseBytes int64
 	metrics          UpstreamMetricsRecorder
 	governor         UpstreamGovernor
-	cacheNamespace   uint64
 }
-
-var nextUpstreamClientNamespace atomic.Uint64
 
 // The upstream application does not attach cache headers to its management
 // APIs. Keep a very small process-wide read cache for endpoints whose source
 // is process memory or a small, slowly-changing catalogue. The key includes
 // the origin and credential fingerprint so data cannot cross sites/users.
+const upstreamReadCacheMaxEntries = 1024
+
 type upstreamReadCacheEntry struct {
 	expiresAt time.Time
 	payload   []byte
 }
 
+type upstreamReadCacheLock struct {
+	mutex sync.Mutex
+	users int
+}
+
 var upstreamReadCache = struct {
 	sync.Mutex
 	entries map[string]upstreamReadCacheEntry
-	locks   map[string]*sync.Mutex
-}{entries: make(map[string]upstreamReadCacheEntry), locks: make(map[string]*sync.Mutex)}
+	locks   map[string]*upstreamReadCacheLock
+}{entries: make(map[string]upstreamReadCacheEntry), locks: make(map[string]*upstreamReadCacheLock)}
 
 func upstreamCacheTTL(endpoint string) time.Duration {
 	switch endpoint {
@@ -109,20 +114,51 @@ func (client *NewAPIClient) upstreamCacheKey(method, endpoint string, query url.
 	credential := "public"
 	if authMode == upstreamAuthManagement {
 		sum := sha256.Sum256([]byte(client.accessToken))
-		credential = strconv.FormatInt(client.rootUserID, 10) + ":" + fmt.Sprintf("%x", sum[:8])
+		credential = strconv.FormatInt(client.rootUserID, 10) + ":" + fmt.Sprintf("%x", sum[:])
 	}
-	return strconv.FormatUint(client.cacheNamespace, 10) + "|" + client.baseOrigin + "|" + credential + "|" + method + "|" + endpoint + "?" + query.Encode()
+	return client.baseOrigin + "|" + strconv.Itoa(int(authMode)) + "|" + credential + "|" + method + "|" + endpoint + "?" + query.Encode()
 }
 
-func upstreamCacheLock(key string) *sync.Mutex {
+func acquireUpstreamCacheLock(key string, now time.Time) func() {
+	upstreamReadCache.Lock()
+	for cachedKey, entry := range upstreamReadCache.entries {
+		if !now.Before(entry.expiresAt) {
+			delete(upstreamReadCache.entries, cachedKey)
+		}
+	}
+	lock := upstreamReadCache.locks[key]
+	if lock == nil {
+		lock = &upstreamReadCacheLock{}
+		upstreamReadCache.locks[key] = lock
+	}
+	lock.users++
+	upstreamReadCache.Unlock()
+	lock.mutex.Lock()
+	return func() {
+		lock.mutex.Unlock()
+		upstreamReadCache.Lock()
+		lock.users--
+		if lock.users == 0 && upstreamReadCache.locks[key] == lock {
+			delete(upstreamReadCache.locks, key)
+		}
+		upstreamReadCache.Unlock()
+	}
+}
+
+func storeUpstreamReadCache(key string, entry upstreamReadCacheEntry) {
 	upstreamReadCache.Lock()
 	defer upstreamReadCache.Unlock()
-	if lock := upstreamReadCache.locks[key]; lock != nil {
-		return lock
+	if len(upstreamReadCache.entries) >= upstreamReadCacheMaxEntries {
+		oldestKey := ""
+		var oldestExpiry time.Time
+		for cachedKey, cached := range upstreamReadCache.entries {
+			if oldestKey == "" || cached.expiresAt.Before(oldestExpiry) {
+				oldestKey, oldestExpiry = cachedKey, cached.expiresAt
+			}
+		}
+		delete(upstreamReadCache.entries, oldestKey)
 	}
-	lock := &sync.Mutex{}
-	upstreamReadCache.locks[key] = lock
-	return lock
+	upstreamReadCache.entries[key] = entry
 }
 
 func NewNewAPIClient(options NewAPIClientOptions) (*NewAPIClient, error) {
@@ -195,7 +231,6 @@ func newNewAPIClient(options NewAPIClientOptions, dependencies newAPIClientDepen
 		maxResponseBytes: maxResponseBytes,
 		metrics:          options.Metrics,
 		governor:         options.Governor,
-		cacheNamespace:   nextUpstreamClientNamespace.Add(1),
 	}, nil
 }
 
@@ -338,6 +373,8 @@ func (client *NewAPIClient) listUsersPage(ctx context.Context, requestID, endpoi
 	}
 	query.Set("p", strconv.Itoa(page))
 	query.Set("page_size", strconv.Itoa(upstreamPageSize))
+	query.Set("sort_by", "id")
+	query.Set("sort_order", "desc")
 	var wire upstreamUserPageWire
 	payloadSize, err := client.get(ctx, client.httpClient, endpoint, query, requestID, upstreamAuthManagement, client.requestTimeout, &wire, false)
 	if err != nil {
@@ -393,12 +430,19 @@ func (client *NewAPIClient) SnapshotUsers(ctx context.Context, requestID string)
 	if int64(len(items)) != first.Total {
 		return dto.UpstreamUserSnapshot{}, newUpstreamRequestError(UpstreamErrorResponseInvalid)
 	}
+	fence, _, err := client.listUsersPage(ctx, requestID+"_fence", "/api/user/", nil, 1)
+	if err != nil {
+		return dto.UpstreamUserSnapshot{}, err
+	}
+	if fence.Total != first.Total || len(fence.Items) == 0 || fence.Items[0].ID != first.Items[0].ID {
+		return dto.UpstreamUserSnapshot{}, newUpstreamRequestError(UpstreamErrorResponseInvalid)
+	}
 	return dto.UpstreamUserSnapshot{Total: first.Total, Items: items}, nil
 }
 
 func appendUniqueUsers(destination *[]dto.UpstreamUser, seen map[int64]struct{}, items []dto.UpstreamUser, expected int64) error {
 	for _, item := range items {
-		if _, duplicate := seen[item.ID]; duplicate {
+		if _, duplicate := seen[item.ID]; duplicate || len(*destination) > 0 && item.ID >= (*destination)[len(*destination)-1].ID {
 			return newUpstreamRequestError(UpstreamErrorResponseInvalid)
 		}
 		seen[item.ID] = struct{}{}
@@ -442,6 +486,13 @@ func (client *NewAPIClient) SnapshotChannels(ctx context.Context, requestID stri
 		return dto.UpstreamChannelSnapshot{}, err
 	}
 	if first.Total == 0 {
+		fence, _, fenceErr := client.listChannelsPage(ctx, requestID+"_fence", 1)
+		if fenceErr != nil {
+			return dto.UpstreamChannelSnapshot{}, fenceErr
+		}
+		if fence.Total != 0 || len(fence.Items) != 0 {
+			return dto.UpstreamChannelSnapshot{}, newUpstreamRequestError(UpstreamErrorResponseInvalid)
+		}
 		return dto.UpstreamChannelSnapshot{Items: []dto.UpstreamChannel{}}, nil
 	}
 	if len(first.Items) == 0 {
@@ -482,12 +533,19 @@ func (client *NewAPIClient) SnapshotChannels(ctx context.Context, requestID stri
 	if int64(len(items)) != first.Total {
 		return dto.UpstreamChannelSnapshot{}, newUpstreamRequestError(UpstreamErrorResponseInvalid)
 	}
+	fence, _, err := client.listChannelsPage(ctx, requestID+"_fence", 1)
+	if err != nil {
+		return dto.UpstreamChannelSnapshot{}, err
+	}
+	if fence.Total != first.Total || len(fence.Items) == 0 || fence.Items[0].ID != first.Items[0].ID {
+		return dto.UpstreamChannelSnapshot{}, newUpstreamRequestError(UpstreamErrorResponseInvalid)
+	}
 	return dto.UpstreamChannelSnapshot{Total: first.Total, Items: items}, nil
 }
 
 func appendUniqueChannels(destination *[]dto.UpstreamChannel, seen map[int64]struct{}, items []dto.UpstreamChannel, expected int64) error {
 	for _, item := range items {
-		if _, duplicate := seen[item.ID]; duplicate {
+		if _, duplicate := seen[item.ID]; duplicate || len(*destination) > 0 && item.ID >= (*destination)[len(*destination)-1].ID {
 			return newUpstreamRequestError(UpstreamErrorResponseInvalid)
 		}
 		seen[item.ID] = struct{}{}
@@ -518,6 +576,69 @@ func (client *NewAPIClient) SnapshotTopups(ctx context.Context, requestID string
 		return dto.UpstreamTopupSnapshot{}, err
 	}
 	return client.collectTopups(ctx, requestID, first, size)
+}
+
+func (client *NewAPIClient) SnapshotTopupsIncremental(ctx context.Context, requestID string, knownMaxID, knownTotal, oldestPendingID int64) (dto.UpstreamTopupSnapshot, error) {
+	first, size, err := client.listTopupsPage(ctx, requestID+"_first", 1)
+	if err != nil {
+		return dto.UpstreamTopupSnapshot{}, err
+	}
+	if knownMaxID <= 0 || knownTotal <= 0 || first.Total < knownTotal {
+		return client.collectTopups(ctx, requestID, first, size)
+	}
+	if first.Total > 100000 || first.Total == 0 || len(first.Items) == 0 {
+		return dto.UpstreamTopupSnapshot{}, invalidUpstreamResponse()
+	}
+	items := make([]dto.UpstreamTopup, 0, len(first.Items))
+	seen := map[int64]struct{}{}
+	previous := int64(^uint64(0) >> 1)
+	reachedKnown := false
+	reachedPending := oldestPendingID <= 0
+	page, totalSize := 1, size
+	current := first
+	for {
+		if current.Total != first.Total || len(current.Items) == 0 {
+			return dto.UpstreamTopupSnapshot{}, invalidUpstreamResponse()
+		}
+		for _, item := range current.Items {
+			if _, ok := seen[item.ID]; ok || item.ID >= previous {
+				return dto.UpstreamTopupSnapshot{}, invalidUpstreamResponse()
+			}
+			seen[item.ID] = struct{}{}
+			previous = item.ID
+			items = append(items, item)
+			if item.ID <= knownMaxID {
+				reachedKnown = true
+			}
+			if oldestPendingID > 0 && item.ID <= oldestPendingID {
+				reachedPending = true
+			}
+		}
+		if reachedKnown && reachedPending || int64(len(items)) >= first.Total {
+			break
+		}
+		page++
+		next, pageSize, pageErr := client.listTopupsPage(ctx, requestID+"_page_"+strconv.Itoa(page), page)
+		if pageErr != nil || totalSize > client.maxResponseBytes-pageSize {
+			if pageErr != nil {
+				return dto.UpstreamTopupSnapshot{}, pageErr
+			}
+			return dto.UpstreamTopupSnapshot{}, invalidUpstreamResponse()
+		}
+		totalSize += pageSize
+		current = next
+	}
+	if (!reachedKnown || !reachedPending) && int64(len(items)) != first.Total {
+		return dto.UpstreamTopupSnapshot{}, invalidUpstreamResponse()
+	}
+	fence, _, err := client.listTopupsPage(ctx, requestID+"_fence", 1)
+	if err != nil || fence.Total != first.Total || len(fence.Items) == 0 || fence.Items[0].ID != first.Items[0].ID {
+		if err != nil {
+			return dto.UpstreamTopupSnapshot{}, err
+		}
+		return dto.UpstreamTopupSnapshot{}, invalidUpstreamResponse()
+	}
+	return dto.UpstreamTopupSnapshot{Total: first.Total, MaxID: first.Items[0].ID, Items: items, Incremental: reachedKnown && reachedPending}, nil
 }
 func (client *NewAPIClient) collectTopups(ctx context.Context, requestID string, first dto.UpstreamTopupPage, size int64) (dto.UpstreamTopupSnapshot, error) {
 	if first.Total > 100000 {
@@ -596,6 +717,10 @@ func (client *NewAPIClient) SnapshotRedemptions(ctx context.Context, requestID s
 	if err != nil {
 		return dto.UpstreamRedemptionSnapshot{}, err
 	}
+	return client.collectRedemptions(ctx, requestID, first, size)
+}
+
+func (client *NewAPIClient) collectRedemptions(ctx context.Context, requestID string, first dto.UpstreamRedemptionPage, size int64) (dto.UpstreamRedemptionSnapshot, error) {
 	if first.Total > 100000 {
 		return dto.UpstreamRedemptionSnapshot{}, newUpstreamResponseTooLargeError(first.Total, 100000)
 	}
@@ -652,6 +777,164 @@ func (client *NewAPIClient) SnapshotRedemptions(ctx context.Context, requestID s
 		return dto.UpstreamRedemptionSnapshot{}, invalidUpstreamResponse()
 	}
 	return dto.UpstreamRedemptionSnapshot{Total: first.Total, MaxID: first.Items[0].ID, Items: items}, nil
+}
+
+func (client *NewAPIClient) SnapshotRedemptionsIncremental(ctx context.Context, requestID string, knownMaxID, knownTotal int64, enabledIDs []int64) (dto.UpstreamRedemptionSnapshot, error) {
+	first, size, err := client.listRedemptionsPage(ctx, requestID+"_first", 1)
+	if err != nil {
+		return dto.UpstreamRedemptionSnapshot{}, err
+	}
+	if knownMaxID <= 0 || knownTotal <= 0 || first.Total < knownTotal {
+		return client.collectRedemptions(ctx, requestID, first, size)
+	}
+	if len(enabledIDs) > 100000 {
+		return dto.UpstreamRedemptionSnapshot{}, newUpstreamResponseTooLargeError(int64(len(enabledIDs)), 100000)
+	}
+	if first.Total > 100000 || first.Total == 0 || len(first.Items) == 0 {
+		return dto.UpstreamRedemptionSnapshot{}, invalidUpstreamResponse()
+	}
+	items := make([]dto.UpstreamRedemption, 0, len(first.Items))
+	seen := map[int64]struct{}{}
+	previous := int64(^uint64(0) >> 1)
+	reached := false
+	page, totalSize := 1, size
+	current := first
+	for {
+		if current.Total != first.Total || len(current.Items) == 0 {
+			return dto.UpstreamRedemptionSnapshot{}, invalidUpstreamResponse()
+		}
+		for _, item := range current.Items {
+			if _, ok := seen[item.ID]; ok || item.ID >= previous {
+				return dto.UpstreamRedemptionSnapshot{}, invalidUpstreamResponse()
+			}
+			seen[item.ID] = struct{}{}
+			previous = item.ID
+			items = append(items, item)
+			if item.ID <= knownMaxID {
+				reached = true
+			}
+		}
+		if reached || int64(len(items)) >= first.Total {
+			break
+		}
+		page++
+		next, pageSize, pageErr := client.listRedemptionsPage(ctx, requestID+"_page_"+strconv.Itoa(page), page)
+		if pageErr != nil || totalSize > client.maxResponseBytes-pageSize {
+			if pageErr != nil {
+				return dto.UpstreamRedemptionSnapshot{}, pageErr
+			}
+			return dto.UpstreamRedemptionSnapshot{}, invalidUpstreamResponse()
+		}
+		totalSize += pageSize
+		current = next
+	}
+	if !reached && int64(len(items)) != first.Total {
+		return dto.UpstreamRedemptionSnapshot{}, invalidUpstreamResponse()
+	}
+	if int64(len(items)) == first.Total {
+		fence, _, fenceErr := client.listRedemptionsPage(ctx, requestID+"_fence", 1)
+		if fenceErr != nil {
+			return dto.UpstreamRedemptionSnapshot{}, fenceErr
+		}
+		if fence.Total != first.Total || len(fence.Items) == 0 || fence.Items[0].ID != first.Items[0].ID {
+			return dto.UpstreamRedemptionSnapshot{}, invalidUpstreamResponse()
+		}
+		return dto.UpstreamRedemptionSnapshot{Total: first.Total, MaxID: first.Items[0].ID, Items: items}, nil
+	}
+	unseenEnabledIDs := make([]int64, 0, len(enabledIDs))
+	unseenEnabled := make(map[int64]struct{}, len(enabledIDs))
+	for _, id := range enabledIDs {
+		if id <= 0 {
+			return dto.UpstreamRedemptionSnapshot{}, invalidUpstreamResponse()
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		if _, duplicate := unseenEnabled[id]; duplicate {
+			continue
+		}
+		unseenEnabled[id] = struct{}{}
+		unseenEnabledIDs = append(unseenEnabledIDs, id)
+	}
+	totalPages := int((first.Total + upstreamPageSize - 1) / upstreamPageSize)
+	remainingPages := totalPages - page
+	if remainingPages <= 0 {
+		return dto.UpstreamRedemptionSnapshot{}, invalidUpstreamResponse()
+	}
+	if len(unseenEnabledIDs) > remainingPages {
+		for int64(len(items)) < first.Total {
+			page++
+			next, pageSize, pageErr := client.listRedemptionsPage(ctx, requestID+"_page_"+strconv.Itoa(page), page)
+			if pageErr != nil {
+				return dto.UpstreamRedemptionSnapshot{}, pageErr
+			}
+			if next.Total != first.Total || len(next.Items) == 0 || totalSize > client.maxResponseBytes-pageSize {
+				return dto.UpstreamRedemptionSnapshot{}, invalidUpstreamResponse()
+			}
+			totalSize += pageSize
+			for _, item := range next.Items {
+				if _, duplicate := seen[item.ID]; duplicate || item.ID >= previous {
+					return dto.UpstreamRedemptionSnapshot{}, invalidUpstreamResponse()
+				}
+				seen[item.ID] = struct{}{}
+				previous = item.ID
+				items = append(items, item)
+			}
+		}
+		if int64(len(items)) != first.Total {
+			return dto.UpstreamRedemptionSnapshot{}, invalidUpstreamResponse()
+		}
+		fence, _, fenceErr := client.listRedemptionsPage(ctx, requestID+"_fence", 1)
+		if fenceErr != nil {
+			return dto.UpstreamRedemptionSnapshot{}, fenceErr
+		}
+		if fence.Total != first.Total || len(fence.Items) == 0 || fence.Items[0].ID != first.Items[0].ID {
+			return dto.UpstreamRedemptionSnapshot{}, invalidUpstreamResponse()
+		}
+		return dto.UpstreamRedemptionSnapshot{Total: first.Total, MaxID: first.Items[0].ID, Items: items}, nil
+	}
+	for index, id := range unseenEnabledIDs {
+		item, detailErr := client.redemptionByID(ctx, requestID+"_enabled_"+strconv.Itoa(index), id)
+		if detailErr != nil {
+			return client.collectRedemptions(ctx, requestID+"_fallback", first, size)
+		}
+		if _, duplicate := seen[item.ID]; duplicate || item.ID != id {
+			return dto.UpstreamRedemptionSnapshot{}, invalidUpstreamResponse()
+		}
+		seen[item.ID] = struct{}{}
+		items = append(items, item)
+	}
+	fence, _, err := client.listRedemptionsPage(ctx, requestID+"_fence", 1)
+	if err != nil || fence.Total != first.Total || len(fence.Items) == 0 || fence.Items[0].ID != first.Items[0].ID {
+		if err != nil {
+			return dto.UpstreamRedemptionSnapshot{}, err
+		}
+		return dto.UpstreamRedemptionSnapshot{}, invalidUpstreamResponse()
+	}
+	return dto.UpstreamRedemptionSnapshot{Total: first.Total, MaxID: first.Items[0].ID, Items: items, Incremental: reached}, nil
+}
+
+func (client *NewAPIClient) redemptionByID(ctx context.Context, requestID string, id int64) (dto.UpstreamRedemption, error) {
+	if id <= 0 {
+		return dto.UpstreamRedemption{}, invalidUpstreamResponse()
+	}
+	var wire upstreamRedemptionWire
+	endpoint := "/api/redemption/" + strconv.FormatInt(id, 10)
+	if _, err := client.get(ctx, client.httpClient, endpoint, nil, requestID, upstreamAuthManagement, client.requestTimeout, &wire, false); err != nil {
+		return dto.UpstreamRedemption{}, err
+	}
+	pageNumber, pageSize, total := 1, upstreamPageSize, int64(1)
+	wires := []upstreamRedemptionWire{wire}
+	page, err := validateRedemptionPage(upstreamRedemptionPageWire{
+		Page: &pageNumber, PageSize: &pageSize, Total: &total, Items: &wires,
+	}, 1)
+	if err != nil || len(page.Items) != 1 || page.Items[0].ID != id {
+		if err != nil {
+			return dto.UpstreamRedemption{}, err
+		}
+		return dto.UpstreamRedemption{}, invalidUpstreamResponse()
+	}
+	return page.Items[0], nil
 }
 
 func (client *NewAPIClient) listTasksPage(ctx context.Context, requestID string, page int, query url.Values) (dto.UpstreamTaskPage, int64, error) {
@@ -1037,24 +1320,9 @@ func (client *NewAPIClient) PerformanceHistory(ctx context.Context, requestID st
 	if len(summary.Models) > 1000 {
 		return dto.UpstreamPerformanceHistory{}, newUpstreamResponseTooLargeError(int64(len(summary.Models)), 1000)
 	}
-	models := make([]dto.UpstreamPerformanceModelHistory, 0, len(summary.Models))
-	counterReady := true
-	seen := map[string]struct{}{}
-	for index, item := range summary.Models {
-		if _, ok := seen[item.ModelName]; ok {
-			return dto.UpstreamPerformanceHistory{}, newUpstreamRequestError(UpstreamErrorResponseInvalid)
-		}
-		seen[item.ModelName] = struct{}{}
-		var wire upstreamPerformanceHistoryWire
-		if _, err := client.get(ctx, client.httpClient, "/api/perf-metrics", url.Values{"model": []string{item.ModelName}, "hours": []string{strconv.Itoa(hours)}}, fmt.Sprintf("%s_model_%d", requestID, index+1), upstreamAuthManagement, client.requestTimeout, &wire, false); err != nil {
-			return dto.UpstreamPerformanceHistory{}, err
-		}
-		model, ready, err := validatePerformanceHistory(wire, item.ModelName, client.now().Unix())
-		if err != nil {
-			return dto.UpstreamPerformanceHistory{}, err
-		}
-		counterReady = counterReady && ready
-		models = append(models, model)
+	models, counterReady, err := client.performanceModelHistories(ctx, requestID, hours, summary.Models)
+	if err != nil {
+		return dto.UpstreamPerformanceHistory{}, err
 	}
 	return dto.UpstreamPerformanceHistory{Models: models, CounterReady: counterReady && len(models) > 0}, nil
 }
@@ -1096,27 +1364,76 @@ func (client *NewAPIClient) PerformanceHistoryIncremental(ctx context.Context, r
 	if len(models) > 1000 {
 		return dto.UpstreamPerformanceHistory{}, newUpstreamResponseTooLargeError(int64(len(models)), 1000)
 	}
-	out := dto.UpstreamPerformanceHistory{Models: make([]dto.UpstreamPerformanceModelHistory, 0, len(models))}
-	counterReady := true
-	seen := map[string]struct{}{}
-	for index, item := range models {
-		if _, ok := seen[item.ModelName]; ok {
-			return dto.UpstreamPerformanceHistory{}, newUpstreamRequestError(UpstreamErrorResponseInvalid)
+	histories, counterReady, err := client.performanceModelHistories(ctx, requestID, hours, models)
+	if err != nil {
+		return dto.UpstreamPerformanceHistory{}, err
+	}
+	out := dto.UpstreamPerformanceHistory{Models: histories, CounterReady: len(histories) > 0 && counterReady}
+	return out, nil
+}
+
+func (client *NewAPIClient) performanceModelHistories(
+	ctx context.Context,
+	requestID string,
+	hours int,
+	models []dto.UpstreamPerformanceModel,
+) ([]dto.UpstreamPerformanceModelHistory, bool, error) {
+	seen := make(map[string]struct{}, len(models))
+	for _, item := range models {
+		if _, duplicate := seen[item.ModelName]; duplicate {
+			return nil, false, newUpstreamRequestError(UpstreamErrorResponseInvalid)
 		}
 		seen[item.ModelName] = struct{}{}
-		var wire upstreamPerformanceHistoryWire
-		if _, err := client.get(ctx, client.httpClient, "/api/perf-metrics", url.Values{"model": []string{item.ModelName}, "hours": []string{strconv.Itoa(hours)}}, fmt.Sprintf("%s_model_%d", requestID, index+1), upstreamAuthManagement, client.requestTimeout, &wire, false); err != nil {
-			return dto.UpstreamPerformanceHistory{}, err
-		}
-		model, ready, err := validatePerformanceHistory(wire, item.ModelName, client.now().Unix())
-		if err != nil {
-			return dto.UpstreamPerformanceHistory{}, err
-		}
-		counterReady = counterReady && ready
-		out.Models = append(out.Models, model)
 	}
-	out.CounterReady = len(out.Models) > 0 && counterReady
-	return out, nil
+	if len(models) == 0 {
+		return []dto.UpstreamPerformanceModelHistory{}, false, nil
+	}
+	type result struct {
+		model dto.UpstreamPerformanceModelHistory
+		ready bool
+		err   error
+	}
+	results := make([]result, len(models))
+	jobs := make(chan int)
+	workers := performanceDetailParallelism
+	if workers > len(models) {
+		workers = len(models)
+	}
+	var wait sync.WaitGroup
+	for worker := 0; worker < workers; worker++ {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			for index := range jobs {
+				item := models[index]
+				var wire upstreamPerformanceHistoryWire
+				if _, err := client.get(ctx, client.httpClient, "/api/perf-metrics", url.Values{
+					"model": {item.ModelName}, "hours": {strconv.Itoa(hours)},
+				}, fmt.Sprintf("%s_model_%d", requestID, index+1), upstreamAuthManagement, client.requestTimeout, &wire, false); err != nil {
+					results[index].err = err
+					continue
+				}
+				results[index].model, results[index].ready, results[index].err =
+					validatePerformanceHistory(wire, item.ModelName, client.now().Unix())
+			}
+		}()
+	}
+	for index := range models {
+		jobs <- index
+	}
+	close(jobs)
+	wait.Wait()
+
+	histories := make([]dto.UpstreamPerformanceModelHistory, len(results))
+	counterReady := true
+	for index, item := range results {
+		if item.err != nil {
+			return nil, false, item.err
+		}
+		histories[index] = item.model
+		counterReady = counterReady && item.ready
+	}
+	return histories, counterReady, nil
 }
 
 func (client *NewAPIClient) LoginAndGenerateAccessToken(ctx context.Context, requestID, username, password string) (dto.UpstreamIdentity, string, error) {
@@ -1273,14 +1590,13 @@ func (client *NewAPIClient) do(
 	requestURL.RawQuery = query.Encode()
 	cacheTTL := time.Duration(0)
 	cacheKey := ""
-	var cacheLock *sync.Mutex
+	var releaseCacheLock func()
 	if method == http.MethodGet && !tokenMutation {
 		cacheTTL = upstreamCacheTTL(endpoint)
 		if cacheTTL > 0 {
 			cacheKey = client.upstreamCacheKey(method, endpoint, query, authMode)
-			cacheLock = upstreamCacheLock(cacheKey)
-			cacheLock.Lock()
-			defer cacheLock.Unlock()
+			releaseCacheLock = acquireUpstreamCacheLock(cacheKey, client.now())
+			defer releaseCacheLock()
 			upstreamReadCache.Lock()
 			entry, ok := upstreamReadCache.entries[cacheKey]
 			upstreamReadCache.Unlock()
@@ -1412,9 +1728,7 @@ func (client *NewAPIClient) do(
 	}
 	if cacheTTL > 0 {
 		payloadCopy := append([]byte(nil), payload...)
-		upstreamReadCache.Lock()
-		upstreamReadCache.entries[cacheKey] = upstreamReadCacheEntry{expiresAt: client.now().Add(cacheTTL), payload: payloadCopy}
-		upstreamReadCache.Unlock()
+		storeUpstreamReadCache(cacheKey, upstreamReadCacheEntry{expiresAt: client.now().Add(cacheTTL), payload: payloadCopy})
 	}
 	return int64(len(payload)), nil
 }

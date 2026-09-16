@@ -118,7 +118,7 @@ func (service *UsageCollectionService) CollectHour(
 		if mutationErr != nil {
 			return UsageCollectionResult{}, mutationErr
 		}
-		commit, aggregationErr := bindUsageAggregationCommit(request, now, nil, mutation)
+		commit, aggregationErr := bindUsageFactOnlyCommit(mutation)
 		if aggregationErr != nil {
 			return UsageCollectionResult{}, aggregationErr
 		}
@@ -153,7 +153,13 @@ func (service *UsageCollectionService) CollectHour(
 		if factErr != nil {
 			aggregationFacts = nil
 		}
-		commit, aggregationErr := bindUsageAggregationCommit(request, now, aggregationFacts, mutation)
+		var commit model.UsageAggregationCommit
+		var aggregationErr error
+		if dataMismatch {
+			commit, aggregationErr = bindUsageAggregationCommit(request, now, aggregationFacts, mutation)
+		} else {
+			commit, aggregationErr = bindUsageFactOnlyCommit(mutation)
+		}
 		if aggregationErr != nil {
 			return UsageCollectionResult{}, aggregationErr
 		}

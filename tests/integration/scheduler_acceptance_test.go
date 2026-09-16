@@ -87,6 +87,13 @@ func TestA30A84SchedulerCadenceAndRealtimePriority(t *testing.T) {
 
 	location := time.FixedZone("Asia/Shanghai", 8*3600)
 	monday := time.Date(2026, time.January, 19, 2, 0, 0, 0, location)
+	pendingHour := monday.Add(-24 * time.Hour).Unix()
+	if err := database.Create(&model.CollectionWindow{
+		SiteID: site.ID, HourTS: pendingHour, Status: model.CollectionWindowStatusComplete,
+		AttributionStatus: model.UsageAttributionAttributed, FactRows: 0, UpdatedAt: now,
+	}).Error; err != nil {
+		t.Fatalf("seed exact pending validation hour: %v", err)
+	}
 	clock.Set(monday)
 	if err := scheduler.RunOnce(context.Background()); err != nil {
 		t.Fatalf("A84 daily and weekly schedule: %v", err)
@@ -100,7 +107,7 @@ func TestA30A84SchedulerCadenceAndRealtimePriority(t *testing.T) {
 		constant.TaskTypeUsageValidation, constant.CollectionPriorityWeeklyValidation).Count(&weekly).Error; err != nil {
 		t.Fatalf("count weekly validation runs: %v", err)
 	}
-	if daily == 0 || weekly == 0 {
+	if daily == 0 || weekly != 0 {
 		t.Fatalf("A84 validation cadence daily=%d weekly=%d", daily, weekly)
 	}
 	beforeDaily, beforeWeekly := daily, weekly

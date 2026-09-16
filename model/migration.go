@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"slices"
 	"strings"
 	"time"
 
@@ -414,6 +415,29 @@ func isMigrationDDL(statement string) bool {
 
 func verifyMigrationDDLPostcondition(ctx context.Context, connection *sql.Conn, version string, index int) (bool, error) {
 	switch version {
+	case "0005_finance_incremental_lookup_indexes":
+		switch index {
+		case 0:
+			return verifyMigrationIndex(ctx, connection, "site_topup_order", "idx_site_topup_order_site_status", []string{"site_id", "remote_status", "remote_state", "remote_id"})
+		case 1:
+			return verifyMigrationIndex(ctx, connection, "site_redemption", "idx_site_redemption_site_status", []string{"site_id", "remote_status", "remote_state", "remote_id"})
+		default:
+			return false, fmt.Errorf("no postcondition for DDL statement %d", index+1)
+		}
+	case "0004_finance_incremental_checkpoint":
+		switch index {
+		case 0:
+			return verifyMigrationColumn(ctx, connection, "site_topup_collection_state", "last_full_success_at")
+		case 1:
+			return verifyMigrationColumn(ctx, connection, "site_redemption_collection_state", "last_full_success_at")
+		default:
+			return false, fmt.Errorf("no postcondition for DDL statement %d", index+1)
+		}
+	case "0003_collection_window_fact_proof":
+		if index != 0 {
+			return false, fmt.Errorf("no postcondition for DDL statement %d", index+1)
+		}
+		return verifyMigrationColumn(ctx, connection, "collection_window", "fact_rows")
 	case "0002_balance_monitor":
 		if index != 0 {
 			return false, fmt.Errorf("no postcondition for DDL statement %d", index+1)
@@ -427,6 +451,36 @@ func verifyMigrationDDLPostcondition(ctx context.Context, connection *sql.Conn, 
 	default:
 		return false, fmt.Errorf("migration %s has no registered DDL postconditions", version)
 	}
+}
+
+func verifyMigrationColumn(ctx context.Context, connection *sql.Conn, table, column string) (bool, error) {
+	var count int
+	err := connection.QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.columns
+WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?`, table, column).Scan(&count)
+	return count == 1, err
+}
+
+func verifyMigrationIndex(ctx context.Context, connection *sql.Conn, table, index string, expectedColumns []string) (bool, error) {
+	rows, err := connection.QueryContext(ctx, `SELECT column_name
+FROM information_schema.statistics
+WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ? AND non_unique = 1
+ORDER BY seq_in_index`, table, index)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	columns := make([]string, 0, len(expectedColumns))
+	for rows.Next() {
+		var column string
+		if err := rows.Scan(&column); err != nil {
+			return false, err
+		}
+		columns = append(columns, column)
+	}
+	if err := rows.Err(); err != nil {
+		return false, err
+	}
+	return slices.Equal(columns, expectedColumns), nil
 }
 
 func verifyMigrationTable(ctx context.Context, connection *sql.Conn, table string) (bool, error) {

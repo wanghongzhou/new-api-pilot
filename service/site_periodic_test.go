@@ -650,6 +650,38 @@ func TestPeriodicSiteTasksCommitMetadataBehindConfigFence(t *testing.T) {
 		len(client.upstreamTaskEnds) != 1 || client.upstreamTaskEnds[0] != now+1 {
 		t.Fatalf("initial upstream task windows starts=%v ends=%v want=[%d,%d)", client.upstreamTaskStarts, client.upstreamTaskEnds, statisticsStart, now+1)
 	}
+	if client.topupFullCalls != 1 || client.redemptionFullCalls != 1 {
+		t.Fatalf("initial finance collection did not use full snapshots: topup=%d redemption=%d", client.topupFullCalls, client.redemptionFullCalls)
+	}
+	if _, _, err := sites.ExecutePeriodicSiteTask(context.Background(), constant.TaskTypeTopupSync, site.ID, site.ConfigVersion, "req_periodic_topup_incremental"); err != nil {
+		t.Fatalf("execute incremental topup: %v", err)
+	}
+	if _, _, err := sites.ExecutePeriodicSiteTask(context.Background(), constant.TaskTypeRedemptionSync, site.ID, site.ConfigVersion, "req_periodic_redemption_incremental"); err != nil {
+		t.Fatalf("execute incremental redemption: %v", err)
+	}
+	if client.topupIncrementalCalls != 1 || client.topupIncrementalMaxID != 11 || client.topupIncrementalTotal != 1 ||
+		client.topupIncrementalOldestID != 0 || client.redemptionIncrementalCalls != 1 || client.redemptionIncrementalMaxID != 12 || client.redemptionIncrementalTotal != 1 ||
+		len(client.redemptionIncrementalIDs) != 1 || client.redemptionIncrementalIDs[0] != 12 {
+		t.Fatalf("finance incremental checkpoints: topup calls=%d max=%d total=%d redemption calls=%d max=%d total=%d",
+			client.topupIncrementalCalls, client.topupIncrementalMaxID, client.topupIncrementalTotal,
+			client.redemptionIncrementalCalls, client.redemptionIncrementalMaxID, client.redemptionIncrementalTotal)
+	}
+	staleFull := now - 86400
+	if err := tx.Model(&model.SiteTopupCollectionState{}).Where("site_id=?", site.ID).Update("last_full_success_at", staleFull).Error; err != nil {
+		t.Fatalf("age topup full checkpoint: %v", err)
+	}
+	if err := tx.Model(&model.SiteRedemptionCollectionState{}).Where("site_id=?", site.ID).Update("last_full_success_at", staleFull).Error; err != nil {
+		t.Fatalf("age redemption full checkpoint: %v", err)
+	}
+	if _, _, err := sites.ExecutePeriodicSiteTask(context.Background(), constant.TaskTypeTopupSync, site.ID, site.ConfigVersion, "req_periodic_topup_calibration"); err != nil {
+		t.Fatalf("execute full topup calibration: %v", err)
+	}
+	if _, _, err := sites.ExecutePeriodicSiteTask(context.Background(), constant.TaskTypeRedemptionSync, site.ID, site.ConfigVersion, "req_periodic_redemption_calibration"); err != nil {
+		t.Fatalf("execute full redemption calibration: %v", err)
+	}
+	if client.topupFullCalls != 2 || client.redemptionFullCalls != 2 {
+		t.Fatalf("aged finance checkpoints did not force full calibration: topup=%d redemption=%d", client.topupFullCalls, client.redemptionFullCalls)
+	}
 	if _, _, err := sites.ExecutePeriodicSiteTask(context.Background(), constant.TaskTypePerformanceSync, site.ID, site.ConfigVersion, "req_periodic_performance_incremental"); err != nil {
 		t.Fatalf("execute incremental performance: %v", err)
 	}
@@ -670,6 +702,52 @@ func TestPeriodicSiteTasksCommitMetadataBehindConfigFence(t *testing.T) {
 	if err := tx.First(&synced, account.ID).Error; err != nil || synced.RemoteState != model.AccountRemoteStateNormal ||
 		synced.RemoteMissingCount != 0 || synced.Username != client.root.Username {
 		t.Fatalf("periodic account = %#v, %v", synced, err)
+	}
+	var userInventoryBefore model.SiteUserInventory
+	if err := tx.Where("site_id = ? AND remote_user_id = ?", site.ID, client.root.ID).Take(&userInventoryBefore).Error; err != nil {
+		t.Fatalf("load user inventory before failed snapshot: %v", err)
+	}
+	var userHourlyBefore int64
+	if err := tx.Model(&model.SiteUserInventoryHourly{}).Where("site_id = ?", site.ID).Count(&userHourlyBefore).Error; err != nil {
+		t.Fatalf("count user hourly before failed snapshot: %v", err)
+	}
+	client.snapshotErr = ErrUpstreamResponseInvalid
+	if _, _, err := sites.ExecutePeriodicSiteTask(context.Background(), constant.TaskTypeUserSync, site.ID, site.ConfigVersion, "req_periodic_user_invalid"); !errors.Is(err, ErrUpstreamResponseInvalid) {
+		t.Fatalf("invalid user snapshot error=%v", err)
+	}
+	client.snapshotErr = nil
+	var accountAfterInvalid model.Account
+	var userInventoryAfter model.SiteUserInventory
+	var userHourlyAfter int64
+	if err := tx.First(&accountAfterInvalid, account.ID).Error; err != nil || accountAfterInvalid.RemoteState != synced.RemoteState || accountAfterInvalid.RemoteMissingCount != synced.RemoteMissingCount || accountAfterInvalid.UpdatedAt != synced.UpdatedAt {
+		t.Fatalf("invalid user snapshot changed account: before=%#v after=%#v err=%v", synced, accountAfterInvalid, err)
+	}
+	if err := tx.Where("site_id = ? AND remote_user_id = ?", site.ID, client.root.ID).Take(&userInventoryAfter).Error; err != nil || userInventoryAfter.RemoteState != userInventoryBefore.RemoteState || userInventoryAfter.MissingCount != userInventoryBefore.MissingCount || userInventoryAfter.UpdatedAt != userInventoryBefore.UpdatedAt {
+		t.Fatalf("invalid user snapshot changed inventory: before=%#v after=%#v err=%v", userInventoryBefore, userInventoryAfter, err)
+	}
+	if err := tx.Model(&model.SiteUserInventoryHourly{}).Where("site_id = ?", site.ID).Count(&userHourlyAfter).Error; err != nil || userHourlyAfter != userHourlyBefore {
+		t.Fatalf("invalid user snapshot changed hourly rows: before=%d after=%d err=%v", userHourlyBefore, userHourlyAfter, err)
+	}
+	var channelInventoryBefore model.SiteChannelInventory
+	if err := tx.Where("site_id = ? AND remote_channel_id = ?", site.ID, 7).Take(&channelInventoryBefore).Error; err != nil {
+		t.Fatalf("load channel inventory before failed snapshot: %v", err)
+	}
+	var channelHourlyBefore int64
+	if err := tx.Model(&model.SiteChannelInventoryHourly{}).Where("site_id = ?", site.ID).Count(&channelHourlyBefore).Error; err != nil {
+		t.Fatalf("count channel hourly before failed snapshot: %v", err)
+	}
+	client.channelsErr = ErrUpstreamResponseInvalid
+	if _, _, err := sites.ExecutePeriodicSiteTask(context.Background(), constant.TaskTypeChannelSync, site.ID, site.ConfigVersion, "req_periodic_channel_invalid"); !errors.Is(err, ErrUpstreamResponseInvalid) {
+		t.Fatalf("invalid channel snapshot error=%v", err)
+	}
+	client.channelsErr = nil
+	var channelInventoryAfter model.SiteChannelInventory
+	var channelHourlyAfter int64
+	if err := tx.Where("site_id = ? AND remote_channel_id = ?", site.ID, 7).Take(&channelInventoryAfter).Error; err != nil || channelInventoryAfter.RemoteState != channelInventoryBefore.RemoteState || channelInventoryAfter.MissingCount != channelInventoryBefore.MissingCount || channelInventoryAfter.UpdatedAt != channelInventoryBefore.UpdatedAt {
+		t.Fatalf("invalid channel snapshot changed inventory: before=%#v after=%#v err=%v", channelInventoryBefore, channelInventoryAfter, err)
+	}
+	if err := tx.Model(&model.SiteChannelInventoryHourly{}).Where("site_id = ?", site.ID).Count(&channelHourlyAfter).Error; err != nil || channelHourlyAfter != channelHourlyBefore {
+		t.Fatalf("invalid channel snapshot changed hourly rows: before=%d after=%d err=%v", channelHourlyBefore, channelHourlyAfter, err)
 	}
 	for _, taskType := range []string{constant.TaskTypeRealtimeStat, constant.TaskTypeTopupSync, constant.TaskTypeRedemptionSync, constant.TaskTypeUpstreamTaskSync} {
 		if _, _, err := sites.ExecutePeriodicSiteTask(context.Background(), taskType, site.ID, site.ConfigVersion+1, "req_periodic_stale_"+taskType); !errors.Is(err, model.ErrSiteRunConfigChanged) {

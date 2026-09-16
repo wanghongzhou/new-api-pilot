@@ -136,11 +136,14 @@ func financeBreakdown(rows []model.FinanceMetricRow, topup bool) []dto.FinanceBr
 }
 
 func financeCoverageStatus(row model.FinanceCollectionCoverageRow) string {
-	if row.LastSuccessAt != nil {
-		if row.LastFailureAt != nil && *row.LastFailureAt > *row.LastSuccessAt {
+	if row.LastFullSuccessAt != nil {
+		if row.LastFailureAt != nil && (row.LastSuccessAt == nil || *row.LastFailureAt > *row.LastSuccessAt) {
 			return "partial"
 		}
 		return "complete"
+	}
+	if row.LastSuccessAt != nil {
+		return "partial"
 	}
 	if row.LastFailureAt != nil {
 		return "unavailable"

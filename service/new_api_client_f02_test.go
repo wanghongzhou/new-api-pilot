@@ -45,6 +45,7 @@ type f02Route struct {
 	Headers          map[string]string `json:"headers"`
 	Status           int               `json:"status"`
 	Disconnect       bool              `json:"disconnect"`
+	ExpectedHits     int               `json:"expected_hits"`
 }
 
 type f02Server struct {
@@ -84,7 +85,7 @@ func TestNewAPIClientF02Scenarios(t *testing.T) {
 		if err != nil {
 			t.Fatalf("users snapshot: %v", err)
 		}
-		if users.Total != 4 || len(users.Items) != 4 || !users.Items[1].Deleted || users.Items[3].Deleted {
+		if users.Total != 4 || len(users.Items) != 4 || !users.Items[2].Deleted || users.Items[0].Deleted {
 			t.Fatalf("unexpected users snapshot: %+v", users)
 		}
 		channels, err := client.SnapshotChannels(context.Background(), "f02-channels")
@@ -355,8 +356,12 @@ func (fixture *f02Server) assertAllRoutesHitOnce() {
 	fixture.mu.Lock()
 	defer fixture.mu.Unlock()
 	for _, route := range fixture.routes {
-		if fixture.hits[route.ID] != 1 {
-			fixture.t.Errorf("route %s hit %d times, want 1", route.ID, fixture.hits[route.ID])
+		expectedHits := route.ExpectedHits
+		if expectedHits == 0 {
+			expectedHits = 1
+		}
+		if fixture.hits[route.ID] != expectedHits {
+			fixture.t.Errorf("route %s hit %d times, want %d", route.ID, fixture.hits[route.ID], expectedHits)
 		}
 	}
 	for _, message := range fixture.errors {

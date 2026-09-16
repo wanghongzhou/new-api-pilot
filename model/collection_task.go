@@ -191,9 +191,10 @@ func (repository *CollectionTaskRepository) ListSitesForScheduling(ctx context.C
 	return sites, err
 }
 
-// ListPendingValidationHours returns only exact complete hours that have not
-// reached their Beijing natural-day verification watermark. The per-site
-// bound prevents recovery from becoming an unbounded historical replay.
+// ListPendingValidationHours returns only exact complete hours that either
+// have not reached their Beijing natural-day verification watermark or whose
+// persisted fact count no longer supports the window's complete claim. The
+// per-site bound prevents recovery from becoming an unbounded historical replay.
 func (repository *CollectionTaskRepository) ListPendingValidationHours(
 	ctx context.Context,
 	siteIDs []int64,
@@ -207,15 +208,45 @@ func (repository *CollectionTaskRepository) ListPendingValidationHours(
 		return []PendingValidationHour{}, nil
 	}
 	rows := []PendingValidationHour{}
-	err := repository.db.WithContext(ctx).Raw(`SELECT site_id,hour_ts FROM (
-  SELECT site_id,hour_ts,ROW_NUMBER() OVER (PARTITION BY site_id ORDER BY hour_ts DESC) AS row_rank
-  FROM collection_window
-  WHERE site_id IN ? AND status = 'complete'
-    AND (verified_at IS NULL OR verified_at < hour_ts - MOD(hour_ts + 28800, 86400) + 86400)
+	err := repository.db.WithContext(ctx).Raw(`WITH ranked_candidates AS (
+  SELECT site_id,hour_ts,status,last_error_code,fact_rows,verified_at,
+         hour_ts - MOD(hour_ts + 28800, 86400) + 86400 AS date_end,
+         ROW_NUMBER() OVER (
+           PARTITION BY site_id
+           ORDER BY CASE
+             WHEN last_error_code = ? THEN 0
+             WHEN verified_at IS NULL OR verified_at < hour_ts - MOD(hour_ts + 28800, 86400) + 86400 THEN 1
+             ELSE 2
+           END ASC, hour_ts DESC
+         ) AS row_rank
+	  FROM collection_window
+	  WHERE site_id IN ?
+	    AND NOT EXISTS (
+	      SELECT 1
+	      FROM collection_run active_validation
+	      WHERE active_validation.site_id = collection_window.site_id
+	        AND active_validation.task_type = ?
+	        AND active_validation.status IN ('pending','running')
+	    )
+	    AND (status = 'complete' OR (status = 'missing' AND last_error_code = ?))
     AND ? >= hour_ts - MOD(hour_ts + 28800, 86400) + 93600
-) ranked
-WHERE row_rank <= ?
-ORDER BY site_id ASC,hour_ts ASC`, siteIDs, now, limitPerSite).Scan(&rows).Error
+), bounded_candidates AS (
+  SELECT site_id,hour_ts,status,last_error_code,fact_rows,verified_at,date_end
+  FROM ranked_candidates
+  WHERE row_rank <= ?
+)
+SELECT site_id,hour_ts
+FROM bounded_candidates candidate
+WHERE candidate.last_error_code = ?
+   OR candidate.verified_at IS NULL OR candidate.verified_at < candidate.date_end
+   OR candidate.fact_rows <> (SELECT COUNT(*) FROM usage_fact_hourly AS fact
+                               WHERE fact.site_id = candidate.site_id
+                                 AND fact.hour_ts = candidate.hour_ts)
+ORDER BY site_id ASC,hour_ts ASC`,
+		string(constant.MessageDataValidationMismatch), siteIDs, constant.TaskTypeUsageValidation,
+		string(constant.MessageDataValidationMismatch),
+		now, limitPerSite, string(constant.MessageDataValidationMismatch),
+	).Scan(&rows).Error
 	return rows, err
 }
 

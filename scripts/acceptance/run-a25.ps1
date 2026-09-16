@@ -34,6 +34,22 @@ function Get-A25ImageIdentity {
     return [ordered]@{ reference = $Reference; id = $fields[0]; digest = $fields[1] }
 }
 
+function Get-A25FileSHA256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $stream = [System.IO.File]::OpenRead($Path)
+    try {
+        $algorithm = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            return ([System.BitConverter]::ToString($algorithm.ComputeHash($stream))).Replace('-', '').ToLowerInvariant()
+        } finally {
+            $algorithm.Dispose()
+        }
+    } finally {
+        $stream.Dispose()
+    }
+}
+
 function Wait-A25HealthyContainer {
     param(
         [Parameter(Mandatory = $true)][string]$Container,
@@ -175,7 +191,7 @@ function Write-A25ArtifactInventory {
         $files += [ordered]@{
             path = $relative
             size_bytes = [int64]$info.Length
-            sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+            sha256 = Get-A25FileSHA256 -Path $path
         }
     }
     $inventory = [ordered]@{

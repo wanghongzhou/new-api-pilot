@@ -46,6 +46,11 @@ func TestSchedulerSiteEligibleRejectsDisabledOrEndedProbe(t *testing.T) {
 func TestSchedulerRecoversOnlyExactPendingValidationHours(t *testing.T) {
 	database := openWorkerTestDatabase(t)
 	now := time.Date(2026, time.September, 16, 3, 0, 0, 0, beijingLocation)
+	seeder := model.NewSeeder(database.SQL)
+	seeder.Now = func() time.Time { return now }
+	if err := seeder.Run(context.Background()); err != nil {
+		t.Fatalf("seed scheduler settings: %v", err)
+	}
 	site := createWorkerTestSite(t, database, "historical-validation-recovery", now.Unix())
 	capabilities := make([]model.SiteCapability, 0, len(constant.SiteCapabilityKeys()))
 	for _, key := range constant.SiteCapabilityKeys() {
@@ -64,12 +69,14 @@ func TestSchedulerRecoversOnlyExactPendingValidationHours(t *testing.T) {
 	dateEnd := dayStart + 24*3600
 	verifiedAt := dateEnd
 	rows := []model.CollectionWindow{
-		{SiteID: site.ID, HourTS: dayStart, Status: model.CollectionWindowStatusComplete, VerifiedAt: &verifiedAt, UpdatedAt: now.Unix()},
+		{SiteID: site.ID, HourTS: dayStart, Status: model.CollectionWindowStatusComplete, FactRows: 1, VerifiedAt: &verifiedAt, UpdatedAt: now.Unix()},
 		{SiteID: site.ID, HourTS: dayStart + 3600, Status: model.CollectionWindowStatusComplete, UpdatedAt: now.Unix()},
 		{SiteID: site.ID, HourTS: dayStart + 2*3600, Status: model.CollectionWindowStatusComplete, UpdatedAt: now.Unix()},
 		{SiteID: site.ID, HourTS: dayStart + 3*3600, Status: model.CollectionWindowStatusComplete, VerifiedAt: &verifiedAt, UpdatedAt: now.Unix()},
 		{SiteID: site.ID, HourTS: dayStart + 4*3600, Status: model.CollectionWindowStatusComplete, UpdatedAt: now.Unix()},
 		{SiteID: site.ID, HourTS: dayStart + 5*3600, Status: model.CollectionWindowStatusMissing, UpdatedAt: now.Unix()},
+		{SiteID: site.ID, HourTS: dayStart + 6*3600, Status: model.CollectionWindowStatusMissing,
+			LastErrorCode: string(constant.MessageDataValidationMismatch), UpdatedAt: now.Unix()},
 	}
 	if err := database.GORM.Create(&rows).Error; err != nil {
 		t.Fatalf("seed validation windows: %v", err)
@@ -99,7 +106,11 @@ func TestSchedulerRecoversOnlyExactPendingValidationHours(t *testing.T) {
 			recovered = append(recovered, [2]int64{*run.StartTimestamp, *run.EndTimestamp})
 		}
 	}
-	want := [][2]int64{{dayStart + 3600, dayStart + 3*3600}, {dayStart + 4*3600, dayStart + 5*3600}}
+	want := [][2]int64{
+		{dayStart, dayStart + 3*3600},
+		{dayStart + 4*3600, dayStart + 5*3600},
+		{dayStart + 6*3600, dayStart + 7*3600},
+	}
 	if len(recovered) != len(want) {
 		t.Fatalf("recovery ranges = %#v, want %#v", recovered, want)
 	}
@@ -119,5 +130,38 @@ func TestSchedulerRecoversOnlyExactPendingValidationHours(t *testing.T) {
 	}
 	if after != int64(before) {
 		t.Fatalf("same-day recovery created duplicate runs: before=%d after=%d", before, after)
+	}
+	if err := database.GORM.Model(&model.CollectionRun{}).
+		Where("site_id = ? AND task_type = ? AND status IN ?", site.ID, constant.TaskTypeUsageValidation,
+			[]string{model.CollectionTaskStatusPending, model.CollectionTaskStatusRunning}).
+		Updates(map[string]any{"status": model.CollectionTaskStatusSuccess, "active_key": nil,
+			"finished_at": now.Unix() + 1, "updated_at": now.Unix() + 1}).Error; err != nil {
+		t.Fatalf("finish recovery runs: %v", err)
+	}
+	if err := database.GORM.Model(&model.CollectionWindow{}).
+		Where("site_id = ? AND hour_ts IN ?", site.ID,
+			[]int64{dayStart, dayStart + 3600, dayStart + 2*3600, dayStart + 4*3600, dayStart + 6*3600}).
+		Updates(map[string]any{"status": model.CollectionWindowStatusComplete, "fact_rows": 0,
+			"verified_at": verifiedAt, "last_error_code": "", "updated_at": now.Unix() + 1}).Error; err != nil {
+		t.Fatalf("mark first recovery batch complete: %v", err)
+	}
+	olderHour := dayStart - 3600
+	if err := database.GORM.Create(&model.CollectionWindow{
+		SiteID: site.ID, HourTS: olderHour, Status: model.CollectionWindowStatusMissing,
+		LastErrorCode: string(constant.MessageDataValidationMismatch), UpdatedAt: now.Unix(),
+	}).Error; err != nil {
+		t.Fatalf("create next recovery window: %v", err)
+	}
+	if err := scheduler.RunOnce(context.Background()); err != nil {
+		t.Fatalf("continue same-day recovery scheduler: %v", err)
+	}
+	var continued int64
+	if err := database.GORM.Model(&model.CollectionRun{}).
+		Where("site_id = ? AND task_type = ? AND start_timestamp = ? AND end_timestamp = ?",
+			site.ID, constant.TaskTypeUsageValidation, olderHour, dayStart).Count(&continued).Error; err != nil {
+		t.Fatalf("count continued recovery run: %v", err)
+	}
+	if continued != 1 {
+		t.Fatalf("same-day terminal batch continuation count = %d, want 1", continued)
 	}
 }

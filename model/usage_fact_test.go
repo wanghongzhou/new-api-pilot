@@ -82,8 +82,12 @@ func TestUsageWindowReplacementMismatchAndCursorRepair(t *testing.T) {
 		t.Fatalf("plan canonical complete = %#v, %v", planned, err)
 	}
 	first := applyUsageMutation(t, database, fixture, 0, hour0Mutation)
+	var firstFacts []UsageFactHourly
+	if err := database.GORM.Where("site_id = ? AND hour_ts = ?", fixture.site.ID, hour0).Order("remote_user_id, model_name, channel_id").Find(&firstFacts).Error; err != nil {
+		t.Fatalf("read first canonical hour zero facts: %v", err)
+	}
 	second := applyUsageMutation(t, database, fixture, 0, hour0Mutation)
-	if first.SourceHash != second.SourceHash || first.WrittenRows != 2 || second.WrittenRows != 2 {
+	if first.SourceHash != second.SourceHash || first.WrittenRows != 2 || second.WrittenRows != 0 || !second.VerifiedOnly {
 		t.Fatalf("idempotent complete results = %#v / %#v", first, second)
 	}
 	var hour0Facts []UsageFactHourly
@@ -93,6 +97,14 @@ func TestUsageWindowReplacementMismatchAndCursorRepair(t *testing.T) {
 	if len(hour0Facts) != 2 || hour0Facts[0].UsernameSnapshot != "alpha" || hour0Facts[0].RequestCount != 5 ||
 		hour0Facts[0].Quota != 50 || hour0Facts[0].TokenUsed != 500 || hour0Facts[1].ModelName != "model-a" {
 		t.Fatalf("canonical facts = %#v", hour0Facts)
+	}
+	if len(firstFacts) != len(hour0Facts) {
+		t.Fatalf("idempotent facts changed cardinality: first=%#v second=%#v", firstFacts, hour0Facts)
+	}
+	for index := range firstFacts {
+		if firstFacts[index].ID != hour0Facts[index].ID || firstFacts[index].CollectedAt != hour0Facts[index].CollectedAt {
+			t.Fatalf("idempotent fact %d rewritten: first=%#v second=%#v", index, firstFacts[index], hour0Facts[index])
+		}
 	}
 	assertUsageCursor(t, database, fixture.site.ID, &hour0)
 

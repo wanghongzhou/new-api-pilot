@@ -84,6 +84,7 @@ type UpstreamTopupPage struct {
 type UpstreamTopupSnapshot struct {
 	Total, MaxID int64
 	Items        []UpstreamTopup
+	Incremental  bool
 }
 
 type UpstreamRedemption struct {
@@ -101,6 +102,7 @@ type UpstreamRedemptionPage struct {
 type UpstreamRedemptionSnapshot struct {
 	Total, MaxID int64
 	Items        []UpstreamRedemption
+	Incremental  bool
 }
 
 type UpstreamFlowRow struct {

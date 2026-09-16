@@ -125,6 +125,53 @@ func TestUsageWorkerCompletesEmptyHourWithoutSparseSummaries(t *testing.T) {
 	}
 }
 
+func TestUsageHourSameCanonicalFactsAdvancesProofWithoutFactOrAggregationWrites(t *testing.T) {
+	database := openWorkerTestDatabase(t)
+	now := time.Date(2032, 1, 3, 12, 5, 0, 0, time.FixedZone("Asia/Shanghai", 8*3600))
+	hour := now.Unix() - now.Unix()%3600 - 3600
+	fixture := createUsageWorkerSite(t, database, hour, now.Unix(), "usage-hour-zero-write")
+	repository := model.NewCollectionTaskRepository(database.GORM)
+	facts := []model.UsageFactInput{{RemoteUserID: 1, ModelName: "stable", ChannelID: 1, RequestCount: 5, Quota: 50, TokenUsed: 500}}
+	seed := createUsageWorkerClaim(t, database, repository, fixture.site, constant.TaskTypeUsageHour, hour, now.Unix(), "usage-hour-zero-write-seed")
+	executeUsageWorkerClaim(t, database, repository, testsupport.NewFakeClock(now), usageCollectorFunc(
+		func(_ context.Context, request service.UsageCollectionRequest) (service.UsageCollectionResult, error) {
+			return completeUsageWorkerResult(t, request, now.Unix(), facts), nil
+		},
+	), seed)
+	var originalFact model.UsageFactHourly
+	if err := database.GORM.Where("site_id = ? AND hour_ts = ?", fixture.site.ID, hour).First(&originalFact).Error; err != nil {
+		t.Fatalf("read original usage-hour fact: %v", err)
+	}
+	var originalHourly model.SiteStatHourly
+	if err := database.GORM.Where("site_id = ? AND hour_ts = ?", fixture.site.ID, hour).First(&originalHourly).Error; err != nil {
+		t.Fatalf("read original usage-hour aggregate: %v", err)
+	}
+
+	retryNow := now.Add(time.Minute)
+	retry := createUsageWorkerClaim(t, database, repository, fixture.site, constant.TaskTypeUsageHour, hour, retryNow.Unix(), "usage-hour-zero-write-repeat")
+	executeUsageWorkerClaim(t, database, repository, testsupport.NewFakeClock(retryNow), usageCollectorFunc(
+		func(_ context.Context, request service.UsageCollectionRequest) (service.UsageCollectionResult, error) {
+			return completeUsageWorkerResult(t, request, retryNow.Unix(), facts), nil
+		},
+	), retry)
+	assertUsageWorkerTaskState(t, database.GORM, retry, model.CollectionTaskStatusSuccess, 1, 2, 0)
+	var currentFact model.UsageFactHourly
+	if err := database.GORM.Where("site_id = ? AND hour_ts = ?", fixture.site.ID, hour).First(&currentFact).Error; err != nil ||
+		currentFact.ID != originalFact.ID || currentFact.CollectedAt != originalFact.CollectedAt {
+		t.Fatalf("unchanged usage-hour fact rewritten: current=%#v original=%#v err=%v", currentFact, originalFact, err)
+	}
+	var currentHourly model.SiteStatHourly
+	if err := database.GORM.Where("site_id = ? AND hour_ts = ?", fixture.site.ID, hour).First(&currentHourly).Error; err != nil ||
+		currentHourly.ID != originalHourly.ID || currentHourly.UpdatedAt != originalHourly.UpdatedAt {
+		t.Fatalf("unchanged usage-hour aggregate rewritten: current=%#v original=%#v err=%v", currentHourly, originalHourly, err)
+	}
+	var window model.CollectionWindow
+	if err := database.GORM.Where("site_id = ? AND hour_ts = ?", fixture.site.ID, hour).First(&window).Error; err != nil ||
+		window.VerifiedAt == nil || *window.VerifiedAt != retryNow.Unix() {
+		t.Fatalf("usage-hour proof watermark=%#v err=%v", window, err)
+	}
+}
+
 func TestUsageWorkerMismatchKeepsOldFactsButIsolatesSummaries(t *testing.T) {
 	database := openWorkerTestDatabase(t)
 	now := time.Date(2032, 1, 4, 12, 5, 0, 0, time.FixedZone("Asia/Shanghai", 8*3600))
@@ -157,6 +204,52 @@ func TestUsageWorkerMismatchKeepsOldFactsButIsolatesSummaries(t *testing.T) {
 		collectionWindow.Status != model.CollectionWindowStatusMissing ||
 		collectionWindow.LastErrorCode != string(constant.MessageDataValidationMismatch) {
 		t.Fatalf("mismatch collection window = %#v, %v", collectionWindow, err)
+	}
+}
+
+func TestUsageWorkerTransientFailurePreservesCompleteFactsWithoutAggregationRebuild(t *testing.T) {
+	database := openWorkerTestDatabase(t)
+	now := time.Date(2032, 1, 4, 14, 5, 0, 0, time.FixedZone("Asia/Shanghai", 8*3600))
+	hour := now.Unix() - now.Unix()%3600 - 3600
+	fixture := createUsageWorkerSite(t, database, hour, now.Unix(), "transient-no-aggregation")
+	repository := model.NewCollectionTaskRepository(database.GORM)
+	facts := []model.UsageFactInput{{RemoteUserID: 1, ModelName: "stable", ChannelID: 1, RequestCount: 4, Quota: 40, TokenUsed: 400}}
+	seed := createUsageWorkerClaim(t, database, repository, fixture.site, constant.TaskTypeUsageHour, hour, now.Unix(), "transient-no-aggregation-seed")
+	executeUsageWorkerClaim(t, database, repository, testsupport.NewFakeClock(now), usageCollectorFunc(
+		func(_ context.Context, request service.UsageCollectionRequest) (service.UsageCollectionResult, error) {
+			return completeUsageWorkerResult(t, request, now.Unix(), facts), nil
+		},
+	), seed)
+	var originalFact model.UsageFactHourly
+	if err := database.GORM.Where("site_id = ? AND hour_ts = ?", fixture.site.ID, hour).First(&originalFact).Error; err != nil {
+		t.Fatalf("read transient original fact: %v", err)
+	}
+	var originalHourly model.SiteStatHourly
+	if err := database.GORM.Where("site_id = ? AND hour_ts = ?", fixture.site.ID, hour).First(&originalHourly).Error; err != nil {
+		t.Fatalf("read transient original aggregate: %v", err)
+	}
+
+	failureNow := now.Add(time.Minute)
+	claim := createUsageWorkerClaim(t, database, repository, fixture.site, constant.TaskTypeUsageHour, hour, failureNow.Unix(), "transient-no-aggregation-failure")
+	executeUsageWorkerClaim(t, database, repository, testsupport.NewFakeClock(failureNow), usageCollectorFunc(
+		func(_ context.Context, request service.UsageCollectionRequest) (service.UsageCollectionResult, error) {
+			return failedUsageWorkerResult(t, request, failureNow.Unix(), nil, service.ErrUpstreamUnavailable, false), nil
+		},
+	), claim)
+	var currentFact model.UsageFactHourly
+	if err := database.GORM.Where("site_id = ? AND hour_ts = ?", fixture.site.ID, hour).First(&currentFact).Error; err != nil ||
+		currentFact.ID != originalFact.ID || currentFact.CollectedAt != originalFact.CollectedAt {
+		t.Fatalf("transient failure changed fact: current=%#v original=%#v err=%v", currentFact, originalFact, err)
+	}
+	var currentHourly model.SiteStatHourly
+	if err := database.GORM.Where("site_id = ? AND hour_ts = ?", fixture.site.ID, hour).First(&currentHourly).Error; err != nil ||
+		currentHourly.ID != originalHourly.ID || currentHourly.UpdatedAt != originalHourly.UpdatedAt {
+		t.Fatalf("transient failure rebuilt aggregate: current=%#v original=%#v err=%v", currentHourly, originalHourly, err)
+	}
+	var window model.CollectionWindow
+	if err := database.GORM.Where("site_id = ? AND hour_ts = ?", fixture.site.ID, hour).First(&window).Error; err != nil ||
+		window.Status != model.CollectionWindowStatusComplete || window.UpdatedAt != now.Unix() {
+		t.Fatalf("transient failure changed complete window: %#v err=%v", window, err)
 	}
 }
 
@@ -454,6 +547,51 @@ func TestUsageValidationSameHashUsesActualVerifiedOnlyCounts(t *testing.T) {
 	if err := database.GORM.Where("site_id = ? AND date_key = ?", fixture.site.ID, dateKey).First(&currentDaily).Error; err != nil ||
 		currentDaily.ID != originalDaily.ID || currentDaily.RequestCount != originalDaily.RequestCount {
 		t.Fatalf("verified-only daily fact = %#v, original=%#v, err=%v", currentDaily, originalDaily, err)
+	}
+}
+
+func TestUsageValidationSameWindowHashRepairsMissingPersistedFacts(t *testing.T) {
+	database := openWorkerTestDatabase(t)
+	now := time.Date(2032, 1, 8, 15, 5, 0, 0, time.FixedZone("Asia/Shanghai", 8*3600))
+	hour := now.Unix() - now.Unix()%3600 - 3600
+	fixture := createUsageWorkerSite(t, database, hour, now.Unix(), "missing-fact-repair")
+	repository := model.NewCollectionTaskRepository(database.GORM)
+	facts := []model.UsageFactInput{{
+		RemoteUserID: 1, UsernameSnapshot: "user", ModelName: "stable", ChannelID: 1,
+		RequestCount: 5, Quota: 50, TokenUsed: 500,
+	}}
+	seed := createUsageWorkerClaim(t, database, repository, fixture.site, constant.TaskTypeUsageHour, hour, now.Unix(), "missing-fact-seed")
+	executeUsageWorkerClaim(t, database, repository, testsupport.NewFakeClock(now), usageCollectorFunc(
+		func(_ context.Context, request service.UsageCollectionRequest) (service.UsageCollectionResult, error) {
+			return completeUsageWorkerResult(t, request, now.Unix(), facts), nil
+		},
+	), seed)
+	var windowBefore model.CollectionWindow
+	if err := database.GORM.Where("site_id = ? AND hour_ts = ?", fixture.site.ID, hour).First(&windowBefore).Error; err != nil ||
+		windowBefore.FactRows != 1 || len(windowBefore.SourceHash) != 64 {
+		t.Fatalf("seed fact proof = %#v, %v", windowBefore, err)
+	}
+	if err := database.GORM.Where("site_id = ? AND hour_ts = ?", fixture.site.ID, hour).
+		Delete(&model.UsageFactHourly{}).Error; err != nil {
+		t.Fatalf("inject missing persisted fact: %v", err)
+	}
+
+	validationNow := now.Add(time.Hour)
+	claim := createUsageWorkerClaim(t, database, repository, fixture.site, constant.TaskTypeUsageValidation, hour, validationNow.Unix(), "missing-fact-check")
+	executeUsageWorkerClaim(t, database, repository, testsupport.NewFakeClock(validationNow), usageCollectorFunc(
+		func(_ context.Context, request service.UsageCollectionRequest) (service.UsageCollectionResult, error) {
+			return completeUsageWorkerResult(t, request, validationNow.Unix(), facts), nil
+		},
+	), claim)
+
+	assertUsageWorkerTaskState(t, database.GORM, claim, model.CollectionTaskStatusSuccess, 1, 2, 1)
+	assertUsageWorkerCount(t, database.GORM, &model.UsageFactHourly{}, "site_id = ? AND hour_ts = ?", []any{fixture.site.ID, hour}, 1)
+	assertUsageWorkerSummaryCounts(t, database.GORM, fixture, hour, 1)
+	var windowAfter model.CollectionWindow
+	if err := database.GORM.Where("site_id = ? AND hour_ts = ?", fixture.site.ID, hour).First(&windowAfter).Error; err != nil ||
+		windowAfter.FactRows != 1 || windowAfter.SourceHash != windowBefore.SourceHash ||
+		windowAfter.VerifiedAt == nil || *windowAfter.VerifiedAt != validationNow.Unix() {
+		t.Fatalf("repaired fact proof = %#v, before=%#v, err=%v", windowAfter, windowBefore, err)
 	}
 }
 
@@ -795,11 +933,16 @@ func failedUsageWorkerResult(
 	if err != nil {
 		t.Fatalf("build failed usage worker mutation: %v", err)
 	}
-	commit, err := model.NewUsageAggregationCommit(model.UsageAggregationMutationRequest{
-		RunID: request.Run.ID, WindowID: request.Window.ID, SiteID: request.Window.SiteID,
-		ExpectedConfigVersion: request.Run.SiteConfigVersion, HourTS: request.Window.HourTS,
-		AttemptCount: request.Window.AttemptCount, RequestID: request.RequestID, Now: now, NewFacts: facts,
-	}, mutation)
+	var commit model.UsageAggregationCommit
+	if mismatch {
+		commit, err = model.NewUsageAggregationCommit(model.UsageAggregationMutationRequest{
+			RunID: request.Run.ID, WindowID: request.Window.ID, SiteID: request.Window.SiteID,
+			ExpectedConfigVersion: request.Run.SiteConfigVersion, HourTS: request.Window.HourTS,
+			AttemptCount: request.Window.AttemptCount, RequestID: request.RequestID, Now: now, NewFacts: facts,
+		}, mutation)
+	} else {
+		commit, err = model.NewUsageFactOnlyCommit(mutation)
+	}
 	if err != nil {
 		t.Fatalf("build failed usage worker commit: %v", err)
 	}

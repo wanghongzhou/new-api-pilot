@@ -47,26 +47,92 @@ type SiteRedemption struct {
 func (SiteRedemption) TableName() string { return "site_redemption" }
 
 type SiteTopupCollectionState struct {
-	SiteID                       int64
-	LastSuccessAt, LastFailureAt *int64
-	LastErrorCode                string
-	ObservedTotal, ObservedMaxID int64
-	ConfigVersion                int
-	UpdatedAt                    int64
+	SiteID                                          int64
+	LastSuccessAt, LastFullSuccessAt, LastFailureAt *int64
+	LastErrorCode                                   string
+	ObservedTotal, ObservedMaxID                    int64
+	ConfigVersion                                   int
+	UpdatedAt                                       int64
 }
 
 func (SiteTopupCollectionState) TableName() string { return "site_topup_collection_state" }
 
 type SiteRedemptionCollectionState struct {
-	SiteID                       int64
-	LastSuccessAt, LastFailureAt *int64
-	LastErrorCode                string
-	ObservedTotal, ObservedMaxID int64
-	ConfigVersion                int
-	UpdatedAt                    int64
+	SiteID                                          int64
+	LastSuccessAt, LastFullSuccessAt, LastFailureAt *int64
+	LastErrorCode                                   string
+	ObservedTotal, ObservedMaxID                    int64
+	ConfigVersion                                   int
+	UpdatedAt                                       int64
 }
 
 func (SiteRedemptionCollectionState) TableName() string { return "site_redemption_collection_state" }
+
+type FinanceCollectionCheckpoint struct {
+	ObservedTotal, ObservedMaxID int64
+	LastFullSuccessAt            *int64
+	ConfigVersion                int
+}
+
+func (r *SiteRepository) TopupCollectionCheckpoint(ctx context.Context, siteID int64) (FinanceCollectionCheckpoint, error) {
+	if r == nil || r.db == nil || siteID <= 0 {
+		return FinanceCollectionCheckpoint{}, errors.New("invalid topup collection checkpoint")
+	}
+	var state SiteTopupCollectionState
+	err := r.db.WithContext(ctx).Where("site_id=?", siteID).Take(&state).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return FinanceCollectionCheckpoint{}, nil
+	}
+	if err != nil {
+		return FinanceCollectionCheckpoint{}, err
+	}
+	return FinanceCollectionCheckpoint{ObservedTotal: state.ObservedTotal, ObservedMaxID: state.ObservedMaxID, LastFullSuccessAt: state.LastFullSuccessAt, ConfigVersion: state.ConfigVersion}, nil
+}
+
+func (r *SiteRepository) RedemptionCollectionCheckpoint(ctx context.Context, siteID int64) (FinanceCollectionCheckpoint, error) {
+	if r == nil || r.db == nil || siteID <= 0 {
+		return FinanceCollectionCheckpoint{}, errors.New("invalid redemption collection checkpoint")
+	}
+	var state SiteRedemptionCollectionState
+	err := r.db.WithContext(ctx).Where("site_id=?", siteID).Take(&state).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return FinanceCollectionCheckpoint{}, nil
+	}
+	if err != nil {
+		return FinanceCollectionCheckpoint{}, err
+	}
+	return FinanceCollectionCheckpoint{ObservedTotal: state.ObservedTotal, ObservedMaxID: state.ObservedMaxID, LastFullSuccessAt: state.LastFullSuccessAt, ConfigVersion: state.ConfigVersion}, nil
+}
+
+func (r *SiteRepository) OldestPendingTopupID(ctx context.Context, siteID int64) (int64, error) {
+	if r == nil || r.db == nil || siteID <= 0 {
+		return 0, errors.New("invalid pending topup lookup")
+	}
+	var id *int64
+	err := r.db.WithContext(ctx).Model(&SiteTopupOrder{}).
+		Select("MIN(remote_id)").Where("site_id=? AND remote_state=? AND remote_status=?", siteID, financeStateNormal, "pending").Scan(&id).Error
+	if err != nil || id == nil {
+		return 0, err
+	}
+	return *id, nil
+}
+
+func (r *SiteRepository) EnabledRedemptionIDs(ctx context.Context, siteID int64) ([]int64, error) {
+	if r == nil || r.db == nil || siteID <= 0 {
+		return nil, errors.New("invalid enabled redemption lookup")
+	}
+	var ids []int64
+	err := r.db.WithContext(ctx).Model(&SiteRedemption{}).
+		Where("site_id=? AND remote_state=? AND remote_status=?", siteID, financeStateNormal, 1).
+		Order("remote_id DESC").Limit(100001).Pluck("remote_id", &ids).Error
+	if err != nil {
+		return nil, err
+	}
+	if len(ids) > 100000 {
+		return nil, errors.New("enabled redemption set is too large")
+	}
+	return ids, nil
+}
 
 func (r *SiteRepository) MarkFinanceCollectionFailure(ctx context.Context, site Site, observedAt int64, kind, code string) error {
 	if r == nil || r.db == nil || site.ID <= 0 || observedAt <= 0 || code == "" {
@@ -93,7 +159,9 @@ func (r *SiteRepository) MarkFinanceCollectionFailure(ctx context.Context, site 
 }
 
 func (r *SiteRepository) SyncTopups(ctx context.Context, site Site, observedAt int64, snapshot dto.UpstreamTopupSnapshot) (int64, error) {
-	if r == nil || r.db == nil || site.ID <= 0 || observedAt <= 0 || snapshot.Total != int64(len(snapshot.Items)) || snapshot.Total > 100000 {
+	if r == nil || r.db == nil || site.ID <= 0 || observedAt <= 0 || snapshot.Total > 100000 ||
+		(!snapshot.Incremental && snapshot.Total != int64(len(snapshot.Items))) ||
+		(snapshot.Incremental && (snapshot.Total <= 0 || len(snapshot.Items) == 0 || int64(len(snapshot.Items)) > snapshot.Total)) {
 		return 0, errors.New("invalid topup snapshot")
 	}
 	items := append([]dto.UpstreamTopup{}, snapshot.Items...)
@@ -113,16 +181,24 @@ func (r *SiteRepository) SyncTopups(ctx context.Context, site Site, observedAt i
 	for _, item := range items {
 		ids = append(ids, item.ID)
 	}
-	missing := r.db.WithContext(ctx).Model(&SiteTopupOrder{}).Where("site_id=?", site.ID)
-	if len(ids) > 0 {
-		missing = missing.Where("remote_id NOT IN ?", ids)
-	}
-	missingResult := missing.Updates(map[string]any{"remote_state": financeStateMissing, "missing_count": gorm.Expr("missing_count+1"), "last_seen_at": nil, "updated_at": observedAt})
-	if missingResult.Error != nil {
-		return 0, missingResult.Error
+	var missingRows int64
+	if !snapshot.Incremental {
+		missing := r.db.WithContext(ctx).Model(&SiteTopupOrder{}).Where("site_id=?", site.ID)
+		if len(ids) > 0 {
+			missing = missing.Where("remote_id NOT IN ?", ids)
+		}
+		missingResult := missing.Updates(map[string]any{"remote_state": financeStateMissing, "missing_count": gorm.Expr("missing_count+1"), "last_seen_at": nil, "updated_at": observedAt})
+		if missingResult.Error != nil {
+			return 0, missingResult.Error
+		}
+		missingRows = missingResult.RowsAffected
 	}
 	var existing []SiteTopupOrder
-	if err := r.db.WithContext(ctx).Where("site_id=?", site.ID).Find(&existing).Error; err != nil {
+	existingQuery := r.db.WithContext(ctx).Where("site_id=?", site.ID)
+	if snapshot.Incremental {
+		existingQuery = existingQuery.Where("remote_id IN ?", ids)
+	}
+	if err := existingQuery.Find(&existing).Error; err != nil {
 		return 0, err
 	}
 	byID := make(map[int64]SiteTopupOrder, len(existing))
@@ -144,14 +220,21 @@ func (r *SiteRepository) SyncTopups(ctx context.Context, site Site, observedAt i
 		}
 	}
 	state := SiteTopupCollectionState{SiteID: site.ID, LastSuccessAt: &observedAt, ObservedTotal: snapshot.Total, ObservedMaxID: snapshot.MaxID, ConfigVersion: site.ConfigVersion, UpdatedAt: observedAt}
-	if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "site_id"}}, DoUpdates: clause.AssignmentColumns([]string{"last_success_at", "last_error_code", "observed_total", "observed_max_id", "config_version", "updated_at"})}).Create(&state).Error; err != nil {
+	stateColumns := []string{"last_success_at", "last_error_code", "observed_total", "observed_max_id", "config_version", "updated_at"}
+	if !snapshot.Incremental {
+		state.LastFullSuccessAt = &observedAt
+		stateColumns = append(stateColumns, "last_full_success_at")
+	}
+	if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "site_id"}}, DoUpdates: clause.AssignmentColumns(stateColumns)}).Create(&state).Error; err != nil {
 		return 0, err
 	}
-	return missingResult.RowsAffected + int64(len(changed)), nil
+	return missingRows + int64(len(changed)), nil
 }
 
 func (r *SiteRepository) SyncRedemptions(ctx context.Context, site Site, observedAt int64, snapshot dto.UpstreamRedemptionSnapshot) (int64, error) {
-	if r == nil || r.db == nil || site.ID <= 0 || observedAt <= 0 || snapshot.Total != int64(len(snapshot.Items)) || snapshot.Total > 100000 {
+	if r == nil || r.db == nil || site.ID <= 0 || observedAt <= 0 || snapshot.Total > 100000 ||
+		(!snapshot.Incremental && snapshot.Total != int64(len(snapshot.Items))) ||
+		(snapshot.Incremental && (snapshot.Total <= 0 || len(snapshot.Items) == 0 || int64(len(snapshot.Items)) > snapshot.Total)) {
 		return 0, errors.New("invalid redemption snapshot")
 	}
 	items := append([]dto.UpstreamRedemption{}, snapshot.Items...)
@@ -168,16 +251,24 @@ func (r *SiteRepository) SyncRedemptions(ctx context.Context, site Site, observe
 	for _, item := range items {
 		ids = append(ids, item.ID)
 	}
-	missing := r.db.WithContext(ctx).Model(&SiteRedemption{}).Where("site_id=?", site.ID)
-	if len(ids) > 0 {
-		missing = missing.Where("remote_id NOT IN ?", ids)
-	}
-	missingResult := missing.Updates(map[string]any{"remote_state": financeStateMissing, "missing_count": gorm.Expr("missing_count+1"), "last_seen_at": nil, "updated_at": observedAt})
-	if missingResult.Error != nil {
-		return 0, missingResult.Error
+	var missingRows int64
+	if !snapshot.Incremental {
+		missing := r.db.WithContext(ctx).Model(&SiteRedemption{}).Where("site_id=?", site.ID)
+		if len(ids) > 0 {
+			missing = missing.Where("remote_id NOT IN ?", ids)
+		}
+		missingResult := missing.Updates(map[string]any{"remote_state": financeStateMissing, "missing_count": gorm.Expr("missing_count+1"), "last_seen_at": nil, "updated_at": observedAt})
+		if missingResult.Error != nil {
+			return 0, missingResult.Error
+		}
+		missingRows = missingResult.RowsAffected
 	}
 	var existing []SiteRedemption
-	if err := r.db.WithContext(ctx).Where("site_id=?", site.ID).Find(&existing).Error; err != nil {
+	existingQuery := r.db.WithContext(ctx).Where("site_id=?", site.ID)
+	if snapshot.Incremental {
+		existingQuery = existingQuery.Where("remote_id IN ?", ids)
+	}
+	if err := existingQuery.Find(&existing).Error; err != nil {
 		return 0, err
 	}
 	byID := make(map[int64]SiteRedemption, len(existing))
@@ -199,10 +290,15 @@ func (r *SiteRepository) SyncRedemptions(ctx context.Context, site Site, observe
 		}
 	}
 	state := SiteRedemptionCollectionState{SiteID: site.ID, LastSuccessAt: &observedAt, ObservedTotal: snapshot.Total, ObservedMaxID: snapshot.MaxID, ConfigVersion: site.ConfigVersion, UpdatedAt: observedAt}
-	if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "site_id"}}, DoUpdates: clause.AssignmentColumns([]string{"last_success_at", "last_error_code", "observed_total", "observed_max_id", "config_version", "updated_at"})}).Create(&state).Error; err != nil {
+	stateColumns := []string{"last_success_at", "last_error_code", "observed_total", "observed_max_id", "config_version", "updated_at"}
+	if !snapshot.Incremental {
+		state.LastFullSuccessAt = &observedAt
+		stateColumns = append(stateColumns, "last_full_success_at")
+	}
+	if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "site_id"}}, DoUpdates: clause.AssignmentColumns(stateColumns)}).Create(&state).Error; err != nil {
 		return 0, err
 	}
-	return missingResult.RowsAffected + int64(len(changed)), nil
+	return missingRows + int64(len(changed)), nil
 }
 
 func validFinanceText(value string, max int) bool {
@@ -256,11 +352,12 @@ type FinanceMetricRow struct {
 	AsOf                       *int64
 }
 type FinanceCollectionCoverageRow struct {
-	SiteID        int64  `gorm:"column:site_id"`
-	SiteName      string `gorm:"column:site_name"`
-	LastSuccessAt *int64 `gorm:"column:last_success_at"`
-	LastFailureAt *int64 `gorm:"column:last_failure_at"`
-	AsOf          *int64 `gorm:"column:as_of"`
+	SiteID            int64  `gorm:"column:site_id"`
+	SiteName          string `gorm:"column:site_name"`
+	LastSuccessAt     *int64 `gorm:"column:last_success_at"`
+	LastFullSuccessAt *int64 `gorm:"column:last_full_success_at"`
+	LastFailureAt     *int64 `gorm:"column:last_failure_at"`
+	AsOf              *int64 `gorm:"column:as_of"`
 }
 type FinanceRepository struct{ db *gorm.DB }
 
@@ -420,6 +517,6 @@ func (r *FinanceRepository) CollectionCoverage(ctx context.Context, siteIDs []in
 		query = query.Where("s.id IN ?", siteIDs)
 	}
 	var rows []FinanceCollectionCoverageRow
-	err := query.Select("s.id site_id,s.name site_name,c.last_success_at,c.last_failure_at,c.last_success_at as_of").Order("s.id").Scan(&rows).Error
+	err := query.Select("s.id site_id,s.name site_name,c.last_success_at,c.last_full_success_at,c.last_failure_at,c.last_full_success_at as_of").Order("s.id").Scan(&rows).Error
 	return rows, err
 }

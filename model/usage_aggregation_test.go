@@ -53,8 +53,8 @@ func TestUsageAggregationRebuildsSixLevelsAndRollingDaily(t *testing.T) {
 		"account_id = ? AND hour_ts = ?", accounts[2].ID, fixture.hours[0], 0)
 
 	repeated := applyCompleteUsageAggregation(t, database, fixture, 0, now+2, hour0Facts)
-	if repeated.HourlyRows != hour0.HourlyRows {
-		t.Fatalf("repeated aggregation rows = %#v, want %#v", repeated, hour0)
+	if !repeated.Window.VerifiedOnly || repeated.Window.WrittenRows != 0 || repeated.HourlyRows != 0 || repeated.DailyRows != 0 {
+		t.Fatalf("repeated aggregation was not zero-write = %#v", repeated)
 	}
 	assertAggregationRowCount(t, database.GORM, &SiteStatHourly{},
 		"site_id = ? AND hour_ts = ?", fixture.site.ID, fixture.hours[0], 1)

@@ -1251,8 +1251,8 @@ NotificationTestResult {
 | realtime_stat | fast | site | 否/否 | 正常周期 Redis 有界历史；恢复/手动/诊断 durable |
 | resource_snapshot | fast | site | 分钟/否 | 正常周期 Redis 有界历史；业务资源事实持久化 |
 | performance_sync | durable | site | 最近窗口/无游标 | collection_run + 性能事实 |
-| topup_sync | durable | site | 快照/无游标 | collection_run + 充值事实 |
-| redemption_sync | durable | site | 快照/无游标 | collection_run + 兑换事实 |
+| topup_sync | durable | site | 头部水位 + pending 下界 + 24h 完整校准 | collection_run + 充值事实/checkpoint |
+| redemption_sync | durable | site | 头部水位 + enabled 精确复核 + 失败回退 + 24h 完整校准 | collection_run + 兑换事实/checkpoint |
 | upstream_task_sync | durable | site | 重叠窗口/无游标 | collection_run + 上游任务事实 |
 | model_meta_sync | durable | site | 快照/无游标 | collection_run + 模型目录 |
 | plan_sync | durable | site | 快照/无游标 | collection_run + 计划目录 |
@@ -1279,7 +1279,7 @@ site disable/enable/manual/schedule/recovery 通过 trigger_type 和 priority �
 | 90 | 站点恢复缺口补采 |
 | 80 | 手动补采 |
 | 70 | 次日校验 |
-| 60 | 每周校验 |
+| 60 | 历史兼容优先级；不再由 Scheduler 创建每周 7 天盲扫任务 |
 | 50 | 新站点历史回填 |
 | 40 | 新账户/客户本地重建 |
 
@@ -1291,7 +1291,7 @@ site disable/enable/manual/schedule/recovery 通过 trigger_type 和 priority �
 |---|---:|---|
 | 小时采集 | 4 | 立即、1m、5m、15m |
 | 历史回填 | 5 | 立即、1m、5m、15m、60m |
-| 次日/每周校验 | 5 | 立即、5m、15m、60m、6h |
+| 每日精确待复核小时校验 | 5 | 立即、5m、15m、60m、6h |
 | 导出 | 2 | 立即、1m |
 | 钉钉 | 5 | 立即、1m、5m、15m、60m |
 

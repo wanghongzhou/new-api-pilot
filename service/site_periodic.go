@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"time"
 
 	"new-api-pilot/constant"
 	"new-api-pilot/dto"
@@ -64,8 +65,14 @@ type incrementalPerformanceHistoryClient interface {
 type topupSnapshotClient interface {
 	SnapshotTopups(context.Context, string) (dto.UpstreamTopupSnapshot, error)
 }
+type incrementalTopupSnapshotClient interface {
+	SnapshotTopupsIncremental(context.Context, string, int64, int64, int64) (dto.UpstreamTopupSnapshot, error)
+}
 type redemptionSnapshotClient interface {
 	SnapshotRedemptions(context.Context, string) (dto.UpstreamRedemptionSnapshot, error)
+}
+type incrementalRedemptionSnapshotClient interface {
+	SnapshotRedemptionsIncremental(context.Context, string, int64, int64, []int64) (dto.UpstreamRedemptionSnapshot, error)
 }
 type upstreamTaskSnapshotClient interface {
 	SnapshotUpstreamTasks(context.Context, string, int64, int64, []string) (dto.UpstreamTaskSnapshot, error)
@@ -305,12 +312,27 @@ func (service *SiteService) executePeriodicTopups(ctx context.Context, siteID in
 	if !ok {
 		return 0, 0, model.ErrCollectionRunContract
 	}
-	snapshot, err := source.SnapshotTopups(ctx, requestID)
+	now := service.clock.Now().Unix()
+	checkpoint, err := service.sites.TopupCollectionCheckpoint(ctx, site.ID)
 	if err != nil {
-		_ = service.sites.MarkFinanceCollectionFailure(ctx, site, service.clock.Now().Unix(), "topup", "TOPUP_UPSTREAM_UNAVAILABLE")
+		return 0, 0, err
+	}
+	full := checkpoint.ConfigVersion != site.ConfigVersion || checkpoint.LastFullSuccessAt == nil ||
+		*checkpoint.LastFullSuccessAt > now || now-*checkpoint.LastFullSuccessAt >= int64((24*time.Hour)/time.Second)
+	var snapshot dto.UpstreamTopupSnapshot
+	if incrementalSource, ok := client.(incrementalTopupSnapshotClient); ok && !full {
+		oldestPendingID, lookupErr := service.sites.OldestPendingTopupID(ctx, site.ID)
+		if lookupErr != nil {
+			return 0, 0, lookupErr
+		}
+		snapshot, err = incrementalSource.SnapshotTopupsIncremental(ctx, requestID, checkpoint.ObservedMaxID, checkpoint.ObservedTotal, oldestPendingID)
+	} else {
+		snapshot, err = source.SnapshotTopups(ctx, requestID)
+	}
+	if err != nil {
+		_ = service.sites.MarkFinanceCollectionFailure(ctx, site, now, "topup", "TOPUP_UPSTREAM_UNAVAILABLE")
 		return 0, 0, service.periodicTaskError(ctx, site.ID, expectedConfigVersion, err)
 	}
-	now := service.clock.Now().Unix()
 	var written int64
 	err = service.sites.WithTransaction(ctx, func(repository *model.SiteRepository) error {
 		current, err := repository.FindByIDForUpdate(ctx, site.ID)
@@ -324,9 +346,9 @@ func (service *SiteService) executePeriodicTopups(ctx context.Context, siteID in
 		return err
 	})
 	if err != nil {
-		return snapshot.Total, 0, err
+		return int64(len(snapshot.Items)), 0, err
 	}
-	return snapshot.Total, written, nil
+	return int64(len(snapshot.Items)), written, nil
 }
 
 func (service *SiteService) executePeriodicRedemptions(ctx context.Context, siteID int64, expectedConfigVersion int, requestID string) (int64, int64, error) {
@@ -339,12 +361,27 @@ func (service *SiteService) executePeriodicRedemptions(ctx context.Context, site
 	if !ok {
 		return 0, 0, model.ErrCollectionRunContract
 	}
-	snapshot, err := source.SnapshotRedemptions(ctx, requestID)
+	now := service.clock.Now().Unix()
+	checkpoint, err := service.sites.RedemptionCollectionCheckpoint(ctx, site.ID)
 	if err != nil {
-		_ = service.sites.MarkFinanceCollectionFailure(ctx, site, service.clock.Now().Unix(), "redemption", "REDEMPTION_UPSTREAM_UNAVAILABLE")
+		return 0, 0, err
+	}
+	full := checkpoint.ConfigVersion != site.ConfigVersion || checkpoint.LastFullSuccessAt == nil ||
+		*checkpoint.LastFullSuccessAt > now || now-*checkpoint.LastFullSuccessAt >= int64((24*time.Hour)/time.Second)
+	var snapshot dto.UpstreamRedemptionSnapshot
+	if incrementalSource, ok := client.(incrementalRedemptionSnapshotClient); ok && !full {
+		enabledIDs, lookupErr := service.sites.EnabledRedemptionIDs(ctx, site.ID)
+		if lookupErr != nil {
+			return 0, 0, lookupErr
+		}
+		snapshot, err = incrementalSource.SnapshotRedemptionsIncremental(ctx, requestID, checkpoint.ObservedMaxID, checkpoint.ObservedTotal, enabledIDs)
+	} else {
+		snapshot, err = source.SnapshotRedemptions(ctx, requestID)
+	}
+	if err != nil {
+		_ = service.sites.MarkFinanceCollectionFailure(ctx, site, now, "redemption", "REDEMPTION_UPSTREAM_UNAVAILABLE")
 		return 0, 0, service.periodicTaskError(ctx, site.ID, expectedConfigVersion, err)
 	}
-	now := service.clock.Now().Unix()
 	var written int64
 	err = service.sites.WithTransaction(ctx, func(repository *model.SiteRepository) error {
 		current, err := repository.FindByIDForUpdate(ctx, site.ID)
@@ -358,9 +395,9 @@ func (service *SiteService) executePeriodicRedemptions(ctx context.Context, site
 		return err
 	})
 	if err != nil {
-		return snapshot.Total, 0, err
+		return int64(len(snapshot.Items)), 0, err
 	}
-	return snapshot.Total, written, nil
+	return int64(len(snapshot.Items)), written, nil
 }
 
 func (service *SiteService) executePeriodicPerformance(ctx context.Context, siteID int64, expectedConfigVersion int, requestID string) (int64, int64, error) {

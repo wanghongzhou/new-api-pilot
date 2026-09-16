@@ -15,7 +15,7 @@ import (
 
 var beijingLocation = time.FixedZone("Asia/Shanghai", 8*60*60)
 
-const pendingValidationRecoveryLimitPerSite = 72
+const pendingValidationRecoveryLimitPerSite = 6
 
 type SchedulerOptions struct {
 	Repository      *model.CollectionTaskRepository
@@ -39,14 +39,13 @@ type Scheduler struct {
 	fastTaskCtx     context.Context
 	fastTaskCancel  context.CancelFunc
 
-	mu                         sync.Mutex
-	fastLifecycleMu            sync.Mutex
-	initialized                bool
-	fastStartup                bool
-	lastFastState              map[string]fastScheduleState
-	lastMetadataHour           int64
-	lastUsageHourBySite        map[int64]int64
-	lastValidationRecoveryDate map[int64]int64
+	mu                  sync.Mutex
+	fastLifecycleMu     sync.Mutex
+	initialized         bool
+	fastStartup         bool
+	lastFastState       map[string]fastScheduleState
+	lastMetadataHour    int64
+	lastUsageHourBySite map[int64]int64
 }
 
 type fastScheduleState struct {
@@ -92,10 +91,9 @@ func NewScheduler(options SchedulerOptions) (*Scheduler, error) {
 	scheduler := &Scheduler{
 		repository: options.Repository, settings: options.Settings, clock: options.Clock,
 		tick: options.Tick, siteJobs: options.SiteJobs, metrics: options.Metrics,
-		fastTaskHistory:            options.FastTaskHistory,
-		lastFastState:              make(map[string]fastScheduleState),
-		lastUsageHourBySite:        make(map[int64]int64),
-		lastValidationRecoveryDate: make(map[int64]int64),
+		fastTaskHistory:     options.FastTaskHistory,
+		lastFastState:       make(map[string]fastScheduleState),
+		lastUsageHourBySite: make(map[int64]int64),
 	}
 	scheduler.fastTaskCtx, scheduler.fastTaskCancel = context.WithCancel(context.Background())
 	scheduler.fastTasks = newFastTaskDispatcher(scheduler.executeFastTask)
@@ -210,9 +208,8 @@ func (scheduler *Scheduler) runOnce(ctx context.Context, now time.Time, startup 
 		}
 	}
 	localNow := now.In(beijingLocation)
-	dateKey := localNow.Year()*10000 + int(localNow.Month())*100 + localNow.Day()
 	if localNow.Hour() >= 2 {
-		if err := scheduler.enqueueHistoricalValidationRecovery(ctx, sites, dateKey, now.Unix()); err != nil {
+		if err := scheduler.enqueueHistoricalValidationRecovery(ctx, sites, now.Unix()); err != nil {
 			return err
 		}
 	}
@@ -225,14 +222,12 @@ func (scheduler *Scheduler) runOnce(ctx context.Context, now time.Time, startup 
 func (scheduler *Scheduler) enqueueHistoricalValidationRecovery(
 	ctx context.Context,
 	sites []model.Site,
-	todayDateKey int,
 	now int64,
 ) error {
 	eligible := make([]model.Site, 0, len(sites))
 	siteIDs := make([]int64, 0, len(sites))
 	for _, site := range sites {
-		if schedulerSiteEligible(site, constant.TaskTypeUsageValidation) &&
-			scheduler.lastValidationRecoveryDate[site.ID] != int64(todayDateKey) {
+		if schedulerSiteEligible(site, constant.TaskTypeUsageValidation) {
 			eligible = append(eligible, site)
 			siteIDs = append(siteIDs, site.ID)
 		}
@@ -262,16 +257,13 @@ func (scheduler *Scheduler) enqueueHistoricalValidationRecovery(
 			end += 3600
 			index++
 		}
-		slot := int64(todayDateKey)*100000000 + start/3600
+		slot := now*1_000_000 + start/3600%1_000_000
 		if err := scheduler.enqueueWindowForSites(
 			ctx, []model.Site{site}, constant.TaskTypeUsageValidation,
 			constant.CollectionPriorityDailyValidation, start, end, slot, now,
 		); err != nil {
 			return err
 		}
-	}
-	for _, site := range eligible {
-		scheduler.lastValidationRecoveryDate[site.ID] = int64(todayDateKey)
 	}
 	return nil
 }

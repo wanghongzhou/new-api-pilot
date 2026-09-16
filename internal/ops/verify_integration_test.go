@@ -350,8 +350,8 @@ func insertCompleteAggregationVerifyFixture(
 	fixture := insertAggregationVerifyEntities(t, ctx, tx, hourTS, hourTS+3600, 20990102)
 	dateEnd := hourTS + 86400
 	execAggregationVerifyFixture(t, ctx, tx, `INSERT INTO collection_window
-  (site_id, hour_ts, status, fetched_rows, source_hash, verified_at, updated_at)
-VALUES (?, ?, 'complete', 1, ?, ?, ?)`, fixture.siteID, hourTS, strings.Repeat("a", 64), dateEnd, fixture.now)
+  (site_id, hour_ts, status, fetched_rows, fact_rows, source_hash, verified_at, updated_at)
+VALUES (?, ?, 'complete', 1, 1, ?, ?, ?)`, fixture.siteID, hourTS, strings.Repeat("a", 64), dateEnd, fixture.now)
 	execAggregationVerifyFixture(t, ctx, tx, `INSERT INTO usage_fact_hourly
   (site_id, remote_user_id, username_snapshot, model_name, channel_id, hour_ts,
    request_count, quota, token_used, collected_at)
@@ -455,13 +455,13 @@ VALUES ('aggregation verify missing site', ?, ?, 'root_created', ?, ?, ?)`,
 	}
 	missingSiteID, _ := result.LastInsertId()
 	execAggregationVerifyFixture(t, ctx, tx, `INSERT INTO collection_window
-  (site_id, hour_ts, status, fetched_rows, source_hash, verified_at, updated_at)
-VALUES (?, ?, 'complete', 0, ?, NULL, ?), (?, ?, 'missing', 0, '', NULL, ?)`,
+  (site_id, hour_ts, status, fetched_rows, fact_rows, source_hash, verified_at, updated_at)
+VALUES (?, ?, 'complete', 0, 0, ?, NULL, ?), (?, ?, 'missing', 0, 0, '', NULL, ?)`,
 		fixture.siteID, hourTS, strings.Repeat("b", 64), fixture.now,
 		fixture.siteID, hourTS+3600, fixture.now)
 	execAggregationVerifyFixture(t, ctx, tx, `INSERT INTO collection_window
-  (site_id, hour_ts, status, fetched_rows, source_hash, verified_at, updated_at)
-VALUES (?, ?, 'missing', 0, '', NULL, ?)`, missingSiteID, hourTS, fixture.now)
+  (site_id, hour_ts, status, fetched_rows, fact_rows, source_hash, verified_at, updated_at)
+VALUES (?, ?, 'missing', 0, 0, '', NULL, ?)`, missingSiteID, hourTS, fixture.now)
 	execAggregationVerifyFixture(t, ctx, tx, `INSERT INTO account_stat_daily
   (account_id, date_key, request_count, quota, token_used, data_status, is_final,
    last_calculated_at, created_at, updated_at)
@@ -498,8 +498,8 @@ func insertPartialDataAggregationVerifyFixture(
 	execAggregationVerifyFixture(t, ctx, tx,
 		"UPDATE site SET statistics_end_at = ? WHERE id = ?", fixture.hourTS+2*3600, fixture.siteID)
 	execAggregationVerifyFixture(t, ctx, tx, `INSERT INTO collection_window
-  (site_id, hour_ts, status, fetched_rows, source_hash, verified_at, updated_at)
-VALUES (?, ?, 'missing', 0, '', NULL, ?)`, fixture.siteID, fixture.hourTS+3600, fixture.now)
+  (site_id, hour_ts, status, fetched_rows, fact_rows, source_hash, verified_at, updated_at)
+VALUES (?, ?, 'missing', 0, 0, '', NULL, ?)`, fixture.siteID, fixture.hourTS+3600, fixture.now)
 	execAggregationVerifyFixture(t, ctx, tx,
 		"UPDATE account_stat_daily SET data_status = 'partial' WHERE account_id = ? AND date_key = ?",
 		fixture.accountID, fixture.dateKey)

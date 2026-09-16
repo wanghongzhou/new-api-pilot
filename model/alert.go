@@ -370,7 +370,14 @@ func (repository *AlertRepository) AdvanceEvaluationCursor(
 		return fmt.Errorf("advance alert evaluation cursor: %w", result.Error)
 	}
 	if result.RowsAffected != 1 {
-		return ErrAlertRecordNotFound
+		var count int64
+		if err := repository.db.WithContext(ctx).Model(&AlertEvaluationCursor{}).
+			Where("active_key = ?", cursor.ActiveKey).Count(&count).Error; err != nil {
+			return fmt.Errorf("verify alert evaluation cursor after no-op advance: %w", err)
+		}
+		if count != 1 {
+			return ErrAlertRecordNotFound
+		}
 	}
 	return nil
 }

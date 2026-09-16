@@ -6,13 +6,21 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
+
+	"new-api-pilot/common"
 )
 
 func TestSystemTaskSnapshotListCurrentTypedPrivacyAndPartial(t *testing.T) {
 	calls := []string{}
+	var callsMu sync.Mutex
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callsMu.Lock()
 		calls = append(calls, r.URL.RequestURI())
+		callsMu.Unlock()
 		if r.Header.Get("Authorization") != "test-root-token" || r.Header.Get("New-Api-User") != "1" {
 			t.Errorf("missing management headers")
 		}
@@ -41,6 +49,8 @@ func TestSystemTaskSnapshotListCurrentTypedPrivacyAndPartial(t *testing.T) {
 	if snapshot.Items[0].ArchivedDays == nil || *snapshot.Items[0].ArchivedDays != 3 || snapshot.Items[1].TaskID != "systask_cleanup" || snapshot.Items[2].ErrorCode != "UPSTREAM_SYSTEM_TASK_FAILED" || snapshot.Items[2].Tested == nil || *snapshot.Items[2].Tested != 5 || snapshot.Items[3].PlatformsScanned == nil {
 		t.Fatalf("items=%#v", snapshot.Items)
 	}
+	callsMu.Lock()
+	defer callsMu.Unlock()
 	if len(calls) != 7 || calls[0] != "/api/system-task/list?limit=100" {
 		t.Fatalf("calls=%#v", calls)
 	}
@@ -105,11 +115,65 @@ func TestSystemTaskCurrentFailureProducesPartialWithoutPerTaskLookup(t *testing.
 	}
 }
 
+func TestSystemTaskCurrentUsesGovernorBoundedParallelismAndStableFailures(t *testing.T) {
+	var inFlight atomic.Int64
+	var maximum atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/system-task/list" {
+			fmt.Fprint(w, `{"success":true,"message":"","data":[]}`)
+			return
+		}
+		current := inFlight.Add(1)
+		defer inFlight.Add(-1)
+		for {
+			old := maximum.Load()
+			if current <= old || maximum.CompareAndSwap(old, current) {
+				break
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+		switch r.URL.Query().Get("type") {
+		case "log_detail_cleanup", "model_update":
+			http.Error(w, "unavailable", http.StatusServiceUnavailable)
+		default:
+			fmt.Fprint(w, `{"success":true,"message":"","data":null}`)
+		}
+	}))
+	defer server.Close()
+	client := testClientForServer(t, server, true, testClientSettings{})
+	governor, err := NewUpstreamGovernor(UpstreamGovernorOptions{
+		Requests: 100, Window: time.Second, MaxInFlight: 2, Clock: common.SystemClock{},
+	})
+	if err != nil {
+		t.Fatalf("create system-task governor: %v", err)
+	}
+	client.governor = governor
+	snapshot, err := client.SnapshotSystemTasks(context.Background(), "system-current-parallel")
+	if err != nil {
+		t.Fatalf("parallel current snapshot: %v", err)
+	}
+	wantFailures := []string{"log_detail_cleanup", "model_update"}
+	if !snapshot.Partial || len(snapshot.CurrentFailures) != len(wantFailures) {
+		t.Fatalf("parallel current snapshot=%#v", snapshot)
+	}
+	for index := range wantFailures {
+		if snapshot.CurrentFailures[index] != wantFailures[index] {
+			t.Fatalf("current failures=%#v, want=%#v", snapshot.CurrentFailures, wantFailures)
+		}
+	}
+	if maximum.Load() != 2 {
+		t.Fatalf("system-task governor maximum in-flight=%d, want 2", maximum.Load())
+	}
+}
+
 func TestSystemTaskSnapshotDerivesValidRequestIDsFromWorkerID(t *testing.T) {
 	requestIDs := map[string]struct{}{}
 	seenLogDetailCleanup := false
+	var requestMu sync.Mutex
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestID := r.Header.Get("X-Request-ID")
+		requestMu.Lock()
+		defer requestMu.Unlock()
 		if !validRequestID(requestID) {
 			t.Errorf("invalid child request ID %q", requestID)
 		}
@@ -133,6 +197,8 @@ func TestSystemTaskSnapshotDerivesValidRequestIDsFromWorkerID(t *testing.T) {
 	if err != nil || snapshot.Partial {
 		t.Fatalf("snapshot=%#v err=%v", snapshot, err)
 	}
+	requestMu.Lock()
+	defer requestMu.Unlock()
 	if len(requestIDs) != 7 || !seenLogDetailCleanup {
 		t.Fatalf("request IDs=%v seen log detail cleanup=%t", requestIDs, seenLogDetailCleanup)
 	}

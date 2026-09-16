@@ -103,12 +103,10 @@ func (r *SiteRepository) SyncSystemTasks(ctx context.Context, site Site, at int6
 		existing[row.RemoteID] = row
 	}
 	changedRows := make([]SiteSystemTask, 0, len(items))
-	unchangedIDs := make([]int64, 0, len(items))
 	for _, item := range items {
 		incoming := systemTaskRow(site, at, item)
 		if old, ok := existing[item.ID]; ok {
 			if item.UpdatedAt < old.RemoteUpdatedAt || item.UpdatedAt == old.RemoteUpdatedAt && incoming.SourceHash == old.SourceHash {
-				unchangedIDs = append(unchangedIDs, item.ID)
 				continue
 			}
 			incoming.FirstSeenAt, incoming.CreatedAt = old.FirstSeenAt, old.CreatedAt
@@ -120,15 +118,6 @@ func (r *SiteRepository) SyncSystemTasks(ctx context.Context, site Site, at int6
 		if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "site_id"}, {Name: "remote_id"}}, DoUpdates: clause.AssignmentColumns([]string{
 			"remote_task_id", "task_type", "remote_status", "error_present", "error_code", "total", "processed", "progress", "remaining", "deleted_count", "tested", "succeeded", "failed", "disabled", "enabled", "checked_channels", "changed_channels", "detected_add_models", "detected_remove_models", "failed_channels", "auto_added_models", "unfinished_tasks", "channels_scanned", "platforms_scanned", "null_tasks_failed", "remote_created_at", "remote_updated_at", "source_hash", "config_version", "last_seen_at", "collected_at", "updated_at",
 		})}).CreateInBatches(&changedRows, 500).Error; err != nil {
-			return written, err
-		}
-	}
-	for start := 0; start < len(unchangedIDs); start += 500 {
-		end := start + 500
-		if end > len(unchangedIDs) {
-			end = len(unchangedIDs)
-		}
-		if err := r.db.WithContext(ctx).Model(&SiteSystemTask{}).Where("site_id = ? AND remote_id IN ?", site.ID, unchangedIDs[start:end]).Updates(map[string]any{"last_seen_at": at, "collected_at": at}).Error; err != nil {
 			return written, err
 		}
 	}

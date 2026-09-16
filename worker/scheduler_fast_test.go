@@ -183,12 +183,17 @@ func TestSchedulerPerformanceSyncUsesDurableRunAndIndependentQueue(t *testing.T)
 		t.Fatalf("same-slot performance runs = %d, %v", count, err)
 	}
 	repository := model.NewCollectionTaskRepository(database.GORM)
+	if err := database.GORM.Model(&model.CollectionRun{}).
+		Where("site_id <> ? AND task_type = ? AND status = ?", site.ID, constant.TaskTypePerformanceSync, model.CollectionTaskStatusPending).
+		Update("next_attempt_at", now.Add(24*time.Hour).Unix()).Error; err != nil {
+		t.Fatalf("isolate performance claim from prior worker fixtures: %v", err)
+	}
 	claim, err := repository.ClaimNext(context.Background(), model.CollectionTaskClaimOptions{
 		TaskTypes: []string{constant.TaskTypePerformanceSync}, Now: now.Unix(),
 		RequestID: "wrk_performance_first", MaxWindow: 24,
 	})
 	if err != nil || claim.Run.ID != runs[0].ID || claim.Run.Status != model.CollectionTaskStatusRunning || claim.Run.RetryCount != 1 {
-		t.Fatalf("claim performance run = %#v, %v", claim.Run, err)
+		t.Fatalf("claim performance run = %#v, expected_id=%d, %v", claim.Run, runs[0].ID, err)
 	}
 	if err := repository.Heartbeat(context.Background(), claim.Run.ID, claim.RequestID, now.Unix()+1); err != nil {
 		t.Fatalf("heartbeat performance run: %v", err)
@@ -225,6 +230,15 @@ func TestSchedulerDurableSyncUsesIndependentQueues(t *testing.T) {
 	defer scheduler.shutdownFastTasks()
 
 	repository := model.NewCollectionTaskRepository(database.GORM)
+	durableTaskTypes := []string{
+		constant.TaskTypeTopupSync, constant.TaskTypeRedemptionSync,
+		constant.TaskTypeUpstreamTaskSync, constant.TaskTypeModelMetaSync,
+	}
+	if err := database.GORM.Model(&model.CollectionRun{}).
+		Where("site_id <> ? AND task_type IN ? AND status = ?", site.ID, durableTaskTypes, model.CollectionTaskStatusPending).
+		Update("next_attempt_at", now.Add(24*time.Hour).Unix()).Error; err != nil {
+		t.Fatalf("isolate durable claims from prior worker fixtures: %v", err)
+	}
 	for _, test := range []struct {
 		taskType string
 		queue    QueueKind
@@ -250,7 +264,7 @@ func TestSchedulerDurableSyncUsesIndependentQueues(t *testing.T) {
 			RequestID: "wrk_" + test.taskType, MaxWindow: 24,
 		})
 		if err != nil || claim.Run.ID != runs[0].ID || claim.Run.RetryCount != 1 {
-			t.Fatalf("claim %s = %#v, %v", test.taskType, claim.Run, err)
+			t.Fatalf("claim %s = %#v, expected_id=%d, %v", test.taskType, claim.Run, runs[0].ID, err)
 		}
 		if err := repository.Heartbeat(context.Background(), claim.Run.ID, claim.RequestID, now.Unix()+1); err != nil {
 			t.Fatalf("heartbeat %s: %v", test.taskType, err)

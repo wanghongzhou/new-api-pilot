@@ -171,9 +171,6 @@ func applySiteChannelInventorySnapshot(ctx context.Context, db *gorm.DB, siteID,
 		}
 	}
 	hour := syncedAt - syncedAt%3600
-	if err := db.WithContext(ctx).Where("site_id = ? AND hour_ts = ?", siteID, hour).Delete(&SiteChannelInventoryHourly{}).Error; err != nil {
-		return err
-	}
 	keys := make([]hourlyKey, 0, len(hourlyMetrics))
 	for key := range hourlyMetrics {
 		keys = append(keys, key)
@@ -205,7 +202,44 @@ func applySiteChannelInventorySnapshot(ctx context.Context, db *gorm.DB, siteID,
 			HourTS: hour, BalanceTotal: "0", ResponseTimeAvgMS: "0", AvailabilityRate: "0", DataStatus: "complete",
 			ConfigVersion: site.ConfigVersion, CollectedAt: syncedAt})
 	}
+	var existingHourly []SiteChannelInventoryHourly
+	if err := db.WithContext(ctx).Where("site_id = ? AND hour_ts = ?", siteID, hour).
+		Order("remote_type, remote_status, remote_group, tag").Find(&existingHourly).Error; err != nil {
+		return err
+	}
+	if siteChannelHourlyEqual(existingHourly, hourly) {
+		return nil
+	}
+	if err := db.WithContext(ctx).Where("site_id = ? AND hour_ts = ?", siteID, hour).Delete(&SiteChannelInventoryHourly{}).Error; err != nil {
+		return err
+	}
 	return db.WithContext(ctx).Create(&hourly).Error
+}
+
+func siteChannelHourlyEqual(left, right []SiteChannelInventoryHourly) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		a, b := left[i], right[i]
+		if a.SiteID != b.SiteID || a.RemoteType != b.RemoteType || a.RemoteStatus != b.RemoteStatus || a.RemoteGroup != b.RemoteGroup ||
+			a.Tag != b.Tag || a.DimensionsAvailable != b.DimensionsAvailable || a.HourTS != b.HourTS || a.ChannelCount != b.ChannelCount ||
+			a.AvailableCount != b.AvailableCount || a.UnavailableCount != b.UnavailableCount || !channelDecimalEqual(a.BalanceTotal, b.BalanceTotal) ||
+			!channelDecimalEqual(a.ResponseTimeAvgMS, b.ResponseTimeAvgMS) || a.ResponseTimeMaxMS != b.ResponseTimeMaxMS || !channelDecimalEqual(a.AvailabilityRate, b.AvailabilityRate) ||
+			a.DataStatus != b.DataStatus || a.ConfigVersion != b.ConfigVersion {
+			return false
+		}
+	}
+	return true
+}
+
+func channelDecimalEqual(left, right string) bool {
+	a, ok := new(big.Rat).SetString(left)
+	if !ok {
+		return false
+	}
+	b, ok := new(big.Rat).SetString(right)
+	return ok && a.Cmp(b) == 0
 }
 
 func ratioDecimal(numerator, denominator int64, scale int) string {

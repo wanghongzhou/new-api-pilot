@@ -8,11 +8,14 @@ import (
 	"encoding/json"
 	"sort"
 	"strconv"
+	"sync"
 
 	"new-api-pilot/dto"
 )
 
 var upstreamSystemTaskTypes = []string{"log_cleanup", "log_detail_cleanup", "channel_test", "model_update", "midjourney_poll", "async_task_poll"}
+
+const systemTaskCurrentParallelism = 6
 
 func upstreamChildRequestID(parent, suffix string) string {
 	candidate := parent + "_" + suffix
@@ -270,22 +273,17 @@ func (client *NewAPIClient) SnapshotSystemTasks(ctx context.Context, requestID s
 		}
 		result.Items = append(result.Items, item)
 	}
-	for _, taskType := range upstreamSystemTaskTypes {
-		currentQuery := cloneURLValues(nil)
-		currentQuery.Set("type", taskType)
-		var current upstreamNullableSystemTaskResponse
-		if _, err := client.get(ctx, client.httpClient, "/api/system-task/current", currentQuery, upstreamChildRequestID(requestID, "current_"+taskType), upstreamAuthManagement, client.requestTimeout, &current, false); err != nil {
+	current := client.snapshotCurrentSystemTasks(ctx, requestID)
+	for index, taskType := range upstreamSystemTaskTypes {
+		observation := current[index]
+		if observation.failed {
 			result.CurrentFailures = append(result.CurrentFailures, taskType)
 			continue
 		}
-		if current.Task == nil {
+		if observation.item == nil {
 			continue
 		}
-		item, err := validateUpstreamSystemTask(*current.Task)
-		if err != nil || item.Type != taskType || item.Status != "pending" && item.Status != "running" {
-			result.CurrentFailures = append(result.CurrentFailures, taskType)
-			continue
-		}
+		item := *observation.item
 		if _, exists := seenTaskIDs[item.TaskID]; exists {
 			continue
 		}
@@ -298,6 +296,54 @@ func (client *NewAPIClient) SnapshotSystemTasks(ctx context.Context, requestID s
 	sort.Slice(result.Items, func(i, j int) bool { return result.Items[i].ID > result.Items[j].ID })
 	result.Partial = result.Truncated || result.IDGap || result.UnsupportedTypes > 0 || len(result.CurrentFailures) > 0
 	return result, nil
+}
+
+type currentSystemTaskObservation struct {
+	item   *dto.UpstreamSystemTask
+	failed bool
+}
+
+func (client *NewAPIClient) snapshotCurrentSystemTasks(ctx context.Context, requestID string) []currentSystemTaskObservation {
+	observations := make([]currentSystemTaskObservation, len(upstreamSystemTaskTypes))
+	jobs := make(chan int)
+	workers := systemTaskCurrentParallelism
+	if workers > len(observations) {
+		workers = len(observations)
+	}
+	var wait sync.WaitGroup
+	for worker := 0; worker < workers; worker++ {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			for index := range jobs {
+				taskType := upstreamSystemTaskTypes[index]
+				query := cloneURLValues(nil)
+				query.Set("type", taskType)
+				var current upstreamNullableSystemTaskResponse
+				if _, err := client.get(ctx, client.httpClient, "/api/system-task/current", query,
+					upstreamChildRequestID(requestID, "current_"+taskType), upstreamAuthManagement,
+					client.requestTimeout, &current, false); err != nil {
+					observations[index].failed = true
+					continue
+				}
+				if current.Task == nil {
+					continue
+				}
+				item, err := validateUpstreamSystemTask(*current.Task)
+				if err != nil || item.Type != taskType || item.Status != "pending" && item.Status != "running" {
+					observations[index].failed = true
+					continue
+				}
+				observations[index].item = &item
+			}
+		}()
+	}
+	for index := range observations {
+		jobs <- index
+	}
+	close(jobs)
+	wait.Wait()
+	return observations
 }
 
 func systemTaskInt64String(value *int64) *string {

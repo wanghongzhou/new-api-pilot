@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -108,6 +109,135 @@ func TestFinanceSnapshotsRejectLimitsAndDuplicateIDs(t *testing.T) {
 			t.Fatalf("duplicate error=%v", err)
 		}
 	})
+}
+
+func TestFinanceIncrementalSnapshotsStopAtKnownWatermarkAndReuseFirstPageForFallback(t *testing.T) {
+	t.Run("topups stop after overlap page", func(t *testing.T) {
+		var hits atomic.Int64
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hits.Add(1)
+			writeFinancePage(t, w, r, 150, true)
+		}))
+		defer server.Close()
+		client := testClientForServer(t, server, true, testClientSettings{})
+		snapshot, err := client.SnapshotTopupsIncremental(context.Background(), "topup-incremental", 150, 150, 50)
+		if err != nil || !snapshot.Incremental || len(snapshot.Items) != 150 || snapshot.Total != 150 || snapshot.MaxID != 150 || hits.Load() != 3 {
+			t.Fatalf("topup incremental=%#v hits=%d err=%v", snapshot, hits.Load(), err)
+		}
+	})
+	t.Run("redemptions stop after overlap page", func(t *testing.T) {
+		var hits atomic.Int64
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hits.Add(1)
+			writeFinancePage(t, w, r, 150, false)
+		}))
+		defer server.Close()
+		client := testClientForServer(t, server, true, testClientSettings{})
+		snapshot, err := client.SnapshotRedemptionsIncremental(context.Background(), "redemption-incremental", 150, 150, nil)
+		if err != nil || !snapshot.Incremental || len(snapshot.Items) != 100 || snapshot.Total != 150 || snapshot.MaxID != 150 || hits.Load() != 2 {
+			t.Fatalf("redemption incremental=%#v hits=%d err=%v", snapshot, hits.Load(), err)
+		}
+	})
+	t.Run("redemptions refresh enabled ids outside head", func(t *testing.T) {
+		var hits atomic.Int64
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hits.Add(1)
+			if r.URL.Path == "/api/redemption/25" {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"success":true,"message":"","data":{"id":25,"user_id":7,"status":3,"name":"changed","quota":10,"created_time":1,"redeemed_time":2,"used_user_id":7,"expired_time":0,"key":"must-not-enter-dto"}}`))
+				return
+			}
+			writeFinancePage(t, w, r, 150, false)
+		}))
+		defer server.Close()
+		client := testClientForServer(t, server, true, testClientSettings{})
+		snapshot, err := client.SnapshotRedemptionsIncremental(context.Background(), "redemption-enabled", 150, 150, []int64{25})
+		if err != nil || !snapshot.Incremental || len(snapshot.Items) != 101 || hits.Load() != 3 {
+			t.Fatalf("redemption enabled refresh=%#v hits=%d err=%v", snapshot, hits.Load(), err)
+		}
+		found := false
+		for _, item := range snapshot.Items {
+			if item.ID == 25 && item.Status == 3 && item.UsedUserID == 7 {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("refreshed redemption missing from snapshot: %#v", snapshot.Items)
+		}
+	})
+	t.Run("redemptions finish pagination when it is cheaper than enabled details", func(t *testing.T) {
+		var hits atomic.Int64
+		var detailHits atomic.Int64
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hits.Add(1)
+			if r.URL.Path != "/api/redemption/" && strings.HasPrefix(r.URL.Path, "/api/redemption/") {
+				detailHits.Add(1)
+				http.Error(w, "detail request must not be used", http.StatusInternalServerError)
+				return
+			}
+			writeFinancePage(t, w, r, 300, false)
+		}))
+		defer server.Close()
+		client := testClientForServer(t, server, true, testClientSettings{})
+		snapshot, err := client.SnapshotRedemptionsIncremental(context.Background(), "redemption-adaptive", 300, 300, []int64{3, 2, 1})
+		if err != nil || snapshot.Incremental || len(snapshot.Items) != 300 || snapshot.Total != 300 || hits.Load() != 4 || detailHits.Load() != 0 {
+			t.Fatalf("adaptive redemption=%#v hits=%d detail_hits=%d err=%v", snapshot, hits.Load(), detailHits.Load(), err)
+		}
+	})
+	t.Run("redemption detail failure falls back to a full snapshot", func(t *testing.T) {
+		var hits atomic.Int64
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hits.Add(1)
+			if r.URL.Path == "/api/redemption/25" {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"success":false,"message":"redemption not found"}`))
+				return
+			}
+			writeFinancePage(t, w, r, 150, false)
+		}))
+		defer server.Close()
+		client := testClientForServer(t, server, true, testClientSettings{})
+		snapshot, err := client.SnapshotRedemptionsIncremental(context.Background(), "redemption-missing", 150, 150, []int64{25})
+		if err != nil || snapshot.Incremental || len(snapshot.Items) != 150 || snapshot.Total != 150 || hits.Load() != 4 {
+			t.Fatalf("redemption full fallback=%#v hits=%d err=%v", snapshot, hits.Load(), err)
+		}
+	})
+	t.Run("redemption total decrease falls back without refetching first page", func(t *testing.T) {
+		var hits atomic.Int64
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hits.Add(1)
+			writeFinancePage(t, w, r, 150, false)
+		}))
+		defer server.Close()
+		client := testClientForServer(t, server, true, testClientSettings{})
+		snapshot, err := client.SnapshotRedemptionsIncremental(context.Background(), "redemption-fallback", 151, 151, nil)
+		if err != nil || snapshot.Incremental || len(snapshot.Items) != 150 || snapshot.Total != 150 || hits.Load() != 3 {
+			t.Fatalf("redemption fallback=%#v hits=%d err=%v", snapshot, hits.Load(), err)
+		}
+	})
+}
+
+func writeFinancePage(t *testing.T, w http.ResponseWriter, r *http.Request, total int, topup bool) {
+	t.Helper()
+	page, err := strconv.Atoi(r.URL.Query().Get("p"))
+	if err != nil || page < 1 {
+		t.Fatalf("invalid page query: %q", r.URL.RawQuery)
+	}
+	start := total - (page-1)*100
+	end := start - 99
+	if end < 1 {
+		end = 1
+	}
+	items := make([]string, 0, 100)
+	for id := start; id >= end && id > 0; id-- {
+		if topup {
+			items = append(items, fmt.Sprintf(`{"id":%d,"user_id":1,"amount":1,"money":1,"payment_method":"x","payment_provider":"x","create_time":1,"complete_time":0,"status":"success"}`, id))
+		} else {
+			items = append(items, fmt.Sprintf(`{"id":%d,"user_id":1,"status":1,"name":"batch","quota":1,"created_time":1,"redeemed_time":0,"used_user_id":0,"expired_time":0}`, id))
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = fmt.Fprintf(w, `{"success":true,"message":"","data":{"page":%d,"page_size":100,"total":%d,"items":[%s]}}`, page, total, strings.Join(items, ","))
 }
 
 func TestTopupMoneyUsesExactDecimal38Boundary(t *testing.T) {

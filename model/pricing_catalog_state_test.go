@@ -37,3 +37,45 @@ func TestPricingCollectionStateIsFencedByCurrentSiteConfig(t *testing.T) {
 		t.Fatalf("stale config pricing state leaked=%#v err=%v", rows, err)
 	}
 }
+
+func TestPricingCatalogUnchangedFactsAreNotRewritten(t *testing.T) {
+	database := openLockedSiteRunDatabase(t)
+	now := int64(2_101_500_500)
+	site := createRunnableSite(t, database, fmt.Sprintf("pricing-zero-write-%d", time.Now().UnixNano()), now)
+	repository := NewSiteRepository(database.GORM)
+	ratio := "1"
+	snapshot := dto.UpstreamPricingSnapshot{
+		PricingVersion: "v1",
+		Items: []dto.UpstreamPricingItem{{
+			ModelName: "gpt-test", VendorName: "openai", ModelRatio: "1", ModelPrice: "0",
+			CompletionRatio: "1", BillingMode: "token", PricingSource: "configured", AbilityAvailable: true,
+		}},
+		Groups: []dto.UpstreamPricingGroup{{Name: "default", Ratio: &ratio, TopupRatio: &ratio, UserSelectable: true}},
+	}
+	if written, err := repository.SyncPricingCatalog(context.Background(), site, now, snapshot); err != nil || written != 2 {
+		t.Fatalf("initial pricing sync written=%d err=%v", written, err)
+	}
+	var originalItem SitePricingCatalog
+	var originalGroup SitePricingGroup
+	if err := database.GORM.Where("site_id=? AND model_name=?", site.ID, "gpt-test").Take(&originalItem).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := database.GORM.Where("site_id=? AND group_name=?", site.ID, "default").Take(&originalGroup).Error; err != nil {
+		t.Fatal(err)
+	}
+	if written, err := repository.SyncPricingCatalog(context.Background(), site, now+1, snapshot); err != nil || written != 0 {
+		t.Fatalf("unchanged pricing sync written=%d err=%v", written, err)
+	}
+	var unchangedItem SitePricingCatalog
+	var unchangedGroup SitePricingGroup
+	if err := database.GORM.Where("site_id=? AND model_name=?", site.ID, "gpt-test").Take(&unchangedItem).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := database.GORM.Where("site_id=? AND group_name=?", site.ID, "default").Take(&unchangedGroup).Error; err != nil {
+		t.Fatal(err)
+	}
+	if unchangedItem.UpdatedAt != originalItem.UpdatedAt || unchangedItem.CollectedAt != originalItem.CollectedAt ||
+		unchangedGroup.UpdatedAt != originalGroup.UpdatedAt || unchangedGroup.CollectedAt != originalGroup.CollectedAt {
+		t.Fatalf("unchanged pricing facts were rewritten: item=%+v group=%+v", unchangedItem, unchangedGroup)
+	}
+}

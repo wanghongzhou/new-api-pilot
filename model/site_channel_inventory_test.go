@@ -3,9 +3,10 @@ package model
 import (
 	"context"
 	"fmt"
-	"gorm.io/gorm"
 	"testing"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 func TestSiteChannelInventorySnapshotDecimalMissingAndAtomicity(t *testing.T) {
@@ -52,5 +53,33 @@ func TestSiteChannelInventorySnapshotDecimalMissingAndAtomicity(t *testing.T) {
 	_ = database.GORM.Where("site_id=? AND remote_channel_id=2", site.ID).Take(&preserved).Error
 	if preserved.UpdatedAt != before {
 		t.Fatalf("failed snapshot partially committed: %+v", preserved)
+	}
+}
+
+func TestSiteChannelInventoryUnchangedSnapshotDoesNotRewriteHourlyFacts(t *testing.T) {
+	database := openLockedSiteRunDatabase(t)
+	now := int64(2_100_202_000)
+	hour := now - now%3600
+	site := createRunnableSite(t, database, fmt.Sprintf("channel-inventory-%d", time.Now().UnixNano()), now)
+	channels := []SiteChannel{{
+		SiteID: site.ID, RemoteChannelID: 7, Name: "stable", RemoteType: 1, RemoteStatus: 1,
+		Balance: "10.0000000000", Models: "gpt-test", RemoteGroup: "default", Priority: 1, Weight: 1,
+	}}
+	if err := applySiteChannelInventorySnapshot(context.Background(), database.GORM, site.ID, now, channels); err != nil {
+		t.Fatalf("initial channel snapshot: %v", err)
+	}
+	var original SiteChannelInventoryHourly
+	if err := database.GORM.Where("site_id=? AND hour_ts=?", site.ID, hour).Take(&original).Error; err != nil {
+		t.Fatalf("load initial hourly channel fact: %v", err)
+	}
+	if err := applySiteChannelInventorySnapshot(context.Background(), database.GORM, site.ID, now+60, channels); err != nil {
+		t.Fatalf("unchanged channel snapshot: %v", err)
+	}
+	var current SiteChannelInventoryHourly
+	if err := database.GORM.Where("site_id=? AND hour_ts=?", site.ID, hour).Take(&current).Error; err != nil {
+		t.Fatalf("load unchanged hourly channel fact: %v", err)
+	}
+	if current.ID != original.ID || current.CollectedAt != original.CollectedAt {
+		t.Fatalf("unchanged hourly channel fact was rewritten: before=%+v after=%+v", original, current)
 	}
 }

@@ -304,6 +304,22 @@ func (commit UsageAggregationCommit) ApplyCollectionTaskWindow(
 
 func (commit UsageAggregationCommit) Valid() bool { return commit.applyFn != nil }
 
+// NewUsageFactOnlyCommit applies a fact/window mutation without binding any
+// aggregation bucket locks or rebuild work. Transient upstream failures use
+// this path because they never change canonical usage facts.
+func NewUsageFactOnlyCommit(factMutation UsageFactMutation) (UsageAggregationCommit, error) {
+	if !factMutation.valid() {
+		return UsageAggregationCommit{}, ErrCollectionRunContract
+	}
+	return UsageAggregationCommit{applyFn: func(ctx context.Context, tx *gorm.DB, scope UsageWindowMutationScope) (UsageAggregationMutationResult, error) {
+		windowResult, err := factMutation.apply(ctx, tx, scope)
+		if err != nil {
+			return UsageAggregationMutationResult{}, err
+		}
+		return UsageAggregationMutationResult{Window: windowResult}, nil
+	}}, nil
+}
+
 func NewUsageAggregationCommit(
 	request UsageAggregationMutationRequest,
 	factMutation UsageFactMutation,

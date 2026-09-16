@@ -34,6 +34,33 @@ func TestAuthoritativeSchemaContractsLoadFlattenedInitialSchema(t *testing.T) {
 	if _, exists := contracts["collection_run"].Indexes["idx_collection_run_queue"]; !exists {
 		t.Error("collection_run contract lost its migration indexes")
 	}
+	collectionWindowColumns := make(map[string]ColumnContract)
+	for _, column := range contracts["collection_window"].Columns {
+		collectionWindowColumns[column.Name] = column
+	}
+	if _, exists := collectionWindowColumns["fact_rows"]; !exists {
+		t.Error("collection_window contract is missing the persisted fact row proof")
+	}
+	for _, table := range []string{"site_topup_collection_state", "site_redemption_collection_state"} {
+		columns := make(map[string]ColumnContract)
+		for _, column := range contracts[table].Columns {
+			columns[column.Name] = column
+		}
+		column, exists := columns["last_full_success_at"]
+		if !exists || column.IsNullable != "YES" || column.ColumnType != "bigint" {
+			t.Errorf("%s contract has invalid full calibration checkpoint: %#v", table, column)
+		}
+	}
+	for table, index := range map[string]string{
+		"site_topup_order": "idx_site_topup_order_site_status",
+		"site_redemption":  "idx_site_redemption_site_status",
+	} {
+		contract := contracts[table].Indexes[index]
+		want := []string{"site_id", "remote_status", "remote_state", "remote_id"}
+		if !reflect.DeepEqual(contract.Columns, want) || contract.Unique {
+			t.Errorf("%s.%s = %#v, want non-unique %#v", table, index, contract, want)
+		}
+	}
 	if _, exists := contracts["alert_delivery"].Indexes["idx_alert_delivery_claim"]; !exists {
 		t.Error("alert_delivery contract is missing the 0003 claim index")
 	}

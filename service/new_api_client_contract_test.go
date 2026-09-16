@@ -12,12 +12,15 @@ import (
 	"net/netip"
 	"net/url"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"new-api-pilot/common"
 	"new-api-pilot/dto"
 )
 
@@ -93,6 +96,58 @@ func TestSnapshotUsersRejectsInventoryOverLimitBeforeSecondPage(t *testing.T) {
 	}
 }
 
+func TestSnapshotUsersUsesStableIDOrderAndRejectsFenceDrift(t *testing.T) {
+	var hits atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		call := hits.Add(1)
+		if request.URL.Query().Get("sort_by") != "id" || request.URL.Query().Get("sort_order") != "desc" {
+			t.Fatalf("unstable user order query: %s", request.URL.RawQuery)
+		}
+		id := 9
+		if call == 2 {
+			id = 10
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(writer, `{"success":true,"message":"","data":{"page":1,"page_size":100,"total":1,"items":[{"id":%d,"username":"root","display_name":"Root","role":100,"status":1,"group":"default","quota":1,"used_quota":0,"request_count":0,"created_at":1,"last_login_at":0,"DeletedAt":null}]}}`, id)
+	}))
+	defer server.Close()
+	client := testClientForServer(t, server, true, testClientSettings{})
+	if _, err := client.SnapshotUsers(context.Background(), "user-fence-drift"); !errors.Is(err, ErrUpstreamResponseInvalid) {
+		t.Fatalf("user fence drift error = %v", err)
+	}
+}
+
+func TestUserAndChannelSnapshotsRejectNonDescendingIDs(t *testing.T) {
+	t.Run("users within page", func(t *testing.T) {
+		items := []dto.UpstreamUser{}
+		err := appendUniqueUsers(&items, map[int64]struct{}{}, []dto.UpstreamUser{{UpstreamIdentity: dto.UpstreamIdentity{ID: 9}}, {UpstreamIdentity: dto.UpstreamIdentity{ID: 10}}}, 2)
+		if !errors.Is(err, ErrUpstreamResponseInvalid) {
+			t.Fatalf("ascending users error=%v", err)
+		}
+	})
+	t.Run("users across pages", func(t *testing.T) {
+		items := []dto.UpstreamUser{{UpstreamIdentity: dto.UpstreamIdentity{ID: 9}}}
+		err := appendUniqueUsers(&items, map[int64]struct{}{9: {}}, []dto.UpstreamUser{{UpstreamIdentity: dto.UpstreamIdentity{ID: 10}}}, 2)
+		if !errors.Is(err, ErrUpstreamResponseInvalid) {
+			t.Fatalf("cross-page ascending users error=%v", err)
+		}
+	})
+	t.Run("channels within page", func(t *testing.T) {
+		items := []dto.UpstreamChannel{}
+		err := appendUniqueChannels(&items, map[int64]struct{}{}, []dto.UpstreamChannel{{ID: 9}, {ID: 10}}, 2)
+		if !errors.Is(err, ErrUpstreamResponseInvalid) {
+			t.Fatalf("ascending channels error=%v", err)
+		}
+	})
+	t.Run("channels across pages", func(t *testing.T) {
+		items := []dto.UpstreamChannel{{ID: 9}}
+		err := appendUniqueChannels(&items, map[int64]struct{}{9: {}}, []dto.UpstreamChannel{{ID: 10}}, 2)
+		if !errors.Is(err, ErrUpstreamResponseInvalid) {
+			t.Fatalf("cross-page ascending channels error=%v", err)
+		}
+	})
+}
+
 func TestSnapshotChannelsKeepsDecimalOperationsAndNeverExposesKey(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Query().Get("id_sort") != "true" {
@@ -105,6 +160,26 @@ func TestSnapshotChannelsKeepsDecimalOperationsAndNeverExposesKey(t *testing.T) 
 	snapshot, err := client.SnapshotChannels(context.Background(), "channel-contract")
 	if err != nil || len(snapshot.Items) != 1 || snapshot.Items[0].Balance != "9007199254740993.123456789" || snapshot.Items[0].UsedQuota != 9007199254740993 || snapshot.Items[0].ResponseTimeMS != 123 {
 		t.Fatalf("channel snapshot=%#v err=%v", snapshot, err)
+	}
+}
+
+func TestSnapshotChannelsRejectsFenceDrift(t *testing.T) {
+	var hits atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		call := hits.Add(1)
+		if request.URL.Query().Get("id_sort") != "true" {
+			t.Fatalf("channel id_sort=%q, want true", request.URL.Query().Get("id_sort"))
+		}
+		id := 9
+		if call == 2 {
+			id = 10
+		}
+		_, _ = fmt.Fprintf(writer, `{"success":true,"message":"","data":{"page":1,"page_size":100,"total":1,"items":[{"id":%d,"name":"primary","type":1,"status":1,"test_time":10,"response_time":123,"balance":1,"balance_updated_time":11,"models":"gpt","group":"default","used_quota":1,"priority":7,"weight":8,"auto_ban":1,"tag":"prod"}]}}`, id)
+	}))
+	defer server.Close()
+	client := testClientForServer(t, server, true, testClientSettings{})
+	if _, err := client.SnapshotChannels(context.Background(), "channel-fence-drift"); !errors.Is(err, ErrUpstreamResponseInvalid) {
+		t.Fatalf("channel fence drift error = %v", err)
 	}
 }
 
@@ -218,6 +293,7 @@ func TestPerformanceHistoryPreservesOfficialAverageSeriesWithoutInventingCounter
 
 func TestPerformanceHistoryIncrementalUsesShortWindowAndStableKnownModelOrder(t *testing.T) {
 	requested := make([]string, 0, 3)
+	var requestedMu sync.Mutex
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Query().Get("hours") != "2" {
 			t.Fatalf("performance hours=%q, want 2", request.URL.Query().Get("hours"))
@@ -227,7 +303,9 @@ func TestPerformanceHistoryIncrementalUsesShortWindowAndStableKnownModelOrder(t 
 			_, _ = writer.Write([]byte(`{"success":true,"data":{"models":[{"model_name":"model-a","avg_latency_ms":1,"success_rate":100,"avg_tps":1},{"model_name":"model-c","avg_latency_ms":1,"success_rate":100,"avg_tps":1},{"model_name":"model-b","avg_latency_ms":1,"success_rate":100,"avg_tps":1}]}}`))
 		case "/api/perf-metrics":
 			modelName := request.URL.Query().Get("model")
+			requestedMu.Lock()
 			requested = append(requested, modelName)
+			requestedMu.Unlock()
 			_, _ = fmt.Fprintf(writer, `{"success":true,"data":{"model_name":%q,"series_schema":"ts,avg_ttft_ms,avg_latency_ms,success_rate,avg_tps","groups":[]}}`, modelName)
 		default:
 			t.Fatalf("unexpected performance path %s", request.URL.Path)
@@ -239,8 +317,62 @@ func TestPerformanceHistoryIncrementalUsesShortWindowAndStableKnownModelOrder(t 
 	if err != nil {
 		t.Fatalf("incremental performance history: %v", err)
 	}
-	if len(history.Models) != 3 || !reflect.DeepEqual(requested, []string{"model-b", "model-a", "model-c"}) {
+	requestedMu.Lock()
+	sort.Strings(requested)
+	requestedMu.Unlock()
+	if len(history.Models) != 3 || history.Models[0].ModelName != "model-b" || history.Models[1].ModelName != "model-a" ||
+		history.Models[2].ModelName != "model-c" || !reflect.DeepEqual(requested, []string{"model-a", "model-b", "model-c"}) {
 		t.Fatalf("incremental models=%v history=%#v", requested, history)
+	}
+}
+
+func TestPerformanceHistoryUsesGovernorBoundedParallelismAndDeterministicOrder(t *testing.T) {
+	var inFlight atomic.Int64
+	var maximum atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/api/perf-metrics/summary":
+			_, _ = writer.Write([]byte(`{"success":true,"data":{"models":[{"model_name":"model-d","avg_latency_ms":1,"success_rate":100,"avg_tps":1},{"model_name":"model-b","avg_latency_ms":1,"success_rate":100,"avg_tps":1},{"model_name":"model-a","avg_latency_ms":1,"success_rate":100,"avg_tps":1},{"model_name":"model-c","avg_latency_ms":1,"success_rate":100,"avg_tps":1}]}}`))
+		case "/api/perf-metrics":
+			current := inFlight.Add(1)
+			defer inFlight.Add(-1)
+			for {
+				old := maximum.Load()
+				if current <= old || maximum.CompareAndSwap(old, current) {
+					break
+				}
+			}
+			time.Sleep(20 * time.Millisecond)
+			modelName := request.URL.Query().Get("model")
+			_, _ = fmt.Fprintf(writer, `{"success":true,"data":{"model_name":%q,"series_schema":"ts,avg_ttft_ms,avg_latency_ms,success_rate,avg_tps","groups":[]}}`, modelName)
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer server.Close()
+	client := testClientForServer(t, server, true, testClientSettings{})
+	governor, err := NewUpstreamGovernor(UpstreamGovernorOptions{
+		Requests: 100, Window: time.Second, MaxInFlight: 2, Clock: common.SystemClock{},
+	})
+	if err != nil {
+		t.Fatalf("create performance governor: %v", err)
+	}
+	client.governor = governor
+	history, err := client.PerformanceHistory(context.Background(), "performance-parallel", 2)
+	if err != nil {
+		t.Fatalf("parallel performance history: %v", err)
+	}
+	want := []string{"model-d", "model-b", "model-a", "model-c"}
+	if len(history.Models) != len(want) {
+		t.Fatalf("parallel performance history=%#v", history)
+	}
+	for index := range want {
+		if history.Models[index].ModelName != want[index] {
+			t.Fatalf("parallel performance order=%#v, want=%#v", history.Models, want)
+		}
+	}
+	if maximum.Load() != 2 {
+		t.Fatalf("performance governor maximum in-flight=%d, want 2", maximum.Load())
 	}
 }
 

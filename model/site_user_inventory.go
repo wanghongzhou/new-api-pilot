@@ -177,6 +177,14 @@ func applySiteUserInventorySnapshot(tx *gorm.DB, site Site, observedAt, hourTS i
 	if err != nil {
 		return 0, err
 	}
+	var existingHourly []SiteUserInventoryHourly
+	if err := tx.Where("site_id = ? AND hour_ts = ?", site.ID, hourTS).
+		Order("remote_role, remote_status, remote_group").Find(&existingHourly).Error; err != nil {
+		return 0, err
+	}
+	if siteUserHourlyEqual(existingHourly, hourly) {
+		return writes, nil
+	}
 	if err := tx.Where("site_id = ? AND hour_ts = ?", site.ID, hourTS).Delete(&SiteUserInventoryHourly{}).Error; err != nil {
 		return 0, err
 	}
@@ -186,6 +194,22 @@ func applySiteUserInventorySnapshot(tx *gorm.DB, site Site, observedAt, hourTS i
 		}
 	}
 	return writes + int64(len(hourly)), nil
+}
+
+func siteUserHourlyEqual(left, right []SiteUserInventoryHourly) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		a, b := left[i], right[i]
+		if a.SiteID != b.SiteID || a.RemoteRole != b.RemoteRole || a.RemoteStatus != b.RemoteStatus || a.RemoteGroup != b.RemoteGroup ||
+			a.HourTS != b.HourTS || a.UserCount != b.UserCount || a.NewUserCount != b.NewUserCount || a.ActiveUserCount != b.ActiveUserCount ||
+			a.Quota != b.Quota || a.UsedQuota != b.UsedQuota || a.RequestCount != b.RequestCount || a.DataStatus != b.DataStatus ||
+			a.ConfigVersion != b.ConfigVersion {
+			return false
+		}
+	}
+	return true
 }
 
 func validInventoryString(value string, limit int) bool {

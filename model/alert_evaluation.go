@@ -9,6 +9,8 @@ import (
 	"new-api-pilot/constant"
 )
 
+const alertValidationProofCandidateLimitPerSite = 72
+
 type AlertEvaluationSnapshot struct {
 	Sites             []AlertSiteEvaluationSnapshot
 	Instances         []AlertInstanceEvaluationSnapshot
@@ -109,6 +111,8 @@ type AlertCollectionEvaluationSnapshot struct {
 	Status            string `gorm:"column:status"`
 	LastErrorCode     string `gorm:"column:last_error_code"`
 	VerifiedAt        *int64 `gorm:"column:verified_at"`
+	FactRows          *int64 `gorm:"column:fact_rows"`
+	ActualFactRows    *int64 `gorm:"column:actual_fact_rows"`
 	UpdatedAt         int64  `gorm:"column:updated_at"`
 	SiteUpdatedAt     int64  `gorm:"column:site_updated_at"`
 }
@@ -293,25 +297,89 @@ ORDER BY a.id`).Scan(&rows).Error
 
 func (repository *AlertEvaluationRepository) listCollectionWindows(ctx context.Context) ([]AlertCollectionEvaluationSnapshot, error) {
 	var rows []AlertCollectionEvaluationSnapshot
-	err := repository.db.WithContext(ctx).Raw(`SELECT cw.id, cw.site_id, s.name AS site_name,
+	err := repository.db.WithContext(ctx).Raw(`WITH ranked_missing AS (
+  SELECT cw.id,
+         EXISTS (
+           SELECT 1 FROM alert_event e
+           WHERE e.active_key IS NOT NULL AND e.site_id = cw.site_id
+             AND e.target_type = 'collection'
+             AND e.target_key = CONCAT(CAST(cw.site_id AS CHAR), '/', CAST(cw.hour_ts AS CHAR))
+             AND e.rule_key IN ('collection_missing', 'validation_failed')
+         ) AS alert_active,
+         ROW_NUMBER() OVER (
+           PARTITION BY cw.site_id
+           ORDER BY CASE
+             WHEN EXISTS (
+               SELECT 1 FROM alert_event e
+               WHERE e.active_key IS NOT NULL AND e.site_id = cw.site_id
+                 AND e.target_type = 'collection'
+                 AND e.target_key = CONCAT(CAST(cw.site_id AS CHAR), '/', CAST(cw.hour_ts AS CHAR))
+                 AND e.rule_key IN ('collection_missing', 'validation_failed')
+             ) THEN 0
+             WHEN cw.last_error_code = ? THEN 1
+             ELSE 2
+           END ASC, cw.hour_ts DESC
+         ) AS row_rank
+  FROM collection_window cw
+  WHERE cw.status = 'missing'
+), bounded_missing AS (
+  SELECT id FROM ranked_missing
+  WHERE alert_active = 1 OR row_rank <= ?
+), ranked_complete AS (
+  SELECT cw.id,
+         EXISTS (
+           SELECT 1 FROM alert_event e
+           WHERE e.active_key IS NOT NULL AND e.site_id = cw.site_id
+             AND e.target_type = 'collection'
+             AND e.target_key = CONCAT(CAST(cw.site_id AS CHAR), '/', CAST(cw.hour_ts AS CHAR))
+             AND e.rule_key IN ('collection_missing', 'validation_failed')
+         ) AS alert_active,
+         ROW_NUMBER() OVER (
+           PARTITION BY cw.site_id
+           ORDER BY CASE
+             WHEN EXISTS (
+               SELECT 1 FROM alert_event e
+               WHERE e.active_key IS NOT NULL AND e.site_id = cw.site_id
+                 AND e.target_type = 'collection'
+                 AND e.target_key = CONCAT(CAST(cw.site_id AS CHAR), '/', CAST(cw.hour_ts AS CHAR))
+                 AND e.rule_key IN ('collection_missing', 'validation_failed')
+             ) THEN 0
+             WHEN cw.last_error_code = ? THEN 1
+             WHEN cw.verified_at IS NULL OR cw.verified_at < cw.hour_ts - MOD(cw.hour_ts + 28800, 86400) + 86400 THEN 2
+             ELSE 3
+           END ASC, cw.hour_ts DESC
+         ) AS row_rank
+  FROM collection_window cw
+  WHERE (cw.status = 'complete' OR (cw.status = 'missing' AND cw.last_error_code = ?))
+    AND (UNIX_TIMESTAMP() >= cw.hour_ts - MOD(cw.hour_ts + 28800, 86400) + 93600
+         OR EXISTS (
+           SELECT 1 FROM alert_event e
+           WHERE e.active_key IS NOT NULL AND e.site_id = cw.site_id
+             AND e.target_type = 'collection'
+             AND e.target_key = CONCAT(CAST(cw.site_id AS CHAR), '/', CAST(cw.hour_ts AS CHAR))
+             AND e.rule_key IN ('collection_missing', 'validation_failed')
+         ))
+), bounded_complete AS (
+  SELECT id FROM ranked_complete
+  WHERE alert_active = 1 OR row_rank <= ?
+)
+SELECT cw.id, cw.site_id, s.name AS site_name,
 s.management_status, s.auth_status, s.data_export_enabled, s.updated_at AS site_updated_at,
 s.statistics_start_at, s.statistics_end_at,
-cw.hour_ts, cw.status, cw.last_error_code, cw.verified_at, cw.updated_at
+cw.hour_ts, cw.status, cw.last_error_code, cw.verified_at, cw.fact_rows,
+CASE WHEN bounded.id IS NULL THEN NULL ELSE (
+  SELECT COUNT(*) FROM usage_fact_hourly fact
+  WHERE fact.site_id = cw.site_id AND fact.hour_ts = cw.hour_ts
+) END AS actual_fact_rows,
+cw.updated_at
 FROM collection_window cw
 JOIN site s ON s.id = cw.site_id
-WHERE cw.status = 'missing'
-   OR cw.last_error_code = ?
-   OR (cw.status = 'complete'
-       AND (cw.verified_at IS NULL OR cw.verified_at < cw.hour_ts - MOD(cw.hour_ts + 28800, 86400) + 86400)
-       AND UNIX_TIMESTAMP() >= cw.hour_ts - MOD(cw.hour_ts + 28800, 86400) + 93600)
-   OR EXISTS (
-      SELECT 1 FROM alert_event e
-      WHERE e.active_key IS NOT NULL AND e.site_id = cw.site_id
-        AND e.target_type = 'collection'
-        AND e.target_key = CONCAT(CAST(cw.site_id AS CHAR), '/', CAST(cw.hour_ts AS CHAR))
-        AND e.rule_key IN ('collection_missing', 'validation_failed')
-   )
-ORDER BY cw.site_id, cw.hour_ts`, string(constant.MessageDataValidationMismatch)).Scan(&rows).Error
+LEFT JOIN bounded_complete bounded ON bounded.id = cw.id
+LEFT JOIN bounded_missing missing ON missing.id = cw.id
+WHERE missing.id IS NOT NULL OR bounded.id IS NOT NULL
+ORDER BY cw.site_id, cw.hour_ts`, string(constant.MessageDataValidationMismatch),
+		alertValidationProofCandidateLimitPerSite, string(constant.MessageDataValidationMismatch),
+		string(constant.MessageDataValidationMismatch), alertValidationProofCandidateLimitPerSite).Scan(&rows).Error
 	if err != nil {
 		return nil, fmt.Errorf("load alert collection snapshots: %w", err)
 	}

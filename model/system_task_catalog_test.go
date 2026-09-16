@@ -23,9 +23,17 @@ func TestSystemTaskSyncPartialIdempotencyAndTerminalRetention(t *testing.T) {
 	if err != nil || written != 2 {
 		t.Fatalf("written=%d err=%v", written, err)
 	}
+	var original SiteSystemTask
+	if err := db.GORM.Where("site_id=? AND remote_id=1", site.ID).Take(&original).Error; err != nil {
+		t.Fatal(err)
+	}
 	written, err = repo.SyncSystemTasks(context.Background(), site, now+1, snapshot)
 	if err != nil || written != 0 {
 		t.Fatalf("idempotent written=%d err=%v", written, err)
+	}
+	var unchanged SiteSystemTask
+	if err := db.GORM.Where("site_id=? AND remote_id=1", site.ID).Take(&unchanged).Error; err != nil || unchanged.UpdatedAt != original.UpdatedAt || unchanged.CollectedAt != original.CollectedAt {
+		t.Fatalf("unchanged system task was rewritten: before=%+v after=%+v err=%v", original, unchanged, err)
 	}
 	var state SiteSystemTaskCollectionState
 	if err = db.GORM.Where("site_id=? AND resource_kind='list'", site.ID).Take(&state).Error; err != nil || state.DataStatus != "partial" || !state.Truncated {

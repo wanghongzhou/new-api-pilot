@@ -2,6 +2,10 @@ package service
 
 import "new-api-pilot/model"
 
+func bindUsageFactOnlyCommit(factMutation model.UsageFactMutation) (model.UsageAggregationCommit, error) {
+	return model.NewUsageFactOnlyCommit(factMutation)
+}
+
 func bindUsageAggregationCommit(
 	request UsageCollectionRequest,
 	now int64,

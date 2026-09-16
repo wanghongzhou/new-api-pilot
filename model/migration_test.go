@@ -116,6 +116,72 @@ func TestMySQLMigrationAndSeeds(t *testing.T) {
 	assertExactDefaultSeeds(t, ctx, database.SQL)
 }
 
+func TestMySQLMismatchEvidenceForwardRepair(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_DSN") == "" || os.Getenv("TEST_DATABASE_ADMIN_DSN") == "" {
+		t.Skip("isolated migration database DSNs are not configured")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	database := openIsolatedMigrationSourceDatabase(t)
+	prefix := NewMigrationRunner(database.SQL)
+	prefix.FS = migrationRepositoryPrefixFS(t, 5)
+	if err := prefix.Run(ctx); err != nil {
+		t.Fatalf("apply pre-repair migrations: %v", err)
+	}
+	const now int64 = 1_789_536_000
+	result, err := database.SQL.ExecContext(ctx, `INSERT INTO site
+  (name,base_url,created_at,updated_at)
+VALUES ('Mismatch Repair Site','https://mismatch-repair.example',?,?)`, now, now)
+	if err != nil {
+		t.Fatalf("insert repair site: %v", err)
+	}
+	siteID, err := result.LastInsertId()
+	if err != nil {
+		t.Fatalf("repair site id: %v", err)
+	}
+	if _, err := database.SQL.ExecContext(ctx, `INSERT INTO collection_window
+  (site_id,hour_ts,status,attribution_status,fetched_rows,fact_rows,source_hash,verified_at,last_error_code,updated_at)
+VALUES
+  (?,?,'missing','attributed',2,2,REPEAT('a',64),?,'',?),
+  (?,?,'missing','attributed',0,0,REPEAT('b',64),?,'',?)`,
+		siteID, now-7200, now-1, now-1,
+		siteID, now-3600, now-1, now-1,
+	); err != nil {
+		t.Fatalf("insert pre-repair windows: %v", err)
+	}
+	if err := NewMigrationRunner(database.SQL).Run(ctx); err != nil {
+		t.Fatalf("apply mismatch evidence repair: %v", err)
+	}
+	type repairedWindow struct {
+		HourTS        int64
+		LastErrorCode string
+		VerifiedAt    sql.NullInt64
+	}
+	rows, err := database.SQL.QueryContext(ctx, `SELECT hour_ts,last_error_code,verified_at
+FROM collection_window WHERE site_id=? ORDER BY hour_ts`, siteID)
+	if err != nil {
+		t.Fatalf("read repaired windows: %v", err)
+	}
+	defer rows.Close()
+	windows := make([]repairedWindow, 0, 2)
+	for rows.Next() {
+		var window repairedWindow
+		if err := rows.Scan(&window.HourTS, &window.LastErrorCode, &window.VerifiedAt); err != nil {
+			t.Fatalf("scan repaired window: %v", err)
+		}
+		windows = append(windows, window)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate repaired windows: %v", err)
+	}
+	if len(windows) != 2 || windows[0].LastErrorCode != "DATA_VALIDATION_MISMATCH" || windows[0].VerifiedAt.Valid {
+		t.Fatalf("mismatch repair result = %#v", windows)
+	}
+	if windows[1].LastErrorCode != "" || !windows[1].VerifiedAt.Valid || windows[1].VerifiedAt.Int64 != now-1 {
+		t.Fatalf("unrelated missing window changed = %#v", windows[1])
+	}
+}
+
 func TestMySQLMigrationRecoversDDLAndDMLCommitGaps(t *testing.T) {
 	dsn := os.Getenv("TEST_DATABASE_DSN")
 	if dsn == "" {
@@ -527,8 +593,8 @@ func TestMySQLMigrationSourceGate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load repository migrations: %v", err)
 	}
-	if len(repository) != 2 {
-		t.Fatalf("repository migration count = %d, want 2", len(repository))
+	if len(repository) != 6 {
+		t.Fatalf("repository migration count = %d, want 6", len(repository))
 	}
 
 	t.Run("current and idempotent rerun", func(t *testing.T) {

@@ -18,7 +18,7 @@ func TestFakeUpstreamServesSupportedScenario(t *testing.T) {
 		t.Fatalf("status code = %d, want 200", response.StatusCode)
 	}
 
-	request, err := http.NewRequest(http.MethodGet, upstream.URL()+"/api/user/?p=1&page_size=100", nil)
+	request, err := http.NewRequest(http.MethodGet, upstream.URL()+"/api/user/?p=1&page_size=100&sort_by=id&sort_order=desc", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

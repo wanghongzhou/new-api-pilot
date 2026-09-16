@@ -1133,36 +1133,46 @@ func (factory *testSiteClientFactory) NewAuthenticated(string, string, string, i
 }
 
 type testSiteClient struct {
-	status             dto.UpstreamStatus
-	statusErr          error
-	self               dto.UpstreamIdentity
-	selfErr            error
-	root               dto.UpstreamUser
-	snapshot           dto.UpstreamUserSnapshot
-	channels           dto.UpstreamChannelSnapshot
-	channelsErr        error
-	instances          []dto.UpstreamInstance
-	instancesErr       error
-	realtime           dto.UpstreamLogStat
-	realtimeErr        error
-	performance        dto.UpstreamPerformanceHistory
-	performanceErr     error
-	performanceHours   []int
-	performanceModels  [][]string
-	topups             dto.UpstreamTopupSnapshot
-	topupsErr          error
-	redemptions        dto.UpstreamRedemptionSnapshot
-	redemptionsErr     error
-	upstreamTasks      dto.UpstreamTaskSnapshot
-	upstreamTasksErr   error
-	upstreamTaskStarts []int64
-	upstreamTaskEnds   []int64
-	snapshotErr        error
-	flowErr            error
-	dataErr            error
-	flowHours          []int64
-	dataHours          []int64
-	loginToken         string
+	status                     dto.UpstreamStatus
+	statusErr                  error
+	self                       dto.UpstreamIdentity
+	selfErr                    error
+	root                       dto.UpstreamUser
+	snapshot                   dto.UpstreamUserSnapshot
+	channels                   dto.UpstreamChannelSnapshot
+	channelsErr                error
+	instances                  []dto.UpstreamInstance
+	instancesErr               error
+	realtime                   dto.UpstreamLogStat
+	realtimeErr                error
+	performance                dto.UpstreamPerformanceHistory
+	performanceErr             error
+	performanceHours           []int
+	performanceModels          [][]string
+	topups                     dto.UpstreamTopupSnapshot
+	topupsErr                  error
+	topupFullCalls             int
+	topupIncrementalCalls      int
+	topupIncrementalMaxID      int64
+	topupIncrementalTotal      int64
+	topupIncrementalOldestID   int64
+	redemptions                dto.UpstreamRedemptionSnapshot
+	redemptionsErr             error
+	redemptionFullCalls        int
+	redemptionIncrementalCalls int
+	redemptionIncrementalMaxID int64
+	redemptionIncrementalTotal int64
+	redemptionIncrementalIDs   []int64
+	upstreamTasks              dto.UpstreamTaskSnapshot
+	upstreamTasksErr           error
+	upstreamTaskStarts         []int64
+	upstreamTaskEnds           []int64
+	snapshotErr                error
+	flowErr                    error
+	dataErr                    error
+	flowHours                  []int64
+	dataHours                  []int64
+	loginToken                 string
 }
 
 type sitePostCommitRecorder struct {
@@ -1242,10 +1252,30 @@ func (client *testSiteClient) PerformanceHistoryIncremental(_ context.Context, _
 	return client.performance, client.performanceErr
 }
 func (client *testSiteClient) SnapshotTopups(context.Context, string) (dto.UpstreamTopupSnapshot, error) {
+	client.topupFullCalls++
 	return client.topups, client.topupsErr
 }
+func (client *testSiteClient) SnapshotTopupsIncremental(_ context.Context, _ string, maxID, total, oldestPendingID int64) (dto.UpstreamTopupSnapshot, error) {
+	client.topupIncrementalCalls++
+	client.topupIncrementalMaxID = maxID
+	client.topupIncrementalTotal = total
+	client.topupIncrementalOldestID = oldestPendingID
+	snapshot := client.topups
+	snapshot.Incremental = true
+	return snapshot, client.topupsErr
+}
 func (client *testSiteClient) SnapshotRedemptions(context.Context, string) (dto.UpstreamRedemptionSnapshot, error) {
+	client.redemptionFullCalls++
 	return client.redemptions, client.redemptionsErr
+}
+func (client *testSiteClient) SnapshotRedemptionsIncremental(_ context.Context, _ string, maxID, total int64, enabledIDs []int64) (dto.UpstreamRedemptionSnapshot, error) {
+	client.redemptionIncrementalCalls++
+	client.redemptionIncrementalMaxID = maxID
+	client.redemptionIncrementalTotal = total
+	client.redemptionIncrementalIDs = append([]int64(nil), enabledIDs...)
+	snapshot := client.redemptions
+	snapshot.Incremental = true
+	return snapshot, client.redemptionsErr
 }
 func (client *testSiteClient) SnapshotUpstreamTasks(_ context.Context, _ string, start, end int64, _ []string) (dto.UpstreamTaskSnapshot, error) {
 	client.upstreamTaskStarts = append(client.upstreamTaskStarts, start)

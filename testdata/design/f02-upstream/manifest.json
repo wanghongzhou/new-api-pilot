@@ -39,7 +39,8 @@
           "id": "users-page-1",
           "method": "GET",
           "path": "/api/user/",
-          "query": {"p": "1", "page_size": "100"},
+          "query": {"p": "1", "page_size": "100", "sort_by": "id", "sort_order": "desc"},
+          "expected_hits": 2,
           "response_file": "responses/users-page-1.json",
           "expected_headers": {
             "Authorization": "fixture-root-token",
@@ -51,7 +52,7 @@
           "id": "users-page-2",
           "method": "GET",
           "path": "/api/user/",
-          "query": {"p": "2", "page_size": "100"},
+          "query": {"p": "2", "page_size": "100", "sort_by": "id", "sort_order": "desc"},
           "response_file": "responses/users-page-2.json",
           "expected_headers": {
             "Authorization": "fixture-root-token",
@@ -64,6 +65,7 @@
           "method": "GET",
           "path": "/api/channel/",
           "query": {"p": "1", "page_size": "100", "id_sort": "true"},
+          "expected_hits": 2,
           "response_file": "responses/channels-page-1.json",
           "expected_headers": {
             "Authorization": "fixture-root-token",
@@ -183,14 +185,14 @@
           "id": "users-page-1",
           "method": "GET",
           "path": "/api/user/",
-          "query": {"p": "1", "page_size": "100"},
+          "query": {"p": "1", "page_size": "100", "sort_by": "id", "sort_order": "desc"},
           "response_file": "responses/users-page-1.json"
         },
         {
           "id": "users-page-2-total-drift",
           "method": "GET",
           "path": "/api/user/",
-          "query": {"p": "2", "page_size": "100"},
+          "query": {"p": "2", "page_size": "100", "sort_by": "id", "sort_order": "desc"},
           "response_file": "responses/users-page-2-total-drift.json"
         }
       ]

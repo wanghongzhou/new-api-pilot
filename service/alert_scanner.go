@@ -619,6 +619,12 @@ func validationFailedEvaluation(target validationEvaluationTarget, now int64, re
 		evaluation.Source = "data_mismatch"
 		return knownAlertEvaluation(evaluation, "1"), nil
 	}
+	if target.collection != nil && target.collection.Status == model.CollectionWindowStatusComplete &&
+		target.collection.FactRows != nil && target.collection.ActualFactRows != nil &&
+		*target.collection.FactRows != *target.collection.ActualFactRows {
+		evaluation.Source = "fact_proof_mismatch"
+		return knownAlertEvaluation(evaluation, "1"), nil
+	}
 	if target.collection != nil && target.collection.Status == model.CollectionWindowStatusComplete {
 		dateEnd := validationDayEnd(target.collection.HourTS)
 		if now >= dateEnd+2*3600 &&
@@ -646,6 +652,11 @@ func validationFailedEvaluation(target validationEvaluationTarget, now int64, re
 			*target.validation.FactStatus == model.CollectionWindowStatusComplete {
 			return knownAlertEvaluation(evaluation, "0"), nil
 		}
+		// A retry that has not reached a terminal success is not recovery
+		// evidence. Keep any active failure event unchanged until either the
+		// validation succeeds or the fact watermark proves a later repair.
+		evaluation.State = AlertSampleUnknown
+		return evaluation, nil
 	}
 	if target.collection != nil && target.collection.Status == model.CollectionWindowStatusComplete {
 		return knownAlertEvaluation(evaluation, "0"), nil

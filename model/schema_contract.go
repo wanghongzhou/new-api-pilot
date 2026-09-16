@@ -82,7 +82,44 @@ func AuthoritativeSchemaContracts() (map[string]TableContract, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parseCreateTableContracts(append(statements, additional...))
+	contracts, err := parseCreateTableContracts(append(statements, additional...))
+	if err != nil {
+		return nil, err
+	}
+	window := contracts["collection_window"]
+	columns := make([]ColumnContract, 0, len(window.Columns)+1)
+	for _, column := range window.Columns {
+		columns = append(columns, column)
+		if column.Name == "fetched_rows" {
+			columns = append(columns, ColumnContract{
+				Name: "fact_rows", ColumnType: "bigint", IsNullable: "NO",
+				Default: sql.NullString{String: "0", Valid: true},
+			})
+		}
+	}
+	window.Columns = columns
+	contracts["collection_window"] = window
+	for _, table := range []string{"site_topup_collection_state", "site_redemption_collection_state"} {
+		contract := contracts[table]
+		columns := make([]ColumnContract, 0, len(contract.Columns)+1)
+		for _, column := range contract.Columns {
+			columns = append(columns, column)
+			if column.Name == "last_success_at" {
+				columns = append(columns, ColumnContract{Name: "last_full_success_at", ColumnType: "bigint", IsNullable: "YES"})
+			}
+		}
+		contract.Columns = columns
+		contracts[table] = contract
+	}
+	for table, index := range map[string]string{
+		"site_topup_order": "idx_site_topup_order_site_status",
+		"site_redemption":  "idx_site_redemption_site_status",
+	} {
+		contract := contracts[table]
+		contract.Indexes[index] = IndexContract{Columns: []string{"site_id", "remote_status", "remote_state", "remote_id"}}
+		contracts[table] = contract
+	}
+	return contracts, nil
 }
 
 func VerifyAuthoritativeSchema(

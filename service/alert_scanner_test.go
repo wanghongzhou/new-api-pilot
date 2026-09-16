@@ -292,6 +292,27 @@ func TestValidationEvaluationDistinguishesExecutionFailureAndRecovery(t *testing
 		t.Fatalf("build unrecovered validation failure: %v", err)
 	}
 	assertScannerValue(t, stillFailed, AlertSampleKnown, "1")
+
+	retrying, err := validationFailedEvaluation(validationEvaluationTarget{
+		collection: &model.AlertCollectionEvaluationSnapshot{
+			ID: 7, SiteID: siteID, SiteName: "站点", ManagementStatus: constant.SiteManagementActive,
+			AuthStatus: constant.SiteAuthAuthorized, DataExportEnabled: true, HourTS: hour,
+			Status: model.CollectionWindowStatusComplete, VerifiedAt: &verifiedBeforeFailure,
+			UpdatedAt: hour + 3500,
+		},
+		validation: &model.AlertValidationEvaluationSnapshot{
+			RunWindowID: 8, SiteID: siteID, SiteName: "站点", ManagementStatus: constant.SiteManagementActive,
+			AuthStatus: constant.SiteAuthAuthorized, DataExportEnabled: true, HourTS: hour,
+			Status: model.CollectionTaskStatusRunning, FactStatus: &factComplete,
+			FactVerifiedAt: &verifiedBeforeFailure, UpdatedAt: hour + 3700,
+		},
+	}, hour+7200, "als_validation_retrying")
+	if err != nil {
+		t.Fatalf("build retrying validation evaluation: %v", err)
+	}
+	if retrying.State != AlertSampleUnknown || retrying.CurrentValue != nil {
+		t.Fatalf("retrying validation prematurely resolved = %#v", retrying)
+	}
 }
 
 func TestValidationEvaluationAlertsOnPendingVerificationAndResolves(t *testing.T) {
@@ -326,6 +347,23 @@ func TestValidationEvaluationAlertsOnPendingVerificationAndResolves(t *testing.T
 		t.Fatalf("build resolved validation evaluation: %v", err)
 	}
 	assertScannerValue(t, resolved, AlertSampleKnown, "0")
+
+	expectedFacts, actualFacts := int64(3), int64(0)
+	brokenProof, err := validationFailedEvaluation(validationEvaluationTarget{
+		collection: &model.AlertCollectionEvaluationSnapshot{
+			ID: 1, SiteID: 2, SiteName: "事实缺失站点", ManagementStatus: constant.SiteManagementActive,
+			AuthStatus: constant.SiteAuthAuthorized, DataExportEnabled: true,
+			HourTS: hour, Status: complete, VerifiedAt: &verifiedAt,
+			FactRows: &expectedFacts, ActualFactRows: &actualFacts, UpdatedAt: now,
+		},
+	}, now, "als_fact_proof_mismatch")
+	if err != nil {
+		t.Fatalf("build fact proof mismatch evaluation: %v", err)
+	}
+	assertScannerValue(t, brokenProof, AlertSampleKnown, "1")
+	if brokenProof.Source != "fact_proof_mismatch" {
+		t.Fatalf("fact proof mismatch source = %q", brokenProof.Source)
+	}
 }
 
 func TestFenceTerminatedRunsResolveFailureAlertsWithoutRefiring(t *testing.T) {

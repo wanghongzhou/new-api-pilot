@@ -21,6 +21,16 @@ func TestFinanceInventoryPageTotalIsJSONString(t *testing.T) {
 	}
 }
 
+func TestFinanceCoverageRequiresFullSuccessProof(t *testing.T) {
+	now := int64(2100914000)
+	if status := financeCoverageStatus(model.FinanceCollectionCoverageRow{LastSuccessAt: &now, AsOf: nil}); status != "partial" {
+		t.Fatalf("incremental-only coverage status=%q", status)
+	}
+	if status := financeCoverageStatus(model.FinanceCollectionCoverageRow{LastSuccessAt: &now, LastFullSuccessAt: &now, AsOf: &now}); status != "complete" {
+		t.Fatalf("full coverage status=%q", status)
+	}
+}
+
 func TestFinanceInventoryCompletenessCoversTheEntireFilteredResult(t *testing.T) {
 	database := openUpstreamLogExportDatabase(t)
 	now := int64(2100915000)
@@ -63,10 +73,10 @@ func TestFinanceInventoryCompletenessCoversTheEntireFilteredResult(t *testing.T)
 		t.Fatal(err)
 	}
 	successAt := now + 10
-	if err := database.GORM.Create(&model.SiteTopupCollectionState{SiteID: site.ID, LastSuccessAt: &successAt, ConfigVersion: site.ConfigVersion, UpdatedAt: successAt}).Error; err != nil {
+	if err := database.GORM.Create(&model.SiteTopupCollectionState{SiteID: site.ID, LastSuccessAt: &successAt, LastFullSuccessAt: &successAt, ConfigVersion: site.ConfigVersion, UpdatedAt: successAt}).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := database.GORM.Create(&model.SiteRedemptionCollectionState{SiteID: site.ID, LastSuccessAt: &successAt, ConfigVersion: site.ConfigVersion, UpdatedAt: successAt}).Error; err != nil {
+	if err := database.GORM.Create(&model.SiteRedemptionCollectionState{SiteID: site.ID, LastSuccessAt: &successAt, LastFullSuccessAt: &successAt, ConfigVersion: site.ConfigVersion, UpdatedAt: successAt}).Error; err != nil {
 		t.Fatal(err)
 	}
 	svc, err := NewFinanceOperationsService(database.GORM, testsupport.NewFakeClock(time.Unix(now+20, 0)))
@@ -94,7 +104,7 @@ func TestFinanceInventoryUsesCurrentConfigAndCompleteEmptySnapshots(t *testing.T
 	if err := database.GORM.Create(&model.SiteTopupOrder{SiteID: site.ID, RemoteID: 1, RemoteUserID: 1, Amount: 1, Money: "1", RemoteStatus: "success", RemoteState: "normal", ConfigVersion: 1, FirstSeenAt: now, CollectedAt: now, CreatedAt: now, UpdatedAt: now}).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := database.GORM.Create(&model.SiteTopupCollectionState{SiteID: site.ID, LastSuccessAt: &now, ConfigVersion: site.ConfigVersion, UpdatedAt: now}).Error; err != nil {
+	if err := database.GORM.Create(&model.SiteTopupCollectionState{SiteID: site.ID, LastSuccessAt: &now, LastFullSuccessAt: &now, ConfigVersion: site.ConfigVersion, UpdatedAt: now}).Error; err != nil {
 		t.Fatal(err)
 	}
 	svc, err := NewFinanceOperationsService(database.GORM, testsupport.NewFakeClock(time.Unix(now, 0)))

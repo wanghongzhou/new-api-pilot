@@ -82,6 +82,11 @@ func writeHashField(digest hash.Hash, value string) {
 
 func verifyAggregationScalarInvariants(ctx context.Context, queryer queryContext) error {
 	queries := []string{
+		`SELECT COUNT(*) FROM collection_window w
+WHERE w.status = 'complete' AND w.fact_rows <> (
+  SELECT COUNT(*) FROM usage_fact_hourly f
+  WHERE f.site_id = w.site_id AND f.hour_ts = w.hour_ts
+)`,
 		`SELECT COUNT(*) FROM usage_fact_hourly f
 LEFT JOIN collection_window w ON w.site_id = f.site_id AND w.hour_ts = f.hour_ts
 LEFT JOIN site s ON s.id = f.site_id

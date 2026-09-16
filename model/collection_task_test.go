@@ -13,6 +13,140 @@ import (
 	"new-api-pilot/constant"
 )
 
+func TestListPendingValidationHoursBoundsCandidatesBeforeFactCount(t *testing.T) {
+	database := openLockedSiteRunDatabase(t)
+	ctx := context.Background()
+	now := int64(1_752_900_000)
+	site := createRunnableSite(t, database, "run-pending-validation-bounded", now)
+	baseHour := now - now%3600 - 10*24*3600
+
+	hours := []int64{
+		baseHour,
+		baseHour + 3600,
+		baseHour + 2*3600,
+		baseHour + 3*3600,
+		baseHour + 4*3600,
+	}
+	for index, hour := range hours {
+		_, _, dateEnd, err := UsageDateBucket(hour)
+		if err != nil {
+			t.Fatalf("usage date bucket %d: %v", hour, err)
+		}
+		verifiedAt := dateEnd + 1
+		window := CollectionWindow{
+			SiteID: site.ID, HourTS: hour, Status: "complete",
+			AttributionStatus: UsageAttributionAttributed, FactRows: 1,
+			SourceHash: fmt.Sprintf("bounded-%d", index), VerifiedAt: &verifiedAt, UpdatedAt: now,
+		}
+		if index == 0 || index == 4 {
+			window.VerifiedAt = nil
+		}
+		if err := database.GORM.Create(&window).Error; err != nil {
+			t.Fatalf("create validation window %d: %v", hour, err)
+		}
+	}
+
+	// The newest verified candidate is inside the per-site bound and has a
+	// persisted fact-count mismatch. The next two verified candidates are also
+	// mismatched, but must not be inspected or returned after the two pending
+	// verification windows have consumed the first two candidate slots.
+	got, err := NewCollectionTaskRepository(database.GORM).ListPendingValidationHours(
+		ctx, []int64{site.ID}, now, 3,
+	)
+	if err != nil {
+		t.Fatalf("list pending validation hours: %v", err)
+	}
+	want := []PendingValidationHour{
+		{SiteID: site.ID, HourTS: hours[0]},
+		{SiteID: site.ID, HourTS: hours[3]},
+		{SiteID: site.ID, HourTS: hours[4]},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("pending validation hours = %#v, want %#v", got, want)
+	}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("pending validation hour %d = %#v, want %#v", index, got[index], want[index])
+		}
+	}
+}
+
+func TestListPendingValidationHoursRetriesExplicitMismatch(t *testing.T) {
+	database := openLockedSiteRunDatabase(t)
+	ctx := context.Background()
+	now := int64(1_752_900_000)
+	site := createRunnableSite(t, database, "run-validation-mismatch-retry", now)
+	hour := now - now%3600 - 10*24*3600
+	_, _, dateEnd, err := UsageDateBucket(hour)
+	if err != nil {
+		t.Fatalf("usage date bucket: %v", err)
+	}
+	verifiedAt := dateEnd + 1
+	if err := database.GORM.Create(&CollectionWindow{
+		SiteID: site.ID, HourTS: hour, Status: CollectionWindowStatusMissing,
+		FactRows: 1, VerifiedAt: &verifiedAt,
+		LastErrorCode: string(constant.MessageDataValidationMismatch), UpdatedAt: now,
+	}).Error; err != nil {
+		t.Fatalf("create mismatched validation window: %v", err)
+	}
+	if err := database.GORM.Create(&CollectionWindow{
+		SiteID: site.ID, HourTS: hour + 3600, Status: CollectionWindowStatusComplete,
+		VerifiedAt: nil, UpdatedAt: now,
+	}).Error; err != nil {
+		t.Fatalf("create newer pending validation window: %v", err)
+	}
+
+	got, err := NewCollectionTaskRepository(database.GORM).ListPendingValidationHours(
+		ctx, []int64{site.ID}, now, 1,
+	)
+	if err != nil {
+		t.Fatalf("list mismatch validation recovery: %v", err)
+	}
+	want := []PendingValidationHour{{SiteID: site.ID, HourTS: hour}}
+	if len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("mismatch validation recovery = %#v, want %#v", got, want)
+	}
+}
+
+func TestListPendingValidationHoursWaitsForActiveSiteBatch(t *testing.T) {
+	database := openLockedSiteRunDatabase(t)
+	ctx := context.Background()
+	now := int64(1_752_900_000)
+	site := createRunnableSite(t, database, "run-validation-active-batch", now)
+	hour := now - now%3600 - 10*24*3600
+	if err := database.GORM.Create(&CollectionWindow{
+		SiteID: site.ID, HourTS: hour, Status: CollectionWindowStatusMissing,
+		LastErrorCode: string(constant.MessageDataValidationMismatch), UpdatedAt: now,
+	}).Error; err != nil {
+		t.Fatalf("create active-batch mismatch window: %v", err)
+	}
+	run := createB3AWindowRun(t, database, site, constant.TaskTypeUsageValidation,
+		constant.CollectionTriggerSchedule, constant.CollectionPriorityDailyValidation,
+		hour+3600, hour+2*3600, "req_validation_active_batch", now)
+
+	repository := NewCollectionTaskRepository(database.GORM)
+	got, err := repository.ListPendingValidationHours(ctx, []int64{site.ID}, now, 6)
+	if err != nil {
+		t.Fatalf("list while validation batch active: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("pending hours while validation batch active = %#v, want none", got)
+	}
+	if err := database.GORM.Model(&CollectionRun{}).Where("id = ?", run.ID).Updates(map[string]any{
+		"status": CollectionTaskStatusSuccess, "active_key": nil, "finished_at": now + 1, "updated_at": now + 1,
+	}).Error; err != nil {
+		t.Fatalf("finish active validation batch: %v", err)
+	}
+	got, err = repository.ListPendingValidationHours(ctx, []int64{site.ID}, now+2, 6)
+	if err != nil {
+		t.Fatalf("list after validation batch terminal: %v", err)
+	}
+	want := []PendingValidationHour{{SiteID: site.ID, HourTS: hour}}
+	if len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("pending hours after validation batch terminal = %#v, want %#v", got, want)
+	}
+}
+
 func TestCollectionTaskConcurrentClaimCrossSiteAndPerSiteSerial(t *testing.T) {
 	database := openLockedSiteRunDatabase(t)
 	ctx := context.Background()

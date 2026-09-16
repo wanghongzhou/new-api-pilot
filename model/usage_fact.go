@@ -55,6 +55,7 @@ type CollectionWindow struct {
 	Status            string  `gorm:"column:status"`
 	AttributionStatus string  `gorm:"column:attribution_status;default:attributed"`
 	FetchedRows       int64   `gorm:"column:fetched_rows"`
+	FactRows          int64   `gorm:"column:fact_rows"`
 	SourceHash        string  `gorm:"column:source_hash"`
 	LastFactRunID     *int64  `gorm:"column:last_fact_run_id"`
 	VerifiedAt        *int64  `gorm:"column:verified_at"`
@@ -172,8 +173,16 @@ func NewCompleteUsageWindowMutation(request CompleteUsageWindowRequest) (UsageFa
 			return UsageWindowMutationResult{}, err
 		}
 		result := planned
-		if request.Validation && exists && window.Status == CollectionWindowStatusComplete &&
-			window.SourceHash == sourceHash && window.AttributionStatus == attributionStatus {
+		verifiedOnly := false
+		if exists && window.Status == CollectionWindowStatusComplete &&
+			window.SourceHash == sourceHash && window.AttributionStatus == attributionStatus &&
+			window.FactRows == int64(len(facts)) {
+			verifiedOnly, err = persistedUsageFactsMatch(ctx, tx, request.SiteID, request.HourTS, facts, sourceHash)
+			if err != nil {
+				return UsageWindowMutationResult{}, err
+			}
+		}
+		if verifiedOnly {
 			if err := tx.WithContext(ctx).Model(&CollectionWindow{}).Where("id = ?", window.ID).
 				Updates(map[string]any{"verified_at": request.Now, "last_error_code": "", "last_error_params": nil,
 					"last_error_message": nil, "updated_at": request.Now}).Error; err != nil {
@@ -196,15 +205,15 @@ func NewCompleteUsageWindowMutation(request CompleteUsageWindowRequest) (UsageFa
 			values := CollectionWindow{
 				SiteID: request.SiteID, HourTS: request.HourTS, Status: CollectionWindowStatusComplete,
 				AttributionStatus: attributionStatus,
-				FetchedRows:       request.FetchedRows, SourceHash: sourceHash, LastFactRunID: &lastRunID,
+				FetchedRows:       request.FetchedRows, FactRows: int64(len(facts)), SourceHash: sourceHash, LastFactRunID: &lastRunID,
 				VerifiedAt: &verifiedAt, UpdatedAt: request.Now,
 			}
 			if err := tx.WithContext(ctx).Clauses(clause.OnConflict{
 				Columns: []clause.Column{{Name: "site_id"}, {Name: "hour_ts"}},
 				DoUpdates: clause.Assignments(map[string]any{
 					"status": CollectionWindowStatusComplete, "attribution_status": attributionStatus,
-					"fetched_rows": request.FetchedRows,
-					"source_hash":  sourceHash, "last_fact_run_id": request.RunID, "verified_at": request.Now,
+					"fetched_rows": request.FetchedRows, "fact_rows": int64(len(facts)),
+					"source_hash": sourceHash, "last_fact_run_id": request.RunID, "verified_at": request.Now,
 					"last_error_code": "", "last_error_params": nil, "last_error_message": nil, "updated_at": request.Now,
 				}),
 			}).Create(&values).Error; err != nil {
@@ -348,10 +357,52 @@ func canonicalUsageFacts(siteID, hourTS, collectedAt int64, input []UsageFactInp
 		}
 		return facts[left].NodeName < facts[right].NodeName
 	})
+	return facts, usageFactsHash(facts), nil
+}
+
+func persistedUsageFactsMatch(
+	ctx context.Context,
+	tx *gorm.DB,
+	siteID, hourTS int64,
+	expected []UsageFactHourly,
+	expectedHash string,
+) (bool, error) {
+	var persisted []UsageFactHourly
+	if err := tx.WithContext(ctx).
+		Where("site_id = ? AND hour_ts = ?", siteID, hourTS).
+		Find(&persisted).Error; err != nil {
+		return false, err
+	}
+	if len(persisted) != len(expected) {
+		return false, nil
+	}
+	return usageFactsHash(persisted) == expectedHash, nil
+}
+
+func usageFactsHash(facts []UsageFactHourly) string {
+	ordered := append([]UsageFactHourly(nil), facts...)
+	sort.Slice(ordered, func(left, right int) bool {
+		if ordered[left].RemoteUserID != ordered[right].RemoteUserID {
+			return ordered[left].RemoteUserID < ordered[right].RemoteUserID
+		}
+		if ordered[left].ModelName != ordered[right].ModelName {
+			return ordered[left].ModelName < ordered[right].ModelName
+		}
+		if ordered[left].ChannelID != ordered[right].ChannelID {
+			return ordered[left].ChannelID < ordered[right].ChannelID
+		}
+		if ordered[left].UseGroup != ordered[right].UseGroup {
+			return ordered[left].UseGroup < ordered[right].UseGroup
+		}
+		if ordered[left].TokenID != ordered[right].TokenID {
+			return ordered[left].TokenID < ordered[right].TokenID
+		}
+		return ordered[left].NodeName < ordered[right].NodeName
+	})
 	hash := sha256.New()
 	hash.Write([]byte("usage-fact-hourly-v2\x00"))
 	buffer := make([]byte, 8)
-	for _, fact := range facts {
+	for _, fact := range ordered {
 		for _, number := range []int64{fact.RemoteUserID, fact.ChannelID, fact.TokenID, fact.RequestCount, fact.Quota, fact.TokenUsed} {
 			binary.BigEndian.PutUint64(buffer, uint64(number))
 			hash.Write(buffer)
@@ -362,7 +413,7 @@ func canonicalUsageFacts(siteID, hourTS, collectedAt int64, input []UsageFactInp
 		writeUsageHashString(hash.Write, buffer, fact.TokenName)
 		writeUsageHashString(hash.Write, buffer, fact.NodeName)
 	}
-	return facts, hex.EncodeToString(hash.Sum(nil)), nil
+	return hex.EncodeToString(hash.Sum(nil))
 }
 
 func usageAttributionStatus(facts []UsageFactHourly) string {
