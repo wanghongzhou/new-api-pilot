@@ -81,7 +81,16 @@ func TestPostCommitFinalizationDetachesCancellationAndHasDeadline(t *testing.T) 
 		t.Fatal("post-commit context has no deadline")
 	}
 	remaining := time.Until(notifier.deadline)
-	if remaining <= 0 || remaining > executorFinalizationTimeout {
+	if remaining <= 0 || remaining > executorControlFinalizationTimeout {
 		t.Fatalf("post-commit deadline remaining = %s", remaining)
+	}
+}
+
+func TestWindowFinalizationTimeoutSeparatesMutationAndControlWork(t *testing.T) {
+	if got := executorWindowFinalizationTimeout(false); got != 10*time.Second {
+		t.Fatalf("control finalization timeout = %s", got)
+	}
+	if got := executorWindowFinalizationTimeout(true); got != 3*time.Minute {
+		t.Fatalf("mutation finalization timeout = %s", got)
 	}
 }

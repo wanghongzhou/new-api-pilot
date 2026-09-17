@@ -1253,14 +1253,17 @@ func (repository *CollectionTaskRepository) ReleaseClaim(
 	})
 }
 
-// ReleaseOwnedRunning returns only work still held by the supplied owner token
-// to pending. It is safe after partial window commits and is therefore used by
-// cooperative shutdown and heartbeat/commit failure paths.
+// ReleaseOwnedRunning releases only work still held by the supplied owner
+// token. Windows with retry budget remaining return to pending; exhausted
+// windows fail without resetting their attempt count. It is safe after partial
+// window commits and is therefore used by cooperative shutdown and
+// heartbeat/commit failure paths.
 func (repository *CollectionTaskRepository) ReleaseOwnedRunning(
 	ctx context.Context,
 	runID int64,
 	requestID string,
 	now int64,
+	policy CollectionTaskAttemptPolicy,
 ) (int64, error) {
 	if repository == nil || repository.db == nil || runID <= 0 || !validCollectionRequestID(requestID) || now <= 0 {
 		return 0, ErrCollectionRunContract
@@ -1298,41 +1301,67 @@ func (repository *CollectionTaskRepository) ReleaseOwnedRunning(
 			return nil
 		}
 
-		update := tx.Model(&CollectionRunWindow{}).
-			Where("run_id = ? AND status = 'running'", runID).
-			Updates(map[string]any{
-				"status": CollectionTaskStatusPending, "next_retry_at": now,
-				"finished_at": nil, "updated_at": now,
-			})
-		if update.Error != nil {
-			return update.Error
+		var windows []CollectionRunWindow
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("run_id = ?", runID).
+			Order("site_id ASC, hour_ts ASC, id ASC").Find(&windows).Error; err != nil {
+			return err
 		}
-		released = update.RowsAffected
+		maxAttempts := policy.maxAttempts(run.TaskType)
+		for index := range windows {
+			if windows[index].Status != CollectionTaskStatusRunning {
+				continue
+			}
+			updates := map[string]any{"updated_at": now, "finished_at": nil}
+			if windows[index].AttemptCount < maxAttempts {
+				updates["status"] = CollectionTaskStatusPending
+				updates["next_retry_at"] = now
+				windows[index].Status = CollectionTaskStatusPending
+				next := now
+				windows[index].NextRetryAt = &next
+			} else {
+				updates["status"] = CollectionTaskStatusFailed
+				updates["next_retry_at"] = nil
+				updates["finished_at"] = now
+				updates["error_code"] = CollectionTaskExecutionFailedCode
+				updates["error_params"] = nil
+				windows[index].Status = CollectionTaskStatusFailed
+				windows[index].ErrorCode = CollectionTaskExecutionFailedCode
+				windows[index].FinishedAt = int64Pointer(now)
+			}
+			update := tx.Model(&CollectionRunWindow{}).
+				Where("id = ? AND run_id = ? AND status = 'running' AND attempt_count = ?",
+					windows[index].ID, runID, windows[index].AttemptCount).
+				Updates(updates)
+			if update.Error != nil {
+				return update.Error
+			}
+			if update.RowsAffected != 1 {
+				return ErrCollectionTaskClaimLost
+			}
+			released++
+		}
 		if released == 0 {
 			return nil
 		}
-		if run.Priority == constant.CollectionPriorityInitialBackfill {
-			if err := recalculateInitialBackfillRun(ctx, tx, &run, now); err != nil {
-				return err
-			}
-		} else {
-			var windows []CollectionRunWindow
-			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("run_id = ?", runID).
-				Order("site_id ASC, hour_ts ASC, id ASC").Find(&windows).Error; err != nil {
-				return err
-			}
-			if err := NewSiteRepository(tx).RecalculateLockedCollectionRun(ctx, &run, windows, now, nil); err != nil {
-				return err
-			}
-		}
 		parent := tx.Model(&CollectionRun{}).
-			Where("id = ? AND status = 'pending' AND last_request_id = ?", runID, requestID).
+			Where("id = ? AND status = 'running' AND last_request_id = ?", runID, requestID).
 			Updates(map[string]any{"heartbeat_at": nil, "updated_at": now})
 		if parent.Error != nil {
 			return parent.Error
 		}
 		if parent.RowsAffected != 1 {
 			return ErrCollectionTaskClaimLost
+		}
+		run.HeartbeatAt = nil
+		run.UpdatedAt = now
+		if run.Priority == constant.CollectionPriorityInitialBackfill {
+			if err := recalculateInitialBackfillRun(ctx, tx, &run, now); err != nil {
+				return err
+			}
+		} else {
+			if err := NewSiteRepository(tx).RecalculateLockedCollectionRun(ctx, &run, windows, now, nil); err != nil {
+				return err
+			}
 		}
 		return repository.recalculateTaskBackfillStatuses(ctx, tx, run, now)
 	})

@@ -137,6 +137,30 @@ func TestUsageAggregationRebuildsSixLevelsAndRollingDaily(t *testing.T) {
 	assertUsageWindowStatus(t, database, fixture.site.ID, fixture.hours[1], CollectionWindowStatusMissing)
 }
 
+func TestUsageFactDailyFullSweepOnlyRunsOnCoverageTransition(t *testing.T) {
+	dateEnd := time.Date(2026, 7, 14, 0, 0, 0, 0, time.FixedZone("Asia/Shanghai", 8*3600)).Unix()
+	now := dateEnd + 2*3600
+	partial := usageCoverage{Expected: 24, Complete: 23, Verified: 23}
+	complete := usageCoverage{Expected: 24, Complete: 24, Verified: 23}
+	final := usageCoverage{Expected: 24, Complete: 24, Verified: 24}
+
+	if !shouldSweepUsageFactDaily(&partial, complete, now, dateEnd) {
+		t.Fatal("incomplete to complete transition did not request one full sweep")
+	}
+	if !shouldSweepUsageFactDaily(&complete, final, now, dateEnd) {
+		t.Fatal("non-final to final transition did not request one full sweep")
+	}
+	if shouldSweepUsageFactDaily(&final, final, now, dateEnd) {
+		t.Fatal("already-final date requested a repeated full sweep")
+	}
+	if shouldSweepUsageFactDaily(&complete, complete, now, dateEnd) {
+		t.Fatal("unchanged complete date requested a repeated full sweep")
+	}
+	if shouldSweepUsageFactDaily(nil, final, now, dateEnd) {
+		t.Fatal("local rebuild without a prior usage transition requested a full sweep")
+	}
+}
+
 func TestUsageAggregationIncludesLegacyResidualWithoutCountingSyntheticUser(t *testing.T) {
 	database := openLockedSiteRunDatabase(t)
 	location := time.FixedZone("Asia/Shanghai", 8*3600)

@@ -74,7 +74,10 @@ type Executor struct {
 	active     sync.WaitGroup
 }
 
-const executorFinalizationTimeout = 10 * time.Second
+const (
+	executorControlFinalizationTimeout  = 10 * time.Second
+	executorMutationFinalizationTimeout = 3 * time.Minute
+)
 
 func NewExecutor(options ExecutorOptions) (*Executor, error) {
 	if options.Repository == nil || options.Settings == nil || options.Clock == nil {
@@ -285,10 +288,10 @@ func (executor *Executor) executeClaim(ctx context.Context, claim model.Collecti
 	claimContext, cancelClaim := context.WithCancel(ctx)
 	defer func() {
 		cancelClaim()
-		releaseContext, cancelRelease := common.FinalizationContext(ctx, executorFinalizationTimeout)
+		releaseContext, cancelRelease := common.FinalizationContext(ctx, executorControlFinalizationTimeout)
 		defer cancelRelease()
 		released, err := executor.repository.ReleaseOwnedRunning(
-			releaseContext, claim.Run.ID, claim.RequestID, executor.clock.Now().Unix(),
+			releaseContext, claim.Run.ID, claim.RequestID, executor.clock.Now().Unix(), executor.attemptPolicy,
 		)
 		if err != nil {
 			log.Printf("collection claim release failed run_id=%d site_id=%d request_id=%s error_class=%s", claim.Run.ID, collectionClaimSiteID(claim), claim.RequestID, workerErrorClass(err))
@@ -310,7 +313,7 @@ func (executor *Executor) executeClaim(ctx context.Context, claim model.Collecti
 
 	handler := executor.handler(claim.Run.TaskType)
 	if handler == nil {
-		releaseContext, cancelRelease := common.FinalizationContext(claimContext, executorFinalizationTimeout)
+		releaseContext, cancelRelease := common.FinalizationContext(claimContext, executorControlFinalizationTimeout)
 		defer cancelRelease()
 		if _, err := executor.repository.ReleaseClaim(releaseContext, claim, executor.clock.Now().Unix()); err == nil {
 			executor.recordOutcome(claim.Run.TaskType, model.CollectionTaskStatusPending, "released")
@@ -339,7 +342,7 @@ func (executor *Executor) executeClaim(ctx context.Context, claim model.Collecti
 				commitAt := monotonicWorkerCommitTime(executor.clock.Now().Unix(), lastCommitAt, pending.UpdatedAt)
 				lastCommitAt = commitAt
 				next := commitAt
-				finalizationContext, cancelFinalization := common.FinalizationContext(claimContext, executorFinalizationTimeout)
+				finalizationContext, cancelFinalization := common.FinalizationContext(claimContext, executorControlFinalizationTimeout)
 				_, err := executor.repository.CompleteClaimedWindow(finalizationContext, model.CompleteClaimedWindowRequest{
 					RunID: claim.Run.ID, RequestID: claim.RequestID, Now: commitAt,
 					Window: model.CollectionTaskWindowResult{
@@ -367,7 +370,9 @@ func (executor *Executor) executeClaim(ctx context.Context, claim model.Collecti
 		}
 		commitAt := monotonicWorkerCommitTime(executor.clock.Now().Unix(), lastCommitAt, window.UpdatedAt)
 		lastCommitAt = commitAt
-		finalizationContext, cancelFinalization := common.FinalizationContext(claimContext, executorFinalizationTimeout)
+		finalizationContext, cancelFinalization := common.FinalizationContext(
+			claimContext, executorWindowFinalizationTimeout(jobOutcome.TransactionMutation != nil),
+		)
 		completedRun, commitErr := executor.repository.CompleteClaimedWindow(finalizationContext, model.CompleteClaimedWindowRequest{
 			RunID: claim.Run.ID, RequestID: claim.RequestID, Now: commitAt,
 			Window: windowOutcome, Mutation: jobOutcome.TransactionMutation,
@@ -427,7 +432,9 @@ func (executor *Executor) executeInitialBackfillClaim(
 				executor.logWindowExecutionFailure(claim, window, executionErr, windowOutcome)
 			}
 			commitAt := executor.clock.Now().Unix()
-			finalizationContext, cancelFinalization := common.FinalizationContext(ctx, executorFinalizationTimeout)
+			finalizationContext, cancelFinalization := common.FinalizationContext(
+				ctx, executorWindowFinalizationTimeout(jobOutcome.TransactionMutation != nil),
+			)
 			completedRun, commitErr := executor.repository.CompleteClaimedWindow(finalizationContext, model.CompleteClaimedWindowRequest{
 				RunID: claim.Run.ID, RequestID: claim.RequestID, Now: commitAt,
 				Window: windowOutcome, Mutation: jobOutcome.TransactionMutation,
@@ -469,7 +476,7 @@ func (executor *Executor) notifyWindowAfterCommit(
 	if executor.postCommit == nil {
 		return
 	}
-	ctx, cancel := common.FinalizationContext(parent, executorFinalizationTimeout)
+	ctx, cancel := common.FinalizationContext(parent, executorControlFinalizationTimeout)
 	defer cancel()
 	if hasMutation {
 		identity, err := executor.repository.CommittedCollectionWindowAlertIdentity(ctx, window.SiteID, window.HourTS)
@@ -570,13 +577,20 @@ func (executor *Executor) executeNonWindow(ctx context.Context, claim model.Coll
 			request.RunStatus = model.CollectionTaskStatusFailed
 		}
 	}
-	finalizationContext, cancelFinalization := common.FinalizationContext(ctx, executorFinalizationTimeout)
+	finalizationContext, cancelFinalization := common.FinalizationContext(ctx, executorControlFinalizationTimeout)
 	defer cancelFinalization()
 	if _, commitErr := executor.repository.CommitClaim(finalizationContext, request); commitErr == nil {
 		executor.recordOutcome(claim.Run.TaskType, request.RunStatus, "")
 	} else {
 		log.Printf("collection completion failed run_id=%d site_id=%d task_type=%s request_id=%s error_class=%s", claim.Run.ID, collectionClaimSiteID(claim), claim.Run.TaskType, claim.RequestID, workerErrorClass(commitErr))
 	}
+}
+
+func executorWindowFinalizationTimeout(hasMutation bool) time.Duration {
+	if hasMutation {
+		return executorMutationFinalizationTimeout
+	}
+	return executorControlFinalizationTimeout
 }
 
 func (executor *Executor) recordClaim(queue QueueKind, taskType string) {

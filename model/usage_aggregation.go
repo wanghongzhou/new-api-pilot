@@ -353,6 +353,14 @@ func NewUsageAggregationCommit(
 			Order("id ASC").Find(&previousFacts).Error; err != nil {
 			return UsageAggregationMutationResult{}, err
 		}
+		priorCoverage, err := loadUsageDailyCoverage(ctx, tx, dateStart, dateEnd)
+		if err != nil {
+			return UsageAggregationMutationResult{}, err
+		}
+		priorSiteCoverage, exists := priorCoverage.bySite[request.SiteID]
+		if !exists || !priorSiteCoverage.valid() || priorSiteCoverage.Expected <= 0 {
+			return UsageAggregationMutationResult{}, ErrCollectionRunContract
+		}
 		windowResult, err := factMutation.apply(ctx, tx, lockedScope)
 		if err != nil {
 			return UsageAggregationMutationResult{}, err
@@ -366,7 +374,9 @@ func NewUsageAggregationCommit(
 		}
 		rebuilt, err := rebuildUsageAggregationBuckets(
 			ctx, tx, request.SiteID, request.HourTS, dateKey, dateStart, dateEnd, request.Now,
-			append(previousFacts, canonicalFacts...), usageAggregationRebuildOptions{},
+			append(previousFacts, canonicalFacts...), usageAggregationRebuildOptions{
+				priorSiteCoverage: &priorSiteCoverage,
+			},
 		)
 		if err != nil {
 			return UsageAggregationMutationResult{}, err
@@ -658,9 +668,13 @@ func rebuildUsageAggregationBuckets(
 type usageAggregationRebuildOptions struct {
 	includePausedAccountIDs  map[int64]struct{}
 	includePausedCustomerIDs map[int64]struct{}
+	priorSiteCoverage        *usageCoverage
 }
 
 func (options usageAggregationRebuildOptions) validate() error {
+	if options.priorSiteCoverage != nil && !options.priorSiteCoverage.valid() {
+		return ErrCollectionRunContract
+	}
 	for id := range options.includePausedAccountIDs {
 		if id <= 0 {
 			return ErrCollectionRunContract
@@ -1312,9 +1326,10 @@ func rebuildUsageDaily(
 		return 0, err
 	}
 	siteFinal := siteCoverage.final(now, dateEnd)
+	fullSweep := shouldSweepUsageFactDaily(options.priorSiteCoverage, siteCoverage, now, dateEnd)
 	rows, err := refreshUsageFactDaily(
 		ctx, tx, siteID, dateKey, dateStart, dateEnd, now, siteFinal,
-		siteCoverage.Complete == siteCoverage.Expected, affectedFacts,
+		fullSweep, affectedFacts,
 	)
 	if err != nil {
 		return 0, err
@@ -1515,4 +1530,16 @@ GROUP BY f.site_id, f.channel_id`,
 		rows++
 	}
 	return rows, nil
+}
+
+func shouldSweepUsageFactDaily(prior *usageCoverage, current usageCoverage, now, dateEnd int64) bool {
+	if prior == nil || !prior.valid() || !current.valid() || current.Expected <= 0 ||
+		current.Complete != current.Expected {
+		return false
+	}
+	priorComplete := prior.Expected > 0 && prior.Complete == prior.Expected
+	if !priorComplete {
+		return true
+	}
+	return current.final(now, dateEnd) && !prior.final(now, dateEnd)
 }

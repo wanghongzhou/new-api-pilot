@@ -923,7 +923,7 @@ func TestReleaseOwnedRunningHandlesPartialWindowCommit(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("complete first window: %v", err)
 	}
-	released, err := repository.ReleaseOwnedRunning(ctx, run.ID, claim.RequestID, now+2)
+	released, err := repository.ReleaseOwnedRunning(ctx, run.ID, claim.RequestID, now+2, CollectionTaskAttemptPolicy{DefaultMaxAttempts: 3})
 	if err != nil || released != 1 {
 		t.Fatalf("release owned windows = %d, %v", released, err)
 	}
@@ -944,5 +944,41 @@ func TestReleaseOwnedRunningHandlesPartialWindowCommit(t *testing.T) {
 	}
 	if statuses[CollectionTaskStatusSuccess] != 1 || statuses[CollectionTaskStatusPending] != 1 {
 		t.Fatalf("released window statuses = %#v", statuses)
+	}
+}
+
+func TestReleaseOwnedRunningFailsExhaustedWindows(t *testing.T) {
+	database := openLockedSiteRunDatabase(t)
+	ctx := context.Background()
+	now := int64(1_752_400_800)
+	site := createRunnableSite(t, database, "run-owned-exhausted-release", now)
+	run := createB3AWindowRun(t, database, site, constant.TaskTypeUsageValidation,
+		constant.CollectionTriggerSchedule, constant.CollectionPriorityDailyValidation,
+		now-3600, now, "req_owned_exhausted", now)
+	repository := NewCollectionTaskRepository(database.GORM)
+	if _, err := repository.MaterializeRunWindows(ctx, run.ID, now, 1000); err != nil {
+		t.Fatalf("materialize exhausted release run: %v", err)
+	}
+	claim, err := repository.ClaimNext(ctx, CollectionTaskClaimOptions{
+		TaskTypes: []string{constant.TaskTypeUsageValidation}, Now: now,
+		RequestID: "wrk_owned_exhausted", MaxWindow: 24,
+	})
+	if err != nil || len(claim.Windows) != 1 || claim.Windows[0].AttemptCount != 1 {
+		t.Fatalf("claim exhausted release run = windows:%#v err:%v", claim.Windows, err)
+	}
+	released, err := repository.ReleaseOwnedRunning(ctx, run.ID, claim.RequestID, now+1,
+		CollectionTaskAttemptPolicy{DefaultMaxAttempts: 1})
+	if err != nil || released != 1 {
+		t.Fatalf("release exhausted window = %d, %v", released, err)
+	}
+	loaded, err := NewSiteRepository(database.GORM).FindCollectionRunByID(ctx, run.ID)
+	if err != nil || loaded.Status != CollectionTaskStatusFailed || loaded.HeartbeatAt != nil || loaded.FailedWindows != 1 {
+		t.Fatalf("exhausted parent = %#v, %v", loaded, err)
+	}
+	var window CollectionRunWindow
+	if err := database.GORM.Where("run_id = ?", run.ID).Take(&window).Error; err != nil ||
+		window.Status != CollectionTaskStatusFailed || window.AttemptCount != 1 ||
+		window.ErrorCode != CollectionTaskExecutionFailedCode || window.FinishedAt == nil {
+		t.Fatalf("exhausted window = %#v, %v", window, err)
 	}
 }
