@@ -162,7 +162,7 @@ func (service *SiteService) List(ctx context.Context, query dto.SiteListQuery) (
 		return common.PageData[dto.SiteListItem]{}, fmt.Errorf("list site usage overviews: %w", err)
 	}
 	performance := service.listPerformanceSummaries(sites, now)
-	completeness, err := service.sites.ListCollectionWindowCompleteness(ctx, siteIDs)
+	completeness, err := service.sites.ListCollectionWindowCompleteness(ctx, sites, now)
 	if err != nil {
 		return common.PageData[dto.SiteListItem]{}, fmt.Errorf("list collection window completeness: %w", err)
 	}
@@ -372,7 +372,7 @@ func (service *SiteService) detailFromModel(ctx context.Context, site model.Site
 	if err != nil {
 		return dto.SiteDetail{}, fmt.Errorf("read site usage overview: %w", err)
 	}
-	completeness, err := service.sites.ListCollectionWindowCompleteness(ctx, []int64{site.ID})
+	completeness, err := service.sites.ListCollectionWindowCompleteness(ctx, []model.Site{site}, now)
 	if err != nil {
 		return dto.SiteDetail{}, fmt.Errorf("read collection window completeness: %w", err)
 	}
@@ -494,38 +494,6 @@ func backfillSummaryFromRun(run model.CollectionRun) dto.BackfillSummary {
 	runID := strconv.FormatInt(run.ID, 10)
 	result.RunID = &runID
 	return result
-}
-
-func backfillCompletenessRate(run model.CollectionRun) float64 {
-	if run.TotalWindows <= 0 {
-		if run.Status == model.CollectionTaskStatusSuccess {
-			return 1
-		}
-		return 0
-	}
-	completed := int64(run.CompletedWindows)
-	total := int64(run.TotalWindows)
-	onlyMissing, err := model.UsageBackfillOnlyMissing(run.Scope)
-	if err == nil && onlyMissing && run.StartTimestamp != nil && run.EndTimestamp != nil && *run.EndTimestamp > *run.StartTimestamp {
-		expected := (*run.EndTimestamp - *run.StartTimestamp) / 3600
-		if expected > 0 {
-			incomplete := total - completed
-			if incomplete < 0 {
-				incomplete = 0
-			}
-			if incomplete > expected {
-				incomplete = expected
-			}
-			return float64(expected-incomplete) / float64(expected)
-		}
-	}
-	if completed < 0 {
-		completed = 0
-	}
-	if completed > total {
-		completed = total
-	}
-	return float64(completed) / float64(total)
 }
 
 func emptyCompleteness(site model.Site) dto.Completeness {
