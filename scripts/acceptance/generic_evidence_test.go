@@ -99,6 +99,11 @@ func TestCanonicalGenericRunnerCoversEveryRegisteredCaseAndManifestPath(t *testi
 		"'--project=chromium-desktop', '--project=chromium-mobile'",
 		"PLAYWRIGHT_INTERNAL_PORT', '4173'",
 		"'-p', '1'", "'-count=1'",
+		"TestA08A12A13A28CollectionHourReplacementAndVisibility",
+		"TestA19A63ResourceSnapshotAcceptance",
+		"TestA76CRUDRouteAndDTOAcceptance",
+		"TestA86DisabledRecheckStaysPausedWithoutBackfill",
+		"TestA102AuthorizationPricingIntentIdempotencyFailureAndFence",
 	} {
 		if !strings.Contains(script, required) {
 			t.Fatalf("canonical generic runner is missing %q", required)

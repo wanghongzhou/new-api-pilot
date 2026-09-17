@@ -194,8 +194,8 @@ func writeValidA45Run(t *testing.T, class string) string {
 	writeA45JSON(t, filepath.Join(run, "a45-fixture.json"), fixtureReport{
 		SchemaVersion: 1, AcceptanceID: AcceptanceID,
 		Fixtures: []fixtureEntry{
-			{FixtureID: "F01", Path: fixtureF01Path, SHA256: fixtureF01SHA256},
-			{FixtureID: "F02", Path: fixtureF02Path, SHA256: fixtureF02SHA256},
+			{FixtureID: "F01", Path: fixtureF01Path, SHA256: strings.Repeat("1", 64)},
+			{FixtureID: "F02", Path: fixtureF02Path, SHA256: strings.Repeat("2", 64)},
 		},
 		ManifestPath: fixtureManifest, ManifestSHA: strings.Repeat("c", 64),
 	})

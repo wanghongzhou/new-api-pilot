@@ -50,6 +50,7 @@ func TestA45RunnerUsesIsolatedReadOnlyResourcesAndExactInventory(t *testing.T) {
 		"a45-environment.json", "a45-fixture.json", "a45-report.json", "a45-cleanup.json",
 		"a45-secret-scan.json", "a45-artifacts.json", "Get-OpsResidualSweep",
 		"if ($files.Count -ne 9)", "evidence_mounted_in_test = $false", "host_ports = @()",
+		"$manifestText -notmatch \"(?m)^$f01SHA", "$manifestText -notmatch \"(?m)^$f02SHA",
 	} {
 		if !strings.Contains(text, required) {
 			t.Fatalf("A45 runner is missing evidence/isolation contract %q", required)

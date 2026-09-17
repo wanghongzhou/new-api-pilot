@@ -55,6 +55,7 @@ func CheckWithOptions(root string, options Options) []Issue {
 	}
 	trace := current.checkTraceability()
 	current.checkAuthoritativeDesignContracts()
+	current.checkChangeContract()
 	manifest := current.checkAcceptanceManifest(trace)
 	current.checkSiteTaskCatalog()
 	current.checkDataMaintenanceCatalog()

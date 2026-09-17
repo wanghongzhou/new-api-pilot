@@ -277,11 +277,11 @@ func writeValidA50Run(t *testing.T, class string) string {
 		BaseURL: "http://127.0.0.1:49200", Port: port, ServerPID: 12345, Workers: 2,
 		Projects: requiredProjects, DesktopViewport: viewport{Width: 1440, Height: 900}, MobileViewport: viewport{Width: 390, Height: 844},
 		TestOutputDirectory: testOutput, HTMLOutputDirectory: htmlOutput,
-		SpecPath: testSpecPath, SpecSHA256: approvedSpecSHA,
+		SpecPath: testSpecPath, SpecSHA256: strings.Repeat("1", 64),
 		LocalePath: "web/src/i18n/locales/zh-CN.json", LocaleSHA256: strings.Repeat("a", 64),
 		BunLockPath: "web/bun.lock", BunLockSHA256: strings.Repeat("b", 64),
-		PackagePath: "web/package.json", PackageSHA256: approvedPackageSHA,
-		PlaywrightConfigPath: "web/playwright.config.ts", PlaywrightConfigSHA256: approvedPlaywrightConfigSHA,
+		PackagePath: "web/package.json", PackageSHA256: strings.Repeat("2", 64),
+		PlaywrightConfigPath: "web/playwright.config.ts", PlaywrightConfigSHA256: strings.Repeat("3", 64),
 	}
 	writeA50JSON(t, filepath.Join(run, "a50-environment.json"), environment)
 	writeA50JSON(t, filepath.Join(run, "a50-fixture.json"), fixtureReport{
@@ -290,7 +290,7 @@ func writeValidA50Run(t *testing.T, class string) string {
 	})
 	report := finalReport{
 		SchemaVersion: 1, AcceptanceID: AcceptanceID, Status: "passed", SpecPath: testSpecPath,
-		SpecSHA256: approvedSpecSHA, Routes: requiredRoutes, Projects: requiredProjects,
+		SpecSHA256: strings.Repeat("1", 64), Routes: requiredRoutes, Projects: requiredProjects,
 		ExpectedTests: 18, DesktopTests: 9, MobileTests: 9,
 	}
 	report.SourceGuards.NoSkip = true

@@ -194,7 +194,7 @@ const rows = cases.map((item) => {
   const planned = item.paths.some((path) => path.startsWith("planned:"));
   const status = planned ? "PLANNED" : external ? "EXTERNAL-BLOCKED" : "PATH-MAPPING-PASS";
   const validation = external
-    ? "template/path structure only; operation and approvals NOT EVALUATED"
+    ? "template/path structure only; controlled operation NOT EVALUATED"
     : item.acceptanceId.match(/^A(?:89|9\d|100)$/)
       ? "integration + contract/unit + Playwright desktop/mobile + safety/fixture path mapping"
       : "authoritative manifest path exists";
@@ -236,7 +236,7 @@ ${rows.join("\n")}
 ## Formal-release blockers
 
 - All 100 items still require a clean reviewed commit, immutable release image provenance, durable per-item runner logs, independent review, and the required no-skip final gate.
-- Runbook items require the real environment, operator execution, measurements, rollback/backup or monitoring observations, and any specified dual approval; template presence is not execution evidence.
+- Runbook items require the real environment, measurements, rollback/backup or monitoring observations specified by the current implementation contract; template presence is not execution evidence. A52/A74/A75 do not require operator/reviewer/approver identities.
 `;
 
 await Bun.write(join(artifactRoot, "A01-A100-technical-pre-evidence-matrix.md"), output);

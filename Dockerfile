@@ -32,6 +32,8 @@ RUN --mount=type=cache,target=/root/.cache/go-mod \
 
 FROM go-deps AS go-test-runner
 
+RUN apk add --no-cache git
+
 COPY . .
 COPY --from=web-builder /build/web/dist ./webui/dist
 

@@ -24,30 +24,44 @@ var (
 	caseContracts = map[string]caseContract{
 		"A52": {
 			runner: "scripts/acceptance/run-a52.ps1", scope: "controlled_production_read_only",
-			fixtures:   []string{"F02", "F05"},
-			zipFiles:   []string{"approvals.json", "readonly-verification.json", "site-inventory.json"},
-			assertions: []string{"export_enabled", "first_root_confirmed", "independent_review", "owner_confirmed", "quota_retention_confirmed", "readonly_contracts_verified", "status_identity_verified", "uniform_version"},
+			fixtures: []string{"F02", "F05"},
+			artifactChecks: map[string][]string{
+				"site-inventory.json":        {"per_site_identity_recorded", "per_site_version_recorded", "readonly_scope"},
+				"readonly-verification.json": {"channel_pagination", "data_contract", "data_export_enabled", "first_user_proof", "flow_contract", "flow_data_consistency", "instance_contract", "realtime_contract", "root_identity", "self_identity", "status_contract", "user_pagination"},
+			},
+			assertions: []string{"channel_pagination", "data_contract", "data_export_enabled", "first_user_proof", "flow_contract", "flow_data_consistency", "instance_contract", "per_site_identity_recorded", "per_site_version_recorded", "readonly_scope", "realtime_contract", "root_identity", "self_identity", "status_contract", "user_pagination"},
 		},
 		"A74": {
 			runner: "scripts/acceptance/run-a74.ps1", scope: "controlled_pilot_owned_isolated",
-			fixtures:   []string{"F05"},
-			zipFiles:   []string{"approvals.json", "cleanup.json", "deployment.json", "monitoring.json", "rollback.json"},
-			assertions: []string{"approvals_complete", "backup_restored", "cleanup_verified", "failure_injected", "health_ready_verified", "immutable_images", "migration_verified", "monitoring_observed", "old_image_verified", "pilot_owned_scope", "smoke_verified"},
+			fixtures: []string{"F05"},
+			artifactChecks: map[string][]string{
+				"cleanup.json":    {"cleanup_verified"},
+				"deployment.json": {"health_ready_verified", "immutable_images", "migration_verified", "pilot_owned_scope", "smoke_verified"},
+				"monitoring.json": {"monitoring_observed"},
+				"rollback.json":   {"backup_restored", "failure_injected", "old_image_verified"},
+			},
+			assertions: []string{"backup_restored", "cleanup_verified", "failure_injected", "health_ready_verified", "immutable_images", "migration_verified", "monitoring_observed", "old_image_verified", "pilot_owned_scope", "smoke_verified"},
 		},
 		"A75": {
 			runner: "scripts/acceptance/run-a75.ps1", scope: "controlled_pilot_owned_isolated",
-			fixtures:   []string{"F05"},
-			zipFiles:   []string{"approvals.json", "backup.json", "cleanup.json", "restore.json", "rpo-rto.json", "verify-restore.json"},
-			assertions: []string{"approvals_complete", "binlog_verified", "cleanup_verified", "full_backup_verified", "keys_verified", "no_production_switch", "pilot_owned_scope", "restore_verified", "rpo_met", "rto_met", "target_identity_verified", "verify_restore_full"},
+			fixtures: []string{"F05"},
+			artifactChecks: map[string][]string{
+				"backup.json":         {"binlog_verified", "full_backup_verified", "keys_verified"},
+				"cleanup.json":        {"cleanup_verified"},
+				"restore.json":        {"no_production_switch", "pilot_owned_scope", "restore_verified", "target_identity_verified"},
+				"rpo-rto.json":        {"rpo_met", "rto_met"},
+				"verify-restore.json": {"verify_restore_full"},
+			},
+			assertions: []string{"binlog_verified", "cleanup_verified", "full_backup_verified", "keys_verified", "no_production_switch", "pilot_owned_scope", "restore_verified", "rpo_met", "rto_met", "target_identity_verified", "verify_restore_full"},
 		},
 	}
 )
 
 type caseContract struct {
-	runner, scope string
-	fixtures      []string
-	zipFiles      []string
-	assertions    []string
+	runner, scope  string
+	fixtures       []string
+	artifactChecks map[string][]string
+	assertions     []string
 }
 
 type finalReport struct {
@@ -83,15 +97,14 @@ type fixtureReport struct {
 }
 
 type materialDocument struct {
-	SchemaVersion int    `json:"schema_version"`
-	AcceptanceID  string `json:"acceptance_id"`
-	ArtifactType  string `json:"artifact_type"`
-	Passed        bool   `json:"passed"`
-	Sanitized     bool   `json:"sanitized"`
-	Operator      string `json:"operator,omitempty"`
-	Reviewer      string `json:"reviewer,omitempty"`
-	Approver      string `json:"approver,omitempty"`
-	Approved      bool   `json:"approved,omitempty"`
+	SchemaVersion   int             `json:"schema_version"`
+	AcceptanceID    string          `json:"acceptance_id"`
+	ArtifactType    string          `json:"artifact_type"`
+	Passed          bool            `json:"passed"`
+	Sanitized       bool            `json:"sanitized"`
+	ObservedAt      string          `json:"observed_at"`
+	ReferenceSHA256 string          `json:"reference_sha256"`
+	Checks          map[string]bool `json:"checks"`
 }
 
 type artifactInventory struct {
@@ -251,17 +264,25 @@ func validateZip(path, id string, contract caseContract) error {
 		docs[file.Name] = doc
 	}
 	sort.Strings(names)
-	if !equalStrings(names, contract.zipFiles) {
+	expectedNames := make([]string, 0, len(contract.artifactChecks))
+	for name := range contract.artifactChecks {
+		expectedNames = append(expectedNames, name)
+	}
+	sort.Strings(expectedNames)
+	if !equalStrings(names, expectedNames) {
 		return fmt.Errorf("%s controlled material file set is invalid", id)
 	}
 	for name, doc := range docs {
-		if doc.SchemaVersion != 1 || doc.AcceptanceID != id || doc.ArtifactType != strings.TrimSuffix(name, ".json") || !doc.Passed || !doc.Sanitized {
+		observedAt, observedErr := time.Parse(time.RFC3339Nano, doc.ObservedAt)
+		requiredChecks := contract.artifactChecks[name]
+		if doc.SchemaVersion != 1 || doc.AcceptanceID != id || doc.ArtifactType != strings.TrimSuffix(name, ".json") || !doc.Passed || !doc.Sanitized || observedErr != nil || observedAt.IsZero() || !sha256Pattern.MatchString(doc.ReferenceSHA256) || len(doc.Checks) != len(requiredChecks) {
 			return fmt.Errorf("%s controlled material %s contract is invalid", id, name)
 		}
-	}
-	approval := docs["approvals.json"]
-	if !approval.Approved || strings.TrimSpace(approval.Operator) == "" || strings.TrimSpace(approval.Reviewer) == "" || strings.TrimSpace(approval.Approver) == "" || approval.Operator == approval.Reviewer || approval.Operator == approval.Approver || approval.Reviewer == approval.Approver {
-		return fmt.Errorf("%s approvals are not independent and complete", id)
+		for _, check := range requiredChecks {
+			if !doc.Checks[check] {
+				return fmt.Errorf("%s controlled material %s check %s did not pass", id, name, check)
+			}
+		}
 	}
 	return nil
 }

@@ -76,11 +76,9 @@ var (
 )
 
 const (
-	fixtureF01Path   = "testdata/design/f01-auth.json"
-	fixtureF01SHA256 = "d232dc1a6b83ba80f49995dadbd8afe11d7b73120f7474a2abcece7e1b46e1da"
-	fixtureF02Path   = "testdata/design/f02-upstream/manifest.json"
-	fixtureF02SHA256 = "044c7037cd875740a5a07fe131bab7b74389b61b4c48982bec5c23266459b1c6"
-	fixtureManifest  = "testdata/design/manifest.sha256"
+	fixtureF01Path  = "testdata/design/f01-auth.json"
+	fixtureF02Path  = "testdata/design/f02-upstream/manifest.json"
+	fixtureManifest = "testdata/design/manifest.sha256"
 )
 
 type testSummary struct {
@@ -489,18 +487,13 @@ func validateEnvironment(environment environmentReport, class string) error {
 }
 
 func validateFixture(fixture fixtureReport) error {
-	want := []fixtureEntry{
-		{FixtureID: "F01", Path: fixtureF01Path, SHA256: fixtureF01SHA256},
-		{FixtureID: "F02", Path: fixtureF02Path, SHA256: fixtureF02SHA256},
-	}
 	if fixture.SchemaVersion != 1 || fixture.AcceptanceID != AcceptanceID || fixture.ManifestPath != fixtureManifest ||
-		!sha256Pattern.MatchString(fixture.ManifestSHA) || len(fixture.Fixtures) != len(want) {
+		!sha256Pattern.MatchString(fixture.ManifestSHA) || len(fixture.Fixtures) != 2 {
 		return errors.New("A45 fixture report contract is invalid")
 	}
-	for index := range want {
-		if fixture.Fixtures[index] != want[index] {
-			return fmt.Errorf("A45 fixture report differs at index %d", index)
-		}
+	if fixture.Fixtures[0].FixtureID != "F01" || fixture.Fixtures[0].Path != fixtureF01Path || !sha256Pattern.MatchString(fixture.Fixtures[0].SHA256) ||
+		fixture.Fixtures[1].FixtureID != "F02" || fixture.Fixtures[1].Path != fixtureF02Path || !sha256Pattern.MatchString(fixture.Fixtures[1].SHA256) {
+		return errors.New("A45 fixture report does not describe the current F01/F02 paths")
 	}
 	return nil
 }

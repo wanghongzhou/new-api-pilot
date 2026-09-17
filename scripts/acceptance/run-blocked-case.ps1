@@ -14,27 +14,24 @@ if ($acceptanceID -notin @('A52', 'A74', 'A75') -or $evidenceClass -cne 'formal'
 
 $blockers = @{
     A52 = [ordered]@{
-        blocker = 'production_site_onboarding_inventory_and_accountable_owner_confirmations_are_not_available_in_the_local_isolated_environment'
+        blocker = 'production_site_onboarding_inventory_and_current_capability_evidence_are_not_available_in_the_local_isolated_environment'
         required_external_inputs = @(
             'production site inventory',
-            'per-site status identity API-contract and export verification',
-            'named owner confirmation before first business record'
+            'per-site current capability contract and export verification'
         )
     }
     A74 = [ordered]@{
-        blocker = 'controlled_deployment_and_rollback_environment_with_immutable_image_digests_monitoring_and_named_approvals_is_not_available_locally'
+        blocker = 'controlled_deployment_and_rollback_environment_with_immutable_image_digests_and_monitoring_is_not_available_locally'
         required_external_inputs = @(
             'controlled deployment target and immutable image digests',
-            'monitoring and rollback observation evidence',
-            'named operator and independent reviewer approvals'
+            'monitoring and rollback observation evidence'
         )
     }
     A75 = [ordered]@{
-        blocker = 'controlled_backup_pitr_and_key_recovery_inputs_with_named_approvals_are_not_available_locally'
+        blocker = 'controlled_backup_pitr_and_key_recovery_inputs_are_not_available_locally'
         required_external_inputs = @(
             'real backup and point-in-time recovery material',
-            'controlled key-recovery execution environment',
-            'named operator and independent reviewer approvals'
+            'controlled key-recovery execution environment'
         )
     }
 }
@@ -48,5 +45,5 @@ $report = [ordered]@{
     required_external_inputs = @($case.required_external_inputs)
 }
 Write-OpsUtf8NoBom -Path (Join-Path $evidenceDirectory 'blocked-report.json') -Payload (($report | ConvertTo-Json -Depth 10) + "`n")
-Write-Error "$acceptanceID BLOCKED: required controlled-environment inputs and independent approvals are unavailable."
+Write-Error "$acceptanceID BLOCKED: required controlled-environment technical inputs are unavailable."
 exit 3

@@ -153,8 +153,10 @@ acceptance_cases:
   - acceptance_id: A13
     requirement_id: R04
     fixture: [F03, F04]
-    layer: contract
-    test_or_runbook_path: "tests/contract/statistics_api_acceptance_test.go"
+    layer: integration
+    test_or_runbook_paths:
+      - "tests/contract/statistics_api_acceptance_test.go"
+      - "tests/integration/collection_acceptance_test.go"
     owner_role: backend
     evidence_path: "artifacts/acceptance/A13/"
 
@@ -553,7 +555,9 @@ acceptance_cases:
     requirement_id: R06
     fixture: [F02, F04, F05]
     layer: integration
-    test_or_runbook_path: "tests/integration/performance_history_acceptance_test.go"
+    test_or_runbook_paths:
+      - "tests/integration/performance_history_acceptance_test.go"
+      - "tests/integration/resource_acceptance_test.go"
     owner_role: backend
     evidence_path: "artifacts/acceptance/A63/"
 
@@ -657,7 +661,9 @@ acceptance_cases:
     requirement_id: R01
     fixture: [F01, F02, F04]
     layer: integration
-    test_or_runbook_path: "router/user_router_integration_test.go"
+    test_or_runbook_paths:
+      - "router/user_router_integration_test.go"
+      - "tests/contract/crud_api_acceptance_test.go"
     owner_role: backend
     evidence_path: "artifacts/acceptance/A76/"
 
@@ -728,8 +734,8 @@ acceptance_cases:
   - acceptance_id: A85
     requirement_id: R07
     fixture: [F04]
-    layer: runbook
-    test_or_runbook_path: "docs/acceptance/runbooks/monitoring-failure-drills.md"
+    layer: integration
+    test_or_runbook_path: "tests/integration/alert_acceptance_test.go"
     owner_role: sre
     evidence_path: "artifacts/acceptance/A85/"
 

@@ -9,9 +9,9 @@
 - `runbooks/`：只能在隔离或受控环境执行的部署、恢复、容量、故障和文档完整性演练模板。
 - `planned:` 路径：实现尚未开始时允许不存在。实现对应功能的同一开发任务必须创建该路径并移除 `planned:` 前缀，不能把它留到发布前处理。
 - F01～F13 及 `testdata/design/manifest.sha256` 是固定的实施契约路径，不表示当前文件已经存在；首批基础设施任务必须将它们版本化落盘。fixture 不存在或 checksum 不匹配时，任何引用它的用例都不可执行、不可判定通过。
-- 运行手册文件当前只是模板；只有完成执行、复核并将完整记录写入对应 `evidence_path` 后，相关 A 用例才算通过。
+- 运行手册文件当前只是模板；只有完成执行并将完整技术记录写入对应 `evidence_path` 后，相关 A 用例才算通过。
 - 通用 harness 的正式 run 除 `evidence.json`、`stdout.log`、`stderr.log` 外，必须包含 `run-manifest.json` 与 `checksums.sha256`，在日志关闭和 wrapper 元数据写入后逐文件固化大小与 SHA-256；采用封闭文件集的专用 runner 继续遵守各自 validator 契约。
-- 受控环境、真实生产资料或独立审批不可用时，必须实际尝试并保存 `blocked-report.json` 与失败 wrapper 记录；这只证明阻断真实存在，不是通过证据，`evidence_path` 必须保留 `planned:`，直至后续正式 run 通过。
+- 必需的受控环境或真实技术资料不可用时，必须实际尝试并保存 `blocked-report.json` 与失败 wrapper 记录；这只证明阻断真实存在，不是通过证据，`evidence_path` 必须保留 `planned:`，直至后续正式 run 通过。
 
 ## 首批开发基础设施
 
@@ -36,7 +36,7 @@
 | `layer` | `integration`、`contract`、`e2e`、`static-analysis` 或 `runbook` |
 | `test_or_runbook_path` | 向后兼容的单个可执行测试路径或本目录下的受控演练模板；与 `test_or_runbook_paths` 互斥；`planned:` 表示首批实现待建 |
 | `test_or_runbook_paths` | 推荐的非空测试路径数组；路径必须唯一且逐条存在；与 `test_or_runbook_path` 互斥 |
-| `owner_role` | `backend`、`frontend`、`sre`、`security` 或 `qa`；对实现和证据负责，不替代独立复核人 |
+| `owner_role` | `backend`、`frontend`、`sre`、`security` 或 `qa`；标识实现与证据的维护归属，不构成人工审批门禁 |
 | `evidence_path` | 每次执行的不可覆盖证据目录；计划阶段使用 `planned:` |
 
 固定 fixture 的内容和路径以 `manifest.yaml` 及详细设计 §51.1 为准。测试必须使用可注入 Clock，不依赖运行当天时间。
@@ -44,11 +44,11 @@
 ## 从计划到通过
 
 1. 功能任务开始时，责任人确认关联 A 项、fixture 和断言，创建计划测试路径，并移除该项路径的 `planned:` 前缀。
-2. 自动化用例按 Given/When/Then 实现，同时断言 HTTP 状态与 `code`/DTO、数据库不变量、用户可见状态及外部副作用。运行手册按模板执行并由另一角色复核。
+2. 自动化用例按 Given/When/Then 实现，同时断言 HTTP 状态与 `code`/DTO、数据库不变量、用户可见状态及外部副作用。运行手册按模板执行并保存机器可验证的技术结果。
 3. 每次验收写入独立证据目录，至少包含 commit、工作区 clean 状态、镜像 digest、fixture 版本/checksum、命令或操作记录、开始/结束时间、结果以及日志/报告路径；秘密和 Webhook 查询参数必须脱敏。
 4. `make acceptance` 汇总结果。最终门禁只接受与当前 HEAD 完全一致且 `worktree_dirty=false` 的 formal 证据，并要求执行门禁的宿主工作区无 tracked/untracked 非忽略变更；历史 commit、脏工作区、无法解析当前 Git 状态、缺证据、证据过期、路径仍为 `planned:` 或 required 用例被 skipped，均阻断发布。
 5. 每个非 `planned:` 用例必须由仓库内已注册的 canonical runner 执行；runner 必须绑定 manifest 路径、精确测试集合、fixture、隔离环境和封闭 artifact 契约。通用 wrapper 不得把任意退出码为 0 的命令当作正式语义证据，旧 evidence 中的临时命令不得作为新版本执行计划。
-6. A52、A74、A75 分别使用站点接入、部署回滚、PITR/密钥恢复的专用 runner 和 validator。缺少受控材料或独立审批时只能生成 blocked evidence 并保持 `planned:`，不得通过修改 manifest、复用其他演练或放宽校验绕过。
+6. A52、A74、A75 分别使用站点接入、部署回滚、PITR/密钥恢复的专用 runner 和 validator。三项不要求 operator、reviewer、approver、具名签字或身份分离；缺少用例真正需要的受控技术材料时只能生成 blocked evidence 并保持 `planned:`，不得通过修改 manifest 或复用其他演练绕过。validator 的字段、断言和文件集合必须对应当前代码与当前运行工具，旧代码专属规则必须随实现移除或更新。
 
 三个受控运维用例的唯一正式入口分别为：
 
@@ -67,11 +67,11 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/acceptance/run.p
 
 启动器只允许使用 `new-api-pilot-go-test:latest` 从当前工作树交叉编译 harness，输出到 Git 忽略的 `artifacts/.acceptance-runner/`；它不安装或调用宿主 Go，也不改变 formal evidence 中记录的 case canonical command。
 
-运行前分别通过 `A52_CONTROLLED_INPUT`、`A74_CONTROLLED_INPUT`、`A75_CONTROLLED_INPUT` 提供绝对路径的已脱敏输入 JSON。输入绑定的 ZIP、内部精确文件集合、具名独立审批、用例专属断言以及外层 artifact SHA-256 均由专用 closed-contract validator 校验；缺失输入的 canonical 命令只产生 blocked 失败证据。
+运行前分别通过 `A52_CONTROLLED_INPUT`、`A74_CONTROLLED_INPUT`、`A75_CONTROLLED_INPUT` 提供绝对路径的已脱敏输入 JSON。输入绑定的 ZIP、与当前实现一致的内部文件集合、用例专属技术断言以及外层 artifact SHA-256 均由专用 closed-contract validator 校验；材料不得包含或要求 `approvals.json`、operator、reviewer、approver。缺失输入的 canonical 命令只产生 blocked 失败证据。
 
 ## 发布与变更规则
 
-A01～A102 全部是 required。发布不得跳过、降级为口头确认，或以另一个相似用例替代；受环境限制的用例必须通过对应运行手册在受控环境完成。任何失败先修复并重跑，再由非执行人复核证据。
+A01～A102 全部是 required。发布不得跳过、降级为口头确认，或以另一个相似用例替代；受环境限制的用例必须通过对应运行手册在受控环境完成。任何失败先判断规则是否仍对应当前代码：当前实现失败则修复并重跑，规则已属于旧代码、旧 DTO、旧命令或已移除流程则更新或删除该规则后重跑。
 
 A102 必须同时绑定后端 integration 与 contract/unit 路径；缺少真实 MySQL/可控 Clock 的端到端维护验证或缺少 F13 文档防漂移测试均由 docscheck 阻断。
 

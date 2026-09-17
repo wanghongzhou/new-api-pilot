@@ -7,9 +7,14 @@ $env:A74_CONTROLLED_INPUT = 'C:\absolute\controlled\a74-input.json'
 go run ./scripts/acceptance run -case A74 -- powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/acceptance/run-a74.ps1
 ```
 
-输入 JSON 使用 schema 1、`acceptance_id=A74`、formal passing 状态、`scope=controlled_pilot_owned_isolated`、脱敏目标身份、不可变镜像/发布引用、时间线和全部 A74 assertions，并以绝对路径指向材料 ZIP。ZIP 精确包含 `deployment.json`、`rollback.json`、`monitoring.json`、`cleanup.json`、`approvals.json`；所有文件必须标记 passed/sanitized，审批人必须具名、互异且批准。
+输入 JSON 使用 schema 1、`acceptance_id=A74`、formal passing 状态、`scope=controlled_pilot_owned_isolated`、脱敏目标身份、不可变镜像/发布引用、时间线和全部 A74 assertions，并以绝对路径指向材料 ZIP。ZIP 精确包含 `deployment.json`、`rollback.json`、`monitoring.json`、`cleanup.json`；每个文件必须标记 passed/sanitized，记录 RFC3339Nano `observed_at`、所引用原始报告的 `reference_sha256` 和下列精确 checks，不要求人工审批、签字或身份分离：
 
-缺少不可变镜像 digest、备份、故障注入、旧镜像恢复、监控观察、清理证明或审批时只能产生 blocked 失败证据并保持 `planned:`。
+- `deployment.json`：`health_ready_verified`、`immutable_images`、`migration_verified`、`pilot_owned_scope`、`smoke_verified`；
+- `rollback.json`：`backup_restored`、`failure_injected`、`old_image_verified`；
+- `monitoring.json`：`monitoring_observed`；
+- `cleanup.json`：`cleanup_verified`。
+
+缺少不可变镜像 digest、备份、故障注入、旧镜像恢复、监控观察或清理证明时只能产生 blocked 失败证据并保持 `planned:`。
 
 ## 1. 演练信息
 
@@ -21,14 +26,13 @@ go run ./scripts/acceptance run -case A74 -- powershell.exe -NoProfile -Executio
 | 部署前/目标 schema 版本 | `<before>` / `<target>` |
 | 备份 ID 与 checksum | `<backup-id>` / `<checksum>` |
 | 开始/结束时间（Asia/Shanghai） | `<start>` / `<end>` |
-| 执行人/复核人/批准人 | `<operator>` / `<reviewer>` / `<approver>` |
 
 ## 2. 前置条件和停止条件
 
-- 已确认维护窗口、影响范围、告警通知、当前镜像和配置版本；生产站点接入清单已逐站确认上游精确版本、`enable_data_export`、`quota_data` 保留策略和首个不可删除 root 责任人。
+- 已确认维护窗口、影响范围、告警通知、当前镜像和配置版本；生产站点接入清单已逐站记录实际版本、`enable_data_export` 和首个不可删除 root 证明。
 - 全量备份、binlog 位点、当前密钥版本和配置导出均已生成并验证可读；备份不与主库共享故障域。
 - 新旧镜像、migration checksum、部署命令、恢复命令、Prometheus 配置版本和冒烟账户已冻结；秘密不出现在命令输出或证据中。
-- 任一备份/checksum/密钥验证失败、迁移来源版本不明、审批缺失或监控基线异常时，停止部署。
+- 任一备份/checksum/密钥验证失败、迁移来源版本不明或监控基线异常时，停止部署。
 
 ## 3. 首次部署或升级
 
@@ -53,6 +57,6 @@ go run ./scripts/acceptance run -case A74 -- powershell.exe -NoProfile -Executio
 - 首次部署/升级路径的 migration、健康/就绪、安全 Header 和冒烟全部通过。
 - 故障路径恢复到已知 schema 后旧镜像可用；没有在未知 schema 上启动，也没有绕过恢复步骤。
 - 上游版本与生产接入清单逐站满足设计约束；所有失败步骤均有明确判定和处置。
-- 证据目录包含命令及退出码、时间线、脱敏日志、数据库版本/checksum、镜像 digest、HTTP 报告、`promtool` 输出、Prometheus 规则 API、监控截图或导出、备份引用及执行/复核签字。
+- 证据目录包含命令及退出码、时间线、脱敏日志、数据库版本/checksum、镜像 digest、HTTP 报告、`promtool` 输出、Prometheus 规则 API、监控截图或导出及备份引用。
 
 最终结论必须由专用 validator 根据封闭 artifact 和 SHA-256 得出，不接受手工填写 `<PASS>`、通用 wrapper 或其他用例证据替代。

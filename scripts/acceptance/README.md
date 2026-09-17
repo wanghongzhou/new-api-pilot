@@ -8,7 +8,7 @@ other file in the run directory after the wrapper record and logs are closed.
 Specialized closed-contract runners keep their validator-defined exact file
 sets instead.
 
-An unavailable controlled environment or external approval must be attempted
+An unavailable controlled environment or required technical input must be attempted
 and recorded as a failed wrapper run with a structured `blocked-report.json`.
 Such a run is audit evidence of the blocker, not passing evidence: its manifest
 entry must retain the `planned:` prefix until a later formal run passes.
@@ -101,7 +101,7 @@ implementation is under review:
 go run ./scripts/acceptance run -case A45 -evidence-root artifacts/smoke -- powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/acceptance/run-a45.ps1
 ```
 
-After independent approval, the formal command is the same except that it uses
+After the required controlled technical material is available, the formal command is the same except that it uses
 the default `artifacts/acceptance` root:
 
 ```powershell

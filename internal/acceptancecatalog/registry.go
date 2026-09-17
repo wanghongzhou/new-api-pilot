@@ -38,6 +38,18 @@ var specializedRunnerPaths = map[string]string{
 	"A85": "scripts/acceptance/run-a85.ps1",
 }
 
+// executionAssets is the machine-readable source of truth for cases whose
+// runner previously drifted away from the manifest after tests were added or
+// a runbook was replaced by executable coverage.
+var executionAssets = map[string][]string{
+	"A13":  {"tests/contract/statistics_api_acceptance_test.go", "tests/integration/collection_acceptance_test.go"},
+	"A63":  {"tests/integration/performance_history_acceptance_test.go", "tests/integration/resource_acceptance_test.go"},
+	"A76":  {"router/user_router_integration_test.go", "tests/contract/crud_api_acceptance_test.go"},
+	"A85":  {"tests/integration/alert_acceptance_test.go"},
+	"A86":  {"tests/integration/site_acceptance_test.go"},
+	"A102": {"tests/integration/data_maintenance_acceptance_test.go", "internal/docscheck/maintenance_catalog_test.go"},
+}
+
 var closedEvidenceCases = stringSet("A22", "A25", "A45", "A49", "A50", "A51", "A52", "A62", "A74", "A75")
 
 // exclusiveCases either own a dedicated Docker environment, drive a browser,
@@ -77,6 +89,10 @@ func Lookup(acceptanceID string) (Runner, bool) {
 	}
 	runner.Command = append([]string(nil), runner.Command...)
 	return runner, true
+}
+
+func ExecutionAssets(acceptanceID string) []string {
+	return append([]string(nil), executionAssets[acceptanceID]...)
 }
 
 func All() []Runner {

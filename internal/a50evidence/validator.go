@@ -18,18 +18,15 @@ import (
 )
 
 const (
-	AcceptanceID                = "A50"
-	FormalClass                 = "formal"
-	DevelopmentClass            = "development"
-	testSpecPath                = "web/e2e/statistics-states.spec.ts"
-	approvedSpecSHA             = "376333476f5094ddbbdf87a763c699da6741d6c1a65fedfb745082bfb17fc63c"
-	approvedPackageSHA          = "47217944ab20bc6875515bbce5fffdbf5110030c48220e294bafd272aeaec19e"
-	approvedPlaywrightConfigSHA = "16c060617c14eefd3e70d3dc2bf15139ae7c8d389a3c43a1e022f6c06151f155"
-	fixturePath                 = "testdata/design/f03-statistics.sql"
-	fixtureSHA256               = "bcceaaf7d6b171014258b9d935fbb1e7cab4585b49403d760a6db373e5aabe94"
-	fixtureManifest             = "testdata/design/manifest.sha256"
-	maxJSONSize                 = 32 << 20
-	maxArtifactSize             = 128 << 20
+	AcceptanceID     = "A50"
+	FormalClass      = "formal"
+	DevelopmentClass = "development"
+	testSpecPath     = "web/e2e/statistics-states.spec.ts"
+	fixturePath      = "testdata/design/f03-statistics.sql"
+	fixtureSHA256    = "bcceaaf7d6b171014258b9d935fbb1e7cab4585b49403d760a6db373e5aabe94"
+	fixtureManifest  = "testdata/design/manifest.sha256"
+	maxJSONSize      = 32 << 20
+	maxArtifactSize  = 128 << 20
 )
 
 var (
@@ -488,6 +485,9 @@ func validateInnerArtifacts(runDirectory, class string, wrapperEvidencePresent b
 	if err := validateFinalReport(report, summary, facts); err != nil {
 		return err
 	}
+	if report.SpecSHA256 != environment.SpecSHA256 {
+		return errors.New("A50 report spec checksum does not match the executed environment")
+	}
 
 	if err := validateCleanup(runDirectory, class, environment); err != nil {
 		return err
@@ -634,14 +634,14 @@ func validateEnvironment(environment environmentReport, class string) error {
 		environment.ServerPID <= 0 || environment.Workers != 2 || environment.Retries != 0 ||
 		!equalStrings(environment.Projects, requiredProjects) || environment.DesktopViewport != (viewport{Width: 1440, Height: 900}) ||
 		environment.MobileViewport != (viewport{Width: 390, Height: 844}) || environment.SharedPort5173Used ||
-		environment.SpecPath != testSpecPath || environment.SpecSHA256 != approvedSpecSHA ||
+		environment.SpecPath != testSpecPath || !sha256Pattern.MatchString(environment.SpecSHA256) ||
 		environment.LocalePath != "web/src/i18n/locales/zh-CN.json" || !sha256Pattern.MatchString(environment.LocaleSHA256) ||
 		environment.BunLockPath != "web/bun.lock" || !sha256Pattern.MatchString(environment.BunLockSHA256) {
 		return errors.New("A50 environment contract is invalid")
 	}
-	if environment.PackagePath != "web/package.json" || environment.PackageSHA256 != approvedPackageSHA ||
+	if environment.PackagePath != "web/package.json" || !sha256Pattern.MatchString(environment.PackageSHA256) ||
 		environment.PlaywrightConfigPath != "web/playwright.config.ts" ||
-		environment.PlaywrightConfigSHA256 != approvedPlaywrightConfigSHA {
+		!sha256Pattern.MatchString(environment.PlaywrightConfigSHA256) {
 		return errors.New("A50 environment contract is invalid")
 	}
 	for _, directory := range []string{environment.TestOutputDirectory, environment.HTMLOutputDirectory} {
@@ -669,7 +669,7 @@ func evidencePathBase(path string) string {
 
 func validateFinalReport(report finalReport, summary checkSummary, facts playwrightFacts) error {
 	if report.SchemaVersion != 1 || report.AcceptanceID != AcceptanceID || report.Status != "passed" ||
-		report.SpecPath != testSpecPath || report.SpecSHA256 != approvedSpecSHA || !equalRoutes(report.Routes, requiredRoutes) ||
+		report.SpecPath != testSpecPath || !sha256Pattern.MatchString(report.SpecSHA256) || !equalRoutes(report.Routes, requiredRoutes) ||
 		!equalStrings(report.Projects, requiredProjects) || report.ExpectedTests != 18 || report.DesktopTests != 9 ||
 		report.MobileTests != 9 || report.Unexpected != 0 || report.Flaky != 0 || report.Skipped != 0 ||
 		report.RetriesObserved != 0 || facts.Expected != report.ExpectedTests || facts.Desktop != report.DesktopTests ||

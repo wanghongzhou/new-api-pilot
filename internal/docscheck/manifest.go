@@ -172,6 +172,7 @@ func (current *checker) checkAcceptanceManifest(trace traceability) *acceptanceM
 			current.add("manifest", path, "%s has invalid owner_role %q", acceptance.AcceptanceID, acceptance.OwnerRole)
 		}
 		testPaths := current.checkAcceptanceTestPaths(path, acceptance)
+		current.checkExecutionAssetContract(path, acceptance.AcceptanceID, testPaths)
 		if requiresMultiLayerAcceptance(acceptance.AcceptanceID) {
 			current.checkMultiLayerAcceptance(path, acceptance.AcceptanceID, testPaths)
 		}
@@ -197,6 +198,22 @@ func (current *checker) checkAcceptanceManifest(trace traceability) *acceptanceM
 		}
 	}
 	return &manifest
+}
+
+func (current *checker) checkExecutionAssetContract(manifestPath, acceptanceID string, paths []string) {
+	want := acceptancecatalog.ExecutionAssets(acceptanceID)
+	if len(want) == 0 {
+		return
+	}
+	actual := append([]string(nil), paths...)
+	for index := range actual {
+		actual[index] = strings.TrimPrefix(actual[index], "planned:")
+	}
+	sort.Strings(actual)
+	sort.Strings(want)
+	if !equalStrings(actual, want) {
+		current.add("manifest", manifestPath, "%s execution assets %q do not match current runner contract %q", acceptanceID, strings.Join(actual, ", "), strings.Join(want, ", "))
+	}
 }
 
 func (current *checker) checkCanonicalAcceptanceRunner(manifestPath, acceptanceID string) {

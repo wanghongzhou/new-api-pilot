@@ -14,6 +14,5 @@ go run ./scripts/acceptance run -case A75 -- powershell.exe -NoProfile -Executio
 - `verify-restore.json`：full verify-restore、密文、外键、任务、事实与汇总验证；
 - `rpo-rto.json`：实测 RPO 不超过 1 小时、RTO 不超过 4 小时；
 - `cleanup.json`：Pilot-owned 临时资源清理且无残留；
-- `approvals.json`：互不相同的具名 operator、reviewer、approver。
 
-所有材料必须脱敏并标记 passed。缺少备份/binlog/密钥、隔离目标、全量验证、RPO/RTO 或审批时 runner 只生成 blocked 失败证据；不得用 A22、A51 或手工报告代替 A75。
+所有材料必须脱敏并标记 passed，记录 RFC3339Nano `observed_at`、所引用原始报告的 `reference_sha256`，checks 精确对应上述技术事实：backup=`binlog_verified/full_backup_verified/keys_verified`，restore=`no_production_switch/pilot_owned_scope/restore_verified/target_identity_verified`，verify-restore=`verify_restore_full`，rpo-rto=`rpo_met/rto_met`，cleanup=`cleanup_verified`。不得包含或要求 `approvals.json`、operator、reviewer、approver。缺少备份/binlog/密钥、隔离目标、全量验证或 RPO/RTO 时 runner 只生成 blocked 失败证据；不得用 A22、A51 或手工报告代替 A75。

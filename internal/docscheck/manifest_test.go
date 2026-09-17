@@ -144,6 +144,23 @@ func TestA102RequiresIntegrationAndContractCoverage(t *testing.T) {
 	}
 }
 
+func TestExecutionAssetContractRejectsStaleManifestPaths(t *testing.T) {
+	current := &checker{root: t.TempDir()}
+	current.checkExecutionAssetContract("manifest.yaml", "A85", []string{"docs/acceptance/runbooks/monitoring-failure-drills.md"})
+	if !issuesContain(current.issues, "do not match current runner contract") {
+		t.Fatalf("stale A85 runbook binding was accepted: %#v", current.issues)
+	}
+
+	current = &checker{root: t.TempDir()}
+	current.checkExecutionAssetContract("manifest.yaml", "A13", []string{
+		"tests/integration/collection_acceptance_test.go",
+		"tests/contract/statistics_api_acceptance_test.go",
+	})
+	if len(current.issues) != 0 {
+		t.Fatalf("current A13 execution assets produced issues: %#v", current.issues)
+	}
+}
+
 func writeManifestTestFile(t *testing.T, root string, relative string) {
 	t.Helper()
 	path := filepath.Join(root, filepath.FromSlash(relative))

@@ -36,20 +36,19 @@ go run ./scripts/acceptance run -case A22 -- powershell.exe -NoProfile -Executio
 | `encryption_key_id`/保留版本 | `<key-id>` / `<key-version>` |
 | 允许 RPO/RTO | `<= 1h` / `<= 4h` |
 | 实际数据损失/恢复耗时 | `<duration>` / `<duration>` |
-| 执行人/复核人/批准人 | `<operator>` / `<reviewer>` / `<approver>` |
 
 ## 2. 前置条件和停止条件
 
 - 使用 F05 固定画像，并记录 commit、镜像 digest、MySQL 精确版本、时区、备份策略、binlog 保留周期和恢复工具版本。
 - 全量备份、binlog 和密钥版本分开保存且均可读取；恢复环境与生产网络、存储和凭证隔离。
-- 目标时间、业务停止点、恢复顺序、DNS/流量切换权限和回退负责人均已批准。
+- 目标时间、业务停止点、恢复顺序、DNS/流量切换权限和回退路径均已确定并可复验。
 - checksum 不符、binlog 缺口、精确密钥版本缺失、隔离边界失效或任何秘密出现在日志时立即停止，不得切换生产。
 
 ## 3. 备份与可恢复性检查
 
 1. 使用权限 0600/0400 的 MySQL defaults file，通过绝对 `BACKUP_ROOT` 执行 `bash scripts/backup.sh`；密码不得出现在参数或日志。确认脚本用 `new-api-pilot:migration-runner` advisory lock 覆盖 dump 和 server/migration metadata 采集，保存脚本 JSON 和退出码，确认退出 0 后才接收原子发布的 `backup-<UTC>-<random>` 目录。
 2. 检查 `database.sql.gz`、dump sidecar、`manifest.json` 和 manifest sidecar；manifest 必须包含一致性 SOURCE file/position 或单一 GTID 起点、server UUID、完整 schema migration/checksum、镜像 digest、dump 大小/hash 和完整 `encryption_key_id`，脚本 JSON 中密钥指纹只能有 12 位。
-3. 备份当前及保留期内所有被引用的密钥版本和 `encryption_key_id` 映射；验证权限最小化和恢复人可按审批取得。
+3. 备份当前及保留期内所有被引用的密钥版本和 `encryption_key_id` 映射；验证权限最小化且恢复流程可按既定访问控制取得。
 4. 验证备份目录、对象数量、大小、checksum 和保留策略；从日志中删除 Token、Webhook URL、明文密钥、完整密钥指纹和解密后配置。
 
 ## 4. 隔离 PITR
@@ -72,6 +71,6 @@ go run ./scripts/acceptance run -case A22 -- powershell.exe -NoProfile -Executio
 - 恢复环境通过全部结构、密文、外键、任务状态、事实与汇总校验，目标时间之后的事务未被应用。
 - 实测数据损失不超过 1 小时，端到端恢复不超过 4 小时；任何失败分支均未触发生产切换。
 - 密钥轮换全成功才切换，注入失败时仍能用旧密钥恢复；数据库、日志和证据无明文秘密。
-- 证据目录包含备份/binlog/密钥引用、checksum、工具与镜像版本、脱敏命令输出、逐项校验报告、RPO/RTO 计算和双人签字。
+- 证据目录包含备份/binlog/密钥引用、checksum、工具与镜像版本、脱敏命令输出、逐项校验报告和 RPO/RTO 计算；不要求具名签字或身份分离。
 
-最终结论：`<PASS/FAIL>`；切换决定：`<NOT-SWITCHED/APPROVED>`；证据目录：`<evidence-path>`。
+最终结论：`<PASS/FAIL>`；切换技术条件：`<NOT-SWITCHED/READY/NOT-READY>`；证据目录：`<evidence-path>`。

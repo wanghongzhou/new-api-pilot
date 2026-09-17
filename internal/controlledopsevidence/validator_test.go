@@ -3,10 +3,12 @@ package controlledopsevidence
 import (
 	"archive/zip"
 	"encoding/json"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"testing"
 )
 
@@ -44,6 +46,19 @@ func TestClosedArtifactsDetectTamperAndBlockedEvidenceCannotPass(t *testing.T) {
 			writeJSONTest(t, filepath.Join(blocked, "blocked-report.json"), map[string]any{"schema_version": 1, "acceptance_id": id, "status": "blocked", "passed": false})
 			if err := ValidateInnerArtifacts(blocked, id, FormalClass); err == nil {
 				t.Fatal("blocked evidence passed")
+			}
+		})
+	}
+}
+
+func TestLegacyApprovalMaterialIsRejected(t *testing.T) {
+	for _, id := range []string{"A52", "A74", "A75"} {
+		t.Run(id, func(t *testing.T) {
+			dir := buildValidRun(t, id)
+			materialPath := filepath.Join(dir, stringsLower(id)+"-controlled-material.zip")
+			appendLegacyApprovalFile(t, materialPath, id)
+			if err := ValidateInnerArtifacts(dir, id, FormalClass); err == nil {
+				t.Fatal("legacy approvals.json unexpectedly passed")
 			}
 		})
 	}
@@ -150,18 +165,21 @@ func buildValidRun(t *testing.T, id string) string {
 		t.Fatal(err)
 	}
 	archive := zip.NewWriter(file)
-	for _, name := range contract.zipFiles {
+	names := make([]string, 0, len(contract.artifactChecks))
+	for name := range contract.artifactChecks {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
 		writer, err := archive.Create(name)
 		if err != nil {
 			t.Fatal(err)
 		}
-		doc := materialDocument{SchemaVersion: 1, AcceptanceID: id, ArtifactType: name[:len(name)-5], Passed: true, Sanitized: true}
-		if name == "approvals.json" {
-			doc.Operator = "operator"
-			doc.Reviewer = "reviewer"
-			doc.Approver = "approver"
-			doc.Approved = true
+		checks := map[string]bool{}
+		for _, check := range contract.artifactChecks[name] {
+			checks[check] = true
 		}
+		doc := materialDocument{SchemaVersion: 1, AcceptanceID: id, ArtifactType: name[:len(name)-5], Passed: true, Sanitized: true, ObservedAt: "2026-01-01T00:00:00Z", ReferenceSHA256: stringsRepeat("c", 64), Checks: checks}
 		payload, _ := json.Marshal(doc)
 		if _, err := writer.Write(payload); err != nil {
 			t.Fatal(err)
@@ -182,15 +200,58 @@ func buildValidRun(t *testing.T, id string) string {
 	writeJSONTest(t, filepath.Join(dir, prefix+"-report.json"), finalReport{SchemaVersion: 1, AcceptanceID: id, Status: "passed", Passed: true, EvidenceClass: FormalClass, AcceptanceEligible: true, Scope: contract.scope, TargetIdentity: "controlled-target", ImmutableReference: stringsRepeat("a", 64), StartedAt: "2026-01-01T00:00:00Z", FinishedAt: "2026-01-01T00:01:00Z", MaterialSHA256: digest, MaterialSizeBytes: info.Size(), Assertions: assertions})
 	writeJSONTest(t, filepath.Join(dir, prefix+"-command.json"), commandReport{SchemaVersion: 1, AcceptanceID: id, EvidenceClass: FormalClass, Command: CanonicalCommand(id)})
 	writeJSONTest(t, filepath.Join(dir, prefix+"-fixture.json"), fixtureReport{SchemaVersion: 1, AcceptanceID: id, ManifestPath: "testdata/design/manifest.sha256", ManifestSHA256: stringsRepeat("b", 64), FixtureIDs: contract.fixtures})
-	names := []string{prefix + "-command.json", prefix + "-controlled-material.zip", prefix + "-fixture.json", prefix + "-report.json"}
-	entries := make([]artifactEntry, 0, len(names))
-	for _, name := range names {
+	artifactNames := []string{prefix + "-command.json", prefix + "-controlled-material.zip", prefix + "-fixture.json", prefix + "-report.json"}
+	entries := make([]artifactEntry, 0, len(artifactNames))
+	for _, name := range artifactNames {
 		info, _ := os.Stat(filepath.Join(dir, name))
 		digest, _ := hashFile(filepath.Join(dir, name))
 		entries = append(entries, artifactEntry{Path: name, SizeBytes: info.Size(), SHA256: digest})
 	}
 	writeJSONTest(t, filepath.Join(dir, prefix+"-artifacts.json"), artifactInventory{SchemaVersion: 1, AcceptanceID: id, EvidenceClass: FormalClass, Files: entries})
 	return dir
+}
+
+func appendLegacyApprovalFile(t *testing.T, path, id string) {
+	t.Helper()
+	original, err := zip.OpenReader(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	temporary := path + ".tmp"
+	file, err := os.Create(temporary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	archive := zip.NewWriter(file)
+	for _, entry := range original.File {
+		reader, openErr := entry.Open()
+		if openErr != nil {
+			t.Fatal(openErr)
+		}
+		writer, createErr := archive.Create(entry.Name)
+		if createErr != nil {
+			t.Fatal(createErr)
+		}
+		if _, copyErr := io.Copy(writer, reader); copyErr != nil {
+			t.Fatal(copyErr)
+		}
+		_ = reader.Close()
+	}
+	writer, err := archive.Create("approvals.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = writer.Write([]byte(`{"schema_version":1,"acceptance_id":"` + id + `","artifact_type":"approvals","passed":true,"sanitized":true,"operator":"operator","reviewer":"reviewer","approver":"approver","approved":true}`))
+	if err := archive.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	_ = original.Close()
+	if err := os.Rename(temporary, path); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func writeJSONTest(t *testing.T, path string, value any) {

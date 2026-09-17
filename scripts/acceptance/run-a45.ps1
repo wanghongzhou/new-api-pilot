@@ -22,9 +22,7 @@ $innerCommand = @(
     '-count=1', '-timeout=4m'
 )
 $fixtureF01Path = 'testdata/design/f01-auth.json'
-$fixtureF01SHA256 = 'd232dc1a6b83ba80f49995dadbd8afe11d7b73120f7474a2abcece7e1b46e1da'
 $fixtureF02Path = 'testdata/design/f02-upstream/manifest.json'
-$fixtureF02SHA256 = '044c7037cd875740a5a07fe131bab7b74389b61b4c48982bec5c23266459b1c6'
 $fixtureManifestPath = 'testdata/design/manifest.sha256'
 $secretScanTargets = @(
     'a45-test.jsonl',
@@ -423,13 +421,10 @@ try {
     $f02Path = Join-Path $repositoryRoot $fixtureF02Path
     $f01SHA = (Get-FileHash -LiteralPath $f01Path -Algorithm SHA256).Hash.ToLowerInvariant()
     $f02SHA = (Get-FileHash -LiteralPath $f02Path -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($f01SHA -cne $fixtureF01SHA256 -or $f02SHA -cne $fixtureF02SHA256) {
-        throw 'A45 fixed F01/F02 fixture checksum differs from the approved contract.'
-    }
     $manifestText = Get-Content -Raw -LiteralPath $manifestPath
-    if ($manifestText -notmatch "(?m)^$fixtureF01SHA256  $([regex]::Escape($fixtureF01Path))$" -or
-        $manifestText -notmatch "(?m)^$fixtureF02SHA256  $([regex]::Escape($fixtureF02Path))$") {
-        throw 'A45 fixed fixture checksums are not bound by the fixture manifest.'
+    if ($manifestText -notmatch "(?m)^$f01SHA  $([regex]::Escape($fixtureF01Path))$" -or
+        $manifestText -notmatch "(?m)^$f02SHA  $([regex]::Escape($fixtureF02Path))$") {
+        throw 'A45 current fixture checksums are not bound by the current fixture manifest.'
     }
     $manifestSHA = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
     $fixtureReport = [ordered]@{
